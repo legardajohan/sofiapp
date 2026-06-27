@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "includeCoAuthoredBy": true,
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm --filter backend typecheck:*)",
+      "Bash(pnpm --filter backend test:*)",
+      "Bash(pnpm --filter backend dev:*)",
+      "Bash(pnpm --filter frontend build:*)",
+      "Bash(pnpm --filter frontend lint:*)",
+      "Bash(pnpm --filter frontend dev:*)",
+      "Bash(pnpm --filter shared:*)",
+      "Bash(pnpm turbo:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose down:*)",
+      "Read(apps/**/src/**)",
+      "Read(packages/**/src/**)",
+      "Edit(apps/**/src/**)",
+      "Edit(packages/**/src/**)",
+      "Edit(docs/**)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(pnpm publish:*)"
+    ],
+    "deny": [
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Bash(rm -rf:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Edit(**/node_modules/**)",
+      "Edit(**/dist/**)",
+      "Read(**/node_modules/**)",
+      "Read(dev/**)",
+      "Edit(dev/**)"
+    ]
+  },
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
