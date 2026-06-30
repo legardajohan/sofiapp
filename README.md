@@ -1,8 +1,8 @@
 # SofiApp
 
-> CRM SaaS **multi-tenant** para cualquier entidad comercial. Centraliza la captación de
+> CRM SaaS **multi-tenant** para entidades comerciales. Centraliza la captación de
 > prospectos, la comunicación omnicanal automatizada con IA y el cierre de ventas. Cada empresa
-> conecta su propia cuenta de WhatsApp Business API (modelo BSP, equivalente a Mercately).
+> conecta su propia cuenta de WhatsApp Business API (modelo BSP).
 
 [![Node](https://img.shields.io/badge/node-24_LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -157,5 +157,3 @@ Toda la documentación vive en [`docs/`](docs/). Empieza por
 ## Licencia
 
 Proyecto privado / propietario. Todos los derechos reservados.
-Proyecto privado / propietario. Todos los derechos reservados.
-
