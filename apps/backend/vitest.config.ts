@@ -22,6 +22,7 @@ export default defineConfig({
       MONGODB_URI: 'mongodb://127.0.0.1:27017/sofiapp_test',
       REDIS_HOST: '127.0.0.1',
       REDIS_PORT: '6379',
+      GEMINI_API_KEY: 'test-fake-gemini-api-key-for-unit-tests',
       // mongodb-memory-server: usar el zip ya descargado en .mongodb-binaries/
       MONGOMS_DOWNLOAD_DIR: mongodbBinaries,
       MONGOMS_MD5_CHECK: 'false', // el zip fue descargado con curl, no necesitamos re-verificar
