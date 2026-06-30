@@ -31,6 +31,10 @@ pnpm-debug.log*
 
 # Claude Code — configuración local personal (no compartida)
 .claude/settings.local.json
+.mcp.json
 
 # Material de trabajo desactualizado (no es fuente de verdad)
 dev/
+
+# Binario MongoDB para tests (se descarga automáticamente en el primer test run)
+.mongodb-binaries/

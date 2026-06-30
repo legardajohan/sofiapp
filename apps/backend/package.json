@@ -1,0 +1,43 @@
+{
+  "name": "@sofiapp/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "tsx watch src/app.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@sofiapp/shared": "workspace:*",
+    "bullmq": "^5.54.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "ioredis": "^5.6.1",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "mongoose": "^8.15.0",
+    "socket.io": "^4.8.1",
+    "zod": "^4.0.0"
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "version": "7.0.24",
+      "downloadDir": "../../.mongodb-binaries"
+    }
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.15.32",
+    "mongodb-memory-server": "^10.1.4",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
