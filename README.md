@@ -11,6 +11,21 @@
 [![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#licencia)
 
 ---
+## Levantar proyecto
+
+#### 1. Redis (si no está corriendo)
+`docker start sofiapp-redis`
+
+#### 2. Terminal 1 — Backend web
+`pnpm dev:web`
+
+#### 3. Terminal 2 — Frontend
+`pnpm dev:front`
+
+#### 4. Terminal 3 (opcional) — Worker BullMQ
+`pnpm dev:worker`
+
+---
 
 ## ✨ Características
 
