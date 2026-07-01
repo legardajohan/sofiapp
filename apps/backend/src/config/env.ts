@@ -20,7 +20,7 @@ const EnvSchema = z.object({
   // LLM / Gemini — sin fallback: el proceso aborta si GEMINI_API_KEY falta
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
   GEMINI_API_KEY: z.string().min(1),
-  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   LLM_TIMEOUT_MS: z.coerce.number().positive().default(15000),
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
