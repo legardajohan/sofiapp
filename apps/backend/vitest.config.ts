@@ -25,6 +25,8 @@ export default defineConfig({
       GEMINI_MODEL: 'gemini-1.5-flash',
       LLM_TIMEOUT_MS: '15000',
       COOKIE_SAMESITE: 'lax',
+      SUPERADMIN_EMAIL: 'admin@sofiapp.test',
+      SUPERADMIN_PASSWORD: 'super-secret-123',
     },
   },
 });

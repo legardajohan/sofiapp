@@ -24,7 +24,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (r) => r,
   (e: unknown) => {
-    if (axios.isAxiosError(e) && e.response?.status === 401) {
+    // Solo forzamos logout+redirect si había una sesión activa que expiró a mitad de uso.
+    // Un 401 mientras el store está en 'idle'/'loading' es el probe normal de /auth/me al
+    // arrancar sin sesión: dispararía logout() -> hard reload -> vuelve a 'idle' -> bucle infinito.
+    if (axios.isAxiosError(e) && e.response?.status === 401 && useAuthStore.getState().status === 'authenticated') {
       useAuthStore.getState().logout();
     }
     return Promise.reject(e);

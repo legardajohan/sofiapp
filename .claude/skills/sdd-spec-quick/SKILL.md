@@ -27,6 +27,8 @@ Camino ligero para CRUDs mecánicos: sin tríada, todo en un `spec.md`. Solo pla
 
 > SDD camino ligero: el QUÉ y las tasks en un solo archivo. Sin plan.md ni tasks.md.
 
+**Estado:** creado
+
 ## Objetivo
 <1-2 frases>
 
@@ -49,5 +51,6 @@ N+1. `tsc --noEmit` en verde.
 
 ## Antes de cerrar
 - [ ] Solo existe `spec.md` (sin plan.md ni tasks.md).
+- [ ] Lleva `**Estado:** creado`.
 - [ ] Lleva criterio de aislamiento y `tsc --noEmit`.
 - [ ] Cero código.

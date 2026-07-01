@@ -73,6 +73,11 @@ Disciplina: **un feature a la vez**, en orden de dependencias, validando `tsc --
 de aislamiento antes de cerrar cada uno. Ejemplo de tríada completa en
 `docs/specs/INF-02-tenant-middleware/`.
 
+Cada `spec.md` lleva una línea `**Estado:** creado|implementado|liberado`, que cada skill
+actualiza al cerrar su fase (`/sdd-spec(-quick)` → `creado`, `/sdd-implement` → `implementado`,
+`/sdd-release` → `liberado`). Sirve para ver de un vistazo en qué punto va cada feature sin abrir
+`tasks.md` ni revisar git.
+
 ## Comandos de calidad
 
 - Backend: `pnpm --filter backend typecheck` (`tsc --noEmit`) · `pnpm --filter backend test`

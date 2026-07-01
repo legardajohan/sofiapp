@@ -21,6 +21,7 @@ allowed-tools: Read, Edit(docs/specs/**), Bash(git status *), Bash(git branch *)
    - `pnpm --filter backend typecheck` + `test` (incluye **aislamiento multi-tenant**).
    - Frontend si aplica: `pnpm --filter frontend build && lint`.
    - Arranca `app.ts`/`worker.ts` si tocas rutas o colas: cero errores en consola.
+6. Todo en verde → actualiza `**Estado:** creado` a `**Estado:** implementado` en `spec.md`.
 
 ## Antes de cerrar
 - [ ] Rama `feat/<ID>` creada.
@@ -28,3 +29,4 @@ allowed-tools: Read, Edit(docs/specs/**), Bash(git status *), Bash(git branch *)
 - [ ] Todas las casillas marcadas.
 - [ ] typecheck + tests (incl. aislamiento) en verde; build/lint de frontend si aplica.
 - [ ] Checklist de PR de `docs/multi-tenancy.md` §9 revisado.
+- [ ] `spec.md` con `**Estado:** implementado`.
