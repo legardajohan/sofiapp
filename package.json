@@ -1,0 +1,19 @@
+{
+  "name": "sofiapp",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:web": "pnpm --filter @sofiapp/api dev:web",
+    "dev:worker": "pnpm --filter @sofiapp/api dev:worker",
+    "dev:front": "pnpm --filter @sofiapp/web dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "prettier": "^3.4.0"
+  }
+}
