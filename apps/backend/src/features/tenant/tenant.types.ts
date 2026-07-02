@@ -1,4 +1,10 @@
 import type { Types, Document } from 'mongoose';
+import { z } from 'zod';
+import {
+  createTenantSchema,
+  updateTenantSchema,
+  updateTenantStatusSchema,
+} from './tenant.validation.js';
 
 export type EstadoTenant = 'activo' | 'suspendido' | 'prueba';
 
@@ -73,3 +79,8 @@ export interface TenantsListResponse {
   page: number;
   limit: number;
 }
+
+// Tipos Zod-inferidos para validación de entrada (fuente única de verdad)
+export type CreateTenantInput = z.infer<typeof createTenantSchema.shape.body>;
+export type UpdateTenantInput = z.infer<typeof updateTenantSchema.shape.body>;
+export type UpdateTenantStatusInput = z.infer<typeof updateTenantStatusSchema.shape.body>;

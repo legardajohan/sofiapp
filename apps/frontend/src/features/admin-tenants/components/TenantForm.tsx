@@ -16,6 +16,7 @@ const toSlug = (value: string): string =>
 export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
   const isEdit = Boolean(tenant);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     nombre: tenant?.nombre ?? '',
@@ -55,22 +56,32 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
+    setAdminError(null);
 
     if (!isEdit) {
+      // Validar que si showAdmin está activo, todos los campos del admin deben estar llenos
+      if (showAdmin) {
+        const adminFieldsComplete =
+          form.adminNombre.trim() && form.adminEmail.trim() && form.adminPassword.trim();
+        if (!adminFieldsComplete) {
+          setAdminError('Complete todos los campos del administrador (nombre, email y contraseña)');
+          return;
+        }
+      }
+
       const payload: CreateTenantPayload = {
         nombre: form.nombre,
         slug: form.slug,
         nit: form.nit || undefined,
         contacto: { email: form.contactoEmail, telefono: form.contactoTelefono },
         planId: form.planId || undefined,
-        adminUser:
-          showAdmin && form.adminEmail
-            ? {
-                nombre: form.adminNombre,
-                email: form.adminEmail,
-                password: form.adminPassword,
-              }
-            : undefined,
+        adminUser: showAdmin
+          ? {
+              nombre: form.adminNombre,
+              email: form.adminEmail,
+              password: form.adminPassword,
+            }
+          : undefined,
       };
       onSuccess(payload);
     } else {
@@ -169,32 +180,46 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
 
           {showAdmin && (
             <div className="mt-3 space-y-3 rounded-md bg-blue-50 p-4">
+              {adminError && (
+                <div className="rounded-md bg-red-100 border border-red-300 p-3">
+                  <p className="text-sm text-red-800">{adminError}</p>
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre *
+                </label>
                 <input
                   className={inputClass}
                   value={form.adminNombre}
                   onChange={(e) => setForm((p) => ({ ...p, adminNombre: e.target.value }))}
                   minLength={2}
+                  required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
+                </label>
                 <input
                   type="email"
                   className={inputClass}
                   value={form.adminEmail}
                   onChange={(e) => setForm((p) => ({ ...p, adminEmail: e.target.value }))}
+                  required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contraseña *
+                </label>
                 <input
                   type="password"
                   className={inputClass}
                   value={form.adminPassword}
                   onChange={(e) => setForm((p) => ({ ...p, adminPassword: e.target.value }))}
                   minLength={8}
+                  required
                 />
               </div>
             </div>

@@ -5,7 +5,7 @@ import {
   updateTenant,
   updateTenantStatus,
 } from './tenant.service.js';
-import type { ListTenantsQuery } from './tenant.types.js';
+import type { ListTenantsQuery, CreateTenantInput, UpdateTenantInput, UpdateTenantStatusInput } from './tenant.types.js';
 
 export async function listTenantsController(req: Request, res: Response): Promise<void> {
   const query: ListTenantsQuery = {
@@ -18,18 +18,18 @@ export async function listTenantsController(req: Request, res: Response): Promis
 }
 
 export async function createTenantController(req: Request, res: Response): Promise<void> {
-  const tenant = await createTenant(req.body as Parameters<typeof createTenant>[0]);
+  const tenant = await createTenant(req.body as CreateTenantInput);
   res.status(201).json(tenant);
 }
 
 export async function updateTenantController(req: Request, res: Response): Promise<void> {
   const { id } = req.params as { id: string };
-  const tenant = await updateTenant(id, req.body as Parameters<typeof updateTenant>[1]);
+  const tenant = await updateTenant(id, req.body as UpdateTenantInput);
   res.json(tenant);
 }
 
 export async function updateTenantStatusController(req: Request, res: Response): Promise<void> {
   const { id } = req.params as { id: string };
-  const tenant = await updateTenantStatus(id, req.body as { estado: 'activo' | 'suspendido' });
+  const tenant = await updateTenantStatus(id, req.body as UpdateTenantStatusInput);
   res.json(tenant);
 }
