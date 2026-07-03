@@ -1,5 +1,6 @@
 {
   "name": "sofiapp",
+  "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -7,12 +8,12 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "dev:web": "pnpm --filter backend dev:web",
-    "dev:worker": "pnpm --filter backend dev:worker"
+    "dev:web": "pnpm --filter @sofiapp/api dev:web",
+    "dev:worker": "pnpm --filter @sofiapp/api dev:worker",
+    "dev:front": "pnpm --filter @sofiapp/web dev"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
-    "prettier": "^3.5.3",
-    "typescript": "^5.8.3"
+    "prettier": "^3.5.3"
   }
 }

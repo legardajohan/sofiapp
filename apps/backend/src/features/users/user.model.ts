@@ -3,12 +3,7 @@ import type { IUserDocument } from './user.types.js';
 
 const UserSchema = new Schema<IUserDocument>(
   {
-    tenantId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Tenant',
-      default: null,
-      index: true,
-    },
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null, index: true },
     nombre: { type: String, required: true },
     email: { type: String, required: true },
     passwordHash: { type: String, required: true, select: false },
@@ -22,11 +17,7 @@ const UserSchema = new Schema<IUserDocument>(
   { timestamps: true },
 );
 
-// Email único GLOBAL (ADR 0003 — el login resuelve el tenant por email)
 UserSchema.index({ email: 1 }, { unique: true });
-// Lookup scoped por tenant (NO único)
 UserSchema.index({ tenantId: 1, email: 1 });
-// Para localizar al/los superadmin
-UserSchema.index({ rol: 1 });
 
-export const UserModel = model<IUserDocument>('User', UserSchema);
+export const User = model<IUserDocument>('User', UserSchema);

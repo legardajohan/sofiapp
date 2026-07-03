@@ -1,6 +1,6 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { RequestHandler } from 'express';
 
-export function requireTenant(req: Request, res: Response, next: NextFunction): void {
+export const requireTenant: RequestHandler = (req, res, next) => {
   if (!req.user?.tenantId) {
     res
       .status(500)
@@ -8,4 +8,4 @@ export function requireTenant(req: Request, res: Response, next: NextFunction): 
     return;
   }
   next();
-}
+};

@@ -1,6 +1,6 @@
 {
   "name": "@sofiapp/shared",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,6 +16,6 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.6.0"
   }
 }

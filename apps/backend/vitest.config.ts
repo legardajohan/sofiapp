@@ -1,32 +1,33 @@
 import { defineConfig } from 'vitest/config';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Ruta absoluta a .mongodb-binaries/ en la raíz del monorepo
-const mongodbBinaries = path.resolve(__dirname, '../../.mongodb-binaries');
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
-    hookTimeout: 120_000, // 2 min — cubre extracción del zip de MongoDB ya descargado
+    globalSetup: ['./tests/globalSetup.ts'],
+    setupFiles: ['./tests/setup.ts'],
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    fileParallelism: false,
     env: {
       NODE_ENV: 'test',
       PORT: '4001',
-      WEB_ORIGIN: 'http://localhost:5173',
-      JWT_SECRET: 'test-jwt-secret-at-least-32-characters-long!!',
+      JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       JWT_EXPIRES_IN: '8h',
-      CSRF_SECRET: 'test-csrf-secret-at-least-32-characters-long!',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/sofiapp_test',
-      REDIS_HOST: '127.0.0.1',
-      REDIS_PORT: '6379',
+      CSRF_SECRET: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      MONGODB_URI: 'mongodb://localhost:27017/sofiapp_test_placeholder',
+      REDIS_URL: 'redis://127.0.0.1:6379',
+      META_APP_SECRET: 'test-app-secret-12345678901234',
+      META_VERIFY_TOKEN: 'test-verify-token',
+      META_GRAPH_VERSION: 'v19.0',
+      TENANT_TOKEN_ENC_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      LLM_PROVIDER: 'gemini',
       GEMINI_API_KEY: 'test-fake-gemini-api-key-for-unit-tests',
-      // mongodb-memory-server: usar el zip ya descargado en .mongodb-binaries/
-      MONGOMS_DOWNLOAD_DIR: mongodbBinaries,
-      MONGOMS_MD5_CHECK: 'false', // el zip fue descargado con curl, no necesitamos re-verificar
-      MONGOMS_PREFER_GLOBAL_PATH: 'false', // forzar uso del downloadDir, no ~/.cache
+      GEMINI_MODEL: 'gemini-2.5-flash',
+      LLM_TIMEOUT_MS: '15000',
+      AI_CACHE_TTL_CHAT_S: '3600',
+      AI_CACHE_TTL_CLASSIFY_S: '7200',
+      COOKIE_SAMESITE: 'lax',
     },
   },
 });

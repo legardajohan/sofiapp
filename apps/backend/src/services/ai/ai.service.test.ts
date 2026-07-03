@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
-import mongoose, { Types } from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Types } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
 import { AIService } from './ai.service.js';
@@ -9,23 +8,7 @@ import { PromptTemplateModel } from './prompt-template.model.js';
 import { AiUsageLogModel } from './ai-usage-log.model.js';
 import { findScoped } from '../../repositories/base.repository.js';
 
-// ─── MongoDB in-memory ────────────────────────────────────────────────────────
-let mongoServer: MongoMemoryServer;
-
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  await mongoose.connect(mongoServer.getUri());
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
-});
-
-afterEach(async () => {
-  await PromptTemplateModel.deleteMany({});
-  await AiUsageLogModel.deleteMany({});
-});
+// Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function seedGlobalTemplate(method: 'chat' | 'extract' | 'classify'): Promise<void> {

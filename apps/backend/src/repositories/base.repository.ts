@@ -2,19 +2,11 @@ import type { Model, FilterQuery, UpdateQuery, Types, HydratedDocument } from 'm
 
 type TenantId = string | Types.ObjectId;
 
-export function findScoped<T>(
-  m: Model<T>,
-  tenantId: TenantId,
-  filter: FilterQuery<T> = {},
-) {
+export function findScoped<T>(m: Model<T>, tenantId: TenantId, filter: FilterQuery<T> = {}) {
   return m.find({ ...filter, tenantId } as FilterQuery<T>);
 }
 
-export function findOneScoped<T>(
-  m: Model<T>,
-  tenantId: TenantId,
-  filter: FilterQuery<T> = {},
-) {
+export function findOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: FilterQuery<T> = {}) {
   return m.findOne({ ...filter, tenantId } as FilterQuery<T>);
 }
 
@@ -58,5 +50,5 @@ export function deleteOneScoped<T>(
   tenantId: TenantId,
   filter: FilterQuery<T>,
 ): ReturnType<Model<T>['deleteOne']> {
-  return m.deleteOne({ ...filter, tenantId } as FilterQuery<T>) as ReturnType<Model<T>['deleteOne']>;
+  return m.deleteOne({ ...filter, tenantId } as FilterQuery<T>);
 }

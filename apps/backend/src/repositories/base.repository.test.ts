@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import mongoose, { Schema, model, Types } from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { describe, it, expect } from 'vitest';
+import { Schema, model, Types } from 'mongoose';
 import {
   findScoped,
   findByIdScoped,
@@ -10,8 +9,7 @@ import {
   deleteOneScoped,
 } from './base.repository.js';
 
-// mongodb-memory-server usa el binario en .mongodb-binaries/ (downloadDir en package.json).
-// Si el zip ya existe ahí, salta la descarga y extrae directamente.
+// Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
 
 interface ITestDoc {
   tenantId: Types.ObjectId;
@@ -22,22 +20,6 @@ const TestSchema = new Schema<ITestDoc>({
   telefono: { type: String, required: true },
 });
 const TestModel = model<ITestDoc>('TestDoc', TestSchema);
-
-let mongoServer: MongoMemoryServer;
-
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  await mongoose.connect(mongoServer.getUri());
-}); // hookTimeout: 600_000 en vitest.config.ts — cubre extracción del binario
-
-afterEach(async () => {
-  await TestModel.deleteMany({});
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
-});
 
 const tenantA = new Types.ObjectId();
 const tenantB = new Types.ObjectId();

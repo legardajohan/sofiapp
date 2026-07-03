@@ -1,25 +1,37 @@
-import express, { type Express } from 'express';
-import cors from 'cors';
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import mongoose from 'mongoose';
 import { env } from './config/env.js';
-import { errorHandler } from './middlewares/error-handler.middleware.js';
 import { logger } from './utils/logger.js';
+import { errorHandler } from './middlewares/error-handler.middleware.js';
+import channelRoutes from './features/channel/channel.routes.js';
+import messageRoutes from './features/message/message.routes.js';
+import webhookRoutes from './features/webhook/webhook.routes.js';
+import clienteRoutes from './features/cliente/cliente.routes.js';
 
-const app: Express = express();
+const app = express();
 
-app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', ts: new Date().toISOString() });
-});
-
-// Montaje de routers (se añaden en features posteriores)
+app.use('/api/channels/whatsapp', channelRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/webhooks/whatsapp', webhookRoutes);
+app.use('/api/clientes', clienteRoutes);
 
 app.use(errorHandler);
 
-const PORT = env.PORT;
-app.listen(PORT, () => {
-  logger.info(`Proceso WEB escuchando en http://localhost:${PORT}`);
-});
+mongoose
+  .connect(env.MONGODB_URI)
+  .then(() => {
+    logger.info('Conectado a MongoDB');
+    app.listen(env.PORT, () => {
+      logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
+    });
+  })
+  .catch((err: unknown) => {
+    logger.error('Fallo al conectar a MongoDB', { error: String(err) });
+    process.exit(1);
+  });
 
 export default app;

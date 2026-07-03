@@ -13,15 +13,10 @@ export interface ITenant {
   nombre: string;
   slug: string;
   nit?: string;
-  contacto: {
-    email: string;
-    telefono: string;
-  };
+  contacto: { email: string; telefono: string };
   estado: EstadoTenant;
-  planId: Types.ObjectId;
+  planId?: Types.ObjectId;
   camposCaptura: ICampoCaptura[];
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 export interface ITenantDocument extends ITenant, Document {}

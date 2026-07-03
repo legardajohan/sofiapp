@@ -1,6 +1,10 @@
-import type { SafeUser } from '../features/users/user.types.js';
+import { Types } from 'mongoose';
 
-export type { SafeUser };
+export interface SafeUser {
+  sub: string;
+  tenantId: Types.ObjectId | null;
+  rol: 'superadmin' | 'admin' | 'coordinador' | 'asesor';
+}
 
 declare global {
   namespace Express {
