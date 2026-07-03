@@ -12,6 +12,8 @@ import type {
   SlotResult,
   NivelInteres,
   Objecion,
+  LlmUsage,
+  LlmCallResult,
 } from './llm-provider.types.js';
 
 function sleep(ms: number): Promise<void> {
@@ -23,6 +25,21 @@ function isRetryable(err: unknown): boolean {
     return err.status === 429 || (err.status !== undefined && err.status >= 500);
   }
   return false;
+}
+
+function usageFromResponse(response: {
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+}): LlmUsage {
+  const usage = response.usageMetadata;
+  return {
+    promptTokens: usage?.promptTokenCount ?? 0,
+    completionTokens: usage?.candidatesTokenCount ?? 0,
+    totalTokens: usage?.totalTokenCount ?? 0,
+  };
 }
 
 function chatTurnsToContents(historial: ChatTurn[]): Array<{ role: string; parts: Array<{ text: string }> }> {
@@ -84,7 +101,7 @@ export class GeminiProvider implements ILlmProvider {
     historial: ChatTurn[];
     tono: string;
     instrucciones: string;
-  }): Promise<string> {
+  }): Promise<LlmCallResult<string>> {
     return this.callWithRetry(async (signal) => {
       const model = this.genAI.getGenerativeModel({ model: env.GEMINI_MODEL });
       const result = await model.generateContent(
@@ -94,14 +111,14 @@ export class GeminiProvider implements ILlmProvider {
         },
         { signal },
       );
-      return result.response.text();
+      return { result: result.response.text(), usage: usageFromResponse(result.response) };
     });
   }
 
   async extractSlots(input: {
     historial: ChatTurn[];
     camposObjetivo: SlotSpec[];
-  }): Promise<SlotResult> {
+  }): Promise<LlmCallResult<SlotResult>> {
     return this.callWithRetry(async (signal) => {
       const schema = slotSpecToSchema(input.camposObjetivo);
       const model = this.genAI.getGenerativeModel({
@@ -116,13 +133,16 @@ export class GeminiProvider implements ILlmProvider {
       const incompletos = input.camposObjetivo
         .filter((s) => s.requerido && (raw[s.campo] === undefined || raw[s.campo] === null))
         .map((s) => s.campo);
-      return { slots: raw, incompletos };
+      return {
+        result: { slots: raw, incompletos },
+        usage: usageFromResponse(result.response),
+      };
     });
   }
 
   async classifyLead(input: {
     historial: ChatTurn[];
-  }): Promise<{ nivelInteres: NivelInteres; objecion: Objecion | null }> {
+  }): Promise<LlmCallResult<{ nivelInteres: NivelInteres; objecion: Objecion | null }>> {
     return this.callWithRetry(async (signal) => {
       const model = this.genAI.getGenerativeModel({
         model: env.GEMINI_MODEL,
@@ -137,8 +157,8 @@ export class GeminiProvider implements ILlmProvider {
         objecion?: Objecion | null;
       };
       return {
-        nivelInteres: raw.nivelInteres,
-        objecion: raw.objecion ?? null,
+        result: { nivelInteres: raw.nivelInteres, objecion: raw.objecion ?? null },
+        usage: usageFromResponse(result.response),
       };
     });
   }

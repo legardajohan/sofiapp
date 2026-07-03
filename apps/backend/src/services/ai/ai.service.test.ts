@@ -48,11 +48,17 @@ function makeRedisMock(cache: Map<string, string> = new Map()): Redis {
   } as unknown as Redis;
 }
 
+const USAGE = { promptTokens: 10, completionTokens: 5, totalTokens: 15 };
+
 function makeProvider(): ILlmProvider {
   return {
-    generateReply: vi.fn().mockResolvedValue('Respuesta del modelo'),
-    extractSlots: vi.fn().mockResolvedValue({ slots: { nombre: 'Juan' }, incompletos: [] }),
-    classifyLead: vi.fn().mockResolvedValue({ nivelInteres: 'tibio', objecion: 'precio' }),
+    generateReply: vi.fn().mockResolvedValue({ result: 'Respuesta del modelo', usage: USAGE }),
+    extractSlots: vi
+      .fn()
+      .mockResolvedValue({ result: { slots: { nombre: 'Juan' }, incompletos: [] }, usage: USAGE }),
+    classifyLead: vi
+      .fn()
+      .mockResolvedValue({ result: { nivelInteres: 'tibio', objecion: 'precio' }, usage: USAGE }),
   };
 }
 
@@ -73,6 +79,9 @@ describe('AIService.chat()', () => {
     expect(provider.generateReply).toHaveBeenCalledTimes(1);
     expect(result.cacheHit).toBe(false);
     expect(result.data).toBe('Respuesta del modelo');
+    expect(result.promptTokens).toBe(USAGE.promptTokens);
+    expect(result.completionTokens).toBe(USAGE.completionTokens);
+    expect(result.totalTokens).toBe(USAGE.totalTokens);
   });
 
   it('segundo llamado mismo input → provider NO invocado, cacheHit: true', async () => {
@@ -142,8 +151,8 @@ describe('AIService.extract()', () => {
     await seedGlobalTemplate('extract');
     const provider = makeProvider();
     vi.mocked(provider.extractSlots).mockResolvedValue({
-      slots: { nombre: 123 },
-      incompletos: [],
+      result: { slots: { nombre: 123 }, incompletos: [] },
+      usage: USAGE,
     });
     const schema = z.object({ nombre: z.string() }); // 123 no es string
     const service = new AIService(provider, makeRedisMock());
@@ -172,6 +181,7 @@ describe('AIService logUsage — aislamiento multi-tenant', () => {
 
     const logsA = await findScoped(AiUsageLogModel, tenantA).exec();
     expect(logsA.length).toBeGreaterThan(0);
+    expect(logsA[0]?.totalTokens).toBe(USAGE.totalTokens);
   });
 
   it('PromptTemplate específica de tenantA no visible para tenantB', async () => {

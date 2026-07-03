@@ -34,13 +34,42 @@ describe('GeminiProvider.generateReply', () => {
       response: { text: () => 'El precio es $50/mes.' },
     });
     const provider = new GeminiProvider();
-    const result = await provider.generateReply({
+    const { result } = await provider.generateReply({
       historial: HISTORIAL,
       tono: 'amable',
       instrucciones: 'Responde brevemente',
     });
     expect(result).toBe('El precio es $50/mes.');
     expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('respuesta OK con usageMetadata → retorna conteo de tokens real', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: {
+        text: () => 'El precio es $50/mes.',
+        usageMetadata: { promptTokenCount: 42, candidatesTokenCount: 8, totalTokenCount: 50 },
+      },
+    });
+    const provider = new GeminiProvider();
+    const { usage } = await provider.generateReply({
+      historial: HISTORIAL,
+      tono: 'amable',
+      instrucciones: 'Responde brevemente',
+    });
+    expect(usage).toEqual({ promptTokens: 42, completionTokens: 8, totalTokens: 50 });
+  });
+
+  it('respuesta OK sin usageMetadata → usage en cero', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => 'El precio es $50/mes.' },
+    });
+    const provider = new GeminiProvider();
+    const { usage } = await provider.generateReply({
+      historial: HISTORIAL,
+      tono: 'amable',
+      instrucciones: 'Responde brevemente',
+    });
+    expect(usage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 
   it('error 429 → reintenta 3 veces y finalmente lanza', async () => {
@@ -77,7 +106,7 @@ describe('GeminiProvider.classifyLead', () => {
       },
     });
     const provider = new GeminiProvider();
-    const result = await provider.classifyLead({ historial: HISTORIAL });
+    const { result } = await provider.classifyLead({ historial: HISTORIAL });
     expect(result.nivelInteres).toBe('tibio');
     expect(result.objecion).toBe('precio');
   });
@@ -87,7 +116,7 @@ describe('GeminiProvider.classifyLead', () => {
       response: { text: () => JSON.stringify({ nivelInteres: 'frio' }) },
     });
     const provider = new GeminiProvider();
-    const result = await provider.classifyLead({ historial: HISTORIAL });
+    const { result } = await provider.classifyLead({ historial: HISTORIAL });
     expect(result.objecion).toBeNull();
   });
 });
@@ -102,7 +131,7 @@ describe('GeminiProvider.extractSlots', () => {
       response: { text: () => JSON.stringify({ nombre: 'Juan' }) },
     });
     const provider = new GeminiProvider();
-    const result = await provider.extractSlots({
+    const { result } = await provider.extractSlots({
       historial: HISTORIAL,
       camposObjetivo: [
         { campo: 'nombre', descripcion: 'Nombre del prospecto', tipo: 'texto', requerido: true },

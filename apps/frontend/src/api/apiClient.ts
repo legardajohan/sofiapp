@@ -2,9 +2,15 @@ const API_BASE = import.meta.env['VITE_API_BASE_URL'] as string ?? 'http://local
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-async function csrfToken(): Promise<string> {
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-  return meta?.content ?? '';
+function getCookie(name: string): string | null {
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
+}
+
+function csrfToken(): string {
+  return getCookie('csrfToken') ?? '';
 }
 
 async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
@@ -12,7 +18,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
 
   const mutating = method !== 'GET';
   if (mutating) {
-    headers['X-CSRF-Token'] = await csrfToken();
+    headers['X-CSRF-Token'] = csrfToken();
   }
 
   const res = await fetch(`${API_BASE}${path}`, {

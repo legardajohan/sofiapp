@@ -34,7 +34,7 @@ export class AIService {
       return { data: cached, cacheHit: true, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
-    const reply = await this.provider.generateReply({
+    const { result: reply, usage } = await this.provider.generateReply({
       historial: params.historial,
       tono: params.tono ?? template.systemPrompt,
       instrucciones: params.instrucciones ?? template.systemPrompt,
@@ -42,23 +42,23 @@ export class AIService {
 
     await setCached(this.redis, cacheKey, reply, env.AI_CACHE_TTL_CHAT_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: false, durationMs });
-    return { data: reply, cacheHit: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs };
+    this.logUsage({ tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    return { data: reply, cacheHit: false, ...usage, durationMs };
   }
 
   async extract<T>(params: AiExtractParams): Promise<AiResult<T>> {
     const start = Date.now();
     await this.resolveTemplate(params.tenantId, 'extract');
 
-    const result = await this.provider.extractSlots({
+    const { result, usage } = await this.provider.extractSlots({
       historial: params.historial,
       camposObjetivo: params.camposObjetivo,
     });
 
     const parsed = params.schema.parse(result.slots) as T;
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'extract', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: false, durationMs });
-    return { data: parsed, cacheHit: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs };
+    this.logUsage({ tenantId: params.tenantId, method: 'extract', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    return { data: parsed, cacheHit: false, ...usage, durationMs };
   }
 
   async classify(params: AiClassifyParams): Promise<AiResult<ClassifyResult>> {
@@ -73,11 +73,13 @@ export class AIService {
       return { data: cached, cacheHit: true, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
-    const classifyResult = await this.provider.classifyLead({ historial: params.historial });
+    const { result: classifyResult, usage } = await this.provider.classifyLead({
+      historial: params.historial,
+    });
     await setCached(this.redis, cacheKey, classifyResult, env.AI_CACHE_TTL_CLASSIFY_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: false, durationMs });
-    return { data: classifyResult, cacheHit: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs };
+    this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    return { data: classifyResult, cacheHit: false, ...usage, durationMs };
   }
 
   private async resolveTemplate(tenantId: Types.ObjectId, method: string): Promise<IPromptTemplate> {

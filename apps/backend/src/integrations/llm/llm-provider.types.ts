@@ -18,19 +18,30 @@ export interface SlotResult {
   incompletos: string[];
 }
 
+export interface LlmUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LlmCallResult<T> {
+  result: T;
+  usage: LlmUsage;
+}
+
 export interface ILlmProvider {
   extractSlots(input: {
     historial: ChatTurn[];
     camposObjetivo: SlotSpec[];
-  }): Promise<SlotResult>;
+  }): Promise<LlmCallResult<SlotResult>>;
 
   classifyLead(input: {
     historial: ChatTurn[];
-  }): Promise<{ nivelInteres: NivelInteres; objecion: Objecion | null }>;
+  }): Promise<LlmCallResult<{ nivelInteres: NivelInteres; objecion: Objecion | null }>>;
 
   generateReply(input: {
     historial: ChatTurn[];
     tono: string;
     instrucciones: string;
-  }): Promise<string>;
+  }): Promise<LlmCallResult<string>>;
 }
