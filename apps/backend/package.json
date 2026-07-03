@@ -6,19 +6,28 @@
   "scripts": {
     "dev:web": "tsx watch --env-file .env src/app.ts",
     "dev:worker": "tsx watch --env-file .env src/worker.ts",
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@sofiapp/shared": "workspace:*",
+    "bcrypt": "^5.1.1",
     "bullmq": "^5.34.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.0.1",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
-    "bcrypt": "^5.1.1",
     "mongoose": "^8.9.0",
     "zod": "^3.24.0"
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "version": "7.0.24",
+      "downloadDir": "../../.mongodb-binaries"
+    }
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

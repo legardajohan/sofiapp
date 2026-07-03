@@ -1,4 +1,4 @@
-import { Model, Document, FilterQuery, UpdateQuery, Types } from 'mongoose';
+import type { Model, FilterQuery, UpdateQuery, Types, HydratedDocument } from 'mongoose';
 
 type TenantId = string | Types.ObjectId;
 
@@ -18,13 +18,13 @@ export function findByIdScoped<T>(
   return m.findOne({ _id: id, tenantId } as FilterQuery<T>);
 }
 
-export async function createScoped<T extends Document>(
+export async function createScoped<T>(
   m: Model<T>,
   tenantId: TenantId,
   data: Record<string, unknown>,
-): Promise<T> {
+): Promise<HydratedDocument<T>> {
   const doc = new m({ ...data, tenantId });
-  return doc.save() as unknown as Promise<T>;
+  return doc.save() as Promise<HydratedDocument<T>>;
 }
 
 export function findOneAndUpdateScoped<T>(
