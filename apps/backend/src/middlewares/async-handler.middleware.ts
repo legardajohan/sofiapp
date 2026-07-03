@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 
 export function asyncHandler(
@@ -5,5 +6,12 @@ export function asyncHandler(
 ): RequestHandler {
   return (req, res, next) => {
     fn(req, res, next).catch(next);
+=======
+import type { RequestHandler } from 'express';
+
+export function asyncHandler(fn: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+>>>>>>> develop
   };
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../app.js';
-import { TenantModel } from './tenant.model.js';
+import { Tenant } from './tenant.model.js';
 
 // SECRET debe coincidir con la variable JWT_SECRET configurada en vitest.config.ts
 const SECRET = 'test_jwt_secret_32_chars_minimum_ok';
@@ -78,7 +78,7 @@ describe('POST /api/admin/tenants (HU-SAAS-01)', () => {
     expect(res.body.nombre).toBe('Nueva Empresa');
     expect(res.body.estado).toBe('prueba');
 
-    const db = await TenantModel.findById(res.body._id).lean();
+    const db = await Tenant.findById(res.body._id).lean();
     expect(db).not.toBeNull();
   });
 

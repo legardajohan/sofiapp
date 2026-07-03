@@ -1,18 +1,26 @@
-import express, { type Express } from 'express';
+import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import mongoose from 'mongoose';
 import { env } from './config/env.js';
-import { errorHandler } from './middlewares/error.middleware.js';
+import { logger } from './utils/logger.js';
+import { errorHandler } from './middlewares/error-handler.middleware.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
+import channelRoutes from './features/channel/channel.routes.js';
+import messageRoutes from './features/message/message.routes.js';
+import webhookRoutes from './features/webhook/webhook.routes.js';
+import clienteRoutes from './features/cliente/cliente.routes.js';
 
-const app: Express = express();
+const app = express();
 
+app.use(express.json());
+app.use(cookieParser());
 app.use(
   cors({
     origin: env.WEB_ORIGIN,
     credentials: true,
   })
 );
-app.use(express.json());
 
 // Healthcheck (público)
 app.get('/api/health', (_req, res) => {
@@ -22,21 +30,25 @@ app.get('/api/health', (_req, res) => {
 // Rutas de Superadmin (cross-tenant, sin requireTenant)
 app.use('/api/admin/tenants', tenantAdminRoutes);
 
-// ⚠️  RUTAS TENANT-AWARE (fase 2+): cuando se monten endpoints que pertenecen a un tenant específico,
-// deben encadenarse así:
-//   router.<method>('<path>',
-//     authenticateJWT,              // 1. Autentica y carga req.user (con tenantId)
-//     requireTenant,                // 2. Valida que req.user.tenantId exista
-//     authorize([/* roles */]),     // 3. Autoriza por rol
-//     requireActiveTenant,          // 4. Valida que el tenant esté en estado 'activo'
-//     validate(<schema>),           // 5. Valida entrada con Zod
-//     asyncHandler(<controller>)    // 6. Ejecuta el controller
-//   );
-// Ejemplo futura ruta de clientes:
-//   app.use('/api/clientes', clientesRoutes);
-// Ver docs/multi-tenancy.md para reglas de aislamiento y docs/architecture.md para pipeline completo.
+// Rutas tenant-aware (fase 2+)
+app.use('/api/channels/whatsapp', channelRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/webhooks/whatsapp', webhookRoutes);
+app.use('/api/clientes', clienteRoutes);
 
-// Error handler central (siempre al final)
 app.use(errorHandler);
+
+mongoose
+  .connect(env.MONGODB_URI)
+  .then(() => {
+    logger.info('Conectado a MongoDB');
+    app.listen(env.PORT, () => {
+      logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
+    });
+  })
+  .catch((err: unknown) => {
+    logger.error('Fallo al conectar a MongoDB', { error: String(err) });
+    process.exit(1);
+  });
 
 export default app;

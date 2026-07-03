@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TenantModel } from './tenant.model.js';
+import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
 import { createTenant, updateTenant, updateTenantStatus } from './tenant.service.js';
 import { AppError } from '../../utils/AppError.js';
@@ -67,7 +67,7 @@ describe('tenant.service — HU-SAAS-01', () => {
       ).rejects.toThrow();
 
       // El tenant NO debe haberse persistido
-      const tenant = await TenantModel.findOne({ slug: 'empresa-rollback' }).lean();
+      const tenant = await Tenant.findOne({ slug: 'empresa-rollback' }).lean();
       expect(tenant).toBeNull();
     });
 

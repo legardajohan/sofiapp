@@ -14,7 +14,7 @@ const CampoCapturaSchema = new Schema(
 const TenantSchema = new Schema<ITenantDocument>(
   {
     nombre: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     nit: { type: String },
     contacto: {
       email: { type: String, required: true },
@@ -32,4 +32,5 @@ const TenantSchema = new Schema<ITenantDocument>(
   { timestamps: true }
 );
 
-export const TenantModel = model<ITenantDocument>('Tenant', TenantSchema);
+export const Tenant = model<ITenantDocument>('Tenant', TenantSchema);
+>>>>>>> develop

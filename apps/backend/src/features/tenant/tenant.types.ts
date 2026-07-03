@@ -1,4 +1,4 @@
-import type { Types, Document } from 'mongoose';
+import type { Document, Types } from 'mongoose';
 import { z } from 'zod';
 import {
   createTenantSchema,

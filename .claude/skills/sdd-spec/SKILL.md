@@ -4,7 +4,6 @@ description: Planeación COMPLEJA de un feature de SofiApp — genera la tríada
 argument-hint: <ID>-<slug> — <descripción del requerimiento>
 disable-model-invocation: true
 allowed-tools: Read, Write(docs/specs/**)
-
 ---
 
 # SDD · Planeación compleja (spec + plan + tasks)

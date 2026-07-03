@@ -14,6 +14,7 @@ const UserSchema = new Schema<IUserDocument>(
     },
     activo: { type: Boolean, default: true },
   },
+<<<<<<< HEAD
   { timestamps: true }
 );
 
@@ -25,3 +26,12 @@ UserSchema.index({ tenantId: 1, email: 1 });
 UserSchema.index({ rol: 1 });
 
 export const UserModel = model<IUserDocument>('User', UserSchema);
+=======
+  { timestamps: true },
+);
+
+UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ tenantId: 1, email: 1 });
+
+export const User = model<IUserDocument>('User', UserSchema);
+>>>>>>> develop

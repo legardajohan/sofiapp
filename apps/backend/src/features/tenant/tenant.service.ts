@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
-import { TenantModel } from './tenant.model.js';
+import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
 import { AppError } from '../../utils/AppError.js';
 import type {
@@ -34,11 +34,11 @@ export async function listTenants(query: ListTenantsQuery): Promise<TenantsListR
     : {};
 
   const [docs, total] = await Promise.all([
-    TenantModel.find(filter)
+    Tenant.find(filter)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean<ITenantDocument[]>(),
-    TenantModel.countDocuments(filter),
+    Tenant.countDocuments(filter),
   ]);
 
   return {
@@ -50,7 +50,7 @@ export async function listTenants(query: ListTenantsQuery): Promise<TenantsListR
 }
 
 export async function createTenant(dto: CreateTenantDTO): Promise<ITenantResponse> {
-  const existing = await TenantModel.findOne({ slug: dto.slug }).lean();
+  const existing = await Tenant.findOne({ slug: dto.slug }).lean();
   if (existing) {
     throw new AppError('El slug ya está en uso.', 409);
   }
@@ -60,7 +60,7 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      const [tenant] = await TenantModel.create(
+      const [tenant] = await Tenant.create(
         [
           {
             nombre: dto.nombre,
@@ -104,7 +104,7 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
 }
 
 export async function updateTenant(id: string, dto: UpdateTenantDTO): Promise<ITenantResponse> {
-  const tenant = await TenantModel.findByIdAndUpdate(
+  const tenant = await Tenant.findByIdAndUpdate(
     id,
     { $set: dto },
     { new: true, runValidators: true }
@@ -118,14 +118,14 @@ export async function updateTenantStatus(
   id: string,
   dto: UpdateTenantStatusDTO
 ): Promise<ITenantResponse> {
-  const tenant = await TenantModel.findById(id).lean<ITenantDocument>();
+  const tenant = await Tenant.findById(id).lean<ITenantDocument>();
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
 
   if (tenant.estado === dto.estado) {
     throw new AppError('La empresa ya tiene ese estado.', 409);
   }
 
-  const updated = await TenantModel.findByIdAndUpdate(
+  const updated = await Tenant.findByIdAndUpdate(
     id,
     { $set: { estado: dto.estado } },
     { new: true }
