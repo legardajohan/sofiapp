@@ -1,8 +1,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-<<<<<<< HEAD
-=======
 
 :root {
   font-family: Inter, system-ui, sans-serif;
@@ -13,4 +11,3 @@ body {
   margin: 0;
   background-color: #faf8ff;
 }
->>>>>>> develop
