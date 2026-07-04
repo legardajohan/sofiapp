@@ -1,1 +1,1 @@
-export type { };
+export type { EstadoTenant, ICampoCaptura } from './tenant.types.js';

@@ -21,3 +21,4 @@ UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, email: 1 });
 
 export const User = model<IUserDocument>('User', UserSchema);
+export const UserModel = User;

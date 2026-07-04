@@ -1,9 +1,11 @@
 import express from 'express';
+import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
+import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
@@ -13,7 +15,22 @@ const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(
+  cors({
+    origin: env.WEB_ORIGIN,
+    credentials: true,
+  })
+);
 
+// Healthcheck (público)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Rutas de Superadmin (cross-tenant, sin requireTenant)
+app.use('/api/admin/tenants', tenantAdminRoutes);
+
+// Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/webhooks/whatsapp', webhookRoutes);

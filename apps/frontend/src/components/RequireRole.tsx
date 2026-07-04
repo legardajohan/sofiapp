@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore.js';
+import { useAuthStore } from '../store/useAuthStore.js';
 
 export function RequireRole({
   roles,
