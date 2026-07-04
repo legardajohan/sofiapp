@@ -14,19 +14,6 @@ const UserSchema = new Schema<IUserDocument>(
     },
     activo: { type: Boolean, default: true },
   },
-<<<<<<< HEAD
-  { timestamps: true }
-);
-
-// ADR 0003: email único global para usuarios de panel
-UserSchema.index({ email: 1 }, { unique: true });
-// Lookup scoped (NO único)
-UserSchema.index({ tenantId: 1, email: 1 });
-// Búsqueda por rol
-UserSchema.index({ rol: 1 });
-
-export const UserModel = model<IUserDocument>('User', UserSchema);
-=======
   { timestamps: true },
 );
 
@@ -34,4 +21,3 @@ UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, email: 1 });
 
 export const User = model<IUserDocument>('User', UserSchema);
->>>>>>> develop

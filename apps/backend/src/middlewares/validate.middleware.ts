@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-import type { Request, Response, NextFunction } from 'express';
-import type { ZodTypeAny } from 'zod';
-
-export function validate(schema: ZodTypeAny) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    schema.parse({
-=======
 import type { RequestHandler } from 'express';
 import { z, ZodError } from 'zod';
 import { asyncHandler } from './async-handler.middleware.js';
@@ -19,15 +11,10 @@ type InputSchema = z.ZodObject<{
 export function validate(schema: InputSchema): RequestHandler {
   return asyncHandler(async (req, res, next) => {
     const result = schema.safeParse({
->>>>>>> develop
       body: req.body,
       params: req.params,
       query: req.query,
     });
-<<<<<<< HEAD
-    next();
-  };
-=======
     if (!result.success) {
       const errors = result.error.errors.map((e) => ({
         path: e.path.join('.'),
@@ -39,5 +26,4 @@ export function validate(schema: InputSchema): RequestHandler {
     req.body = result.data.body;
     next();
   });
->>>>>>> develop
 }
