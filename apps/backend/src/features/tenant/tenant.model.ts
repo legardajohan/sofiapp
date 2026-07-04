@@ -33,3 +33,4 @@ const TenantSchema = new Schema<ITenantDocument>(
 );
 
 export const Tenant = model<ITenantDocument>('Tenant', TenantSchema);
+export const TenantModel = Tenant;
