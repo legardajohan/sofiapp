@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useAuthStore } from '../stores/authStore.js';
+import { useAuthStore } from '../store/useAuthStore.js';
 
 function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
