@@ -5,28 +5,32 @@
 
 ## Implementación
 
-- [ ] Crear `features/tenant/tenant.types.ts` con `ITenant`, `ITenantDocument`, `EstadoTenant`, `ICampoCaptura`.
-- [ ] Crear `features/tenant/tenant.model.ts` (schema + `{ slug }` unique, `{ timestamps: true }`).
-- [ ] Modificar `features/users/user.model.ts`: `tenantId: { type: ObjectId, ref:'Tenant', default:null, index:true }` + índice `{ email:1 } unique` (global, ADR 0003) + `{ tenantId:1, email:1 }` (no único).
-- [ ] Crear `repositories/base.repository.ts` con las 7 funciones `*Scoped` (copiar de `docs/multi-tenancy.md` §3).
-- [ ] Crear `middlewares/require-tenant.middleware.ts`.
-- [ ] Crear/actualizar `types/express.d.ts` con `req.user` tipado (incluye `tenantId`).
+- [x] Crear `features/tenant/tenant.types.ts` con `ITenant`, `ITenantDocument`, `EstadoTenant`, `ICampoCaptura`.
+- [x] Crear `features/tenant/tenant.model.ts` (schema + `{ slug }` unique, `{ timestamps: true }`).
+- [x] Modificar `features/users/user.model.ts`: `tenantId: { type: ObjectId, ref:'Tenant', default:null, index:true }` + índice `{ email:1 } unique` (global, ADR 0003) + `{ tenantId:1, email:1 }` (no único).
+- [x] Crear `repositories/base.repository.ts` con las 7 funciones `*Scoped` (adaptadas para Mongoose 8).
+- [x] Crear `middlewares/require-tenant.middleware.ts`.
+- [x] Crear/actualizar `types/express.d.ts` con `req.user` tipado (incluye `tenantId`).
 
 ## Tests (Vitest)
 
-- [ ] `base.repository.test.ts`:
-  - [ ] `findByIdScoped` con `tenantB` sobre un doc de `tenantA` → `null`.
-  - [ ] `createScoped(Model, tenantA, { tenantId: tenantB, ... })` → el doc guardado tiene `tenantId === tenantA`.
-  - [ ] `findScoped` nunca devuelve documentos de otro tenant.
-- [ ] `require-tenant.middleware.test.ts`:
-  - [ ] sin `req.user.tenantId` → 500.
-  - [ ] con `tenantId` → llama `next()`.
+- [x] `base.repository.test.ts`:
+  - [x] `findByIdScoped` con `tenantB` sobre un doc de `tenantA` → `null`.
+  - [x] `createScoped(Model, tenantA, { tenantId: tenantB, ... })` → el doc guardado tiene `tenantId === tenantA`.
+  - [x] `findScoped` nunca devuelve documentos de otro tenant.
+  - [x] `findOneScoped` retorna null si no hay coincidencia en el tenant.
+  - [x] `findOneAndUpdateScoped` solo actualiza documentos del tenant correcto.
+  - [x] `deleteOneScoped` solo elimina documentos del tenant correcto.
+- [x] `require-tenant.middleware.test.ts`:
+  - [x] sin `req.user.tenantId` → 500.
+  - [x] con `tenantId` → llama `next()`.
 
 ## Verificación final
 
-- [ ] `pnpm --filter backend typecheck` sin errores.
-- [ ] `pnpm --filter backend test` con los tests anteriores en verde.
-- [ ] Checklist de PR de `docs/multi-tenancy.md` §9 revisado.
+- [x] `pnpm --filter backend typecheck` sin errores. ✅
+- [x] `pnpm --filter backend test` con los tests anteriores en verde. ✅
+      _Binario (~600MB) descargado con curl y cacheado en `.mongodb-binaries/`. Config: `MONGOMS_DOWNLOAD_DIR` + `MONGOMS_MD5_CHECK=false` en `vitest.config.ts`._
+- [x] Checklist de PR de `docs/multi-tenancy.md` §9 revisado.
 
 ## Definición de "hecho"
 

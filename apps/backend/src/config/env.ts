@@ -16,10 +16,15 @@ const EnvSchema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)')
     .optional(),
+
+  // LLM / Gemini — sin fallback: el proceso aborta si GEMINI_API_KEY falta
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
-  GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
-  LLM_TIMEOUT_MS: z.coerce.number().default(15000),
+  GEMINI_API_KEY: z.string().min(1),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  LLM_TIMEOUT_MS: z.coerce.number().positive().default(15000),
+  AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
+  AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),
@@ -28,4 +33,12 @@ const EnvSchema = z.object({
 });
 
 export type Env = z.infer<typeof EnvSchema>;
-export const env = EnvSchema.parse(process.env);
+
+const parsed = EnvSchema.safeParse(process.env);
+
+if (!parsed.success) {
+  console.error('❌ Variables de entorno inválidas:\n', parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+
+export const env: Env = parsed.data;

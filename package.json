@@ -13,7 +13,7 @@
     "dev:front": "pnpm --filter @sofiapp/web dev"
   },
   "devDependencies": {
-    "turbo": "^2.3.0",
-    "prettier": "^3.4.0"
+    "turbo": "^2.5.4",
+    "prettier": "^3.5.3"
   }
 }
