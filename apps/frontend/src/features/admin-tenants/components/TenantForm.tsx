@@ -121,7 +121,7 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
           value={form.slug}
           onChange={(e) => !isEdit && setForm((p) => ({ ...p, slug: e.target.value }))}
           readOnly={isEdit}
-          pattern="^[a-z0-9-]+$"
+          pattern="^[a-z0-9\-]+$"
           required
         />
       </div>

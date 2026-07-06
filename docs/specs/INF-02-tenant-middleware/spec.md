@@ -3,6 +3,8 @@
 > **Spec-Driven Development.** Este es el QUÉ y el porqué. El CÓMO va en `plan.md`; la ejecución
 > en `tasks.md`. Es el núcleo del SaaS: la columna vertebral del aislamiento de datos.
 
+**Estado:** liberado
+
 ## Objetivo
 
 Disponer del modelo `Tenant`, el modelo `User` con `tenantId`, la emisión del JWT con `tenantId`

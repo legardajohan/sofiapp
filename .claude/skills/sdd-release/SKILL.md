@@ -3,7 +3,7 @@ name: sdd-release
 description: Prepara el release de un feature SDD ya implementado de SofiApp (revisión vs criterios, semver, CHANGELOG, tag y merge a main). Úsala con /sdd-release <ID>-<slug>.
 argument-hint: <ID>-<slug>
 disable-model-invocation: true
-allowed-tools: Read, Bash(git status *), Bash(git diff *), Bash(git log *), Bash(pnpm *)
+allowed-tools: Read, Edit(docs/specs/**), Bash(git status *), Bash(git diff *), Bash(git log *), Bash(pnpm *)
 ---
 
 # SDD · Release
@@ -21,10 +21,11 @@ Entrada: `$ARGUMENTS` = `<ID>-<slug>`. La rama actual debe ser `feat/<ID>`.
    - Commit `chore: prepare release v{version}` (en inglés).
    - Tag `Release v{version}`.
    - Merge `feat/<ID>` → `main`.
-5. Marca en el `spec.md` que quedó liberado.
+5. Actualiza `**Estado:** implementado` a `**Estado:** liberado` en `spec.md`.
 
 ## Antes de cerrar
 - [ ] Criterios del `spec.md` verificados.
 - [ ] Tests (con aislamiento) en verde; build/lint de web si aplica.
 - [ ] `package.json` y `CHANGELOG.md` actualizados.
 - [ ] Tag creado y `feat/<ID>` fusionada a `main`.
+- [ ] `spec.md` con `**Estado:** liberado`.

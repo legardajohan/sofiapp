@@ -32,7 +32,11 @@ apiClient.interceptors.request.use((c) => {
   }
   return c;
 });
-apiClient.interceptors.response.use(r => r, (e) => { if (e.response?.status === 401) useAuthStore.getState().logout(); return Promise.reject(e); });
+apiClient.interceptors.response.use(r => r, (e) => {
+  // Solo forzar logout+redirect si había sesión autenticada (evita bucle de reload en el probe /auth/me sin sesión).
+  if (e.response?.status === 401 && useAuthStore.getState().status === 'authenticated') useAuthStore.getState().logout();
+  return Promise.reject(e);
+});
 ```
 
 > La app **móvil** (Fase 4) no usa cookies: se autentica con `Authorization: Bearer <token>`.

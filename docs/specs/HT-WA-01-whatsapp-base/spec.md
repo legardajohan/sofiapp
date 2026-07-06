@@ -3,6 +3,8 @@
 > **Spec-Driven Development.** Este es el QUÉ y el porqué. El CÓMO va en `plan.md`; la ejecución
 > en `tasks.md`. Es la capa fundacional de mensajería: sin ella no hay omnicanal ni IA conversacional.
 
+**Estado:** liberado
+
 ## Objetivo
 
 Implementar la capa de mensajería base de WhatsApp: verificación y recepción del webhook de Meta

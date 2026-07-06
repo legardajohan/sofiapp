@@ -38,3 +38,6 @@ dev/
 
 # Binario MongoDB para tests (se descarga automáticamente en el primer test run)
 .mongodb-binaries/
+
+# Snapshots temporales de Playwright MCP
+.playwright-mcp/

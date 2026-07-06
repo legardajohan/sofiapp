@@ -5,7 +5,7 @@ import app from '../../app.js';
 import { Tenant } from './tenant.model.js';
 
 // SECRET debe coincidir con la variable JWT_SECRET configurada en vitest.config.ts
-const SECRET = 'test_jwt_secret_32_chars_minimum_ok';
+const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 const makeSuperadminToken = () =>
   jwt.sign(
@@ -46,7 +46,7 @@ describe('GET /api/admin/tenants — aislamiento (HU-SAAS-01)', () => {
     const token = makeAdminToken(tenantId);
     const res = await request(app)
       .get('/api/admin/tenants')
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', `token=${token}`);
     expect(res.status).toBe(403);
   });
 
@@ -54,7 +54,7 @@ describe('GET /api/admin/tenants — aislamiento (HU-SAAS-01)', () => {
     const token = makeSuperadminToken();
     const res = await request(app)
       .get('/api/admin/tenants')
-      .set('Authorization', `Bearer ${token}`);
+      .set('Cookie', `token=${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('data');
     expect(res.body).toHaveProperty('total');
@@ -62,11 +62,14 @@ describe('GET /api/admin/tenants — aislamiento (HU-SAAS-01)', () => {
 });
 
 describe('POST /api/admin/tenants (HU-SAAS-01)', () => {
+  const CSRF = 'test-csrf-token';
+
   it('crea empresa con datos válidos y JWT superadmin → 201', async () => {
     const token = makeSuperadminToken();
     const res = await request(app)
       .post('/api/admin/tenants')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
       .send({
         nombre: 'Nueva Empresa',
         slug: 'nueva-empresa',
@@ -92,12 +95,14 @@ describe('POST /api/admin/tenants (HU-SAAS-01)', () => {
 
     await request(app)
       .post('/api/admin/tenants')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
       .send(payload);
 
     const res = await request(app)
       .post('/api/admin/tenants')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
       .send(payload);
 
     expect(res.status).toBe(409);

@@ -11,12 +11,12 @@ export const getAdminTenants = async (params: {
   page?: number;
   limit?: number;
 }): Promise<TenantsListResponse> => {
-  const res = await apiClient.get<TenantsListResponse>('/api/admin/tenants', { params });
+  const res = await apiClient.get<TenantsListResponse>('/admin/tenants', { params });
   return res.data;
 };
 
 export const createAdminTenant = async (payload: CreateTenantPayload): Promise<ITenant> => {
-  const res = await apiClient.post<ITenant>('/api/admin/tenants', payload);
+  const res = await apiClient.post<ITenant>('/admin/tenants', payload);
   return res.data;
 };
 
@@ -24,7 +24,7 @@ export const updateAdminTenant = async (
   id: string,
   payload: UpdateTenantPayload
 ): Promise<ITenant> => {
-  const res = await apiClient.patch<ITenant>(`/api/admin/tenants/${id}`, payload);
+  const res = await apiClient.patch<ITenant>(`/admin/tenants/${id}`, payload);
   return res.data;
 };
 
@@ -32,6 +32,6 @@ export const updateAdminTenantStatus = async (
   id: string,
   estado: 'activo' | 'suspendido'
 ): Promise<ITenant> => {
-  const res = await apiClient.patch<ITenant>(`/api/admin/tenants/${id}/status`, { estado });
+  const res = await apiClient.patch<ITenant>(`/admin/tenants/${id}/status`, { estado });
   return res.data;
 };

@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuthStore } from '../store/useAuthStore.js';
+import { useAuthStore } from '../stores/authStore.js';
 import { AdminTenantsPage } from '../features/admin-tenants/pages/AdminTenantsPage.js';
 
 export default function AdminRoutes() {

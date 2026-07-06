@@ -28,6 +28,8 @@ export default defineConfig({
       AI_CACHE_TTL_CHAT_S: '3600',
       AI_CACHE_TTL_CLASSIFY_S: '7200',
       COOKIE_SAMESITE: 'lax',
+      SUPERADMIN_EMAIL: 'admin@sofiapp.test',
+      SUPERADMIN_PASSWORD: 'super-secret-123',
     },
   },
 });

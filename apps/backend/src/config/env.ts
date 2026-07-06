@@ -27,6 +27,9 @@ const EnvSchema = z.object({
 
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
+  SUPERADMIN_EMAIL: z.string().email().optional(),
+  SUPERADMIN_PASSWORD: z.string().min(8).optional(),
+  SALT_ROUNDS: z.coerce.number().default(12),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

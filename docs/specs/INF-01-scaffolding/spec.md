@@ -3,6 +3,8 @@
 > **Spec-Driven Development.** El QUÉ y el porqué. El CÓMO va en `plan.md`; la ejecución en
 > `tasks.md`. Es el cimiento: sin esto no hay base multi-tenant ni features.
 
+**Estado:** liberado
+
 ## Objetivo
 
 Dejar el **andamiaje del monorepo** listo y compilando: estructura de carpetas de
