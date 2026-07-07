@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { login as loginRequest, type LoginDTO } from './api.js';
 import { useAuthStore } from '../../stores/authStore.js';
-import loginBg from '../../assets/login-bg.svg';
+import loginIllustration from '../../assets/undraw_chat_qmyo.svg';
 import { SofiAppLogin } from './components/SofiAppLogin.js';
 
 function Spinner(): React.ReactElement {
@@ -62,7 +62,7 @@ export function LoginPage(): React.ReactElement {
         {/* Columna 1: logo + nombre, tagline y, debajo, la ilustración */}
         <div className="hidden md:flex flex-col items-center pt-12 px-8 min-h-[560px]">
           <div className="flex items-end justify-center gap-3 pt-5">
-            <SofiAppLogin width="180px" />
+            <SofiAppLogin width="220px" />
           </div>
 
           <p className="mt-2 text-center text-md font-medium text-secondary-foreground">
@@ -71,7 +71,7 @@ export function LoginPage(): React.ReactElement {
 
           <div
             className="w-full flex-1 mt-4 bg-contain bg-bottom bg-no-repeat"
-            style={{ backgroundImage: `url(${loginBg})` }}
+            style={{ backgroundImage: `url(${loginIllustration})` }}
           />
         </div>
 
@@ -126,7 +126,7 @@ export function LoginPage(): React.ReactElement {
             <button
               type="submit"
               disabled={loginMutation.isPending}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-[background-color,transform] duration-150 focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               {loginMutation.isPending ? (
                 <>

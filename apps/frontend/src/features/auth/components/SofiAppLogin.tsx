@@ -20,7 +20,6 @@ export function SofiAppLogin({ width, accentColor, className }: SofiAppLoginProp
           <img className="logo__art" src={lockupSvg} alt="" draggable={false} />
           <div className="logo__sheen" />
         </div>
-        <div className="logo__shadow" />
       </div>
     </div>
   );

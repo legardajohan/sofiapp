@@ -23,7 +23,8 @@ selectores de ID de alta especificidad, y parametrizado vía CSS custom properti
 Incluye:
 
 - Componente `SofiAppLogin` + su CSS aislado (origen: `index.html` + `styles.css`, solo la
-  porción `.logo-wrap`/`.logo`/`.logo__art`/`.logo__sheen`/`.logo__shadow`).
+  porción `.logo-wrap`/`.logo`/`.logo__art`/`.logo__sheen`; sin sombra de contacto — ver
+  ajuste post-implementación en `plan.md`).
 - Componente `SofiAppWelcomeLoader` + su CSS aislado (origen: `loading.html` + `loading.css`,
   solo la porción `.boot-overlay*`; se excluye el `.login-mock` de la demo).
 - Componente `LoginView`, montado en la raíz del router (hermano de `AuthBootstrap`), que

@@ -32,7 +32,7 @@
   gap: 28px;
   background: radial-gradient(120% 90% at 50% -10%, #fdfeff 0%, #f5f7fb 46%, #e7ebf4 100%);
   opacity: 1;
-  animation: sofiaWelcome-fadeOut 320ms ease-in forwards;
+  animation: sofiaWelcome-fadeOut 320ms ease-out forwards;
   animation-delay: var(--sofia-welcome-duration, 2200ms);
 }
 
@@ -116,7 +116,7 @@
   height: 100%;
   border-radius: 2px;
   background: linear-gradient(90deg, #4f6bff, #8a2dcb);
-  animation: sofiaWelcome-progressSlide 1.3s ease-in-out infinite;
+  animation: sofiaWelcome-progressSlide 1.3s linear infinite;
 }
 
 @keyframes sofiaWelcome-logoIn {

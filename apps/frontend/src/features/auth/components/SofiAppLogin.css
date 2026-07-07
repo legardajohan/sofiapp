@@ -29,9 +29,6 @@
   position: relative;
   width: var(--sofia-login-width, clamp(140px, 20vw, 220px));
   aspect-ratio: 769.21 / 201.38;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 #sofiapp-login-wrapper .logo__art {
@@ -73,20 +70,6 @@
   will-change: transform;
 }
 
-#sofiapp-login-wrapper .logo__shadow {
-  width: 58%;
-  height: 15px;
-  margin-top: 20px;
-  border-radius: 50%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(var(--sofia-login-tint, 88, 45, 203), 0.24) 0%,
-    rgba(var(--sofia-login-tint, 88, 45, 203), 0) 72%
-  );
-  filter: blur(6px);
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 @keyframes sofiaLogin-sweep {
   0%, 58%   { transform: translateX(1500%) rotate(8deg); }
   76%       { transform: translateX(-250%) rotate(8deg); }
@@ -95,9 +78,6 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  #sofiapp-login-wrapper .logo:hover {
-    transform: translateY(-4px) scale(1.015);
-  }
   #sofiapp-login-wrapper .logo:hover .logo__art {
     filter:
       drop-shadow(0 20px 28px rgba(var(--sofia-login-tint, 88, 45, 203), 0.24))
@@ -106,22 +86,8 @@
   #sofiapp-login-wrapper .logo:hover .logo__sheen::before {
     animation-duration: 1.6s;
   }
-  #sofiapp-login-wrapper .logo:hover ~ .logo__shadow {
-    transform: scale(0.94);
-    opacity: 0.7;
-  }
-}
-
-#sofiapp-login-wrapper .logo:active {
-  transform: translateY(-1px) scale(0.99);
-  transition: transform 0.15s cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   #sofiapp-login-wrapper .logo__sheen::before { animation: none; display: none; }
-  #sofiapp-login-wrapper .logo,
-  #sofiapp-login-wrapper .logo__art,
-  #sofiapp-login-wrapper .logo__shadow { transition: none; }
-  #sofiapp-login-wrapper .logo:hover { transform: none; }
-  #sofiapp-login-wrapper .logo:active { transform: none; }
 }

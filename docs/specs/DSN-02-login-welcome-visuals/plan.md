@@ -41,10 +41,14 @@ export function SofiAppLogin(props: SofiAppLoginProps): React.ReactElement
         <img className="logo__art" src={lockupSvg} alt="" draggable="false" />
         <div className="logo__sheen" />
       </div>
-      <div className="logo__shadow" />
     </div>
   </div>
   ```
+  > **Ajuste post-implementación** (feedback visual del usuario): se eliminó `.logo__shadow`
+  > (sombra de contacto elíptica bajo el lockup) — dentro de la tarjeta de login, junto al
+  > formulario, se leía como un manchón flotante en vez de aportar sensación de "objeto real".
+  > El ancho por defecto en `LoginPage.tsx` subió de `180px` a `220px` para compensar el peso
+  > visual que perdía el componente sin la sombra.
 - `style={{ '--sofia-login-width': width, '--sofia-login-tint': accentColor }}` — solo se
   inyectan las que vengan definidas (`undefined` deja el `var(--x, fallback)` del CSS).
 - Importa `./SofiAppLogin.css` (side-effect import, sin CSS Modules — no hay esa
@@ -55,8 +59,9 @@ export function SofiAppLogin(props: SofiAppLoginProps): React.ReactElement
 - Todo bajo `#sofiapp-login-wrapper` (o `#sofiapp-login-wrapper .clase`).
 - Reglas portadas: `.logo-wrap`, `.logo` (usa `var(--sofia-login-width, clamp(140px, 20vw,
   220px))` en `width`), `.logo__art` (drop-shadow usa `var(--sofia-login-tint, 88, 45, 203)`),
-  `.logo__sheen` + `::before` (mask data-URI sin tocar), `.logo__shadow`, hover/active,
-  `@media (prefers-reduced-motion: reduce)`.
+  `.logo__sheen` + `::before` (mask data-URI sin tocar), hover/active,
+  `@media (prefers-reduced-motion: reduce)`. `.logo__shadow` se descartó (ver nota de ajuste
+  post-implementación arriba).
 - Descartadas: `:root`, `*`, `html,body`, `body`, `.stage`, `.tagline` (no aplican fuera de una
   página standalone; la tagline del login sigue siendo el párrafo ya existente en
   `LoginPage.tsx`).
@@ -165,7 +170,7 @@ export function LoginView(): React.ReactElement | null {
   ```
   por:
   ```tsx
-  <SofiAppLogin width="180px" />
+  <SofiAppLogin width="220px" />
   ```
 - Quitar los imports `sofiappIcon`/`sofiappName` (ya no se usan); añadir
   `import { SofiAppLogin } from './components/SofiAppLogin.js';`. `loginBg` se mantiene (sigue
