@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sofiapp — Loading primario (Bienvenida)</title>
+  <link rel="stylesheet" href="loading.css" />
+</head>
+<body>
+  <!--
+    iteración-05 · complemento "loading.html" · MODO CLARO · Bienvenida (boot splash)
+      · Uso sugerido: overlay que se monta ENCIMA de /login, no una pantalla aparte.
+        El formulario real ya vive en el DOM (mock abajo) mientras el overlay
+        reproduce el momento de marca; en producción quita `.boot-overlay` (o
+        añádele `.is-done`) cuando la sesión + assets críticos resuelvan, con un
+        mínimo de ~1.6s en pantalla para que no sea solo un parpadeo.
+      · Sin JS: la secuencia completa (entrada del logo → un barrido de luz
+        único → progreso indeterminado → revelado del login) se reproduce sola
+        vía CSS, en loop, solo para efectos de esta vitrina.
+      · Paleta y curvas de easing idénticas a index.html — misma placa de marca,
+        ahora como bienvenida en vez de vitrina estática.
+  -->
+  <main class="stage">
+    <section class="login-mock" aria-hidden="true">
+      <div class="login-mock__card">
+        <div class="login-mock__logo"></div>
+        <div class="login-mock__field"></div>
+        <div class="login-mock__field"></div>
+        <div class="login-mock__button"></div>
+      </div>
+    </section>
+
+    <div class="boot-overlay">
+      <div class="boot-overlay__logo" role="img" aria-label="Sofiapp">
+        <img class="boot-overlay__art" src="../assets/sofiapp-v5.svg" alt="" draggable="false" />
+        <div class="boot-overlay__sheen"></div>
+      </div>
+      <p class="boot-overlay__tagline">Preparando tu tienda…</p>
+      <div class="boot-overlay__progress"><span></span></div>
+    </div>
+  </main>
+</body>
+</html>

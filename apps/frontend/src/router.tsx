@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage.js';
+import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
@@ -16,7 +17,12 @@ const AdminRoutes = lazy(() =>
 
 export const router = createBrowserRouter([
   {
-    element: <AuthBootstrap />,
+    element: (
+      <>
+        <LoginView />
+        <AuthBootstrap />
+      </>
+    ),
     children: [
       {
         path: '/login',

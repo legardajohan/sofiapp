@@ -5,8 +5,7 @@ import axios from 'axios';
 import { login as loginRequest, type LoginDTO } from './api.js';
 import { useAuthStore } from '../../stores/authStore.js';
 import loginBg from '../../assets/login-bg.svg';
-import sofiappIcon from '../../assets/sofiapp-v1.svg';
-import sofiappName from '../../assets/sofiapp-name.svg';
+import { SofiAppLogin } from './components/SofiAppLogin.js';
 
 function Spinner(): React.ReactElement {
   return (
@@ -63,8 +62,7 @@ export function LoginPage(): React.ReactElement {
         {/* Columna 1: logo + nombre, tagline y, debajo, la ilustración */}
         <div className="hidden md:flex flex-col items-center pt-12 px-8 min-h-[560px]">
           <div className="flex items-end justify-center gap-3 pt-5">
-            <img src={sofiappIcon} alt="" className="h-20 w-auto drop-shadow-md" />
-            <img src={sofiappName} alt="SofiApp" className="h-16 w-auto drop-shadow-lg" />
+            <SofiAppLogin width="180px" />
           </div>
 
           <p className="mt-2 text-center text-md font-medium text-secondary-foreground">
