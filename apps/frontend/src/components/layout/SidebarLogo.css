@@ -2,8 +2,11 @@
    SidebarLogo — ícono + wordmark del sidebar, con el mismo barrido
    de luz especular del login (ver SofiAppLogin.css), pero cada pieza
    enmascarada por su propio SVG (sofiapp-v1 / sofiapp-name) en vez
-   de un data-URI combinado. El wordmark se rellena con currentColor
-   para adaptarse a light/dark; el ícono conserva su gradiente propio.
+   de un data-URI combinado. El ícono conserva siempre su gradiente
+   propio. El wordmark: en light usa sus colores originales del SVG
+   (sin recolorear); en dark se rellena con el mismo degradado
+   azul→púrpura del ícono (ver .sidebar-logo__name-fill) para no
+   perderse contra el fondo oscuro.
    ============================================================= */
 
 .sidebar-logo__icon {
@@ -33,17 +36,31 @@
 .sidebar-logo__name {
   position: relative;
   flex: 0 0 auto;
-  height: 1.25rem;
+  height: 1.75rem;
+  margin-top: 0.25rem;
+  margin-left: 0.3rem;
   overflow: hidden;
 }
 
+.sidebar-logo__name-native {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7.6rem;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+/* Dark: mismo degradado azul→púrpura de sofiapp-v1.svg (stops #008aff / #8a4cff),
+   para que el wordmark case con el ícono en vez de perderse en negro sobre negro. */
 .sidebar-logo__name-fill {
   position: absolute;
   top: 0;
   left: 0;
-  width: 4.75rem;
+  width: 7.6rem;
   height: 100%;
-  background-color: currentColor;
+  background: linear-gradient(90deg, #008aff 0%, #8a4cff 100%);
   -webkit-mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
   mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
 }
@@ -81,15 +98,15 @@
   );
   filter: blur(3px);
   transform: translateX(1200%) rotate(8deg);
-  animation: sidebarLogo-sweep 11s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation: sidebarLogo-sweep 6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   will-change: transform;
 }
 
 @keyframes sidebarLogo-sweep {
-  0%, 70%   { transform: translateX(1200%) rotate(8deg); }
-  86%       { transform: translateX(-250%) rotate(8deg); }
-  86.01%    { transform: translateX(1350%) rotate(8deg); }
-  98%, 100% { transform: translateX(1200%) rotate(8deg); }
+  0%, 30%   { transform: translateX(1200%) rotate(8deg); }
+  70%       { transform: translateX(-250%) rotate(8deg); }
+  70.01%    { transform: translateX(1350%) rotate(8deg); }
+  100% { transform: translateX(1200%) rotate(8deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {

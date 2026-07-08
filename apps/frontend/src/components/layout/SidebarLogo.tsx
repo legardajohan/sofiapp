@@ -21,9 +21,11 @@ export function SidebarLogo(): React.ReactElement {
       </div>
       <div
         aria-hidden="true"
-        className="sidebar-logo__name w-[4.75rem] opacity-100 transition-[width,opacity,margin] duration-200 ease-linear group-data-[collapsible=icon]:-ml-2 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0"
+        className="sidebar-logo__name w-[7.6rem] opacity-100 transition-[width,opacity,margin] duration-200 ease-linear group-data-[collapsible=icon]:-ml-2 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0"
       >
-        <div className="sidebar-logo__name-fill" />
+        {/* Light: colores propios del SVG, intactos. Dark: degradado azul→púrpura del ícono. */}
+        <img src={nameSvg} alt="" className="sidebar-logo__name-native block dark:hidden" draggable={false} />
+        <div className="sidebar-logo__name-fill hidden dark:block" />
         <div className="sidebar-logo__name-sheen" />
       </div>
     </div>
