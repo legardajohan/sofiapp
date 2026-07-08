@@ -56,7 +56,7 @@ export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit 
         className="mb-4"
       />
 
-      <div className="rounded-lg border border-border">
+      <div className="rounded-lg border border-border bg-card shadow-card">
         <Table>
           <TableHeader>
             <TableRow>

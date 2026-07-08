@@ -12,6 +12,10 @@ body {
 }
 
 @layer base {
+  * {
+    @apply border-border;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -49,13 +53,15 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 100%;
+    /* Panel del sidebar: capa neutra distinta del canvas (--background) para dar
+       profundidad real en vez de dos blancos casi idénticos apilados. */
+    --sidebar-background: 245 30% 95%;
     --sidebar-foreground: 228 16.7% 11.8%;
     --sidebar-primary: 221 83.2% 53.3%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 248 40% 96.1%;
-    --sidebar-accent-foreground: 230 11.8% 29.8%;
-    --sidebar-border: 235 25% 90.6%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 228 16.7% 11.8%;
+    --sidebar-border: 235 22% 87%;
     --sidebar-ring: 221 83.2% 53.3%;
   }
 
@@ -94,9 +100,11 @@ body {
     --sidebar-foreground: 250 40% 96%;
     --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 228 16% 18%;
-    --sidebar-accent-foreground: 250 20% 88%;
-    --sidebar-border: 228 16% 20%;
+    --sidebar-accent: 228 16% 19%;
+    --sidebar-accent-foreground: 250 40% 96%;
+    /* Delta ajustado (13%→17%) para una línea sutil, no la barra brillante que salía
+       antes por el bug de currentColor en border-r sin color explícito. */
+    --sidebar-border: 228 14% 17%;
     --sidebar-ring: 217 91% 60%;
   }
 

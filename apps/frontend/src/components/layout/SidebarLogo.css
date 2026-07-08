@@ -1,0 +1,101 @@
+/* =============================================================
+   SidebarLogo — ícono + wordmark del sidebar, con el mismo barrido
+   de luz especular del login (ver SofiAppLogin.css), pero cada pieza
+   enmascarada por su propio SVG (sofiapp-v1 / sofiapp-name) en vez
+   de un data-URI combinado. El wordmark se rellena con currentColor
+   para adaptarse a light/dark; el ícono conserva su gradiente propio.
+   ============================================================= */
+
+.sidebar-logo__icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  aspect-ratio: 339.32 / 384.58;
+}
+
+.sidebar-logo__icon-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sidebar-logo__icon-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask: var(--sidebar-logo-icon-mask) center / contain no-repeat;
+  mask: var(--sidebar-logo-icon-mask) center / contain no-repeat;
+  pointer-events: none;
+}
+
+.sidebar-logo__name {
+  position: relative;
+  flex: 0 0 auto;
+  height: 1.25rem;
+  overflow: hidden;
+}
+
+.sidebar-logo__name-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4.75rem;
+  height: 100%;
+  background-color: currentColor;
+  -webkit-mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
+  mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
+}
+
+.sidebar-logo__name-sheen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4.75rem;
+  height: 100%;
+  overflow: hidden;
+  -webkit-mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
+  mask: var(--sidebar-logo-name-mask) left center / contain no-repeat;
+  pointer-events: none;
+}
+
+/* Barrido compartido: mismo timing en ícono y nombre para que se lean
+   como un solo paso de luz, aunque son dos máscaras independientes.
+   Ciclo largo (11s) y opacidad baja: esto vive en pantalla todo el
+   tiempo (no es un momento único como en el login), así que se atenúa
+   a un detalle ambiental en vez de una animación que se note en bucle. */
+.sidebar-logo__icon-sheen::before,
+.sidebar-logo__name-sheen::before {
+  content: '';
+  position: absolute;
+  top: -120%;
+  left: 0;
+  width: 10%;
+  height: 340%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  filter: blur(3px);
+  transform: translateX(1200%) rotate(8deg);
+  animation: sidebarLogo-sweep 11s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes sidebarLogo-sweep {
+  0%, 70%   { transform: translateX(1200%) rotate(8deg); }
+  86%       { transform: translateX(-250%) rotate(8deg); }
+  86.01%    { transform: translateX(1350%) rotate(8deg); }
+  98%, 100% { transform: translateX(1200%) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-logo__icon-sheen::before,
+  .sidebar-logo__name-sheen::before {
+    animation: none;
+    display: none;
+  }
+}
