@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore.js';
+import { RequireAuth } from './RequireAuth.js';
 
 export function RequireRole({
   roles,
@@ -9,7 +10,7 @@ export function RequireRole({
   children: React.ReactNode;
 }): React.ReactElement {
   const user = useAuthStore((s) => s.user);
-  if (!user) return <Navigate to="/login" replace />;
-  if (!roles.includes(user.rol)) return <Navigate to="/" replace />;
-  return <>{children}</>;
+  return (
+    <RequireAuth>{user && roles.includes(user.rol) ? children : <Navigate to="/" replace />}</RequireAuth>
+  );
 }

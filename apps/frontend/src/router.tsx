@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage.js';
 import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
+import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
 import { Loading } from './components/Loading.js';
@@ -45,14 +46,20 @@ export const router = createBrowserRouter([
       {
         path: '/admin/*',
         element: (
-          <Suspense fallback={<Loading />}>
-            <AdminRoutes />
-          </Suspense>
+          <RequireAuth>
+            <Suspense fallback={<Loading />}>
+              <AdminRoutes />
+            </Suspense>
+          </RequireAuth>
         ),
       },
       {
         path: '*',
-        element: <div className="p-8 text-sm text-gray-500">Página no encontrada</div>,
+        element: (
+          <RequireAuth>
+            <div className="p-8 text-sm text-gray-500">Página no encontrada</div>
+          </RequireAuth>
+        ),
       },
     ],
   },

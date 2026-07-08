@@ -62,7 +62,7 @@ export function LoginPage(): React.ReactElement {
         {/* Columna 1: logo + nombre, tagline y, debajo, la ilustración */}
         <div className="hidden md:flex flex-col items-center pt-12 px-8 min-h-[560px]">
           <div className="flex items-end justify-center gap-3 pt-5">
-            <SofiAppLogin width="220px" />
+            <SofiAppLogin width="240px" />
           </div>
 
           <p className="mt-2 text-center text-md font-medium text-secondary-foreground">
@@ -70,7 +70,7 @@ export function LoginPage(): React.ReactElement {
           </p>
 
           <div
-            className="w-full flex-1 mt-4 bg-contain bg-bottom bg-no-repeat"
+            className="w-full flex-1 mt-4 bg-contain bg-[center_60%] bg-no-repeat"
             style={{ backgroundImage: `url(${loginIllustration})` }}
           />
         </div>
