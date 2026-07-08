@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sofiapp — Vitrina (iteración 05 · Light Sweep)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="stage">
+    <!--
+      iteración-05 · MODO CLARO · Light Sweep sobre el lockup completo (ícono + wordmark).
+        · .logo__shadow → sombra de contacto estática en el suelo (el lockup no flota: es una placa de marca)
+        · .logo         → caja con la proporción exacta del viewBox del SVG (769.21 × 201.38)
+        · .logo__art    → assets/sofiapp-v5.svg tal cual, sin tocar sus colores/gradientes
+        · .logo__sheen  → barrido de luz especular, recortado a la silueta exacta del lockup (signature)
+    -->
+    <div class="logo-wrap">
+      <div class="logo" role="img" aria-label="Sofiapp">
+        <img class="logo__art" src="./assets/sofiapp-lg-v1.svg" alt="" draggable="false" />
+        <div class="logo__sheen"></div>
+      </div>
+      <div class="logo__shadow"></div>
+    </div>
+
+    <p class="tagline">Compra fácil, vende más.</p>
+  </main>
+</body>
+</html>
