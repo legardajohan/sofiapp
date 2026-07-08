@@ -11,7 +11,7 @@ export interface SofiAppWelcomeLoaderProps {
   onComplete?: () => void;
 }
 
-const DEFAULT_TAGLINE = 'Preparando tu tienda…';
+const DEFAULT_TAGLINE = 'Preparando tu entorno…';
 const DEFAULT_DURATION_MS = 2200;
 
 export function SofiAppWelcomeLoader({

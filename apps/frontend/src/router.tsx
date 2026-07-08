@@ -7,6 +7,7 @@ import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
 import { Loading } from './components/Loading.js';
+import { AppLayout } from './components/layout/AppLayout.js';
 
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
@@ -28,38 +29,43 @@ export const router = createBrowserRouter([
       {
         path: '/login',
         element: (
-          <PublicOnly>
-            <LoginPage />
-          </PublicOnly>
+          <div className="light">
+            <PublicOnly>
+              <LoginPage />
+            </PublicOnly>
+          </div>
         ),
       },
       {
-        path: '/settings/channels/whatsapp',
-        element: (
-          <RequireRole roles={['admin']}>
-            <Suspense fallback={<Loading />}>
-              <ChannelConfigPage />
-            </Suspense>
-          </RequireRole>
-        ),
-      },
-      {
-        path: '/admin/*',
         element: (
           <RequireAuth>
-            <Suspense fallback={<Loading />}>
-              <AdminRoutes />
-            </Suspense>
+            <AppLayout />
           </RequireAuth>
         ),
-      },
-      {
-        path: '*',
-        element: (
-          <RequireAuth>
-            <div className="p-8 text-sm text-gray-500">Página no encontrada</div>
-          </RequireAuth>
-        ),
+        children: [
+          {
+            path: '/settings/channels/whatsapp',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <ChannelConfigPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/admin/*',
+            element: (
+              <Suspense fallback={<Loading />}>
+                <AdminRoutes />
+              </Suspense>
+            ),
+          },
+          {
+            path: '*',
+            element: <div className="p-8 text-sm text-gray-500">Página no encontrada</div>,
+          },
+        ],
       },
     ],
   },

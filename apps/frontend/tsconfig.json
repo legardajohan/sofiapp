@@ -12,7 +12,11 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

@@ -1,0 +1,85 @@
+import {
+  Building2,
+  Inbox,
+  LineChart,
+  MessageSquareText,
+  Megaphone,
+  Package,
+  Users,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { UserRol } from '@/stores/authStore';
+
+export interface NavItem {
+  label: string;
+  to: string;
+  icon: LucideIcon;
+  roles: UserRol[];
+  disabled?: boolean;
+}
+
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+export const navGroups: NavGroup[] = [
+  {
+    label: 'Superadmin',
+    items: [
+      { label: 'Empresas', to: '/admin/tenants', icon: Building2, roles: ['superadmin'] },
+      {
+        label: 'Métricas globales',
+        to: '/admin/metrics',
+        icon: LineChart,
+        roles: ['superadmin'],
+        disabled: true,
+      },
+    ],
+  },
+  {
+    label: 'Operación',
+    items: [
+      {
+        label: 'Bandeja omnicanal',
+        to: '/inbox',
+        icon: Inbox,
+        roles: ['coordinador', 'asesor'],
+        disabled: true,
+      },
+      {
+        label: 'Clientes',
+        to: '/clientes',
+        icon: Users,
+        roles: ['coordinador', 'asesor'],
+        disabled: true,
+      },
+      {
+        label: 'Campañas',
+        to: '/campanas',
+        icon: Megaphone,
+        roles: ['coordinador'],
+        disabled: true,
+      },
+    ],
+  },
+  {
+    label: 'Configuración',
+    items: [
+      {
+        label: 'WhatsApp',
+        to: '/settings/channels/whatsapp',
+        icon: MessageSquareText,
+        roles: ['admin'],
+      },
+      { label: 'Usuarios', to: '/usuarios', icon: Users, roles: ['admin'], disabled: true },
+      { label: 'Catálogo', to: '/catalogo', icon: Package, roles: ['admin'], disabled: true },
+    ],
+  },
+];
+
+export function navGroupsForRole(rol: UserRol): NavGroup[] {
+  return navGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.roles.includes(rol)) }))
+    .filter((group) => group.items.length > 0);
+}

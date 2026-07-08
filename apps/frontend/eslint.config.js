@@ -22,4 +22,12 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    // Componentes shadcn/ui vendorizados y el ThemeProvider: exportan constantes
+    // (cva variants, hooks) junto al componente por diseño (docs/specs/DSN-03-ui-kit-appshell/).
+    files: ['src/components/ui/**/*.{ts,tsx}', 'src/components/theme/ThemeProvider.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 );
