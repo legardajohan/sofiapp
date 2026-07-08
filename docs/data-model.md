@@ -216,6 +216,47 @@
 // Índices: { tenantId: 1, clienteId: 1 } unique
 ```
 
+## kb_documents  (base de conocimiento — RAG, HU-KB-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  titulo: String,                 // requerido; único por tenant (re-subir = nueva versión)
+  contenido: String,              // texto crudo (fuente para re-indexar)
+  version: Number,                // incremental por documento (versionado del conocimiento por empresa)
+  estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
+  chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
+  error: String?,                 // motivo si estadoIndexacion = "fallido"
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, titulo: 1 } unique
+//          { tenantId: 1, createdAt: -1 }
+```
+
+## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  documentId: ObjectId,           // ref KbDocument
+  version: Number,                // versión del documento a la que pertenece el chunk
+  chunkIndex: Number,             // orden dentro del documento
+  texto: String,                  // fragmento recuperable como contexto (RAG)
+  embedding: [Number],            // vector de dimensión KB_EMBED_DIM (768; gemini-embedding-001 con outputDimensionality=768)
+  createdAt
+}
+// Índices (Mongoose): { tenantId: 1, documentId: 1, version: 1 }
+// Índice vectorial (Atlas Search, NO Mongoose — src/scripts/create-kb-vector-index.ts):
+//   name: KB_VECTOR_INDEX, type: vectorSearch
+//   fields: [ { vector, path: embedding, numDimensions: KB_EMBED_DIM, similarity: cosine },
+//             { filter, path: tenantId },   // OBLIGATORIO: aísla el $vectorSearch por tenant
+//             { filter, path: version } ]
+```
+> **Aislamiento del `$vectorSearch`:** la agregación no pasa por el `base.repository`. Se blinda en
+> `features/kb/kb.repository.ts` (`vectorSearchScoped`), que inyecta SIEMPRE `filter: { tenantId }`
+> del argumento + un `$match { tenantId }` defensivo. El campo `tenantId` como *filter* del índice
+> es lo que hace posible ese aislamiento.
+
 ---
 
 ## Relaciones (resumen)
@@ -228,6 +269,7 @@ Tenant 1──┬──N User
           │        └──1 User (asesorId)
           ├──N CatalogItem
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
+          ├──N KbDocument ──N KbChunk   (RAG: embeddings + Atlas Vector Search)
           └──N Flow ──N FlowState ──1 Cliente
 Plan 1──N Tenant
 User(superadmin) tenantId=null  (global)

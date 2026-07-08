@@ -2,7 +2,11 @@ import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
+import { KB_INDEX_QUEUE_NAME } from './config/queues.js';
 import { inboundMessageProcessor } from './workers/inbound-message.processor.js';
+import { processKbIndexJob } from './workers/kb-index.processor.js';
+import { GeminiProvider } from './integrations/llm/gemini.provider.js';
+import type { KbIndexJobData } from './features/kb/kb.types.js';
 
 const redisConnection = { url: env.REDIS_URL };
 
@@ -31,7 +35,16 @@ const campaignWorker = new Worker(
   { connection: redisConnection },
 );
 
-for (const w of [llmWorker, outboundWorker, campaignWorker]) {
+// KB / RAG — indexación de conocimiento (HU-KB-01)
+const kbIndexWorker = new Worker<KbIndexJobData>(
+  KB_INDEX_QUEUE_NAME,
+  async (job) => {
+    await processKbIndexJob(job.data, new GeminiProvider());
+  },
+  { connection: redisConnection },
+);
+
+for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker]) {
   w.on('failed', (job, err) => {
     logger.error(`Worker ${w.name} job falló`, { jobId: job?.id, error: String(err) });
   });

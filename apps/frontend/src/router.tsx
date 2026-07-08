@@ -10,6 +10,10 @@ const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
 
+const KnowledgeBasePage = lazy(() =>
+  import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeBasePage })),
+);
+
 const AdminRoutes = lazy(() =>
   import('./routes/AdminRoutes.js').then((m) => ({ default: m.default })),
 );
@@ -32,6 +36,16 @@ export const router = createBrowserRouter([
           <RequireRole roles={['admin']}>
             <Suspense fallback={<Loading />}>
               <ChannelConfigPage />
+            </Suspense>
+          </RequireRole>
+        ),
+      },
+      {
+        path: '/settings/knowledge',
+        element: (
+          <RequireRole roles={['admin']}>
+            <Suspense fallback={<Loading />}>
+              <KnowledgeBasePage />
             </Suspense>
           </RequireRole>
         ),

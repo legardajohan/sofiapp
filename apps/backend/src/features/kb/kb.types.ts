@@ -1,0 +1,70 @@
+import type { Document, Types } from 'mongoose';
+
+export type EstadoIndexacion = 'pendiente' | 'procesando' | 'indexado' | 'fallido';
+
+export interface IKbDocument {
+  tenantId: Types.ObjectId;
+  titulo: string;
+  contenido: string; // texto crudo (fuente para re-indexar)
+  version: number; // incremental por documento (versionado por empresa)
+  estadoIndexacion: EstadoIndexacion;
+  chunkCount: number; // 0 hasta indexar
+  error?: string; // motivo si estadoIndexacion === 'fallido'
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IKbDocumentDocument extends IKbDocument, Document {
+  _id: Types.ObjectId;
+}
+
+export interface IKbChunk {
+  tenantId: Types.ObjectId;
+  documentId: Types.ObjectId; // ref KbDocument
+  version: number; // versión del documento a la que pertenece
+  chunkIndex: number;
+  texto: string;
+  embedding: number[]; // dimensión KB_EMBED_DIM
+}
+
+export interface IKbChunkDocument extends IKbChunk, Document {
+  _id: Types.ObjectId;
+}
+
+// ─── DTOs / contratos HTTP ──────────────────────────────────────────────────
+export interface CreateKbDocumentDTO {
+  titulo: string;
+  contenido: string;
+}
+
+export interface IKbDocumentResponse {
+  id: string;
+  titulo: string;
+  estadoIndexacion: EstadoIndexacion;
+  version: number;
+  chunkCount: number;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KbDocumentsListResponse {
+  data: IKbDocumentResponse[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// ─── Job BullMQ ─────────────────────────────────────────────────────────────
+export interface KbIndexJobData {
+  tenantId: string;
+  documentId: string;
+  version: number;
+}
+
+// ─── Recuperación (RAG) ─────────────────────────────────────────────────────
+export interface KbRetrievalResult {
+  texto: string;
+  documentId: string;
+  score?: number;
+}

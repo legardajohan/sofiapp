@@ -2,6 +2,7 @@ import {
   GoogleGenerativeAI,
   GoogleGenerativeAIFetchError,
   SchemaType,
+  TaskType,
   type Schema,
 } from '@google/generative-ai';
 import { env } from '../../config/env.js';
@@ -12,9 +13,12 @@ import type {
   SlotResult,
   NivelInteres,
   Objecion,
+  EmbedTaskType,
   LlmUsage,
   LlmCallResult,
 } from './llm-provider.types.js';
+
+const ZERO_USAGE: LlmUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -160,6 +164,29 @@ export class GeminiProvider implements ILlmProvider {
         result: { nivelInteres: raw.nivelInteres, objecion: raw.objecion ?? null },
         usage: usageFromResponse(result.response),
       };
+    });
+  }
+
+  async embedTexts(input: {
+    texts: string[];
+    taskType: EmbedTaskType;
+  }): Promise<LlmCallResult<number[][]>> {
+    if (input.texts.length === 0) return { result: [], usage: ZERO_USAGE };
+    return this.callWithRetry(async (signal) => {
+      const model = this.genAI.getGenerativeModel({ model: env.GEMINI_EMBED_MODEL });
+      const response = await model.batchEmbedContents(
+        {
+          requests: input.texts.map((text) => ({
+            content: { role: 'user', parts: [{ text }] },
+            taskType: input.taskType as TaskType,
+            // Fija la dimensión al valor del índice vectorial de Atlas (KB_EMBED_DIM).
+            outputDimensionality: env.KB_EMBED_DIM,
+          })),
+        },
+        { signal },
+      );
+      // Los endpoints de embeddings no reportan usageMetadata: usage en cero.
+      return { result: response.embeddings.map((e) => e.values), usage: ZERO_USAGE };
     });
   }
 

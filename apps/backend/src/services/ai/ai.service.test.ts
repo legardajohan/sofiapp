@@ -42,6 +42,9 @@ function makeProvider(): ILlmProvider {
     classifyLead: vi
       .fn()
       .mockResolvedValue({ result: { nivelInteres: 'tibio', objecion: 'precio' }, usage: USAGE }),
+    embedTexts: vi
+      .fn()
+      .mockResolvedValue({ result: [[0.1, 0.2, 0.3]], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }),
   };
 }
 
