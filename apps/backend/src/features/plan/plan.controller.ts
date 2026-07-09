@@ -1,0 +1,20 @@
+import type { Request, Response } from 'express';
+import { listPlans, createPlan, updatePlan } from './plan.service.js';
+import type { CreatePlanDTO, UpdatePlanDTO } from './plan.types.js';
+
+export async function listPlansController(req: Request, res: Response): Promise<void> {
+  const activoRaw = req.query['activo'];
+  const activo = activoRaw === undefined ? undefined : activoRaw === 'true';
+  res.json(await listPlans({ activo }));
+}
+
+export async function createPlanController(req: Request, res: Response): Promise<void> {
+  const plan = await createPlan(req.body as CreatePlanDTO);
+  res.status(201).json(plan);
+}
+
+export async function updatePlanController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  const plan = await updatePlan(id, req.body as UpdatePlanDTO);
+  res.json(plan);
+}

@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
+interface PlanOption {
+  _id: string;
+  nombre: string;
+}
+
 interface Props {
   tenant?: ITenant;
+  plans?: PlanOption[];
   onSuccess: (payload: CreateTenantPayload | UpdateTenantPayload) => void;
   onCancel: () => void;
 }
@@ -13,7 +19,7 @@ const toSlug = (value: string): string =>
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
 
-export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
+export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props) {
   const isEdit = Boolean(tenant);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -159,13 +165,33 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Plan ID</label>
-        <input
-          className={inputClass}
-          value={form.planId}
-          onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
-          placeholder="ObjectId del plan (opcional)"
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+        {plans ? (
+          <select
+            className={inputClass}
+            value={form.planId}
+            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
+          >
+            <option value="">Sin plan</option>
+            {plans.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className={inputClass}
+            value={form.planId}
+            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
+            placeholder="ObjectId del plan (opcional)"
+          />
+        )}
+        {isEdit && (
+          <p className="mt-1 text-xs text-gray-400">
+            También puedes cambiar el plan desde el panel de consumo.
+          </p>
+        )}
       </div>
 
       {!isEdit && (

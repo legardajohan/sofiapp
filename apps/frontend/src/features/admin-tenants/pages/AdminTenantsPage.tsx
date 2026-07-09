@@ -7,6 +7,8 @@ import {
 } from '../../../api/admin-tenants.js';
 import { TenantTable } from '../components/TenantTable.js';
 import { TenantForm } from '../components/TenantForm.js';
+import { TenantUsagePanel } from '../components/TenantUsagePanel.js';
+import { getAdminPlans } from '../../../api/admin-plans.js';
 import type { CreateTenantPayload, UpdateTenantPayload } from '../types/index.js';
 
 export function AdminTenantsPage() {
@@ -26,6 +28,9 @@ export function AdminTenantsPage() {
     queryKey: ['admin-tenants', searchTerm, currentPage],
     queryFn: () => getAdminTenants({ search: searchTerm || undefined, page: currentPage }),
   });
+
+  const { data: plans } = useQuery({ queryKey: ['admin-plans'], queryFn: getAdminPlans });
+  const activePlans = (plans ?? []).filter((p) => p.activo).map((p) => ({ _id: p._id, nombre: p.nombre }));
 
   const createMutation = useMutation({
     mutationFn: createAdminTenant,
@@ -89,6 +94,7 @@ export function AdminTenantsPage() {
             </h2>
             <TenantForm
               tenant={tenantEditing ?? undefined}
+              plans={activePlans}
               onSuccess={handleFormSuccess}
               onCancel={closeModal}
             />
@@ -96,6 +102,13 @@ export function AdminTenantsPage() {
               <p className="mt-2 text-sm text-red-600">
                 Error al guardar. Verifica los datos e intenta de nuevo.
               </p>
+            )}
+            {tenantEditing && (
+              <TenantUsagePanel
+                tenantId={tenantEditing._id}
+                currentPlanId={tenantEditing.planId}
+                plans={activePlans}
+              />
             )}
           </div>
         </div>

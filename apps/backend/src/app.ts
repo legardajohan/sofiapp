@@ -7,8 +7,10 @@ import { logger } from './utils/logger.js';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
 import { csrfGuard } from './middlewares/csrf.middleware.js';
 import { seedSuperadmin } from './seed/seed-superadmin.js';
+import { seedPlans } from './seed/seed-plans.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
+import planAdminRoutes from './features/plan/plan.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
@@ -30,6 +32,7 @@ app.use('/api/auth', authRoutes);
 
 // Rutas de Superadmin (cross-tenant, sin requireTenant)
 app.use('/api/admin/tenants', tenantAdminRoutes);
+app.use('/api/admin/plans', planAdminRoutes);
 
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
@@ -45,6 +48,7 @@ if (env.NODE_ENV !== 'test') {
     .then(async () => {
       logger.info('Conectado a MongoDB');
       await seedSuperadmin();
+      await seedPlans();
       app.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });
