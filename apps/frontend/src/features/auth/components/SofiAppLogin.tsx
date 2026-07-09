@@ -17,7 +17,10 @@ export function SofiAppLogin({ width, accentColor, className }: SofiAppLoginProp
     <div id="sofiapp-login-wrapper" style={style} className={className}>
       <div className="logo-wrap">
         <div className="logo" role="img" aria-label="Sofiapp">
+          {/* Light: colores nativos del SVG. Dark: cede a un relleno con degradado
+              púrpura↔azul enmascarado por la misma silueta (crossfade por opacidad). */}
           <img className="logo__art" src={lockupSvg} alt="" draggable={false} />
+          <div className="logo__fill" aria-hidden="true" />
           <div className="logo__sheen" />
         </div>
       </div>

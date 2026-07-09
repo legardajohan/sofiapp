@@ -36,7 +36,10 @@ export function SofiAppWelcomeLoader({
     <div id="sofiapp-loader-wrapper" style={style}>
       <div className="boot-overlay">
         <div className="boot-overlay__logo" role="img" aria-label="Sofiapp">
+          {/* Light: colores nativos del SVG. Dark: relleno con degradado que se desplaza
+              de púrpura a azul mientras el overlay está visible. */}
           <img className="boot-overlay__art" src={lockupSvg} alt="" draggable={false} />
+          <div className="boot-overlay__fill" aria-hidden="true" />
           <div className="boot-overlay__sheen" />
         </div>
         <p className="boot-overlay__tagline">{tagline}</p>

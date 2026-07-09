@@ -1,4 +1,5 @@
 import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { logout as logoutRequest } from '@/features/auth/api';
 import { useAuthStore, type UserRol } from '@/stores/authStore';
 import { useTheme, type Theme } from '@/components/theme/ThemeProvider';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -43,12 +44,23 @@ const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
 
 export function NavUser(): React.ReactElement | null {
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const storeLogout = useAuthStore((s) => s.logout);
   const { theme, setTheme } = useTheme();
   const { isMobile } = useSidebar();
   if (!user) return null;
 
   const displayName = user.nombre ?? user.sub;
+
+  // Cierra la sesión también en el servidor (invalida las cookies httpOnly/CSRF) y
+  // luego limpia el store + redirige. Resiliente: si el back falla, igual sale local.
+  async function handleLogout(): Promise<void> {
+    try {
+      await logoutRequest();
+    } catch {
+      /* best-effort: la cookie puede estar ya inválida */
+    }
+    storeLogout();
+  }
 
   return (
     <SidebarMenu>
@@ -107,7 +119,7 @@ export function NavUser(): React.ReactElement | null {
               </div>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout}>
+            <DropdownMenuItem onClick={() => void handleLogout()}>
               <LogOut />
               Cerrar sesión
             </DropdownMenuItem>

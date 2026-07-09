@@ -29,11 +29,9 @@ export const router = createBrowserRouter([
       {
         path: '/login',
         element: (
-          <div className="light">
-            <PublicOnly>
-              <LoginPage />
-            </PublicOnly>
-          </div>
+          <PublicOnly>
+            <LoginPage />
+          </PublicOnly>
         ),
       },
       {

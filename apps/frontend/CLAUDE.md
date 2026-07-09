@@ -44,18 +44,23 @@
 - **Tema light/dark:** `darkMode: 'class'`. `<ThemeProvider>` envuelve la app en `main.tsx` y
   aplica la clase `.dark`/`.light` en `<html>`. Cualquier vista nueva hereda el tema activo
   automáticamente si usa los tokens semánticos.
-  - **Excepción deliberada:** la ruta `/login` fuerza `className="light"` en su wrapper
-    (`router.tsx`) para no heredar `.dark` nunca — el login mantiene su identidad visual fija
-    (ver `docs/specs/DSN-02-login-welcome-visuals/` y el criterio de "login intacto" de DSN-03).
-    Ese patrón (`className="light"` re-declarando las variables `:root`) es la forma correcta de
-    forzar light en una subárbol puntual sin tocar el tema global.
+  - **`/login` sigue el tema (desde DSN-04):** la ruta ya **no** fuerza light; hereda `.dark`/`.light`
+    como el resto de la app y expone un toggle sol/luna (`LoginThemeToggle`) que escribe en el mismo
+    `useTheme()` persistido. Esto **supersede** el pin `className="light"` de DSN-02/DSN-03 (ver
+    `docs/specs/DSN-04-login-dark-mode/`). El patrón de forzar light en un subárbol puntual
+    (`className="light"` re-declarando `:root`) sigue existiendo en `index.css` por si otra vista lo
+    necesita, pero el login ya no lo usa.
 - **App Shell:** toda pantalla autenticada se monta como hija de `AppLayout` (ver `router.tsx`),
   que ya provee sidebar + `SidebarTrigger` + `Toaster`. Una página nueva **no** necesita volver a
   montar layout: solo se agrega como ruta hija y, si aplica, una entrada en `nav-config.ts`.
-- **Login y loader intocables:** `src/features/auth/**` (incluye `SofiAppLogin.{tsx,css}` y
-  `SofiAppWelcomeLoader.{tsx,css}`, con CSS aislado por `#sofiapp-login-wrapper` /
-  `#sofiapp-loader-wrapper`) y `src/components/Loading.tsx` **no usan el UI kit** ni deben
-  migrarse a él; son código congelado por diseño.
+- **Login y loader (CSS aislado, no UI kit):** `src/features/auth/**` (incluye
+  `SofiAppLogin.{tsx,css}` y `SofiAppWelcomeLoader.{tsx,css}`, con CSS aislado por
+  `#sofiapp-login-wrapper` / `#sofiapp-loader-wrapper`) y `src/components/Loading.tsx` **no usan el
+  UI kit** ni deben migrarse a él. Desde DSN-04 **sí** tienen rama dark: en `.dark` el lockup cambia
+  a un relleno con degradado púrpura↔azul enmascarado por la silueta (estático en el login, animado
+  en el loader), conservando el barrido de luz. Al tocar estos archivos, mantené el gating por
+  `.dark #sofiapp-*-wrapper …` dentro del scope aislado (no uses utilidades `dark:` de Tailwind:
+  el selector de ID gana la cascada y las anularía).
 
 ## Una sola puerta de salida HTTP
 

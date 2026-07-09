@@ -62,6 +62,20 @@
   display: block;
 }
 
+/* Relleno de degradado enmascarado (solo dark). El barrido de background-position lo
+   anima de púrpura a azul mientras el overlay está en pantalla. */
+#sofiapp-loader-wrapper .boot-overlay__fill {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(105deg, #b45cff 0%, #7a5bff 30%, #4f6bff 58%, #0aa0ff 100%);
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+  -webkit-mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  pointer-events: none;
+}
+
 #sofiapp-loader-wrapper .boot-overlay__sheen {
   position: absolute;
   inset: 0;
@@ -144,6 +158,27 @@
   100% { opacity: 0; }
 }
 
+@keyframes sofiaWelcome-gradShift {
+  0%   { background-position: 0% 50%; }   /* púrpura dominante */
+  100% { background-position: 100% 50%; } /* azul dominante */
+}
+
+/* ---- Dark: fondo oscuro coherente + logo con degradado animado púrpura→azul ---- */
+.dark #sofiapp-loader-wrapper {
+  background: radial-gradient(120% 90% at 50% -10%, #191c27 0%, #13151d 46%, #0b0d13 100%);
+}
+
+.dark #sofiapp-loader-wrapper .boot-overlay__art { opacity: 0; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__fill {
+  opacity: 1;
+  animation: sofiaWelcome-gradShift 1.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.dark #sofiapp-loader-wrapper .boot-overlay__tagline { color: #8b93ad; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__progress { background: #232733; }
+
 @media (prefers-reduced-motion: reduce) {
   #sofiapp-loader-wrapper { animation: none; }
   #sofiapp-loader-wrapper .boot-overlay__logo,
@@ -155,4 +190,6 @@
   }
   #sofiapp-loader-wrapper .boot-overlay__sheen::before { display: none; }
   #sofiapp-loader-wrapper .boot-overlay__progress span { animation: none; width: 62%; transform: none; }
+  /* Dark: degradado quieto en su estado final (azul), sin barrido. */
+  .dark #sofiapp-loader-wrapper .boot-overlay__fill { animation: none; background-position: 100% 50%; }
 }
