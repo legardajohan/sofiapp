@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import lockupSvg from '../../../assets/sofiapp-lockup.svg';
 import './SofiAppWelcomeLoader.css';
+import './rainbow-fill.css';
 
 export interface SofiAppWelcomeLoaderProps {
   width?: string;
@@ -38,8 +39,9 @@ export function SofiAppWelcomeLoader({
         <div className="boot-overlay__logo" role="img" aria-label="Sofiapp">
           {/* Light: colores nativos del SVG. Dark: relleno con degradado que se desplaza
               de púrpura a azul mientras el overlay está visible. */}
+          <div className="boot-overlay__aura sofia-rainbow-fill" aria-hidden="true" />
           <img className="boot-overlay__art" src={lockupSvg} alt="" draggable={false} />
-          <div className="boot-overlay__fill" aria-hidden="true" />
+          <div className="boot-overlay__fill sofia-rainbow-fill" aria-hidden="true" />
           <div className="boot-overlay__sheen" />
         </div>
         <p className="boot-overlay__tagline">{tagline}</p>

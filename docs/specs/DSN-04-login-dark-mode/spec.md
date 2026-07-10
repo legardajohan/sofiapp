@@ -70,6 +70,23 @@ Fuera de alcance (otros features):
 > (INF-02 / AUTH-01), que este UI solo consume vía `apiClient`. Este feature **supersede a propósito**
 > la regla "login intacto / fijado a light" de DSN-02 y del criterio 6 de DSN-03.
 
+## Addenda (refinamiento post-implementación, 2026-07-09)
+
+A pedido del usuario, en **dark** se ajustó:
+1. **Inputs oscuros con profundidad:** en dark los campos toman el color del fondo
+   (`dark:bg-background`, casi negro, más oscuro que la tarjeta) con una sombra interior sutil
+   (`dark:shadow-[inset…]`). Además, `LoginPage.css` neutraliza el fondo blanco/amarillo del
+   **autocompletado** del navegador (`:-webkit-autofill`) forzándolo a los tokens del tema
+   (`hsl(var(--card))` en light, `hsl(var(--background))` en dark) — era la causa del "input blanco"
+   que solo aparecía con credenciales guardadas. Light sin cambios (superficie blanca de la tarjeta).
+2. **Degradado arcoíris animado + aura aditiva:** el relleno del lockup es un **arcoíris saturado que
+   viaja a lo ancho** del SVG (ciclo suave ~8s), *además* del barrido de luz; y una **aura** que
+   EMITE luz (copia enmascarada del mismo arcoíris, difuminada y en `mix-blend-mode: screen` → halo
+   aditivo acorde al color que pasa, sin silueta duplicada) rodea el contorno. Estilo compartido
+   `components/rainbow-fill.css` (clase `.sofia-rainbow-fill`) en **ambos** lockups (`SofiAppLogin` y
+   `SofiAppWelcomeLoader`); cada componente aporta su capa `.*__aura` (mask + blur + screen).
+   Respeta `prefers-reduced-motion`. Reemplaza el púrpura→azul del loader por el arcoíris.
+
 ## Dependencias
 
 - `DSN-02` (login-welcome-visuals) — `SofiAppLogin` y `SofiAppWelcomeLoader` con su CSS aislado.

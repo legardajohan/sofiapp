@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore.js';
 import loginIllustration from '../../assets/undraw_chat_qmyo.svg';
 import { SofiAppLogin } from './components/SofiAppLogin.js';
 import { LoginThemeToggle } from './components/LoginThemeToggle.js';
+import './LoginPage.css';
 
 function Spinner(): React.ReactElement {
   return (
@@ -57,7 +58,11 @@ export function LoginPage(): React.ReactElement {
   }
 
   const inputClass = [
-    'block w-full px-3 py-2 rounded-lg bg-card text-foreground placeholder-muted-foreground',
+    'sofia-input block w-full px-3 py-2 rounded-lg text-foreground placeholder-muted-foreground',
+    // Light: superficie plana de la tarjeta. Dark: el campo se hunde al color del fondo
+    // (casi negro, más oscuro que la tarjeta) con una sombra interior sutil para que no
+    // quede plano y resalte como un pozo recto donde se escribe.
+    'bg-card dark:bg-background dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]',
     'focus:outline-none focus:ring-2 transition-colors',
     hasError
       ? 'border border-destructive focus:border-destructive focus:ring-destructive/25'
