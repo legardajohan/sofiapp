@@ -18,6 +18,14 @@ export function findByIdScoped<T>(
   return m.findOne({ _id: id, tenantId } as FilterQuery<T>);
 }
 
+export function countScoped<T>(
+  m: Model<T>,
+  tenantId: TenantId,
+  filter: FilterQuery<T> = {},
+): Promise<number> {
+  return m.countDocuments({ ...filter, tenantId } as FilterQuery<T>).exec();
+}
+
 export async function createScoped<T>(
   m: Model<T>,
   tenantId: TenantId,

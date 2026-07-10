@@ -19,6 +19,9 @@ const ClienteSchema = new Schema<IClienteDocument>(
     },
     ventana24hExpiraEn: { type: Date },
     ultimoMensajeAt: { type: Date },
+    // Bandeja (HU-OMNI-01): contador de no leídos y flag de Sofi (IA) por conversación.
+    noLeidos: { type: Number, default: 0 },
+    iaHabilitada: { type: Boolean, default: true },
     asesorId: { type: Schema.Types.ObjectId, ref: 'User' },
     customFields: { type: Schema.Types.Mixed, default: {} },
     tags: [{ type: String }],

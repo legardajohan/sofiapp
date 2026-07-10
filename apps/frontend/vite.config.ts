@@ -19,6 +19,12 @@ export default defineConfig({
         target: 'http://localhost:4000',
         changeOrigin: true,
       },
+      // Gateway Socket.IO (tiempo real de la bandeja) — proxy WebSocket same-origin en dev.
+      '/socket.io': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   build: {

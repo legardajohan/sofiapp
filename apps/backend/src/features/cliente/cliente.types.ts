@@ -17,6 +17,8 @@ export interface ICliente {
   estadoComercial: EstadoComercial;
   ventana24hExpiraEn?: Date;
   ultimoMensajeAt?: Date;
+  noLeidos: number;
+  iaHabilitada: boolean;
   asesorId?: Types.ObjectId;
   customFields: Record<string, unknown>;
   tags: string[];

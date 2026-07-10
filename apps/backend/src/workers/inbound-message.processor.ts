@@ -6,6 +6,8 @@ import { logger } from '../utils/logger.js';
 import { resolveWebhookTenant } from '../features/webhook/webhook.service.js';
 import { upsertByMetaUser } from '../features/cliente/cliente.service.js';
 import { saveMessage, updateDeliveryStatus } from '../features/message/message.service.js';
+import { notifyInboundMessage } from '../features/conversation/conversation.service.js';
+import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import { parseDeliveryStatuses } from '../integrations/meta/meta-whatsapp.normalizer.js';
 import type { IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
 import type { TipoMensaje } from '../features/message/message.types.js';
@@ -49,10 +51,11 @@ export const inboundMessageProcessor = new Worker<InboundJobData>(
           const nombre = contact?.profile.name;
 
           const cliente = await upsertByMetaUser(tenantId, msg.from, msg.from, 'whatsapp', nombre);
+          const clienteId = cliente._id as Types.ObjectId;
 
-          await saveMessage(tenantId, {
+          const saved = await saveMessage(tenantId, {
             tenantId: tenantOid,
-            clienteId: cliente._id as Types.ObjectId,
+            clienteId,
             canal: 'whatsapp',
             direccion: 'inbound',
             sender: 'user',
@@ -61,6 +64,11 @@ export const inboundMessageProcessor = new Worker<InboundJobData>(
             metaMessageId: msg.id,
             status: 'sent',
           });
+
+          // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
+          await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
+
+          // TODO(Fase 3): si cliente.iaHabilitada, encolar auto-reply de Sofi (generateReply de Gemini).
         }
 
         const statuses = parseDeliveryStatuses(value);

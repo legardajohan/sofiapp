@@ -5,10 +5,19 @@ import {
   MessageSquareText,
   Megaphone,
   Package,
+  Sparkles,
+  UserCheck,
   Users,
+  UserX,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { UserRol } from '@/stores/authStore';
+
+export interface NavSubItem {
+  label: string;
+  to: string;
+  icon: LucideIcon;
+}
 
 export interface NavItem {
   label: string;
@@ -16,6 +25,7 @@ export interface NavItem {
   icon: LucideIcon;
   roles: UserRol[];
   disabled?: boolean;
+  children?: NavSubItem[];
 }
 
 export interface NavGroup {
@@ -45,7 +55,12 @@ export const navGroups: NavGroup[] = [
         to: '/inbox',
         icon: Inbox,
         roles: ['coordinador', 'asesor'],
-        disabled: true,
+        children: [
+          { label: 'Todos', to: '/inbox', icon: Inbox },
+          { label: 'Míos', to: '/inbox?filtro=mios', icon: UserCheck },
+          { label: 'Sin asignar', to: '/inbox?filtro=sin_asignar', icon: UserX },
+          { label: 'Sofi activa', to: '/inbox?filtro=sofi', icon: Sparkles },
+        ],
       },
       {
         label: 'Clientes',

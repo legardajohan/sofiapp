@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { navGroupsForRole } from '@/components/layout/nav-config';
 import { NavUser } from '@/components/layout/NavUser';
@@ -15,6 +15,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar';
 
@@ -38,9 +41,17 @@ function SidebarCollapseTrigger(): React.ReactElement {
 
 export function AppSidebar(): React.ReactElement | null {
   const user = useAuthStore((s) => s.user);
+  const location = useLocation();
   if (!user) return null;
 
   const groups = navGroupsForRole(user.rol);
+
+  function subActive(to: string): boolean {
+    const [path, search] = to.split('?');
+    if (location.pathname !== path) return false;
+    // '/inbox' (Todos) solo está activo cuando no hay filtro en la URL.
+    return search ? location.search === `?${search}` : location.search === '';
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -63,12 +74,28 @@ export function AppSidebar(): React.ReactElement | null {
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   ) : (
-                    <SidebarMenuButton asChild tooltip={item.label}>
-                      <NavLink to={item.to}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
+                    <>
+                      <SidebarMenuButton asChild tooltip={item.label}>
+                        <NavLink to={item.to}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                      {item.children && (
+                        <SidebarMenuSub>
+                          {item.children.map((sub) => (
+                            <SidebarMenuSubItem key={sub.label}>
+                              <SidebarMenuSubButton asChild isActive={subActive(sub.to)}>
+                                <NavLink to={sub.to}>
+                                  <sub.icon />
+                                  <span>{sub.label}</span>
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      )}
+                    </>
                   )}
                 </SidebarMenuItem>
               ))}
