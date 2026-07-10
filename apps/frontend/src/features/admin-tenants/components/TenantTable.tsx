@@ -1,6 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { useAdminTenantsStore } from '../useAdminTenantsStore.js';
 import { TenantStatusSwitch } from './TenantStatusSwitch.js';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { ITenant, EstadoTenant } from '../types/index.js';
 
 interface Props {
@@ -12,13 +23,13 @@ interface Props {
   onEdit: (tenant: ITenant) => void;
 }
 
-const estadoChip: Record<EstadoTenant, string> = {
-  activo: 'bg-green-100 text-green-800',
-  suspendido: 'bg-gray-100 text-gray-700',
-  prueba: 'bg-yellow-100 text-yellow-800',
+const estadoBadgeVariant: Record<EstadoTenant, 'success' | 'secondary' | 'outline'> = {
+  activo: 'success',
+  suspendido: 'secondary',
+  prueba: 'outline',
 };
 
-export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit }: Props) {
+export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit }: Props): React.ReactElement {
   const { setSearch } = useAdminTenantsStore();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,91 +49,84 @@ export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit 
 
   return (
     <div>
-      <input
+      <Input
         type="text"
         placeholder="Buscar por nombre o slug…"
         onChange={handleSearch}
-        className="mb-4 w-full rounded-md border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="mb-4"
       />
 
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              {['Nombre', 'Slug', 'Estado', 'Plan', 'Creado', 'Acciones'].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 bg-white">
+      <div className="rounded-lg border border-border bg-card shadow-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Slug</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead>Creado</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {tenants.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-400">
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                   No hay empresas registradas.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               tenants.map((tenant) => (
-                <tr key={tenant._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{tenant.nombre}</td>
-                  <td className="px-4 py-3 text-gray-500">{tenant.slug}</td>
-                  <td className="px-4 py-3">
+                <TableRow key={tenant._id}>
+                  <TableCell className="font-medium text-foreground">{tenant.nombre}</TableCell>
+                  <TableCell className="text-muted-foreground">{tenant.slug}</TableCell>
+                  <TableCell>
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${estadoChip[tenant.estado]}`}
-                      >
-                        {tenant.estado}
-                      </span>
+                      <Badge variant={estadoBadgeVariant[tenant.estado]}>{tenant.estado}</Badge>
                       <TenantStatusSwitch tenant={tenant} />
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{tenant.planId ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{tenant.planId ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">
                     {new Date(tenant.createdAt).toLocaleDateString('es-CO')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => onEdit(tenant)}
-                      className="text-blue-600 hover:underline text-xs"
-                    >
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => onEdit(tenant)}>
                       Editar
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
-          <span className="text-gray-500">
+          <span className="text-muted-foreground">
             {total} empresa{total !== 1 ? 's' : ''}
           </span>
-          <div className="flex gap-2">
-            <button
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
               disabled={page <= 1}
               onClick={() => onPageChange(page - 1)}
-              className="rounded border px-3 py-1 disabled:opacity-40"
             >
               Anterior
-            </button>
-            <span className="px-3 py-1">
+            </Button>
+            <span className="px-2 text-muted-foreground">
               {page} / {totalPages}
             </span>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               disabled={page >= totalPages}
               onClick={() => onPageChange(page + 1)}
-              className="rounded border px-3 py-1 disabled:opacity-40"
             >
               Siguiente
-            </button>
+            </Button>
           </div>
         </div>
       )}

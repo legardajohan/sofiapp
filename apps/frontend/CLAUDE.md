@@ -10,6 +10,58 @@
 - **Organización por feature** (igual filosofía que el backend): `src/features/<feature>/`.
 - Estilos con Tailwind (+ shadcn/ui opcional). Sin CSS global disperso.
 
+## Componentes reutilizables (UI kit)
+
+- **Base:** [shadcn/ui](https://ui.shadcn.com/) (registry Radix, estilo `new-york`, `baseColor`
+  `slate`). Instalado y documentado en `docs/specs/DSN-03-ui-kit-appshell/`.
+- **Dónde viven:**
+  - `src/components/ui/` — primitivos vendorizados por la CLI de shadcn (`button`, `input`,
+    `label`, `textarea`, `checkbox`, `switch`, `select`, `dropdown-menu`, `dialog`, `table`,
+    `badge`, `avatar`, `separator`, `tooltip`, `card`, `sonner` (toasts), `skeleton`, `sidebar`,
+    `sheet`). Tratarlos como código vendorizado: se editan solo para añadir variantes propias
+    (ver `badge.tsx` → variante `success`), no se reestructuran para "arreglar" el patrón
+    export-múltiple de shadcn.
+  - `src/components/theme/` — `ThemeProvider`/`useTheme` (contexto light/dark/system,
+    persistido en `localStorage`) y `ModeToggle` (dropdown para cambiarlo).
+  - `src/components/layout/` — el **App Shell**: `AppLayout` (`SidebarProvider` + `AppSidebar` +
+    `SidebarInset` con `<Outlet/>`), `AppSidebar` (header con el logo, navegación por grupos),
+    `NavUser` (menú de usuario en el footer del sidebar) y `nav-config.ts` (mapa de navegación
+    **rol-aware**: cada `NavItem` declara `roles: UserRol[]`; los ítems sin feature implementada
+    se marcan `disabled: true` y quedan como esqueleto inerte hasta que el feature exista).
+  - `src/lib/utils.ts` — `cn()` (merge de clases Tailwind, usado por todos los componentes).
+- **Cómo añadir más componentes:** `pnpm dlx shadcn@3.8.5 add <componente>` desde
+  `apps/frontend/`. **Fijar la versión `3.8.5`** (o la que esté vigente en `docs/specs/DSN-03-*`):
+  las versiones `4.x` de la CLI asumen Tailwind v4 (colores OKLCH, `@import "tailwindcss"`) y
+  **no son compatibles** con este proyecto, que sigue en Tailwind v3.4 con tokens HSL vía
+  variables CSS. Tras generar, si el componente trae sus propias variables CSS (como pasó con
+  `--sidebar-*`), alinéalas a la paleta de marca en `src/index.css` en vez de dejar los valores
+  zinc/slate por defecto de la CLI.
+- **Tokens de color:** siguen `docs/specs/INF-03-design-tokens/` — vocabulario semántico (`bg-background`,
+  `text-foreground`, `bg-primary`, `bg-muted`, `border-border`, `bg-destructive-subtle`,
+  `bg-success`, etc.), **cero utilidades de color arbitrarias** (`bg-[#...]`) en `src/**`. Desde
+  DSN-03 los tokens viven como **variables CSS** en `src/index.css` (`:root` = light, `.dark` =
+  dark) y `tailwind.config.js` los referencia con `hsl(var(--token))`; ya no son hex estático.
+- **Tema light/dark:** `darkMode: 'class'`. `<ThemeProvider>` envuelve la app en `main.tsx` y
+  aplica la clase `.dark`/`.light` en `<html>`. Cualquier vista nueva hereda el tema activo
+  automáticamente si usa los tokens semánticos.
+  - **`/login` sigue el tema (desde DSN-04):** la ruta ya **no** fuerza light; hereda `.dark`/`.light`
+    como el resto de la app y expone un toggle sol/luna (`LoginThemeToggle`) que escribe en el mismo
+    `useTheme()` persistido. Esto **supersede** el pin `className="light"` de DSN-02/DSN-03 (ver
+    `docs/specs/DSN-04-login-dark-mode/`). El patrón de forzar light en un subárbol puntual
+    (`className="light"` re-declarando `:root`) sigue existiendo en `index.css` por si otra vista lo
+    necesita, pero el login ya no lo usa.
+- **App Shell:** toda pantalla autenticada se monta como hija de `AppLayout` (ver `router.tsx`),
+  que ya provee sidebar + `SidebarTrigger` + `Toaster`. Una página nueva **no** necesita volver a
+  montar layout: solo se agrega como ruta hija y, si aplica, una entrada en `nav-config.ts`.
+- **Login y loader (CSS aislado, no UI kit):** `src/features/auth/**` (incluye
+  `SofiAppLogin.{tsx,css}` y `SofiAppWelcomeLoader.{tsx,css}`, con CSS aislado por
+  `#sofiapp-login-wrapper` / `#sofiapp-loader-wrapper`) y `src/components/Loading.tsx` **no usan el
+  UI kit** ni deben migrarse a él. Desde DSN-04 **sí** tienen rama dark: en `.dark` el lockup cambia
+  a un relleno con degradado púrpura↔azul enmascarado por la silueta (estático en el login, animado
+  en el loader), conservando el barrido de luz. Al tocar estos archivos, mantené el gating por
+  `.dark #sofiapp-*-wrapper …` dentro del scope aislado (no uses utilidades `dark:` de Tailwind:
+  el selector de ID gana la cascada y las anularía).
+
 ## Una sola puerta de salida HTTP
 
 - Todo el tráfico al API pasa por `src/api/apiClient.ts` (axios).

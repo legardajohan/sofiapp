@@ -6,6 +6,8 @@ import { login as loginRequest, type LoginDTO } from './api.js';
 import { useAuthStore } from '../../stores/authStore.js';
 import loginIllustration from '../../assets/undraw_chat_qmyo.svg';
 import { SofiAppLogin } from './components/SofiAppLogin.js';
+import { LoginThemeToggle } from './components/LoginThemeToggle.js';
+import './LoginPage.css';
 
 function Spinner(): React.ReactElement {
   return (
@@ -46,9 +48,26 @@ export function LoginPage(): React.ReactElement {
     },
   });
 
+  const hasError = errorMsg !== null;
+
   function handleChange(field: keyof LoginDTO): (e: React.ChangeEvent<HTMLInputElement>) => void {
-    return (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    return (e) => {
+      if (errorMsg !== null) setErrorMsg(null);
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    };
   }
+
+  const inputClass = [
+    'sofia-input block w-full px-3 py-2 rounded-lg text-foreground placeholder-muted-foreground',
+    // Light: superficie plana de la tarjeta. Dark: el campo se hunde al color del fondo
+    // (casi negro, más oscuro que la tarjeta) con una sombra interior sutil para que no
+    // quede plano y resalte como un pozo recto donde se escribe.
+    'bg-card dark:bg-background dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]',
+    'focus:outline-none focus:ring-2 transition-colors',
+    hasError
+      ? 'border border-destructive focus:border-destructive focus:ring-destructive/25'
+      : 'border border-input focus:border-ring focus:ring-ring/20',
+  ].join(' ');
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
@@ -57,7 +76,11 @@ export function LoginPage(): React.ReactElement {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center bg-background px-4 py-8">
+    <div className="relative min-h-screen flex flex-col justify-center items-center bg-background px-4 py-8">
+      <div className="absolute right-4 top-4 z-10">
+        <LoginThemeToggle />
+      </div>
+
       <div className="w-full max-w-4xl grid md:grid-cols-2 bg-card shadow-xl rounded-xl border border-border overflow-hidden">
         {/* Columna 1: logo + nombre, tagline y, debajo, la ilustración */}
         <div className="hidden md:flex flex-col items-center pt-12 px-8 min-h-[560px]">
@@ -94,7 +117,8 @@ export function LoginPage(): React.ReactElement {
                 value={form.email}
                 onChange={handleChange('email')}
                 placeholder="tu@empresa.com"
-                className="block w-full px-3 py-2 border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors"
+                aria-invalid={hasError}
+                className={inputClass}
               />
             </div>
 
@@ -110,12 +134,17 @@ export function LoginPage(): React.ReactElement {
                 value={form.password}
                 onChange={handleChange('password')}
                 placeholder="••••••••"
-                className="block w-full px-3 py-2 border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors"
+                aria-invalid={hasError}
+                className={inputClass}
               />
             </div>
 
             {errorMsg && (
-              <div className="flex items-center gap-2 p-3 bg-destructive-subtle border border-destructive/30 rounded-lg text-sm text-destructive">
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="flex items-center gap-2 p-3 bg-destructive-subtle border border-destructive/30 rounded-lg text-sm text-destructive animate-in fade-in slide-in-from-top-1 duration-200"
+              >
                 <svg className="w-4 h-4 flex-shrink-0 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>

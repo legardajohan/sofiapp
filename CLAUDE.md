@@ -82,3 +82,17 @@ actualiza al cerrar su fase (`/sdd-spec(-quick)` → `creado`, `/sdd-implement` 
 
 - Backend: `pnpm --filter backend typecheck` (`tsc --noEmit`) · `pnpm --filter backend test`
 - Frontend: `pnpm --filter frontend build && pnpm --filter frontend lint`
+
+## Capturas de pantalla (Playwright / verificación visual)
+
+Cuando necesites tomar screenshots para verificar un cambio visual (login, dashboard, temas, etc.):
+
+1. **Nunca** las guardes sueltas en la raíz del repo ni en `apps/*`. Van dentro de `.playwright-mcp/`
+   (ya está en `.gitignore`) o, si estás fuera del MCP de Playwright, en el directorio de scratchpad
+   de la sesión.
+2. Son material de verificación desechable, no artefactos del feature. Al terminar de revisarlas
+   (confirmando visualmente el resultado), **bórralas** — no las dejes para que el usuario las
+   limpie ni las incluyas en el commit del feature.
+3. Antes de cualquier `git add`/commit de un feature, revisa `git status` en busca de `*.png`/`*.jpg`
+   sin relación con el cambio; si aparecen, es señal de que una captura de verificación se coló y
+   hay que quitarla antes de confirmar.
