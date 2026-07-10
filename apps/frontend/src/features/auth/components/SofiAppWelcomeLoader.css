@@ -62,6 +62,31 @@
   display: block;
 }
 
+/* Relleno enmascarado (solo dark). El color/animación arcoíris lo aporta la clase
+   compartida .sofia-rainbow-fill (rainbow-fill.css); aquí solo van forma, máscara y
+   opacidad. El barrido de luz único (.boot-overlay__sheen) sigue encima. */
+#sofiapp-loader-wrapper .boot-overlay__fill {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  -webkit-mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  pointer-events: none;
+}
+
+/* Aura arcoíris difusa detrás del lockup, en blend "screen" para que emita luz (halo
+   aditivo acorde al color que pasa, no una silueta duplicada). */
+#sofiapp-loader-wrapper .boot-overlay__aura {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  -webkit-mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  mask: var(--sofia-lockup-mask) center / contain no-repeat;
+  filter: blur(24px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
 #sofiapp-loader-wrapper .boot-overlay__sheen {
   position: absolute;
   inset: 0;
@@ -144,6 +169,21 @@
   100% { opacity: 0; }
 }
 
+/* ---- Dark: fondo oscuro coherente + logo con relleno arcoíris (rainbow-fill.css) ---- */
+.dark #sofiapp-loader-wrapper {
+  background: radial-gradient(120% 90% at 50% -10%, #191c27 0%, #13151d 46%, #0b0d13 100%);
+}
+
+.dark #sofiapp-loader-wrapper .boot-overlay__art { opacity: 0; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__fill { opacity: 1; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__aura { opacity: 0.75; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__tagline { color: #8b93ad; }
+
+.dark #sofiapp-loader-wrapper .boot-overlay__progress { background: #232733; }
+
 @media (prefers-reduced-motion: reduce) {
   #sofiapp-loader-wrapper { animation: none; }
   #sofiapp-loader-wrapper .boot-overlay__logo,
@@ -155,4 +195,5 @@
   }
   #sofiapp-loader-wrapper .boot-overlay__sheen::before { display: none; }
   #sofiapp-loader-wrapper .boot-overlay__progress span { animation: none; width: 62%; transform: none; }
+  /* El arcoíris quieto lo maneja rainbow-fill.css (@media reduce → animation: none). */
 }

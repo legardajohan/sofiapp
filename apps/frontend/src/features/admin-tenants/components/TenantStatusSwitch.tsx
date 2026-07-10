@@ -1,12 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { updateAdminTenantStatus } from '../../../api/admin-tenants.js';
+import { Switch } from '@/components/ui/switch';
 import type { ITenant } from '../types/index.js';
 
 interface Props {
   tenant: ITenant;
 }
 
-export function TenantStatusSwitch({ tenant }: Props) {
+export function TenantStatusSwitch({ tenant }: Props): React.ReactElement {
   const queryClient = useQueryClient();
   const isActive = tenant.estado === 'activo';
 
@@ -19,20 +20,12 @@ export function TenantStatusSwitch({ tenant }: Props) {
   });
 
   return (
-    <button
-      type="button"
+    <Switch
+      checked={isActive}
       disabled={isPending}
-      onClick={() => mutate()}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
-        isActive ? 'bg-green-500' : 'bg-gray-300'
-      }`}
+      onCheckedChange={() => mutate()}
+      aria-label={isActive ? 'Desactivar empresa' : 'Activar empresa'}
       title={isActive ? 'Desactivar empresa' : 'Activar empresa'}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          isActive ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
+    />
   );
 }

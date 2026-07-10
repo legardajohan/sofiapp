@@ -1,0 +1,26 @@
+/* =============================================================
+   LoginPage — solo el arreglo del autocompletado. Chrome/Safari pintan el
+   fondo del input (blanco/amarillo) en :-webkit-autofill, ignorando bg-*.
+   Lo forzamos al color del tema con la técnica del box-shadow interior de
+   1000px, usando tokens (hsl(var(--...))) para respetar light y dark.
+   ============================================================= */
+
+.sofia-input:-webkit-autofill,
+.sofia-input:-webkit-autofill:hover,
+.sofia-input:-webkit-autofill:focus,
+.sofia-input:-webkit-autofill:active {
+  /* Light: el campo es la superficie blanca de la tarjeta. */
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--card)) inset;
+  -webkit-text-fill-color: hsl(var(--foreground));
+  caret-color: hsl(var(--foreground));
+  /* Retrasa el repintado del fondo del navegador para que no parpadee blanco. */
+  transition: background-color 9999s ease-out 0s;
+}
+
+.dark .sofia-input:-webkit-autofill,
+.dark .sofia-input:-webkit-autofill:hover,
+.dark .sofia-input:-webkit-autofill:focus,
+.dark .sofia-input:-webkit-autofill:active {
+  /* Dark: el campo se hunde al color del fondo (casi negro). */
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+}

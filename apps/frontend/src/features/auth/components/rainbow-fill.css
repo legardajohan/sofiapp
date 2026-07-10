@@ -1,0 +1,45 @@
+/* =============================================================
+   rainbow-fill — relleno de degradado arcoíris animado, COMPARTIDO por los
+   lockups de marca en dark (SofiAppLogin y SofiAppWelcomeLoader). Se aplica
+   como clase "al lado" sobre el elemento `.*__fill` que ya está enmascarado
+   por la silueta del lockup (cada componente aporta su -webkit-mask/mask).
+
+   - El arcoíris viaja a lo ancho del logo (linear-gradient 90deg + shift de
+     background-position), en paralelo al barrido de luz especular (.__sheen),
+     que sigue viviendo en el CSS de cada componente.
+   - Hues suaves y ciclo lento (8s): esto vive fijo en pantalla, así que es un
+     shimmer ambiental, no una animación que grite.
+   - Solo anima bajo `.dark`; en light el `.*__fill` está a opacity 0 (lo controla
+     el CSS aislado por ID de cada componente), así que esta capa no se ve.
+   ============================================================= */
+
+.sofia-rainbow-fill {
+  /* Hues saturados y con cuerpo para resaltar sobre el fondo casi negro del dark. */
+  background-image: linear-gradient(
+    90deg,
+    #ff1f5a,
+    #b81fff,
+    #5a3bff,
+    #0a9bff,
+    #16c46a,
+    #ffc21a,
+    #ff7a1a,
+    #ff1f5a
+  );
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  background-repeat: repeat;
+}
+
+.dark .sofia-rainbow-fill {
+  animation: sofia-rainbow 8s linear infinite;
+}
+
+@keyframes sofia-rainbow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dark .sofia-rainbow-fill { animation: none; }
+}
