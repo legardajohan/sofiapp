@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
 interface Props {
@@ -13,7 +16,7 @@ const toSlug = (value: string): string =>
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
 
-export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
+export function TenantForm({ tenant, onSuccess, onCancel }: Props): React.ReactElement {
   const isEdit = Boolean(tenant);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -95,15 +98,13 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
     }
   };
 
-  const inputClass =
-    'w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-        <input
-          className={inputClass}
+        <Label htmlFor="tenant-nombre">Nombre *</Label>
+        <Input
+          id="tenant-nombre"
+          className="mt-1"
           value={form.nombre}
           onChange={(e) => handleNombre(e.target.value)}
           minLength={2}
@@ -113,23 +114,26 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Slug * {isEdit && <span className="text-gray-400 text-xs">(no editable)</span>}
-        </label>
-        <input
-          className={`${inputClass} ${isEdit ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+        <Label htmlFor="tenant-slug">
+          Slug * {isEdit && <span className="text-xs text-muted-foreground">(no editable)</span>}
+        </Label>
+        <Input
+          id="tenant-slug"
+          className="mt-1 disabled:cursor-not-allowed"
           value={form.slug}
           onChange={(e) => !isEdit && setForm((p) => ({ ...p, slug: e.target.value }))}
           readOnly={isEdit}
+          disabled={isEdit}
           pattern="^[a-z0-9\-]+$"
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">NIT</label>
-        <input
-          className={inputClass}
+        <Label htmlFor="tenant-nit">NIT</Label>
+        <Input
+          id="tenant-nit"
+          className="mt-1"
           value={form.nit}
           onChange={(e) => setForm((p) => ({ ...p, nit: e.target.value }))}
         />
@@ -137,19 +141,21 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email contacto *</label>
-          <input
+          <Label htmlFor="tenant-contacto-email">Email contacto *</Label>
+          <Input
+            id="tenant-contacto-email"
             type="email"
-            className={inputClass}
+            className="mt-1"
             value={form.contactoEmail}
             onChange={(e) => setForm((p) => ({ ...p, contactoEmail: e.target.value }))}
             required
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono *</label>
-          <input
-            className={inputClass}
+          <Label htmlFor="tenant-contacto-telefono">Teléfono *</Label>
+          <Input
+            id="tenant-contacto-telefono"
+            className="mt-1"
             value={form.contactoTelefono}
             onChange={(e) => setForm((p) => ({ ...p, contactoTelefono: e.target.value }))}
             minLength={7}
@@ -159,9 +165,10 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Plan ID</label>
-        <input
-          className={inputClass}
+        <Label htmlFor="tenant-plan-id">Plan ID</Label>
+        <Input
+          id="tenant-plan-id"
+          className="mt-1"
           value={form.planId}
           onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
           placeholder="ObjectId del plan (opcional)"
@@ -169,28 +176,23 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
       </div>
 
       {!isEdit && (
-        <div className="border-t pt-4">
-          <button
-            type="button"
-            onClick={() => setShowAdmin((v) => !v)}
-            className="text-sm text-blue-600 hover:underline"
-          >
+        <div className="border-t border-border pt-4">
+          <Button type="button" variant="link" className="h-auto p-0" onClick={() => setShowAdmin((v) => !v)}>
             {showAdmin ? '▲ Ocultar' : '▼ Agregar'} administrador inicial
-          </button>
+          </Button>
 
           {showAdmin && (
-            <div className="mt-3 space-y-3 rounded-md bg-blue-50 p-4">
+            <div className="mt-3 space-y-3 rounded-md bg-muted p-4">
               {adminError && (
-                <div className="rounded-md bg-red-100 border border-red-300 p-3">
-                  <p className="text-sm text-red-800">{adminError}</p>
+                <div className="rounded-md border border-destructive/30 bg-destructive-subtle p-3">
+                  <p className="text-sm text-destructive">{adminError}</p>
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre *
-                </label>
-                <input
-                  className={inputClass}
+                <Label htmlFor="tenant-admin-nombre">Nombre *</Label>
+                <Input
+                  id="tenant-admin-nombre"
+                  className="mt-1"
                   value={form.adminNombre}
                   onChange={(e) => setForm((p) => ({ ...p, adminNombre: e.target.value }))}
                   minLength={2}
@@ -198,24 +200,22 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
-                </label>
-                <input
+                <Label htmlFor="tenant-admin-email">Email *</Label>
+                <Input
+                  id="tenant-admin-email"
                   type="email"
-                  className={inputClass}
+                  className="mt-1"
                   value={form.adminEmail}
                   onChange={(e) => setForm((p) => ({ ...p, adminEmail: e.target.value }))}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contraseña *
-                </label>
-                <input
+                <Label htmlFor="tenant-admin-password">Contraseña *</Label>
+                <Input
+                  id="tenant-admin-password"
                   type="password"
-                  className={inputClass}
+                  className="mt-1"
                   value={form.adminPassword}
                   onChange={(e) => setForm((p) => ({ ...p, adminPassword: e.target.value }))}
                   minLength={8}
@@ -228,19 +228,10 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props) {
       )}
 
       <div className="flex justify-end gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
-        >
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
-        </button>
-        <button
-          type="submit"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-        >
-          {isEdit ? 'Guardar cambios' : 'Crear empresa'}
-        </button>
+        </Button>
+        <Button type="submit">{isEdit ? 'Guardar cambios' : 'Crear empresa'}</Button>
       </div>
     </form>
   );

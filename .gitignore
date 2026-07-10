@@ -41,3 +41,6 @@ dev/
 
 # Snapshots temporales de Playwright MCP
 .playwright-mcp/
+
+# Capturas/imágenes sueltas (no deben commitearse por error)
+*.png
