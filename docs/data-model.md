@@ -100,6 +100,9 @@
   customFields: { [key: String]: Mixed },
   tags: [String],
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
+  // bandeja única (HU-OMNI-01)
+  noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
+  iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, estadoComercial: 1 }
