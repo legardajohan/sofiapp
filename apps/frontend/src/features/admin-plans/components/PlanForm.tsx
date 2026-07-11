@@ -14,7 +14,7 @@ const DESC_MAX = 500;
 
 // Micro-interacciones sutiles (Emil): transición corta ease-out + focus ring, sin animaciones exageradas.
 const inputClass =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none transition-shadow duration-150 ease-out focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40';
+  'w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-shadow duration-150 ease-out placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/40';
 
 const num = (v: string): number => Number(v) || 0;
 
@@ -74,7 +74,7 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
     min = 0,
   ): React.ReactElement => (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
       <input
         type="number"
         min={min}
@@ -89,7 +89,7 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Nombre *</label>
+        <label className="mb-1 block text-sm font-medium text-foreground">Nombre *</label>
         <input
           className={inputClass}
           value={form.nombre}
@@ -101,8 +101,8 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
-          Descripción <span className="text-xs text-gray-400">(opcional)</span>
+        <label className="mb-1 block text-sm font-medium text-foreground">
+          Descripción <span className="text-xs text-muted-foreground">(opcional)</span>
         </label>
         <textarea
           className={`${inputClass} min-h-[72px] resize-y`}
@@ -113,15 +113,15 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
         />
         <p
           className={`mt-1 text-right text-xs ${
-            form.descripcion.length >= DESC_MAX ? 'text-amber-600' : 'text-gray-400'
+            form.descripcion.length >= DESC_MAX ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
           }`}
         >
           {form.descripcion.length}/{DESC_MAX}
         </p>
       </div>
 
-      <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-gray-200 p-3">
-        <legend className="px-1 text-xs font-medium text-gray-500">Límites del plan</legend>
+      <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs font-medium text-muted-foreground">Límites del plan</legend>
         {limitField('Usuarios', 'usuarios')}
         {limitField('Administradores incluidos', 'administradores', 1)}
         {limitField('Mensajes / mes', 'mensajesMes')}
@@ -131,11 +131,11 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700">
-            Precio <span className="text-xs font-normal text-gray-400">(USD)</span>
+          <label className="mb-1 flex items-center gap-1 text-sm font-medium text-foreground">
+            Precio <span className="text-xs font-normal text-muted-foreground">(USD)</span>
           </label>
           <div className="relative">
-            <DollarSign className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+            <DollarSign className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="number"
               min={0}
@@ -157,18 +157,18 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
           />
         </div>
         <div>
-          <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700">
-            <Calculator className="size-4 text-gray-400" />
+          <label className="mb-1 flex items-center gap-1 text-sm font-medium text-foreground">
+            <Calculator className="size-4 text-muted-foreground" />
             Costo estimado de operación
             <span
-              className="cursor-help text-gray-400"
+              className="cursor-help text-muted-foreground"
               title="Costo interno estimado (USD) para calcular el margen. No se muestra al cliente."
             >
               <Info className="size-3.5" />
             </span>
           </label>
           <div className="relative">
-            <DollarSign className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+            <DollarSign className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="number"
               min={0}
@@ -181,7 +181,7 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-700">
+      <label className="flex items-center gap-2 text-sm text-foreground">
         <input
           type="checkbox"
           checked={form.activo}
@@ -194,13 +194,13 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm transition-transform duration-150 ease-out hover:bg-gray-50 active:scale-[0.98]"
+          className="rounded-md border border-input px-4 py-2 text-sm text-foreground transition-transform duration-150 ease-out hover:bg-muted active:scale-[0.98]"
         >
           Cancelar
         </button>
         <button
           type="submit"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition-transform duration-150 ease-out hover:bg-blue-700 active:scale-[0.98]"
+          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-transform duration-150 ease-out hover:bg-primary-hover active:scale-[0.98]"
         >
           {isEdit ? 'Guardar cambios' : 'Crear plan'}
         </button>
@@ -231,7 +231,7 @@ function ConversionHint({
 }: ConversionHintProps): React.ReactElement {
   if (loading) {
     return (
-      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400">
+      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
         Obteniendo TRM…
       </p>
@@ -241,7 +241,7 @@ function ConversionHint({
   if (rate === null) {
     return (
       <div className="mt-1.5 space-y-1.5">
-        <p className="flex items-center gap-1.5 text-xs text-amber-600">
+        <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
           <TriangleAlert className="size-3.5 shrink-0" />
           No pudimos obtener la TRM. Ingresa la tasa manualmente:
         </p>
@@ -253,12 +253,12 @@ function ConversionHint({
             value={manualRate}
             onChange={(e) => onManualRateChange(e.target.value)}
             placeholder="COP por USD (ej: 4000)"
-            className="w-40 rounded-md border border-gray-300 px-2 py-1 text-xs outline-none transition-shadow duration-150 ease-out focus:ring-2 focus:ring-blue-500/40"
+            className="w-40 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground outline-none transition-shadow duration-150 ease-out focus:ring-2 focus:ring-ring/40"
           />
           <button
             type="button"
             onClick={onRetry}
-            className="flex items-center gap-1 text-xs text-blue-600 transition-transform duration-150 ease-out hover:underline active:scale-[0.98]"
+            className="flex items-center gap-1 text-xs text-primary transition-transform duration-150 ease-out hover:underline active:scale-[0.98]"
           >
             <RefreshCw className="size-3" />
             Reintentar
@@ -269,11 +269,11 @@ function ConversionHint({
   }
 
   return (
-    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500">
-      <RefreshCw className="size-3.5 text-gray-400" />
+    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+      <RefreshCw className="size-3.5 text-muted-foreground" />
       ≈ {formatCurrency(copEquivalente, 'COP')} COP
-      {estado === 'STALE' && <span className="text-amber-600">· tasa no actualizada hoy</span>}
-      {estado === 'MANUAL' && <span className="text-amber-600">· tasa manual</span>}
+      {estado === 'STALE' && <span className="text-amber-600 dark:text-amber-400">· tasa no actualizada hoy</span>}
+      {estado === 'MANUAL' && <span className="text-amber-600 dark:text-amber-400">· tasa manual</span>}
     </p>
   );
 }

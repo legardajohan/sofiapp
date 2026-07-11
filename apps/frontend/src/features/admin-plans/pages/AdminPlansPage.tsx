@@ -65,14 +65,14 @@ export function AdminPlansPage(): React.ReactElement {
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Planes</h1>
-          <p className="mt-1 text-sm text-gray-500">Límites de uso y rentabilidad por plan</p>
+          <h1 className="text-2xl font-bold text-foreground">Planes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Límites de uso y rentabilidad por plan</p>
         </div>
         <div className="flex items-center gap-3">
           <ViewToggle value={viewMode} onChange={setViewMode} />
           <button
             onClick={openCreate}
-            className="flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm text-white transition-transform duration-150 ease-out hover:bg-blue-700 active:scale-[0.98]"
+            className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-transform duration-150 ease-out hover:bg-primary-hover active:scale-[0.98]"
           >
             <Plus className="size-4" />
             Nuevo plan
@@ -81,13 +81,13 @@ export function AdminPlansPage(): React.ReactElement {
       </div>
 
       {isLoading && (
-        <p className="flex items-center gap-2 text-gray-500">
+        <p className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
           Cargando…
         </p>
       )}
       {isError && (
-        <p className="flex items-center gap-2 text-red-500">
+        <p className="flex items-center gap-2 text-destructive">
           <TriangleAlert className="size-4" />
           Error al cargar los planes.
         </p>
@@ -101,21 +101,21 @@ export function AdminPlansPage(): React.ReactElement {
         ))}
 
       {deleteMutation.isError && (
-        <p className="mt-2 flex items-center gap-1.5 text-sm text-red-600">
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-destructive">
           <TriangleAlert className="size-4" />
           No se pudo eliminar el plan. Puede estar asignado a una o más empresas.
         </p>
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 duration-200 animate-in fade-in-0 motion-reduce:animate-none">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl duration-200 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 duration-200 animate-in fade-in-0 motion-reduce:animate-none">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-xl duration-200 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none">
+            <h2 className="mb-4 text-lg font-semibold text-foreground">
               {planEditing ? 'Editar plan' : 'Nuevo plan'}
             </h2>
             <PlanForm plan={planEditing ?? undefined} onSuccess={handleFormSuccess} onCancel={closeModal} />
             {(createMutation.isError || updateMutation.isError) && (
-              <p className="mt-2 text-sm text-red-600">
+              <p className="mt-2 text-sm text-destructive">
                 Error al guardar. Verifica los datos e intenta de nuevo.
               </p>
             )}
@@ -135,13 +135,13 @@ function ViewToggle({ value, onChange }: ViewToggleProps): React.ReactElement {
   const baseBtn =
     'flex items-center justify-center rounded-md p-1.5 transition-colors duration-150 ease-out';
   return (
-    <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5">
       <button
         type="button"
         aria-label="Vista de tabla"
         aria-pressed={value === 'table'}
         onClick={() => onChange('table')}
-        className={`${baseBtn} ${value === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+        className={`${baseBtn} ${value === 'table' ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
       >
         <LayoutList className="size-4" />
       </button>
@@ -150,7 +150,7 @@ function ViewToggle({ value, onChange }: ViewToggleProps): React.ReactElement {
         aria-label="Vista de tarjetas"
         aria-pressed={value === 'cards'}
         onClick={() => onChange('cards')}
-        className={`${baseBtn} ${value === 'cards' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+        className={`${baseBtn} ${value === 'cards' ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
       >
         <LayoutGrid className="size-4" />
       </button>
