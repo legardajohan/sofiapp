@@ -23,6 +23,10 @@ import type {
 
 type TenantId = string | Types.ObjectId;
 
+// Roles que ocupan un "puesto"/asiento comercial (consumen la cuota `administradores`).
+// El `superadmin` es global (no pertenece a un tenant) y NO ocupa asiento.
+const ROLES_CON_PUESTO = ['admin', 'coordinador', 'asesor'] as const;
+
 /** Periodo actual en formato 'YYYY-MM' (UTC en el MVP). */
 export function getCurrentPeriodo(now: Date = new Date()): string {
   const year = now.getUTCFullYear();
@@ -53,6 +57,11 @@ export async function getMetricUsed(tenantId: TenantId, metric: QuotaMetric): Pr
   switch (metric) {
     case 'usuarios':
       return countScoped(UserModel, tenantId, { activo: true });
+    case 'administradores':
+      return countScoped(UserModel, tenantId, {
+        activo: true,
+        rol: { $in: ROLES_CON_PUESTO },
+      });
     case 'leads':
       return countScoped(Cliente, tenantId, {});
     case 'mensajesMes':
@@ -100,14 +109,24 @@ export async function getTenantUsage(tenantId: TenantId): Promise<IUsageResponse
   const { tenant, limites } = await resolveTenantWithLimits(tenantId);
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
 
-  const [usuarios, leads, mensajesMes, campanasMes] = await Promise.all([
+  const [usuarios, administradores, leads, mensajesMes, campanasMes] = await Promise.all([
     getMetricUsed(tenantId, 'usuarios'),
+    getMetricUsed(tenantId, 'administradores'),
     getMetricUsed(tenantId, 'leads'),
     getMetricUsed(tenantId, 'mensajesMes'),
     getMetricUsed(tenantId, 'campanasMes'),
   ]);
 
-  const l: IPlanLimites = limites ?? { usuarios: 0, mensajesMes: 0, leads: 0, campanasMes: 0 };
+  // Normaliza límites: rellena con 0 cualquier métrica ausente (p. ej. `administradores` en
+  // planes creados antes de la ampliación v2), evitando NaN en el desglose.
+  const l: IPlanLimites = {
+    usuarios: 0,
+    administradores: 0,
+    mensajesMes: 0,
+    leads: 0,
+    campanasMes: 0,
+    ...(limites ?? {}),
+  };
 
   let plan: IUsageResponse['plan'] = null;
   if (tenant.planId) {
@@ -121,6 +140,7 @@ export async function getTenantUsage(tenantId: TenantId): Promise<IUsageResponse
     plan,
     metrics: {
       usuarios: buildMetric(usuarios, l.usuarios),
+      administradores: buildMetric(administradores, l.administradores),
       mensajesMes: buildMetric(mensajesMes, l.mensajesMes),
       leads: buildMetric(leads, l.leads),
       campanasMes: buildMetric(campanasMes, l.campanasMes),

@@ -29,6 +29,10 @@ export const updateAdminTenant = async (
   return res.data;
 };
 
+export const deleteAdminTenant = async (id: string): Promise<void> => {
+  await apiClient.delete(`/admin/tenants/${id}`);
+};
+
 export const updateAdminTenantStatus = async (
   id: string,
   estado: 'activo' | 'suspendido'

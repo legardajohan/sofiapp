@@ -17,7 +17,7 @@ describe('sendMessage — cuota de mensajes (HU-SAAS-02 · DoD)', () => {
   it('bloquea con 429 y NO envía cuando el tenant Básico alcanzó su límite de mensajes', async () => {
     const plan = await Plan.create({
       nombre: 'Básico',
-      limites: { usuarios: 3, mensajesMes: 2, leads: 500, campanasMes: 2 },
+      limites: { usuarios: 3, administradores: 3, mensajesMes: 2, leads: 500, campanasMes: 2 },
       precio: 0,
     });
     const tenant = await Tenant.create({

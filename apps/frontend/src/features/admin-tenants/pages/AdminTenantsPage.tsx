@@ -1,18 +1,21 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { Plus, Search, X } from 'lucide-react';
 import { useAdminTenantsStore } from '../useAdminTenantsStore.js';
 import {
   getAdminTenants,
   createAdminTenant,
   updateAdminTenant,
+  deleteAdminTenant,
 } from '../../../api/admin-tenants.js';
 import { TenantTable } from '../components/TenantTable.js';
 import { TenantForm } from '../components/TenantForm.js';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TenantUsagePanel } from '../components/TenantUsagePanel.js';
 import { getAdminPlans } from '../../../api/admin-plans.js';
-import type { CreateTenantPayload, UpdateTenantPayload } from '../types/index.js';
+import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
 export function AdminTenantsPage(): React.ReactElement {
   const queryClient = useQueryClient();
@@ -24,12 +27,37 @@ export function AdminTenantsPage(): React.ReactElement {
     openCreate,
     openEdit,
     closeModal,
+    setSearch,
     setPage,
   } = useAdminTenantsStore();
+
+  // Estado local del texto tecleado; sólo se lanza la búsqueda al enviar (Enter/botón),
+  // así el input no se desmonta con cada recarga y no pierde el foco.
+  const [searchInput, setSearchInput] = useState(searchTerm);
+
+  const handleSearchSubmit = (e: React.FormEvent): void => {
+    e.preventDefault();
+    setSearch(searchInput.trim());
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const value = e.target.value;
+    setSearchInput(value);
+    // Al vaciar el buscador se restaura el listado completo sin necesidad de Enter.
+    if (value.trim() === '' && searchTerm !== '') {
+      setSearch('');
+    }
+  };
+
+  const handleClearSearch = (): void => {
+    setSearchInput('');
+    setSearch('');
+  };
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-tenants', searchTerm, currentPage],
     queryFn: () => getAdminTenants({ search: searchTerm || undefined, page: currentPage }),
+    placeholderData: keepPreviousData,
   });
 
   const { data: plans } = useQuery({ queryKey: ['admin-plans'], queryFn: getAdminPlans });
@@ -52,12 +80,26 @@ export function AdminTenantsPage(): React.ReactElement {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminTenant,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+    },
+  });
+
   const handleFormSuccess = (payload: CreateTenantPayload | UpdateTenantPayload): void => {
     if (tenantEditing) {
       updateMutation.mutate({ id: tenantEditing._id, payload: payload as UpdateTenantPayload });
     } else {
       createMutation.mutate(payload as CreateTenantPayload);
     }
+  };
+
+  const handleDelete = (tenant: ITenant): void => {
+    const ok = window.confirm(
+      `¿Eliminar la empresa "${tenant.nombre}"? Se borrarán también sus usuarios, clientes y datos asociados. Esta acción no se puede deshacer.`,
+    );
+    if (ok) deleteMutation.mutate(tenant._id);
   };
 
   return (
@@ -73,8 +115,51 @@ export function AdminTenantsPage(): React.ReactElement {
         </Button>
       </div>
 
+      <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Busca por nombre o slug y presiona enter"
+            value={searchInput}
+            onChange={handleSearchChange}
+            className="pl-9"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+        <Button type="submit" variant="outline">
+          Buscar
+        </Button>
+      </form>
+
+      {searchTerm && (
+        <p className="text-sm text-muted-foreground">
+          Resultados para «{searchTerm}».{' '}
+          <button
+            type="button"
+            onClick={handleClearSearch}
+            className="font-medium text-primary hover:underline"
+          >
+            Ver todas
+          </button>
+        </p>
+      )}
+
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
       {isError && <p className="text-destructive">Error al cargar las empresas.</p>}
+
+      {deleteMutation.isError && (
+        <p className="text-sm text-destructive">No se pudo eliminar la empresa. Intenta de nuevo.</p>
+      )}
 
       {data && (
         <TenantTable
@@ -84,6 +169,7 @@ export function AdminTenantsPage(): React.ReactElement {
           limit={data.limit}
           onPageChange={setPage}
           onEdit={openEdit}
+          onDelete={handleDelete}
         />
       )}
 

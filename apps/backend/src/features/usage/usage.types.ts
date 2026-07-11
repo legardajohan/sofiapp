@@ -1,6 +1,11 @@
 import type { Document, Types } from 'mongoose';
 
-export type QuotaMetric = 'usuarios' | 'mensajesMes' | 'leads' | 'campanasMes';
+export type QuotaMetric =
+  | 'usuarios'
+  | 'administradores'
+  | 'mensajesMes'
+  | 'leads'
+  | 'campanasMes';
 /** Métricas con contador mensual persistido (las demás se cuentan en vivo). */
 export type MonthlyQuotaMetric = 'mensajesMes' | 'campanasMes';
 

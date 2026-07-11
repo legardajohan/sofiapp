@@ -1,18 +1,34 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { IPlan } from './types/index.js';
+
+export type PlanViewMode = 'table' | 'cards';
 
 interface AdminPlansState {
   isModalOpen: boolean;
   planEditing: IPlan | null;
+  viewMode: PlanViewMode;
   openCreate: () => void;
   openEdit: (plan: IPlan) => void;
   closeModal: () => void;
+  setViewMode: (mode: PlanViewMode) => void;
 }
 
-export const useAdminPlansStore = create<AdminPlansState>((set) => ({
-  isModalOpen: false,
-  planEditing: null,
-  openCreate: () => set({ isModalOpen: true, planEditing: null }),
-  openEdit: (plan) => set({ isModalOpen: true, planEditing: plan }),
-  closeModal: () => set({ isModalOpen: false, planEditing: null }),
-}));
+// UI state (Zustand). El modo de vista se persiste para respetar la preferencia del superadmin.
+export const useAdminPlansStore = create<AdminPlansState>()(
+  persist(
+    (set) => ({
+      isModalOpen: false,
+      planEditing: null,
+      viewMode: 'table',
+      openCreate: () => set({ isModalOpen: true, planEditing: null }),
+      openEdit: (plan) => set({ isModalOpen: true, planEditing: plan }),
+      closeModal: () => set({ isModalOpen: false, planEditing: null }),
+      setViewMode: (mode) => set({ viewMode: mode }),
+    }),
+    {
+      name: 'admin-plans-ui',
+      partialize: (state) => ({ viewMode: state.viewMode }),
+    },
+  ),
+);

@@ -11,7 +11,7 @@ import {
   getTenantUsage,
 } from './usage.service.js';
 
-const limites = { usuarios: 2, mensajesMes: 2, leads: 5, campanasMes: 1 };
+const limites = { usuarios: 2, administradores: 2, mensajesMes: 2, leads: 5, campanasMes: 1 };
 
 async function crearTenantConPlan() {
   const plan = await Plan.create({ nombre: 'Básico', limites, precio: 0 });
@@ -107,6 +107,54 @@ describe('usage.service — HU-SAAS-02', () => {
     });
   });
 
+  describe('métrica administradores', () => {
+    it('cuenta solo usuarios con puesto (admin/coordinador/asesor) y bloquea al alcanzar el límite', async () => {
+      const { tenant } = await crearTenantConPlan(); // administradores: 2
+      // El superadmin es global y NO ocupa asiento: no debe contar.
+      await UserModel.create({
+        tenantId: tenant._id,
+        nombre: 'Root',
+        email: 'root@empresa-quota.com',
+        passwordHash: 'hash',
+        rol: 'superadmin',
+        activo: true,
+      });
+      // Dos puestos ocupados (admin + coordinador) → alcanza el límite (2).
+      await UserModel.create({
+        tenantId: tenant._id,
+        nombre: 'Ad',
+        email: 'ad@empresa-quota.com',
+        passwordHash: 'hash',
+        rol: 'admin',
+        activo: true,
+      });
+      await UserModel.create({
+        tenantId: tenant._id,
+        nombre: 'Co',
+        email: 'co@empresa-quota.com',
+        passwordHash: 'hash',
+        rol: 'coordinador',
+        activo: true,
+      });
+      expect(await getMetricUsed(tenant._id.toString(), 'administradores')).toBe(2);
+      await expect(
+        assertWithinQuota(tenant._id.toString(), 'administradores')
+      ).rejects.toMatchObject({ statusCode: 429 });
+    });
+
+    it('es no-op cuando el tenant no tiene plan asignado', async () => {
+      const tenant = await Tenant.create({
+        nombre: 'Sin Plan Admin',
+        slug: 'sin-plan-admin',
+        contacto: { email: 'spa@t.com', telefono: '3000000009' },
+        estado: 'activo',
+      });
+      await expect(
+        assertWithinQuota(tenant._id.toString(), 'administradores')
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('getTenantUsage', () => {
     it('devuelve las 4 métricas con usado/limite/restante/porcentaje y el plan', async () => {
       const { plan, tenant } = await crearTenantConPlan();
@@ -123,6 +171,7 @@ describe('usage.service — HU-SAAS-02', () => {
         porcentaje: 50,
       });
       expect(usage.metrics.usuarios.limite).toBe(2);
+      expect(usage.metrics.administradores.limite).toBe(2);
     });
   });
 });

@@ -7,19 +7,26 @@ import type { IPlan } from '../features/plan/plan.types.js';
 const DEFAULT_PLANS: IPlan[] = [
   {
     nombre: 'Básico',
-    limites: { usuarios: 3, mensajesMes: 1000, leads: 500, campanasMes: 2 },
+    // `administradores`, `perfilesPermitidos`, `descripcion` y `precio` (USD) son SUGERIDOS.
+    descripcion: 'Ideal para empezar: lo esencial para captar y atender tus primeros clientes.',
+    limites: { usuarios: 3, administradores: 3, mensajesMes: 1000, leads: 500, campanasMes: 2 },
+    perfilesPermitidos: ['vendedor', 'asesor_comercial'],
     precio: 0,
     activo: true,
   },
   {
     nombre: 'Estándar',
-    limites: { usuarios: 10, mensajesMes: 5000, leads: 5000, campanasMes: 10 },
+    descripcion: 'Para equipos en crecimiento que necesitan más volumen y coordinación.',
+    limites: { usuarios: 10, administradores: 10, mensajesMes: 5000, leads: 5000, campanasMes: 10 },
+    perfilesPermitidos: ['vendedor', 'asesor_comercial', 'coordinador'],
     precio: 0,
     activo: true,
   },
   {
     nombre: 'Pro',
-    limites: { usuarios: 50, mensajesMes: 50000, leads: 50000, campanasMes: 100 },
+    descripcion: 'Máxima capacidad: operación comercial completa con todos los perfiles.',
+    limites: { usuarios: 50, administradores: 20, mensajesMes: 50000, leads: 50000, campanasMes: 100 },
+    perfilesPermitidos: ['vendedor', 'asesor_comercial', 'coordinador', 'director', 'gerente'],
     precio: 0,
     activo: true,
   },

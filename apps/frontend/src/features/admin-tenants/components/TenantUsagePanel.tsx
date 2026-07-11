@@ -15,12 +15,19 @@ interface Props {
 
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   usuarios: 'Usuarios',
+  administradores: 'Administradores',
   mensajesMes: 'Mensajes / mes',
   leads: 'Leads',
   campanasMes: 'Campañas / mes',
 };
 
-const METRIC_ORDER: QuotaMetric[] = ['usuarios', 'mensajesMes', 'leads', 'campanasMes'];
+const METRIC_ORDER: QuotaMetric[] = [
+  'usuarios',
+  'administradores',
+  'mensajesMes',
+  'leads',
+  'campanasMes',
+];
 
 function barColor(porcentaje: number): string {
   if (porcentaje >= 100) return 'bg-red-600';

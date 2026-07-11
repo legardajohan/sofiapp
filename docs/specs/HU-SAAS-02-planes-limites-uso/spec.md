@@ -6,6 +6,11 @@
 
 **Estado:** implementado
 
+> **Ampliación v2 (en planeación):** administradores configurables por plan, perfiles/etiquetas,
+> catálogo de costos multimoneda, tasa de cambio oficial USD/COP (TRM) y fotografía financiera.
+> Ver [`spec-v2-costeo-trm.md`](./spec-v2-costeo-trm.md) · [`plan-v2-costeo-trm.md`](./plan-v2-costeo-trm.md)
+> · [`tasks-v2-costeo-trm.md`](./tasks-v2-costeo-trm.md). No reemplaza esta v1.
+
 ## Objetivo
 
 Permitir al superadministrador controlar **planes** (Básico / Estándar / Pro) con **límites

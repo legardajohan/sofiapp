@@ -3,11 +3,18 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { listPlansSchema, createPlanSchema, updatePlanSchema } from './plan.validation.js';
+import {
+  listPlansSchema,
+  createPlanSchema,
+  updatePlanSchema,
+  planIdParamSchema,
+} from './plan.validation.js';
 import {
   listPlansController,
   createPlanController,
   updatePlanController,
+  nuevaVersionPlanController,
+  deletePlanController,
 } from './plan.controller.js';
 
 const router: ExpressRouter = Router();
@@ -37,6 +44,23 @@ router.patch(
   authorize(['superadmin']),
   validate(updatePlanSchema),
   asyncHandler(updatePlanController),
+);
+
+// Acción explícita: nueva versión del plan (recalcula la fotografía con la TRM vigente).
+router.post(
+  '/:id/nueva-version',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(planIdParamSchema),
+  asyncHandler(nuevaVersionPlanController),
+);
+
+router.delete(
+  '/:id',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(planIdParamSchema),
+  asyncHandler(deletePlanController),
 );
 
 export default router;

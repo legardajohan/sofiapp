@@ -17,6 +17,7 @@ import {
   updateTenantController,
   updateTenantStatusController,
   assignPlanToTenantController,
+  deleteTenantController,
 } from './tenant.controller.js';
 import { getTenantUsageController } from '../usage/usage.controller.js';
 
@@ -47,6 +48,14 @@ router.patch(
   authorize(['superadmin']),
   validate(updateTenantSchema),
   asyncHandler(updateTenantController)
+);
+
+router.delete(
+  '/:id',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(tenantIdParamSchema),
+  asyncHandler(deleteTenantController)
 );
 
 router.patch(

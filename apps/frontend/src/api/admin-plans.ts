@@ -3,6 +3,7 @@ import type {
   IPlan,
   CreatePlanPayload,
   UpdatePlanPayload,
+  IExchangeRateVigente,
 } from '../features/admin-plans/types/index.js';
 
 export const getAdminPlans = async (): Promise<IPlan[]> => {
@@ -20,5 +21,14 @@ export const updateAdminPlan = async (
   payload: UpdatePlanPayload
 ): Promise<IPlan> => {
   const res = await apiClient.patch<IPlan>(`/admin/plans/${id}`, payload);
+  return res.data;
+};
+
+export const deleteAdminPlan = async (id: string): Promise<void> => {
+  await apiClient.delete(`/admin/plans/${id}`);
+};
+
+export const getExchangeRateVigente = async (): Promise<IExchangeRateVigente> => {
+  const res = await apiClient.get<IExchangeRateVigente>('/admin/exchange-rate/vigente');
   return res.data;
 };

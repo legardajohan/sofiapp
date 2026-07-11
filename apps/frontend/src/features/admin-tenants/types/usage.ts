@@ -1,4 +1,9 @@
-export type QuotaMetric = 'usuarios' | 'mensajesMes' | 'leads' | 'campanasMes';
+export type QuotaMetric =
+  | 'usuarios'
+  | 'administradores'
+  | 'mensajesMes'
+  | 'leads'
+  | 'campanasMes';
 
 export interface IMetricUsage {
   usado: number;

@@ -25,6 +25,13 @@ const EnvSchema = z.object({
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
 
+  // TRM oficial USD/COP — Superintendencia Financiera vía datos.gov.co (recurso 32sa-8pi3, SODA API).
+  TRM_DATASET_URL: z
+    .string()
+    .url()
+    .default('https://www.datos.gov.co/resource/32sa-8pi3.json'),
+  TRM_HTTP_TIMEOUT_MS: z.coerce.number().positive().default(8000),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

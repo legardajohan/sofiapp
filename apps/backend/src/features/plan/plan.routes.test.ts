@@ -22,7 +22,7 @@ const adminToken = () =>
     { expiresIn: '1h' }
   );
 
-const limites = { usuarios: 3, mensajesMes: 1000, leads: 500, campanasMes: 2 };
+const limites = { usuarios: 3, administradores: 3, mensajesMes: 1000, leads: 500, campanasMes: 2 };
 const mutHeaders = (token: string) => ({ Cookie: [`token=${token}`, `csrfToken=${CSRF}`], 'X-CSRF-Token': CSRF });
 
 describe('/api/admin/plans — HU-SAAS-02', () => {
