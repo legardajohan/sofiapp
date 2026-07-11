@@ -19,3 +19,8 @@ export const getKbDocuments = async (params: {
   const res = await apiClient.get<KbDocumentsListResponse>('/kb/documents', { params });
   return res.data;
 };
+
+export const deleteKbDocument = async (id: string): Promise<{ deleted: boolean }> => {
+  const res = await apiClient.delete<{ deleted: boolean }>(`/kb/documents/${id}`);
+  return res.data;
+};

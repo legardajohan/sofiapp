@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { getKbDocuments } from '../../../api/knowledge-base.js';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteKbDocument, getKbDocuments } from '../../../api/knowledge-base.js';
 import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
 import { IndexingStatusBadge } from './IndexingStatusBadge.js';
 
@@ -17,13 +17,31 @@ function formatDate(iso: string): string {
 }
 
 export function KnowledgeDocumentTable(): React.ReactElement {
-  const { data, isLoading, isError } = useQuery<KbDocumentsListResponse>({
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
     queryKey: ['kb', 'documents'],
     queryFn: () => getKbDocuments({ page: 1, limit: 50 }),
     // Refresca mientras haya documentos indexándose, para ver el estado en vivo.
     refetchInterval: (query) =>
       query.state.data?.data.some(isPending) ? 3000 : false,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteKbDocument,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
+    },
+  });
+
+  function handleDelete(id: string): void {
+    if (
+      window.confirm(
+        '¿Eliminar este documento? Se borrarán todos sus fragmentos y no se podrá recuperar.',
+      )
+    ) {
+      deleteMutation.mutate(id);
+    }
+  }
 
   const documentos = data?.data ?? [];
 
@@ -42,7 +60,10 @@ export function KnowledgeDocumentTable(): React.ReactElement {
         <div className="px-6 py-10 text-center text-sm text-muted-foreground">Cargando…</div>
       ) : isError ? (
         <div className="px-6 py-10 text-center text-sm text-destructive">
-          No se pudo cargar la lista de documentos.
+          <p>No se pudo cargar la lista de documentos.</p>
+          <button onClick={() => refetch()} className="mt-2 text-xs underline">
+            Reintentar
+          </button>
         </div>
       ) : documentos.length === 0 ? (
         <div className="px-6 py-10 text-center text-sm text-muted-foreground">
@@ -58,6 +79,7 @@ export function KnowledgeDocumentTable(): React.ReactElement {
                 <th className="px-4 py-3 font-medium">Fragmentos</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-6 py-3 font-medium">Actualizado</th>
+                <th className="px-6 py-3 font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +97,15 @@ export function KnowledgeDocumentTable(): React.ReactElement {
                     <IndexingStatusBadge estado={doc.estadoIndexacion} />
                   </td>
                   <td className="px-6 py-3 text-secondary-foreground">{formatDate(doc.updatedAt)}</td>
+                  <td className="px-6 py-3">
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      disabled={deleteMutation.isPending}
+                      className="text-destructive hover:text-destructive/80 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

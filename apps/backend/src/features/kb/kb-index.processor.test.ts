@@ -99,7 +99,7 @@ describe('processKbIndexJob', () => {
 
     const doc = await KbDocument.findById(documentId).lean<IKbDocument>();
     expect(doc?.estadoIndexacion).toBe('fallido');
-    expect(doc?.error).toContain('gemini caído');
+    expect(doc?.error).toBe('Ocurrió un error al procesar el contenido. Intenta de nuevo más tarde.');
   });
 
   it('chunks de tenantA no son visibles para tenantB', async () => {

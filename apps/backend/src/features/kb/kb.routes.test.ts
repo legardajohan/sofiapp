@@ -81,3 +81,56 @@ describe('POST /api/kb/documents', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('DELETE /api/kb/documents/:id', () => {
+  it('admin borra un documento de su propio tenant → 200', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Borrable', contenido: 'contenido' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .delete(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ deleted: true });
+  });
+
+  it('documento de otro tenant → 404 (no se filtra existencia entre tenants)', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const doc = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'contenido' });
+    const tokenB = makeToken(tenantB.toString(), 'admin');
+
+    const res = await request(app)
+      .delete(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${tokenB}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('id con formato inválido → 400', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const res = await request(app)
+      .delete('/api/kb/documents/no-es-un-objectid')
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rol asesor (no admin) → 403', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Protegido', contenido: 'contenido' });
+    const token = makeToken(tenantId.toString(), 'asesor');
+
+    const res = await request(app)
+      .delete(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(403);
+  });
+});

@@ -4,13 +4,18 @@ import { kbIndexQueue, KB_INDEX_JOB_NAME } from '../../config/queues.js';
 import {
   findScoped,
   findOneScoped,
+  findByIdScoped,
   findOneAndUpdateScoped,
+  findOneAndDeleteScoped,
   createScoped,
   countScoped,
+  deleteManyScoped,
 } from '../../repositories/base.repository.js';
 import { KbDocument } from './kb-document.model.js';
+import { KbChunk } from './kb-chunk.model.js';
 import type {
   CreateKbDocumentDTO,
+  DeleteKbDocumentResponse,
   IKbDocument,
   IKbDocumentResponse,
   KbDocumentsListResponse,
@@ -103,4 +108,17 @@ export async function listDocuments(
     page,
     limit,
   };
+}
+
+export async function deleteDocument(
+  tenantId: TenantId,
+  id: string,
+): Promise<DeleteKbDocumentResponse> {
+  const existing = await findByIdScoped(KbDocument, tenantId, id).lean().exec();
+  if (!existing) throw new AppError('No se encontró el documento.', 404);
+
+  await deleteManyScoped(KbChunk, tenantId, { documentId: id });
+  await findOneAndDeleteScoped(KbDocument, tenantId, { _id: id });
+
+  return { deleted: true };
 }

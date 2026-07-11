@@ -55,6 +55,10 @@ export interface KbDocumentsListResponse {
   limit: number;
 }
 
+export interface DeleteKbDocumentResponse {
+  deleted: boolean;
+}
+
 // ─── Job BullMQ ─────────────────────────────────────────────────────────────
 export interface KbIndexJobData {
   tenantId: string;

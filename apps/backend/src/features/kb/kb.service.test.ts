@@ -11,9 +11,11 @@ vi.mock('../../config/queues.js', () => ({
   kbIndexQueue: { add: mockAdd },
 }));
 
-import { createDocument, listDocuments } from './kb.service.js';
+import { createDocument, listDocuments, deleteDocument } from './kb.service.js';
 import { KbDocument } from './kb-document.model.js';
-import { findScoped } from '../../repositories/base.repository.js';
+import { KbChunk } from './kb-chunk.model.js';
+import { createScoped, findScoped } from '../../repositories/base.repository.js';
+import { AppError } from '../../utils/AppError.js';
 import type { IKbDocument } from './kb.types.js';
 
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts.
@@ -79,5 +81,46 @@ describe('listDocuments — aislamiento multi-tenant', () => {
 
     const docsB = await findScoped(KbDocument, tenantB).exec();
     expect(docsB).toHaveLength(0);
+  });
+});
+
+describe('deleteDocument', () => {
+  it('borra el documento y sus chunks asociados', async () => {
+    const tenantId = new Types.ObjectId();
+    const created = await createDocument(tenantId, { titulo: 'A borrar', contenido: 'x' });
+    await createScoped(KbChunk, tenantId, {
+      documentId: created.id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento',
+      embedding: [0.1],
+    });
+
+    const result = await deleteDocument(tenantId, created.id);
+    expect(result).toEqual({ deleted: true });
+
+    const doc = await KbDocument.findById(created.id);
+    expect(doc).toBeNull();
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: created.id }).exec();
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('documento inexistente → AppError 404', async () => {
+    const tenantId = new Types.ObjectId();
+    await expect(deleteDocument(tenantId, new Types.ObjectId().toString())).rejects.toThrow(
+      AppError,
+    );
+  });
+
+  it('aislamiento multi-tenant: tenantB no puede borrar un documento de tenantA', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'x' });
+
+    await expect(deleteDocument(tenantB, created.id)).rejects.toThrow(AppError);
+
+    const doc = await KbDocument.findById(created.id);
+    expect(doc).not.toBeNull();
   });
 });

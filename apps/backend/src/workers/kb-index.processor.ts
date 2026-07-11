@@ -14,6 +14,32 @@ import type { KbIndexJobData } from '../features/kb/kb.types.js';
 import type { ILlmProvider } from '../integrations/llm/llm-provider.types.js';
 
 /**
+ * Traduce el error crudo del provider/Mongo a un mensaje amigable en español,
+ * para mostrar en la UI sin exponer detalles técnicos del proveedor de IA.
+ */
+export function mapIndexErrorToMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (/api key|invalid|permission/.test(lower)) {
+    return 'No se pudo conectar con el servicio de IA. Verifica la configuración del API key.';
+  }
+  if (/quota|rate limit|429/.test(lower)) {
+    return 'Se alcanzó el límite de consultas de IA. Intenta de nuevo en unos minutos.';
+  }
+  if (/not found|model|404/.test(lower)) {
+    return 'El modelo de IA no está disponible. Contacta al administrador.';
+  }
+  if (/timeout|econnrefused|network/.test(lower)) {
+    return 'No se pudo conectar con el servicio de IA. Verifica tu conexión.';
+  }
+  if (/mongo/.test(lower)) {
+    return 'Error al guardar el contenido. Intenta de nuevo.';
+  }
+  return 'Ocurrió un error al procesar el contenido. Intenta de nuevo más tarde.';
+}
+
+/**
  * Indexa un KbDocument: trocea → genera embeddings → persiste KbChunk (scoped) →
  * marca el documento como `indexado` (o `fallido`).
  *
@@ -86,7 +112,7 @@ export async function processKbIndexJob(
       KbDocument,
       tenantId,
       { _id: documentId },
-      { $set: { estadoIndexacion: 'fallido', error: String(err) } },
+      { $set: { estadoIndexacion: 'fallido', error: mapIndexErrorToMessage(err) } },
     ).exec();
     throw err; // deja que BullMQ reintente
   }

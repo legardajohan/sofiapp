@@ -37,7 +37,9 @@ export function KnowledgeUploadEditor(): React.ReactElement {
       setContenido('');
     },
     onError: (err: Error) => {
-      setErrorMsg(err.message ?? 'No se pudo cargar el conocimiento.');
+      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message;
+      setErrorMsg(serverMsg ?? 'No se pudo guardar el contenido. Intenta de nuevo.');
       setSuccessMsg(null);
     },
   });
