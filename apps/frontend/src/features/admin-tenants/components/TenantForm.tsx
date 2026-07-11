@@ -4,8 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
+interface PlanOption {
+  _id: string;
+  nombre: string;
+}
+
 interface Props {
   tenant?: ITenant;
+  plans?: PlanOption[];
   onSuccess: (payload: CreateTenantPayload | UpdateTenantPayload) => void;
   onCancel: () => void;
 }
@@ -16,7 +22,7 @@ const toSlug = (value: string): string =>
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
 
-export function TenantForm({ tenant, onSuccess, onCancel }: Props): React.ReactElement {
+export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React.ReactElement {
   const isEdit = Boolean(tenant);
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -165,14 +171,35 @@ export function TenantForm({ tenant, onSuccess, onCancel }: Props): React.ReactE
       </div>
 
       <div>
-        <Label htmlFor="tenant-plan-id">Plan ID</Label>
-        <Input
-          id="tenant-plan-id"
-          className="mt-1"
-          value={form.planId}
-          onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
-          placeholder="ObjectId del plan (opcional)"
-        />
+        <Label htmlFor="tenant-plan-id">Plan</Label>
+        {plans ? (
+          <select
+            id="tenant-plan-id"
+            className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            value={form.planId}
+            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
+          >
+            <option value="">Sin plan</option>
+            {plans.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            id="tenant-plan-id"
+            className="mt-1"
+            value={form.planId}
+            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
+            placeholder="ObjectId del plan (opcional)"
+          />
+        )}
+        {isEdit && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            También puedes cambiar el plan desde el panel de consumo.
+          </p>
+        )}
       </div>
 
       {!isEdit && (

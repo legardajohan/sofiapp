@@ -30,16 +30,37 @@
 // Índices: { slug: 1 } unique
 ```
 
-## plans
+## plans  (catálogo GLOBAL — sin tenantId, como tenants)
 ```js
 {
   _id: ObjectId,
-  nombre: String,                 // ej. "Básico", "Pro"
-  limites: { usuarios: Number, mensajesMes: Number, campanasMes: Number },
+  nombre: String,                 // único. ej. "Básico", "Estándar", "Pro"
+  limites: {
+    usuarios: Number,             // total acumulado de usuarios del tenant
+    mensajesMes: Number,          // mensajes OUTBOUND por periodo (YYYY-MM)
+    leads: Number,                // total acumulado de clientes/leads del tenant
+    campanasMes: Number           // campañas lanzadas por periodo
+  },
   precio: Number,
-  activo: Boolean,
+  costoEstimado: Number?,         // para rentabilidad: margen = precio - costoEstimado
+  activo: Boolean,                // default true
   createdAt, updatedAt
 }
+// Índices: { nombre: 1 } unique
+```
+
+## tenant_usage  (contadores de consumo por empresa y periodo — HU-SAAS-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required, index
+  periodo: String,                // 'YYYY-MM' (UTC). El cambio de periodo reinicia los contadores.
+  mensajesMes: Number,            // default 0. $inc atómico en cada envío outbound
+  campanasMes: Number,            // default 0. $inc atómico al lanzar una campaña
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, periodo: 1 } unique
+// NOTA: usuarios y leads NO se guardan aquí; se derivan con countDocuments scoped al consultar.
 ```
 
 ## users  (usuarios del panel)
@@ -232,6 +253,7 @@ Tenant 1──┬──N User
           ├──N CatalogItem
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
           └──N Flow ──N FlowState ──1 Cliente
-Plan 1──N Tenant
+Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
+Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)
 User(superadmin) tenantId=null  (global)
 ```

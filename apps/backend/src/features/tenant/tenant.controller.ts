@@ -4,6 +4,7 @@ import {
   createTenant,
   updateTenant,
   updateTenantStatus,
+  assignPlanToTenant,
 } from './tenant.service.js';
 import type { ListTenantsQuery, CreateTenantInput, UpdateTenantInput, UpdateTenantStatusInput } from './tenant.types.js';
 
@@ -31,5 +32,12 @@ export async function updateTenantController(req: Request, res: Response): Promi
 export async function updateTenantStatusController(req: Request, res: Response): Promise<void> {
   const { id } = req.params as { id: string };
   const tenant = await updateTenantStatus(id, req.body as UpdateTenantStatusInput);
+  res.json(tenant);
+}
+
+export async function assignPlanToTenantController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  const { planId } = req.body as { planId: string };
+  const tenant = await assignPlanToTenant(id, planId);
   res.json(tenant);
 }

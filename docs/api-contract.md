@@ -61,6 +61,10 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 | POST | `/api/auth/refresh` | público | Renueva el token. |
 | GET/POST | `/api/admin/tenants` | superadmin | Listar/crear empresas. |
 | PATCH | `/api/admin/tenants/:id` | superadmin | Activar/suspender, asignar plan. |
+| GET/POST | `/api/admin/plans` | superadmin | Catálogo global de planes (listar/crear). |
+| PATCH | `/api/admin/plans/:id` | superadmin | Editar límites/precio/estado de un plan. |
+| PATCH | `/api/admin/tenants/:id/plan` | superadmin | Asignar un plan (activo) a una empresa. |
+| GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
 | GET | `/api/admin/metrics` | superadmin | Métricas globales cross-tenant. |
 | GET/POST | `/api/users` | admin | Gestionar usuarios del tenant. |
 | GET | `/api/clientes` | asesor+ | Listar prospectos (filtrado, paginado). |

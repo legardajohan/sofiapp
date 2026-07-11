@@ -10,20 +10,20 @@ export function findOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: Filter
   return m.findOne({ ...filter, tenantId } as FilterQuery<T>);
 }
 
-export function findByIdScoped<T>(
-  m: Model<T>,
-  tenantId: TenantId,
-  id: string | Types.ObjectId,
-) {
-  return m.findOne({ _id: id, tenantId } as FilterQuery<T>);
-}
-
 export function countScoped<T>(
   m: Model<T>,
   tenantId: TenantId,
   filter: FilterQuery<T> = {},
 ): Promise<number> {
   return m.countDocuments({ ...filter, tenantId } as FilterQuery<T>).exec();
+}
+
+export function findByIdScoped<T>(
+  m: Model<T>,
+  tenantId: TenantId,
+  id: string | Types.ObjectId,
+) {
+  return m.findOne({ _id: id, tenantId } as FilterQuery<T>);
 }
 
 export async function createScoped<T>(

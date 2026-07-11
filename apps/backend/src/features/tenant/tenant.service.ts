@@ -2,7 +2,10 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
+import { Plan } from '../plan/plan.model.js';
+import { assertWithinQuota } from '../usage/usage.service.js';
 import { AppError } from '../../utils/AppError.js';
+import type { IPlanDocument } from '../plan/plan.types.js';
 import type {
   CreateTenantDTO,
   UpdateTenantDTO,
@@ -77,6 +80,8 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
       if (!tenant) throw new AppError('Error al crear la empresa.', 500);
 
       if (dto.adminUser) {
+        // Cuota de usuarios: no-op si la empresa aún no tiene plan asignado.
+        await assertWithinQuota(tenant._id.toString(), 'usuarios');
         const passwordHash = await bcrypt.hash(dto.adminUser.password, 10);
         await UserModel.create(
           [
@@ -133,4 +138,19 @@ export async function updateTenantStatus(
 
   if (!updated) throw new AppError('Error al actualizar el estado.', 500);
   return mapTenantToResponse(updated);
+}
+
+/** Asigna un plan (existente y activo) a una empresa. HU-SAAS-02. */
+export async function assignPlanToTenant(id: string, planId: string): Promise<ITenantResponse> {
+  const plan = await Plan.findById(planId).lean<IPlanDocument>();
+  if (!plan || !plan.activo) throw new AppError('Plan no disponible.', 409);
+
+  const tenant = await Tenant.findByIdAndUpdate(
+    id,
+    { $set: { planId } },
+    { new: true }
+  ).lean<ITenantDocument>();
+
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return mapTenantToResponse(tenant);
 }

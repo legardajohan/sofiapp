@@ -4,6 +4,7 @@ import type {
   UpdateTenantPayload,
   TenantsListResponse,
   ITenant,
+  IUsageResponse,
 } from '../features/admin-tenants/types/index.js';
 
 export const getAdminTenants = async (params: {
@@ -33,5 +34,15 @@ export const updateAdminTenantStatus = async (
   estado: 'activo' | 'suspendido'
 ): Promise<ITenant> => {
   const res = await apiClient.patch<ITenant>(`/admin/tenants/${id}/status`, { estado });
+  return res.data;
+};
+
+export const assignTenantPlan = async (id: string, planId: string): Promise<ITenant> => {
+  const res = await apiClient.patch<ITenant>(`/admin/tenants/${id}/plan`, { planId });
+  return res.data;
+};
+
+export const getTenantUsage = async (id: string): Promise<IUsageResponse> => {
+  const res = await apiClient.get<IUsageResponse>(`/admin/tenants/${id}/usage`);
   return res.data;
 };

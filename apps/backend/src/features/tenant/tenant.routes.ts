@@ -8,13 +8,17 @@ import {
   createTenantSchema,
   updateTenantSchema,
   updateTenantStatusSchema,
+  assignPlanSchema,
+  tenantIdParamSchema,
 } from './tenant.validation.js';
 import {
   listTenantsController,
   createTenantController,
   updateTenantController,
   updateTenantStatusController,
+  assignPlanToTenantController,
 } from './tenant.controller.js';
+import { getTenantUsageController } from '../usage/usage.controller.js';
 
 const router: ExpressRouter = Router();
 
@@ -51,6 +55,23 @@ router.patch(
   authorize(['superadmin']),
   validate(updateTenantStatusSchema),
   asyncHandler(updateTenantStatusController)
+);
+
+// HU-SAAS-02 — asignación de plan y consulta de consumo (superadmin, sin requireTenant)
+router.patch(
+  '/:id/plan',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(assignPlanSchema),
+  asyncHandler(assignPlanToTenantController)
+);
+
+router.get(
+  '/:id/usage',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(tenantIdParamSchema),
+  asyncHandler(getTenantUsageController)
 );
 
 export default router;
