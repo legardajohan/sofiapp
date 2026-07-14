@@ -1,5 +1,5 @@
 import { apiClient } from '../../api/apiClient.js';
-import type { UserRol } from '../../stores/authStore.js';
+import type { AdminSubrol, UserRol } from '../../stores/authStore.js';
 
 export interface LoginDTO {
   email: string;
@@ -11,6 +11,7 @@ export interface ISessionUser {
   nombre: string;
   email: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   tenantId: string | null;
 }
 

@@ -11,7 +11,8 @@ const PASSWORD = 'secret123';
 async function createUser(overrides: {
   tenantId: Types.ObjectId | null;
   email: string;
-  rol: 'superadmin' | 'admin' | 'coordinador' | 'asesor';
+  rol: 'superadmin' | 'admin';
+  subrol?: 'director' | 'manager' | 'coordinator' | 'secretary';
   activo?: boolean;
   nombre?: string;
 }) {
@@ -22,6 +23,7 @@ async function createUser(overrides: {
     email: overrides.email,
     passwordHash,
     rol: overrides.rol,
+    subrol: overrides.subrol,
     activo: overrides.activo ?? true,
   });
 }
@@ -50,9 +52,36 @@ describe('auth.service — login', () => {
   });
 
   it('usuario activo=false → AppError 401', async () => {
-    await createUser({ tenantId: new Types.ObjectId(), email: 'y@tenant-a.com', rol: 'asesor', activo: false });
+    await createUser({ tenantId: new Types.ObjectId(), email: 'y@tenant-a.com', rol: 'admin', activo: false });
 
     await expect(login('y@tenant-a.com', PASSWORD)).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it('usuario admin con subrol → el JWT y la session incluyen el subrol', async () => {
+    const tenantId = new Types.ObjectId();
+    await createUser({
+      tenantId,
+      email: 'dir@tenant-a.com',
+      rol: 'admin',
+      subrol: 'director',
+      nombre: 'Directora',
+    });
+
+    const { token, session } = await login('dir@tenant-a.com', PASSWORD);
+    const payload = jwt.verify(token, env.JWT_SECRET) as { subrol?: string };
+
+    expect(payload.subrol).toBe('director');
+    expect(session.subrol).toBe('director');
+  });
+
+  it('usuario admin sin subrol → el JWT y la session no lo incluyen', async () => {
+    await createUser({ tenantId: new Types.ObjectId(), email: 'sinsub@tenant-a.com', rol: 'admin' });
+
+    const { token, session } = await login('sinsub@tenant-a.com', PASSWORD);
+    const payload = jwt.verify(token, env.JWT_SECRET) as { subrol?: string };
+
+    expect(payload.subrol).toBeUndefined();
+    expect(session.subrol).toBeUndefined();
   });
 
   it('email inexistente → AppError 401 (mismo mensaje, sin enumeración)', async () => {
@@ -66,7 +95,7 @@ describe('auth.service — login', () => {
 describe('auth.service — getProfile', () => {
   it('mapea el usuario a ISessionUser', async () => {
     const tenantId = new Types.ObjectId();
-    const user = await createUser({ tenantId, email: 'zoe@tenant-a.com', rol: 'coordinador', nombre: 'Zoe' });
+    const user = await createUser({ tenantId, email: 'zoe@tenant-a.com', rol: 'admin', nombre: 'Zoe' });
 
     const session = await getProfile((user._id as Types.ObjectId).toString());
 
@@ -74,7 +103,7 @@ describe('auth.service — getProfile', () => {
       sub: (user._id as Types.ObjectId).toString(),
       nombre: 'Zoe',
       email: 'zoe@tenant-a.com',
-      rol: 'coordinador',
+      rol: 'admin',
       tenantId: tenantId.toString(),
     });
   });

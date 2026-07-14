@@ -1,5 +1,5 @@
 import type { Types } from 'mongoose';
-import type { UserRol } from '../users/user.types.js';
+import type { AdminSubrol, UserRol } from '../users/user.types.js';
 
 export interface LoginDTO {
   email: string;
@@ -11,6 +11,7 @@ export interface ISessionUser {
   nombre: string;
   email: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   tenantId: string | null;
 }
 
@@ -19,6 +20,7 @@ export interface ISessionUserSource {
   nombre: string;
   email: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   tenantId: Types.ObjectId | null;
 }
 
@@ -28,6 +30,7 @@ export function mapUserToSession(user: ISessionUserSource): ISessionUser {
     nombre: user.nombre,
     email: user.email,
     rol: user.rol,
+    subrol: user.subrol,
     tenantId: user.tenantId ? user.tenantId.toString() : null,
   };
 }

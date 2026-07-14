@@ -10,7 +10,7 @@ import { env } from '../../src/config/env.js';
 
 function sign(tenantId: string): string {
   return jwt.sign(
-    { sub: new Types.ObjectId().toString(), tenantId, rol: 'asesor' },
+    { sub: new Types.ObjectId().toString(), tenantId, rol: 'admin' },
     env.JWT_SECRET,
   );
 }

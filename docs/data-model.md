@@ -50,7 +50,8 @@
   nombre: String,
   email: String,
   passwordHash: String,           // select:false
-  rol: "superadmin" | "admin" | "coordinador" | "asesor",
+  rol: "superadmin" | "admin",
+  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // opcional, solo admin; metadata, no afecta permisos (AUTH-02)
   activo: Boolean,                // default true
   createdAt, updatedAt
 }
@@ -95,7 +96,7 @@
   objecionPrincipal: "precio" | "tiempo" | "confianza" | "otra" | null,
   // comercial
   estadoComercial: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",  // default "nuevo"
-  asesorId: ObjectId?,            // ref User (asesor asignado)
+  asesorId: ObjectId?,            // ref User (usuario admin asignado a la conversación; el nombre del campo describe la función, no un rol de login — AUTH-02)
   // datos verticales específicos del tenant (ej. colegio, grado en Pre-ICFES)
   customFields: { [key: String]: Mixed },
   tags: [String],

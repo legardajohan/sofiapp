@@ -45,7 +45,7 @@ export async function getClienteByIdController(req: Request, res: Response): Pro
 //          asyncHandler ← middlewares/async-handler.middleware
 //          AppError ← utils/AppError · *Scoped ← repositories/base.repository
 router.get('/:id',
-  authenticateJWT, requireTenant, authorize(['asesor', 'coordinador', 'admin']),
+  authenticateJWT, requireTenant, authorize(['admin']),
   validate(getClienteSchema), asyncHandler(getClienteByIdController));
 ```
 
