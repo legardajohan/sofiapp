@@ -18,14 +18,6 @@ export function findByIdScoped<T>(
   return m.findOne({ _id: id, tenantId } as FilterQuery<T>);
 }
 
-export function countScoped<T>(
-  m: Model<T>,
-  tenantId: TenantId,
-  filter: FilterQuery<T> = {},
-): Promise<number> {
-  return m.countDocuments({ ...filter, tenantId } as FilterQuery<T>).exec();
-}
-
 export async function createScoped<T>(
   m: Model<T>,
   tenantId: TenantId,
@@ -59,4 +51,20 @@ export function deleteOneScoped<T>(
   filter: FilterQuery<T>,
 ): ReturnType<Model<T>['deleteOne']> {
   return m.deleteOne({ ...filter, tenantId } as FilterQuery<T>);
+}
+
+export function deleteManyScoped<T>(
+  m: Model<T>,
+  tenantId: TenantId,
+  filter: FilterQuery<T> = {},
+): ReturnType<Model<T>['deleteMany']> {
+  return m.deleteMany({ ...filter, tenantId } as FilterQuery<T>);
+}
+
+export function countScoped<T>(
+  m: Model<T>,
+  tenantId: TenantId,
+  filter: FilterQuery<T> = {},
+): ReturnType<Model<T>['countDocuments']> {
+  return m.countDocuments({ ...filter, tenantId } as FilterQuery<T>);
 }
