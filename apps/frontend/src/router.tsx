@@ -72,7 +72,7 @@ export const router = createBrowserRouter([
           {
             path: '/inbox',
             element: (
-              <RequireRole roles={['coordinador', 'asesor']}>
+              <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <InboxPage />
                 </Suspense>

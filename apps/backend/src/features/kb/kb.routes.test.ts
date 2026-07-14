@@ -18,9 +18,9 @@ import { createDocument } from './kb.service.js';
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
 
-const makeToken = (tenantId: string | null, rol: string) =>
+const makeToken = (tenantId: string | null, rol: string, subrol?: string) =>
   jwt.sign(
-    { sub: '507f1f77bcf86cd799439012', tenantId, email: 'u@e.com', nombre: 'U', rol, activo: true },
+    { sub: '507f1f77bcf86cd799439012', tenantId, email: 'u@e.com', nombre: 'U', rol, subrol, activo: true },
     SECRET,
     { expiresIn: '1h' },
   );
@@ -31,8 +31,8 @@ describe('GET /api/kb/documents', () => {
     expect(res.status).toBe(401);
   });
 
-  it('rol asesor (no admin) → 403', async () => {
-    const token = makeToken(new Types.ObjectId().toString(), 'asesor');
+  it('rol superadmin (no admin) → 403', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'superadmin');
     const res = await request(app).get('/api/kb/documents').set('Cookie', `token=${token}`);
     expect(res.status).toBe(403);
   });
@@ -52,6 +52,13 @@ describe('GET /api/kb/documents', () => {
     expect(resA.status).toBe(200);
     expect(resA.body.total).toBe(1);
     expect(resA.body.data[0].titulo).toBe('Solo A');
+  });
+
+  it('admin con subrol → 200 (el subrol es metadata y no altera la autorización)', async () => {
+    const tenantId = new Types.ObjectId();
+    const token = makeToken(tenantId.toString(), 'admin', 'coordinator');
+    const res = await request(app).get('/api/kb/documents').set('Cookie', `token=${token}`);
+    expect(res.status).toBe(200);
   });
 });
 
@@ -121,10 +128,10 @@ describe('DELETE /api/kb/documents/:id', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rol asesor (no admin) → 403', async () => {
+  it('rol superadmin (no admin) → 403', async () => {
     const tenantId = new Types.ObjectId();
     const doc = await createDocument(tenantId, { titulo: 'Protegido', contenido: 'contenido' });
-    const token = makeToken(tenantId.toString(), 'asesor');
+    const token = makeToken(tenantId.toString(), 'superadmin');
 
     const res = await request(app)
       .delete(`/api/kb/documents/${doc.id}`)

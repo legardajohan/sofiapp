@@ -9,8 +9,12 @@ const UserSchema = new Schema<IUserDocument>(
     passwordHash: { type: String, required: true, select: false },
     rol: {
       type: String,
-      enum: ['superadmin', 'admin', 'coordinador', 'asesor'],
+      enum: ['superadmin', 'admin'],
       required: true,
+    },
+    subrol: {
+      type: String,
+      enum: ['director', 'manager', 'coordinator', 'secretary'],
     },
     activo: { type: Boolean, default: true },
   },
