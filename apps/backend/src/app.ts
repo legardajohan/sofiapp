@@ -21,6 +21,7 @@ import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
 import clienteRoutes from './features/cliente/cliente.routes.js';
+import kbRoutes from './features/kb/kb.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 
@@ -50,6 +51,7 @@ app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/webhooks/whatsapp', webhookRoutes);
 app.use('/api/clientes', clienteRoutes);
+app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 

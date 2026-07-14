@@ -13,7 +13,7 @@ router.post(
   '/send',
   authenticateJWT,
   requireTenant,
-  authorize(['asesor', 'coordinador', 'admin']),
+  authorize(['admin']),
   validate(sendSchema),
   asyncHandler(sendController),
 );

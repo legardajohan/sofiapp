@@ -32,6 +32,14 @@ const EnvSchema = z.object({
     .default('https://www.datos.gov.co/resource/32sa-8pi3.json'),
   TRM_HTTP_TIMEOUT_MS: z.coerce.number().positive().default(8000),
 
+  // Knowledge Base / RAG (HU-KB-01)
+  GEMINI_EMBED_MODEL: z.string().default('gemini-embedding-001'),
+  KB_EMBED_DIM: z.coerce.number().positive().default(768),
+  KB_CHUNK_SIZE: z.coerce.number().positive().default(1000),
+  KB_CHUNK_OVERLAP: z.coerce.number().nonnegative().default(150),
+  KB_VECTOR_INDEX: z.string().default('kb_chunks_vector'),
+  KB_RETRIEVAL_K: z.coerce.number().positive().default(5),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

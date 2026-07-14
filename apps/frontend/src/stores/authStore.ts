@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 
-export type UserRol = 'superadmin' | 'admin' | 'coordinador' | 'asesor';
+export type UserRol = 'superadmin' | 'admin';
+export type AdminSubrol = 'director' | 'manager' | 'coordinator' | 'secretary';
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
 
 interface AuthUser {
   sub: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   nombre?: string;
 }
 

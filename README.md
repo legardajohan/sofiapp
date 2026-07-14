@@ -150,11 +150,12 @@ Redis, Meta (BSP), LLM (Gemini), Storage (DO Spaces).
 - **Fase 1 — Núcleo CRM:** bandeja omnicanal, gestión por estados, catálogo.
 - **Fase 2 — Inteligencia:** motor de IA (slot filling, scoring, objeciones).
 - **Fase 3 — Crecimiento:** campañas de remarketing y constructor visual de flujos.
-- **Fase 4 — Móvil:** app React Native para asesores.
+- **Fase 4 — Móvil:** app React Native para los `admin` que atienden la bandeja.
 
 ## 👥 Roles
 
-`superadmin` (global, cross-tenant) · `admin` (empresa) · `coordinador` · `asesor`.
+`superadmin` (global, cross-tenant) · `admin` (empresa, con subroles internos opcionales como
+metadata: Director, Gerente, Coordinador, Secretaria — sin efecto en permisos).
 El **cliente final / prospecto** es una entidad de datos, no un usuario del panel.
 
 ## 🤖 Desarrollo con Claude Code (Spec-Driven Development)

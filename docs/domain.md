@@ -5,7 +5,7 @@
 | Término | Definición |
 |---|---|
 | **Tenant / Empresa** | Entidad comercial que alquila SofiApp. Raíz del aislamiento multi-tenant. |
-| **Usuario del panel** | Persona con login (Superadmin, Admin, Coordinador, Asesor). |
+| **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): Director, Gerente, Coordinador, Secretaria (`AUTH-02`). |
 | **Cliente / Prospecto** | Lead. Entidad de datos (`Cliente`), nunca inicia sesión. |
 | **Canal** | Origen de la comunicación: `whatsapp | instagram | messenger | formulario | web`. |
 | **WABA** | WhatsApp Business Account; cada tenant conecta la suya (modelo BSP). |
@@ -37,8 +37,8 @@
 ```
 
 - Default genérico, **configurable por tenant** en una fase posterior.
-- `pagado` se establece como **cambio manual de atributo** por un Asesor/Coordinador (no hay
-  verificación de comprobante).
+- `pagado` se establece como **cambio manual de atributo** por un `admin` (no hay verificación de
+  comprobante).
 - Cada transición es **idempotente** y emite un evento al bus interno para recalcular métricas.
 
 ### Reglas de transición

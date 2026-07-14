@@ -6,6 +6,8 @@ export interface ChatTurn {
 export type NivelInteres = 'frio' | 'tibio' | 'caliente';
 export type Objecion = 'precio' | 'tiempo' | 'confianza' | 'otra';
 
+export type EmbedTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY';
+
 export interface SlotSpec {
   campo: string;
   descripcion: string;
@@ -44,4 +46,10 @@ export interface ILlmProvider {
     tono: string;
     instrucciones: string;
   }): Promise<LlmCallResult<string>>;
+
+  // Genera embeddings (vectores) para RAG. Un vector por texto de entrada.
+  embedTexts(input: {
+    texts: string[];
+    taskType: EmbedTaskType;
+  }): Promise<LlmCallResult<number[][]>>;
 }

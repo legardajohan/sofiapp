@@ -1,6 +1,7 @@
 import type { Document, Types } from 'mongoose';
 
-export type UserRol = 'superadmin' | 'admin' | 'coordinador' | 'asesor';
+export type UserRol = 'superadmin' | 'admin';
+export type AdminSubrol = 'director' | 'manager' | 'coordinator' | 'secretary';
 
 export interface IUser {
   tenantId: Types.ObjectId | null;
@@ -8,6 +9,7 @@ export interface IUser {
   email: string;
   passwordHash: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   activo: boolean;
 }
 
@@ -19,5 +21,6 @@ export interface IUserResponse {
   nombre: string;
   email: string;
   rol: UserRol;
+  subrol?: AdminSubrol;
   activo: boolean;
 }

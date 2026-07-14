@@ -67,14 +67,14 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 | GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
 | GET | `/api/admin/metrics` | superadmin | Métricas globales cross-tenant. |
 | GET/POST | `/api/users` | admin | Gestionar usuarios del tenant. |
-| GET | `/api/clientes` | asesor+ | Listar prospectos (filtrado, paginado). |
-| PATCH | `/api/clientes/:id` | asesor+ | Editar datos / asignar / cambiar estado. |
-| PATCH | `/api/clientes/:id/estado` | asesor+ | Transición de `estadoComercial`. |
-| GET | `/api/clientes/:id/messages` | asesor+ | Hilo de conversación. |
-| POST | `/api/messages/send` | asesor+ | Envío outbound por canal. |
+| GET | `/api/clientes` | admin | Listar prospectos (filtrado, paginado). |
+| PATCH | `/api/clientes/:id` | admin | Editar datos / asignar / cambiar estado. |
+| PATCH | `/api/clientes/:id/estado` | admin | Transición de `estadoComercial`. |
+| GET | `/api/clientes/:id/messages` | admin | Hilo de conversación. |
+| POST | `/api/messages/send` | admin | Envío outbound por canal. |
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |
-| GET/POST | `/api/campaigns` | coordinador+ | Campañas de remarketing. |
-| GET | `/api/clientes/filter` | coordinador+ | Conteo/listado para segmentar campañas. |
+| GET/POST | `/api/campaigns` | admin | Campañas de remarketing. |
+| GET | `/api/clientes/filter` | admin | Conteo/listado para segmentar campañas. |
 | GET/POST | `/api/webhooks/meta` | público | Verificación + recepción de eventos de Meta. |
 
 ## 7. Tiempo real (Socket.IO)

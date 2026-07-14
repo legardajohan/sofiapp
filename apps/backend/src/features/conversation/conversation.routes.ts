@@ -21,7 +21,7 @@ import {
 
 const router = Router();
 
-const bandejaRoles = authorize(['coordinador', 'asesor']);
+const bandejaRoles = authorize(['admin']);
 
 router.get(
   '/',
