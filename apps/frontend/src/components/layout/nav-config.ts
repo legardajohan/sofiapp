@@ -1,6 +1,7 @@
 import {
   BookText,
   Building2,
+  CreditCard,
   Inbox,
   LineChart,
   MessageSquareText,
@@ -39,6 +40,7 @@ export const navGroups: NavGroup[] = [
     label: 'Superadmin',
     items: [
       { label: 'Empresas', to: '/admin/tenants', icon: Building2, roles: ['superadmin'] },
+      { label: 'Planes', to: '/admin/plans', icon: CreditCard, roles: ['superadmin'] },
       {
         label: 'Métricas globales',
         to: '/admin/metrics',

@@ -62,6 +62,8 @@ export function AdminTenantsPage(): React.ReactElement {
 
   const { data: plans } = useQuery({ queryKey: ['admin-plans'], queryFn: getAdminPlans });
   const activePlans = (plans ?? []).filter((p) => p.activo).map((p) => ({ _id: p._id, nombre: p.nombre }));
+  // Mapa completo (incluye inactivos) para mostrar el nombre del plan asignado en la tabla.
+  const planNameById = new Map((plans ?? []).map((p) => [p._id, p.nombre]));
 
   const createMutation = useMutation({
     mutationFn: createAdminTenant,
@@ -167,6 +169,7 @@ export function AdminTenantsPage(): React.ReactElement {
           total={data.total}
           page={data.page}
           limit={data.limit}
+          planNameById={planNameById}
           onPageChange={setPage}
           onEdit={openEdit}
           onDelete={handleDelete}

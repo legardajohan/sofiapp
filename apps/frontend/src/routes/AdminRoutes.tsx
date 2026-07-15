@@ -5,7 +5,9 @@ import { AdminPlansPage } from '../features/admin-plans/pages/AdminPlansPage.js'
 
 const navClass = ({ isActive }: { isActive: boolean }): string =>
   `px-3 py-2 text-sm font-medium ${
-    isActive ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-800'
+    isActive
+      ? 'border-b-2 border-primary text-primary'
+      : 'text-muted-foreground hover:text-foreground'
   }`;
 
 export default function AdminRoutes() {
@@ -17,7 +19,7 @@ export default function AdminRoutes() {
 
   return (
     <div>
-      <nav className="flex gap-2 border-b bg-white px-6">
+      <nav className="flex gap-2 border-b border-border bg-card px-6">
         <NavLink to="/admin/tenants" className={navClass}>
           Empresas
         </NavLink>

@@ -17,6 +17,8 @@ interface Props {
   total: number;
   page: number;
   limit: number;
+  /** Mapa planId → nombre del plan, para mostrar el nombre en vez del identificador. */
+  planNameById: Map<string, string>;
   onPageChange: (page: number) => void;
   onEdit: (tenant: ITenant) => void;
   onDelete: (tenant: ITenant) => void;
@@ -33,6 +35,7 @@ export function TenantTable({
   total,
   page,
   limit,
+  planNameById,
   onPageChange,
   onEdit,
   onDelete,
@@ -71,7 +74,9 @@ export function TenantTable({
                       <TenantStatusSwitch tenant={tenant} />
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{tenant.planId ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {tenant.planId ? (planNameById.get(tenant.planId) ?? tenant.planId) : '—'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(tenant.createdAt).toLocaleDateString('es-CO')}
                   </TableCell>
