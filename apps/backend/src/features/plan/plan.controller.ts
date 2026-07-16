@@ -3,8 +3,7 @@ import { listPlans, createPlan, updatePlan, nuevaVersionPlan, deletePlan } from 
 import type { CreatePlanDTO, UpdatePlanDTO } from './plan.types.js';
 
 export async function listPlansController(req: Request, res: Response): Promise<void> {
-  const activoRaw = req.query['activo'];
-  const activo = activoRaw === undefined ? undefined : activoRaw === 'true';
+  const { activo } = req.validatedQuery as { activo?: boolean };
   res.json(await listPlans({ activo }));
 }
 

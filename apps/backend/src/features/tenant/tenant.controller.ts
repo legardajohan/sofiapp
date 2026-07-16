@@ -10,12 +10,7 @@ import {
 import type { ListTenantsQuery, CreateTenantInput, UpdateTenantInput, UpdateTenantStatusInput } from './tenant.types.js';
 
 export async function listTenantsController(req: Request, res: Response): Promise<void> {
-  const query: ListTenantsQuery = {
-    search: req.query['search'] as string | undefined,
-    page: Number(req.query['page'] ?? 1),
-    limit: Number(req.query['limit'] ?? 20),
-  };
-  const result = await listTenants(query);
+  const result = await listTenants(req.validatedQuery as unknown as ListTenantsQuery);
   res.json(result);
 }
 

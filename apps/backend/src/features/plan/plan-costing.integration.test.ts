@@ -30,7 +30,7 @@ async function crearTenant(slug: string) {
 
 describe('costeo de planes — Fase E (fotografía + no-retroactividad)', () => {
   it('createPlan sin TRM no genera fotografía pero crea el plan (no bloquea)', async () => {
-    const plan = await createPlan({ nombre: 'SinTRM', limites, precio: 100000 });
+    const plan = await createPlan({ nombre: 'SinTRM', periodicidad: 'mensual', limites, precio: 100000 });
     expect(plan.numeroVersion).toBe(1);
     expect(plan.fotografiaFinanciera).toBeUndefined();
   });
@@ -44,7 +44,7 @@ describe('costeo de planes — Fase E (fotografía + no-retroactividad)', () => 
       unit: 'administrador',
     });
 
-    const plan = await createPlan({ nombre: 'ConTRM', limites, precio: 50 });
+    const plan = await createPlan({ nombre: 'ConTRM', periodicidad: 'mensual', limites, precio: 50 });
     expect(plan.fotografiaFinanciera).toBeDefined();
     // 10 administradores × 8.000 = 80.000
     expect(plan.fotografiaFinanciera?.subtotalAdministradoresCop).toBe('80000');
@@ -55,7 +55,7 @@ describe('costeo de planes — Fase E (fotografía + no-retroactividad)', () => 
 
   it('CA-24: cambiar la TRM NO altera el precio congelado del tenant ya contratado', async () => {
     await registerOficial(providerOk('4000'));
-    const plan = await createPlan({ nombre: 'Contratable', limites, precio: 50 });
+    const plan = await createPlan({ nombre: 'Contratable', periodicidad: 'mensual', limites, precio: 50 });
     const tenant = await crearTenant('empresa-contrato');
 
     const asignado = await assignPlanToTenant(tenant._id.toString(), plan._id);
@@ -72,7 +72,7 @@ describe('costeo de planes — Fase E (fotografía + no-retroactividad)', () => 
 
   it('nuevaVersion incrementa numeroVersion y NO afecta a tenants ya contratados', async () => {
     await registerOficial(providerOk('4000'));
-    const plan = await createPlan({ nombre: 'Versionable', limites, precio: 50 });
+    const plan = await createPlan({ nombre: 'Versionable', periodicidad: 'mensual', limites, precio: 50 });
     const tenant = await crearTenant('empresa-version');
     await assignPlanToTenant(tenant._id.toString(), plan._id);
 

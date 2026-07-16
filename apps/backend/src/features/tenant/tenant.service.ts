@@ -88,8 +88,10 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
       if (dto.adminUser) {
         // Cuotas de puestos: el adminUser inicial (rol 'admin') ocupa un asiento y suma a 'usuarios'.
         // Ambos son no-op si la empresa aún no tiene plan asignado.
-        await assertWithinQuota(tenant._id.toString(), 'usuarios');
-        await assertWithinQuota(tenant._id.toString(), 'administradores');
+        // `session` es necesaria: el tenant recién creado aún no está confirmado fuera de esta
+        // transacción, y sin ella la lectura de su plan no lo vería (quedaría como no-op siempre).
+        await assertWithinQuota(tenant._id.toString(), 'usuarios', session);
+        await assertWithinQuota(tenant._id.toString(), 'administradores', session);
         const passwordHash = await bcrypt.hash(dto.adminUser.password, 10);
         await UserModel.create(
           [

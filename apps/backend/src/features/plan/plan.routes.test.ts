@@ -46,6 +46,25 @@ describe('/api/admin/plans — HU-SAAS-02', () => {
     expect(res.body._id).toBeDefined();
     expect(res.body.limites.leads).toBe(500);
   });
+
+  it('GET ?activo=true / ?activo=false filtra correctamente (regresión validate.middleware)', async () => {
+    await Plan.create({ nombre: 'RouteActivoQA', limites, precio: 0, activo: true });
+    await Plan.create({ nombre: 'RouteInactivoQA', limites, precio: 0, activo: false });
+
+    const activos = await request(app)
+      .get('/api/admin/plans?activo=true')
+      .set('Cookie', `token=${superadminToken()}`);
+    expect(activos.status).toBe(200);
+    expect(activos.body.every((p: { activo: boolean }) => p.activo === true)).toBe(true);
+    expect(activos.body.some((p: { nombre: string }) => p.nombre === 'RouteActivoQA')).toBe(true);
+
+    const inactivos = await request(app)
+      .get('/api/admin/plans?activo=false')
+      .set('Cookie', `token=${superadminToken()}`);
+    expect(inactivos.status).toBe(200);
+    expect(inactivos.body.every((p: { activo: boolean }) => p.activo === false)).toBe(true);
+    expect(inactivos.body.some((p: { nombre: string }) => p.nombre === 'RouteInactivoQA')).toBe(true);
+  });
 });
 
 describe('/api/admin/tenants/:id/plan y /usage — HU-SAAS-02', () => {

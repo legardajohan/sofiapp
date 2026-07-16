@@ -1,4 +1,4 @@
-import type { Types } from 'mongoose';
+import type { ClientSession, Types } from 'mongoose';
 import { AppError } from '../../utils/AppError.js';
 import {
   countScoped,
@@ -36,8 +36,11 @@ export function getCurrentPeriodo(now: Date = new Date()): string {
 
 async function resolveTenantWithLimits(
   tenantId: TenantId,
+  session?: ClientSession,
 ): Promise<{ tenant: ITenantDocument | null; limites: IPlanLimites | null }> {
-  const tenant = await Tenant.findById(tenantId).lean<ITenantDocument>();
+  const query = Tenant.findById(tenantId);
+  if (session) query.session(session);
+  const tenant = await query.lean<ITenantDocument>();
   const limites = tenant ? await getPlanLimits(tenant.planId ?? null) : null;
   return { tenant, limites };
 }
@@ -73,9 +76,17 @@ export async function getMetricUsed(tenantId: TenantId, metric: QuotaMetric): Pr
 /**
  * Lanza `AppError(429)` si el tenant ya alcanzó (o superó) el límite de su plan para la métrica.
  * Es no-op si el tenant no tiene plan asignado (o su plan está inactivo).
+ *
+ * `session` es obligatorio cuando el tenant se está creando en la misma transacción (p. ej.
+ * `createTenant`): sin ella, la lectura de `Tenant.findById` no ve el documento aún no confirmado
+ * y la cuota queda como no-op siempre.
  */
-export async function assertWithinQuota(tenantId: TenantId, metric: QuotaMetric): Promise<void> {
-  const { limites } = await resolveTenantWithLimits(tenantId);
+export async function assertWithinQuota(
+  tenantId: TenantId,
+  metric: QuotaMetric,
+  session?: ClientSession,
+): Promise<void> {
+  const { limites } = await resolveTenantWithLimits(tenantId, session);
   if (!limites) return; // sin plan → sin límites
   const usado = await getMetricUsed(tenantId, metric);
   if (usado >= limites[metric]) {

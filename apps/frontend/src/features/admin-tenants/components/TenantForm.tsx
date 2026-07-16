@@ -11,7 +11,7 @@ interface PlanOption {
 
 interface Props {
   tenant?: ITenant;
-  plans?: PlanOption[];
+  plans: PlanOption[];
   onSuccess: (payload: CreateTenantPayload | UpdateTenantPayload) => void;
   onCancel: () => void;
 }

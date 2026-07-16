@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Plan } from './plan.model.js';
 import { Tenant } from '../tenant/tenant.model.js';
-import { createPlan, updatePlan, getPlanLimits, deletePlan } from './plan.service.js';
+import { createPlan, updatePlan, listPlans, getPlanLimits, deletePlan } from './plan.service.js';
 import { createPlanSchema } from './plan.validation.js';
 import { assignPlanToTenant } from '../tenant/tenant.service.js';
 import { updateSettings } from '../platform-settings/platform-settings.service.js';
@@ -25,17 +25,46 @@ async function crearTenant(slug: string, planId?: string) {
 describe('plan.service — HU-SAAS-02', () => {
   describe('createPlan', () => {
     it('crea un plan con límites y precio', async () => {
-      const plan = await createPlan({ nombre: 'Básico', limites, precio: 0 });
+      const plan = await createPlan({ nombre: 'Básico', periodicidad: 'mensual', limites, precio: 0 });
       expect(plan._id).toBeDefined();
       expect(plan.limites.leads).toBe(500);
       expect(plan.activo).toBe(true);
     });
 
     it('lanza AppError 409 si el nombre ya existe', async () => {
-      await createPlan({ nombre: 'Pro', limites, precio: 0 });
-      await expect(createPlan({ nombre: 'Pro', limites, precio: 0 })).rejects.toMatchObject({
+      await createPlan({ nombre: 'Pro', periodicidad: 'mensual', limites, precio: 0 });
+      await expect(
+        createPlan({ nombre: 'Pro', periodicidad: 'mensual', limites, precio: 0 }),
+      ).rejects.toMatchObject({
         statusCode: 409,
       });
+    });
+  });
+
+  describe('listPlans', () => {
+    it('sin filtro devuelve todos los planes ordenados por precio', async () => {
+      await crearPlan('ListPlanBarato');
+      await crearPlan('ListPlanCaro');
+      await Plan.updateOne({ nombre: 'ListPlanCaro' }, { precio: 500 });
+
+      const planes = await listPlans();
+      const nombres = planes.map((p) => p.nombre);
+      expect(nombres).toContain('ListPlanBarato');
+      expect(nombres).toContain('ListPlanCaro');
+      expect(planes[0]!.precio).toBeLessThanOrEqual(planes[planes.length - 1]!.precio);
+    });
+
+    it('filtra por activo=true y activo=false correctamente', async () => {
+      await crearPlan('ListActivoQA', true);
+      await crearPlan('ListInactivoQA', false);
+
+      const activos = await listPlans({ activo: true });
+      expect(activos.some((p) => p.nombre === 'ListActivoQA')).toBe(true);
+      expect(activos.some((p) => p.nombre === 'ListInactivoQA')).toBe(false);
+
+      const inactivos = await listPlans({ activo: false });
+      expect(inactivos.some((p) => p.nombre === 'ListInactivoQA')).toBe(true);
+      expect(inactivos.some((p) => p.nombre === 'ListActivoQA')).toBe(false);
     });
   });
 
@@ -47,7 +76,7 @@ describe('plan.service — HU-SAAS-02', () => {
     });
 
     it('actualiza un límite sin pisar el resto del subdocumento', async () => {
-      const created = await createPlan({ nombre: 'Estándar', limites, precio: 0 });
+      const created = await createPlan({ nombre: 'Estándar', periodicidad: 'mensual', limites, precio: 0 });
       const updated = await updatePlan(created._id, { limites: { mensajesMes: 9999 } });
       expect(updated.limites.mensajesMes).toBe(9999);
       expect(updated.limites.leads).toBe(500); // intacto
@@ -60,6 +89,7 @@ describe('plan.service — HU-SAAS-02', () => {
       for (const [i, n] of [3, 10, 20].entries()) {
         const plan = await createPlan({
           nombre: `Var${i}`,
+          periodicidad: 'mensual',
           limites: { ...limites, administradores: n },
           precio: 0,
         });
@@ -70,7 +100,12 @@ describe('plan.service — HU-SAAS-02', () => {
     it('rechaza con 422 cuando administradores supera el máximo técnico global', async () => {
       await updateSettings({ maxAdministradoresPorPlan: 5 });
       await expect(
-        createPlan({ nombre: 'Excede', limites: { ...limites, administradores: 10 }, precio: 0 }),
+        createPlan({
+          nombre: 'Excede',
+          periodicidad: 'mensual',
+          limites: { ...limites, administradores: 10 },
+          precio: 0,
+        }),
       ).rejects.toMatchObject({ statusCode: 422 });
     });
 
@@ -86,6 +121,7 @@ describe('plan.service — HU-SAAS-02', () => {
     it('guarda los perfiles base habilitados en el plan', async () => {
       const plan = await createPlan({
         nombre: 'ConPerfiles',
+        periodicidad: 'mensual',
         limites,
         perfilesPermitidos: ['vendedor', 'coordinador'],
         precio: 0,
@@ -96,6 +132,7 @@ describe('plan.service — HU-SAAS-02', () => {
     it('cambiar perfilesPermitidos NO altera limites.administradores', async () => {
       const created = await createPlan({
         nombre: 'PerfilesVsAdmins',
+        periodicidad: 'mensual',
         limites: { ...limites, administradores: 7 },
         perfilesPermitidos: ['vendedor'],
         precio: 0,
