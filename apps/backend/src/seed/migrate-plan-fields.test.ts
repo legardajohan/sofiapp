@@ -25,6 +25,7 @@ describe('migrate-plan-fields — backfill de planes antiguos', () => {
     expect(rep.total).toBe(1);
     expect(rep.faltanAdministradores).toBe(1);
     expect(rep.faltanPerfilesPermitidos).toBe(1);
+    expect(rep.faltanPeriodicidad).toBe(1);
     expect(rep.faltanNumeroVersion).toBe(1);
     expect(rep.sinFotografiaFinanciera).toBe(1);
   });
@@ -46,6 +47,7 @@ describe('migrate-plan-fields — backfill de planes antiguos', () => {
     const plan = await Plan.findOne({ nombre: 'Pro' }).lean();
     expect(plan?.limites.administradores).toBe(50); // = usuarios (default estructural)
     expect(plan?.perfilesPermitidos).toEqual([]);
+    expect(plan?.periodicidad).toBe('mensual'); // default estructural
     expect(plan?.numeroVersion).toBe(1);
     expect(plan?.fotografiaFinanciera).toBeUndefined(); // NO se fabricó
   });

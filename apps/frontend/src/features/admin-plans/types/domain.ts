@@ -1,3 +1,16 @@
+// Periodicidad de facturación del plan (obligatoria desde HU-SAAS-02). Espejo del catálogo del
+// backend (`plan.constants.ts`); el orden es el de presentación en la UI (menor a mayor duración).
+export const PERIODICIDADES_PLAN = ['mensual', 'trimestral', 'semestral', 'anual'] as const;
+
+export type PeriodicidadPlan = (typeof PERIODICIDADES_PLAN)[number];
+
+export const PERIODICIDAD_LABELS: Record<PeriodicidadPlan, string> = {
+  mensual: 'Mensual',
+  trimestral: 'Trimestral',
+  semestral: 'Semestral',
+  anual: 'Anual',
+};
+
 export interface IPlanLimites {
   usuarios: number;
   // `administradores` se agregó en la ampliación HU-SAAS-02 v2: los planes creados ANTES pueden no
@@ -51,6 +64,8 @@ export interface IPlan {
   _id: string;
   nombre: string;
   descripcion?: string;
+  // Opcional para tolerar planes creados antes de que el campo existiera (se leen como 'mensual').
+  periodicidad?: PeriodicidadPlan;
   limites: IPlanLimites;
   // Campos de la ampliación v2: opcionales para tolerar planes antiguos aún no migrados.
   perfilesPermitidos?: string[];

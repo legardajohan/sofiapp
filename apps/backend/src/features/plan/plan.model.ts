@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { PERFILES_BASE } from '../admin-profile/admin-profile.constants.js';
+import { PERIODICIDADES_PLAN, PERIODICIDAD_PLAN_DEFAULT } from './plan.constants.js';
 import type { IPlanDocument } from './plan.types.js';
 
 // NOTA multi-tenancy: `Plan` es un catálogo GLOBAL (sin `tenantId`), igual que `Tenant`.
@@ -51,6 +52,12 @@ const PlanSchema = new Schema<IPlanDocument>(
   {
     nombre: { type: String, required: true, unique: true, trim: true },
     descripcion: { type: String, trim: true, maxlength: 500 },
+    periodicidad: {
+      type: String,
+      enum: PERIODICIDADES_PLAN,
+      required: true,
+      default: PERIODICIDAD_PLAN_DEFAULT,
+    },
     limites: { type: LimitesSchema, required: true },
     perfilesPermitidos: { type: [String], enum: [...PERFILES_BASE], default: [] },
     precio: { type: Number, required: true, min: 0 },

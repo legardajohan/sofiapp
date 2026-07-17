@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import { Plan } from './plan.model.js';
+import { PERIODICIDAD_PLAN_DEFAULT } from './plan.constants.js';
 import { AppError } from '../../utils/AppError.js';
 import { getSettings } from '../platform-settings/platform-settings.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
@@ -20,6 +21,7 @@ export function mapPlanToResponse(doc: IPlanDocument): IPlanResponse {
     _id: doc._id.toString(),
     nombre: doc.nombre,
     descripcion: doc.descripcion,
+    periodicidad: doc.periodicidad ?? PERIODICIDAD_PLAN_DEFAULT,
     limites: {
       usuarios: doc.limites.usuarios,
       administradores: doc.limites.administradores,
@@ -116,6 +118,7 @@ export async function updatePlan(id: string, dto: UpdatePlanDTO): Promise<IPlanR
   const update: Record<string, unknown> = {};
   if (dto.nombre !== undefined) update['nombre'] = dto.nombre;
   if (dto.descripcion !== undefined) update['descripcion'] = dto.descripcion;
+  if (dto.periodicidad !== undefined) update['periodicidad'] = dto.periodicidad;
   if (dto.perfilesPermitidos !== undefined) update['perfilesPermitidos'] = dto.perfilesPermitidos;
   if (dto.precio !== undefined) update['precio'] = dto.precio;
   if (dto.costoEstimado !== undefined) update['costoEstimado'] = dto.costoEstimado;

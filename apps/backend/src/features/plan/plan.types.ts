@@ -1,6 +1,7 @@
 import type { Document } from 'mongoose';
 import type { z } from 'zod';
 import type { PerfilBase } from '../admin-profile/admin-profile.constants.js';
+import type { PeriodicidadPlan } from './plan.constants.js';
 import type { Moneda } from '../../services/pricing/money.util.js';
 import type { createPlanSchema, updatePlanSchema } from './plan.validation.js';
 
@@ -41,6 +42,8 @@ export interface IPlanLimites {
 export interface IPlan {
   nombre: string;
   descripcion?: string; // texto comercial breve (máx. 500)
+  // Periodicidad de facturación: obligatoria al crear. `precio` se entiende POR periodo.
+  periodicidad: PeriodicidadPlan;
   limites: IPlanLimites;
   // Perfiles BASE globales habilitados en el plan (subconjunto de PERFILES_BASE). Las etiquetas
   // propias de cada tenant (admin_profiles) NO se listan aquí; se combinan en tiempo de uso.
@@ -58,6 +61,7 @@ export interface IPlanResponse {
   _id: string;
   nombre: string;
   descripcion?: string;
+  periodicidad: PeriodicidadPlan;
   limites: IPlanLimites;
   perfilesPermitidos: PerfilBase[];
   precio: number;

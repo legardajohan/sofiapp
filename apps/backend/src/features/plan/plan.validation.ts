@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { objectIdSchema } from '../../utils/validation.js';
 import { PERFILES_BASE } from '../admin-profile/admin-profile.constants.js';
+import { PERIODICIDADES_PLAN } from './plan.constants.js';
 
 // Cada perfil permitido debe pertenecer al catálogo BASE global. Las etiquetas propias del tenant
 // no se validan aquí (viven en admin_profiles, tenant-scoped).
@@ -30,6 +31,10 @@ export const createPlanSchema = z.object({
   body: z.object({
     nombre: z.string().min(2).max(60),
     descripcion: z.string().max(500).optional(),
+    // Obligatorio: mensaje de error explícito si falta o no es uno de los valores válidos.
+    periodicidad: z.enum(PERIODICIDADES_PLAN, {
+      message: 'La periodicidad es obligatoria (mensual, trimestral, semestral o anual).',
+    }),
     limites: limitesSchema,
     perfilesPermitidos: perfilesPermitidosSchema.optional(),
     precio: z.coerce.number().min(0),
@@ -47,6 +52,7 @@ export const updatePlanSchema = z.object({
   body: z.object({
     nombre: z.string().min(2).max(60).optional(),
     descripcion: z.string().max(500).optional(),
+    periodicidad: z.enum(PERIODICIDADES_PLAN).optional(),
     limites: limitesSchema.partial().optional(),
     perfilesPermitidos: perfilesPermitidosSchema.optional(),
     precio: z.coerce.number().min(0).optional(),

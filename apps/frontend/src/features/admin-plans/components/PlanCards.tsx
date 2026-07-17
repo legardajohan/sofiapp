@@ -1,7 +1,15 @@
 import { Check, Coins, Crown, DollarSign, Pencil, Rocket, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../../../lib/currency.js';
 import { precioEnCop } from '../pricing.js';
-import type { IPlan } from '../types/index.js';
+import { PERIODICIDAD_LABELS, type IPlan } from '../types/index.js';
+
+// Clase del efecto de borde luminoso según periodicidad. Solo semestral/anual lo llevan; el anual
+// usa una variante propia (paleta distinta, más brillante y con hover más marcado). '' = sin efecto.
+function glowClass(periodicidad: IPlan['periodicidad']): string {
+  if (periodicidad === 'anual') return 'plan-card-glow plan-card--anual';
+  if (periodicidad === 'semestral') return 'plan-card-glow';
+  return '';
+}
 
 interface Props {
   plans: IPlan[];
@@ -42,7 +50,9 @@ export function PlanCards({ plans, copRate, onEdit, onDelete }: Props): React.Re
         return (
           <article
             key={plan._id}
-            className="flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-1 hover:border-muted-foreground/30 hover:shadow-lg"
+            className={`flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-1 hover:border-muted-foreground/30 hover:shadow-lg ${glowClass(
+              plan.periodicidad,
+            )}`}
           >
             <header className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -75,6 +85,11 @@ export function PlanCards({ plans, copRate, onEdit, onDelete }: Props): React.Re
                   {formatCurrency(plan.precio, 'USD')}
                 </span>
                 <span className="text-sm font-medium text-muted-foreground">USD</span>
+                {plan.periodicidad && (
+                  <span className="text-sm font-medium text-muted-foreground">
+                    / {PERIODICIDAD_LABELS[plan.periodicidad].toLowerCase()}
+                  </span>
+                )}
               </div>
               <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                 <Coins className="size-3.5" />≈ {formatCurrency(cop, 'COP')} COP

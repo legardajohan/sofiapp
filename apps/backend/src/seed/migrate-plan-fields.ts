@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { Plan } from '../features/plan/plan.model.js';
+import { PERIODICIDAD_PLAN_DEFAULT } from '../features/plan/plan.constants.js';
 
 // Migración/backfill IDEMPOTENTE de planes creados antes de la ampliación HU-SAAS-02 v2.
 //
@@ -10,6 +11,7 @@ import { Plan } from '../features/plan/plan.model.js';
 //   - `limites.administradores` → se inicializa con `limites.usuarios` (default ESTRUCTURAL, no un
 //     costo; el superadmin puede ajustarlo). No se inventa ningún valor financiero.
 //   - `perfilesPermitidos`      → `[]`.
+//   - `periodicidad`            → `'mensual'` (default estructural; el superadmin puede ajustarlo).
 //   - `numeroVersion`           → `1`.
 //   - `fotografiaFinanciera`    → NO se toca: queda "pendiente de cálculo" hasta que exista TRM +
 //     catálogo de costos y se genere con una nueva versión del plan.
@@ -22,23 +24,32 @@ export interface PlanMigrationReport {
   total: number;
   faltanAdministradores: number;
   faltanPerfilesPermitidos: number;
+  faltanPeriodicidad: number;
   faltanNumeroVersion: number;
   sinFotografiaFinanciera: number; // informativo: financiero pendiente (no se modifica)
 }
 
 export async function planFieldsMigrationReport(): Promise<PlanMigrationReport> {
-  const [total, faltanAdministradores, faltanPerfilesPermitidos, faltanNumeroVersion, sinFotografiaFinanciera] =
-    await Promise.all([
-      Plan.countDocuments({}),
-      Plan.countDocuments({ 'limites.administradores': { $exists: false } }),
-      Plan.countDocuments({ perfilesPermitidos: { $exists: false } }),
-      Plan.countDocuments({ numeroVersion: { $exists: false } }),
-      Plan.countDocuments({ fotografiaFinanciera: { $exists: false } }),
-    ]);
+  const [
+    total,
+    faltanAdministradores,
+    faltanPerfilesPermitidos,
+    faltanPeriodicidad,
+    faltanNumeroVersion,
+    sinFotografiaFinanciera,
+  ] = await Promise.all([
+    Plan.countDocuments({}),
+    Plan.countDocuments({ 'limites.administradores': { $exists: false } }),
+    Plan.countDocuments({ perfilesPermitidos: { $exists: false } }),
+    Plan.countDocuments({ periodicidad: { $exists: false } }),
+    Plan.countDocuments({ numeroVersion: { $exists: false } }),
+    Plan.countDocuments({ fotografiaFinanciera: { $exists: false } }),
+  ]);
   return {
     total,
     faltanAdministradores,
     faltanPerfilesPermitidos,
+    faltanPeriodicidad,
     faltanNumeroVersion,
     sinFotografiaFinanciera,
   };
@@ -55,6 +66,10 @@ export async function applyPlanFieldsMigration(): Promise<PlanMigrationReport> {
   await Plan.updateMany(
     { perfilesPermitidos: { $exists: false } },
     { $set: { perfilesPermitidos: [] } },
+  );
+  await Plan.updateMany(
+    { periodicidad: { $exists: false } },
+    { $set: { periodicidad: PERIODICIDAD_PLAN_DEFAULT } },
   );
   await Plan.updateMany({ numeroVersion: { $exists: false } }, { $set: { numeroVersion: 1 } });
   // fotografiaFinanciera: intencionalmente NO se toca (pendiente de cálculo).

@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { Calculator, DollarSign, Info, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import { formatCurrency } from '../../../lib/currency.js';
 import { useExchangeRate } from '../hooks/useExchangeRate.js';
-import type { CreatePlanPayload, UpdatePlanPayload, IPlan } from '../types/index.js';
+import {
+  PERIODICIDADES_PLAN,
+  PERIODICIDAD_LABELS,
+  type CreatePlanPayload,
+  type UpdatePlanPayload,
+  type IPlan,
+  type PeriodicidadPlan,
+} from '../types/index.js';
 
 interface Props {
   plan?: IPlan;
@@ -23,6 +30,8 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
   const [form, setForm] = useState({
     nombre: plan?.nombre ?? '',
     descripcion: plan?.descripcion ?? '',
+    // Vacío en creación fuerza una elección explícita (campo obligatorio); en edición prellena.
+    periodicidad: (plan?.periodicidad ?? '') as PeriodicidadPlan | '',
     usuarios: String(plan?.limites.usuarios ?? 0),
     administradores: String(plan?.limites.administradores ?? 1),
     mensajesMes: String(plan?.limites.mensajesMes ?? 0),
@@ -54,6 +63,7 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
     const payload: CreatePlanPayload = {
       nombre: form.nombre,
       descripcion: form.descripcion.trim() || undefined,
+      periodicidad: form.periodicidad as PeriodicidadPlan, // el <select required> garantiza no-vacío
       limites: {
         usuarios: num(form.usuarios),
         administradores: num(form.administradores),
@@ -118,6 +128,28 @@ export function PlanForm({ plan, onSuccess, onCancel }: Props): React.ReactEleme
         >
           {form.descripcion.length}/{DESC_MAX}
         </p>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-foreground">Periodicidad *</label>
+        <select
+          className={inputClass}
+          value={form.periodicidad}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, periodicidad: e.target.value as PeriodicidadPlan | '' }))
+          }
+          required
+        >
+          <option value="" disabled>
+            Selecciona la periodicidad…
+          </option>
+          {PERIODICIDADES_PLAN.map((periodo) => (
+            <option key={periodo} value={periodo}>
+              {PERIODICIDAD_LABELS[periodo]}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">El precio se entiende por periodo.</p>
       </div>
 
       <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-border p-3">
