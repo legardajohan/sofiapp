@@ -1,17 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { deleteKbDocument, getKbDocuments } from '../../../api/knowledge-base.js';
-import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
+import { deleteKbDocument } from '../../../api/knowledge-base.js';
+import type { IKbDocument } from '../types/index.js';
 import { IndexingStatusBadge } from './IndexingStatusBadge.js';
 
 interface KnowledgeDocumentTableProps {
+  /** Documentos ya cargados por el padre (query única compartida con la barra de presets). */
+  documents: IKbDocument[];
+  isLoading: boolean;
+  isError: boolean;
+  /** Reintenta la carga cuando la query falló. */
+  onRetry: () => void;
   /** Se dispara al pulsar el lápiz de una fila para editar ese documento. */
   onEdit: (doc: IKbDocument) => void;
-}
-
-function isPending(doc: IKbDocument): boolean {
-  return doc.estadoIndexacion === 'pendiente' || doc.estadoIndexacion === 'procesando';
 }
 
 function formatDate(iso: string): string {
@@ -24,16 +26,13 @@ function formatDate(iso: string): string {
 }
 
 export function KnowledgeDocumentTable({
+  documents,
+  isLoading,
+  isError,
+  onRetry,
   onEdit,
 }: KnowledgeDocumentTableProps): React.ReactElement {
   const queryClient = useQueryClient();
-  const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
-    queryKey: ['kb', 'documents'],
-    queryFn: () => getKbDocuments({ page: 1, limit: 50 }),
-    // Refresca mientras haya documentos indexándose, para ver el estado en vivo.
-    refetchInterval: (query) =>
-      query.state.data?.data.some(isPending) ? 3000 : false,
-  });
 
   const deleteMutation = useMutation({
     mutationFn: deleteKbDocument,
@@ -55,15 +54,15 @@ export function KnowledgeDocumentTable({
     }
   }
 
-  const documentos = data?.data ?? [];
+  const documentos = documents;
 
   return (
     <div className="bg-card border border-border rounded-xl shadow-card">
       <div className="px-6 py-5 border-b border-border flex items-center justify-between">
         <h2 className="text-base font-semibold text-foreground">Conocimiento cargado</h2>
-        {data && (
+        {!isLoading && !isError && (
           <span className="text-xs text-muted-foreground">
-            {data.total} {data.total === 1 ? 'documento' : 'documentos'}
+            {documentos.length} {documentos.length === 1 ? 'documento' : 'documentos'}
           </span>
         )}
       </div>
@@ -73,7 +72,7 @@ export function KnowledgeDocumentTable({
       ) : isError ? (
         <div className="px-6 py-10 text-center text-sm text-destructive">
           <p>No se pudo cargar la lista de documentos.</p>
-          <button onClick={() => refetch()} className="mt-2 text-xs underline">
+          <button onClick={onRetry} className="mt-2 text-xs underline">
             Reintentar
           </button>
         </div>

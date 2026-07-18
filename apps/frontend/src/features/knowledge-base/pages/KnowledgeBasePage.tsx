@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getKbDocuments } from '../../../api/knowledge-base.js';
 import { KnowledgeUploadEditor } from '../components/KnowledgeUploadEditor.js';
 import { KnowledgeDocumentTable } from '../components/KnowledgeDocumentTable.js';
-import type { IKbDocument } from '../types/index.js';
+import { PresetKnowledgeBar } from '../components/PresetKnowledgeBar.js';
+import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
+
+// Indica si un documento está indexándose activamente (justifica el polling en vivo). Un `pendiente`
+// SIN contenido es un preset en reposo, no un trabajo en curso: no debe mantener el polling vivo.
+function isIndexingActive(doc: IKbDocument): boolean {
+  if (doc.estadoIndexacion === 'procesando') return true;
+  return doc.estadoIndexacion === 'pendiente' && doc.contenido.trim().length > 0;
+}
 
 export function KnowledgeBasePage(): React.ReactElement {
   const [editingDocument, setEditingDocument] = useState<IKbDocument | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Query única compartida por la barra de presets y la tabla (evita doble fetch).
+  const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
+    queryKey: ['kb', 'documents'],
+    queryFn: () => getKbDocuments({ page: 1, limit: 50 }),
+    // Refresca solo mientras haya documentos indexándose de verdad (no presets vacíos en reposo).
+    refetchInterval: (query) => (query.state.data?.data.some(isIndexingActive) ? 3000 : false),
+  });
+
+  const documents = data?.data ?? [];
 
   // Al iniciar una edición, lleva el formulario a la vista para que el admin no lo pierda de vista.
   useEffect(() => {
@@ -37,13 +57,26 @@ export function KnowledgeBasePage(): React.ReactElement {
           </div>
         </div>
 
+        <PresetKnowledgeBar
+          documents={documents}
+          editingDocumentId={editingDocument?.id}
+          onEdit={(doc) => setEditingDocument(doc)}
+          onCreateNew={() => setEditingDocument(null)}
+        />
+
         <div ref={formRef}>
           <KnowledgeUploadEditor
             document={editingDocument ?? undefined}
             onDone={() => setEditingDocument(null)}
           />
         </div>
-        <KnowledgeDocumentTable onEdit={(doc) => setEditingDocument(doc)} />
+        <KnowledgeDocumentTable
+          documents={documents}
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => void refetch()}
+          onEdit={(doc) => setEditingDocument(doc)}
+        />
       </div>
     </div>
   );
