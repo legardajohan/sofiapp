@@ -4,10 +4,16 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { createDocumentSchema, listDocumentsSchema, deleteDocumentSchema } from './kb.validation.js';
+import {
+  createDocumentSchema,
+  listDocumentsSchema,
+  updateDocumentSchema,
+  deleteDocumentSchema,
+} from './kb.validation.js';
 import {
   createDocumentController,
   listDocumentsController,
+  updateDocumentController,
   deleteDocumentController,
 } from './kb.controller.js';
 
@@ -29,6 +35,15 @@ router.get(
   authorize(['admin']),
   validate(listDocumentsSchema),
   asyncHandler(listDocumentsController),
+);
+
+router.patch(
+  '/documents/:id',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  validate(updateDocumentSchema),
+  asyncHandler(updateDocumentController),
 );
 
 router.delete(

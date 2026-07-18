@@ -1,8 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// Mock de la cola BullMQ: tenant.service → kb.service → config/queues.js construye la Queue al
+// cargar; sin mock intentaría conectar a Redis. El seeding no encola, pero evitamos el ruido.
+vi.mock('../../config/queues.js', () => ({
+  KB_INDEX_QUEUE_NAME: 'kb-index',
+  KB_INDEX_JOB_NAME: 'index-document',
+  INBOUND_QUEUE_NAME: 'inbound-messages',
+  inboundQueue: { add: vi.fn() },
+  kbIndexQueue: { add: vi.fn().mockResolvedValue(undefined) },
+}));
+
 import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
+import { KbDocument } from '../kb/kb-document.model.js';
+import * as kbService from '../kb/kb.service.js';
 import { createTenant, updateTenant, updateTenantStatus } from './tenant.service.js';
 import { AppError } from '../../utils/AppError.js';
+import type { IKbDocument } from '../kb/kb.types.js';
 
 describe('tenant.service — HU-SAAS-01', () => {
   describe('createTenant', () => {
@@ -69,6 +83,38 @@ describe('tenant.service — HU-SAAS-01', () => {
       // El tenant NO debe haberse persistido
       const tenant = await Tenant.findOne({ slug: 'empresa-rollback' }).lean();
       expect(tenant).toBeNull();
+    });
+
+    it('siembra los 5 documentos predefinidos en la KB del tenant', async () => {
+      const result = await createTenant({
+        nombre: 'Empresa Seed',
+        slug: 'empresa-seed',
+        contacto: { email: 'seed@empresa.com', telefono: '3001234580' },
+      });
+
+      const docs = await KbDocument.find({ tenantId: result._id }).lean<IKbDocument[]>();
+      expect(docs).toHaveLength(5);
+      expect(docs.every((d) => d.isPreset === true)).toBe(true);
+      expect(docs.every((d) => d.contenido === '')).toBe(true);
+      expect(docs.every((d) => d.estadoIndexacion === 'pendiente')).toBe(true);
+    });
+
+    it('si el seeding de la KB falla, la creación del tenant NO se revierte', async () => {
+      const spy = vi
+        .spyOn(kbService, 'seedPresetDocuments')
+        .mockRejectedValueOnce(new Error('fallo simulado de seeding'));
+
+      const result = await createTenant({
+        nombre: 'Empresa Seed Falla',
+        slug: 'empresa-seed-falla',
+        contacto: { email: 'seedfail@empresa.com', telefono: '3001234581' },
+      });
+
+      expect(result._id).toBeDefined();
+      const tenant = await Tenant.findById(result._id).lean();
+      expect(tenant).not.toBeNull();
+
+      spy.mockRestore();
     });
 
     it('lanza AppError 409 si slug ya existe', async () => {

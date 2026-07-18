@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { deleteKbDocument, getKbDocuments } from '../../../api/knowledge-base.js';
 import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
 import { IndexingStatusBadge } from './IndexingStatusBadge.js';
+
+interface KnowledgeDocumentTableProps {
+  /** Se dispara al pulsar el lápiz de una fila para editar ese documento. */
+  onEdit: (doc: IKbDocument) => void;
+}
 
 function isPending(doc: IKbDocument): boolean {
   return doc.estadoIndexacion === 'pendiente' || doc.estadoIndexacion === 'procesando';
@@ -16,7 +23,9 @@ function formatDate(iso: string): string {
   });
 }
 
-export function KnowledgeDocumentTable(): React.ReactElement {
+export function KnowledgeDocumentTable({
+  onEdit,
+}: KnowledgeDocumentTableProps): React.ReactElement {
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
     queryKey: ['kb', 'documents'],
@@ -32,6 +41,9 @@ export function KnowledgeDocumentTable(): React.ReactElement {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
     },
   });
+
+  // Solo la fila en borrado se deshabilita/carga, no toda la tabla.
+  const deletingId = deleteMutation.isPending ? deleteMutation.variables : null;
 
   function handleDelete(id: string): void {
     if (
@@ -86,7 +98,14 @@ export function KnowledgeDocumentTable(): React.ReactElement {
               {documentos.map((doc) => (
                 <tr key={doc.id} className="border-b border-border last:border-0">
                   <td className="px-6 py-3 text-foreground font-medium">
-                    {doc.titulo}
+                    <span className="inline-flex items-center gap-2">
+                      {doc.titulo}
+                      {doc.isPreset && (
+                        <Badge variant="secondary" className="font-normal">
+                          Predefinido
+                        </Badge>
+                      )}
+                    </span>
                     {doc.estadoIndexacion === 'fallido' && doc.error && (
                       <p className="text-xs text-destructive font-normal mt-0.5">{doc.error}</p>
                     )}
@@ -98,13 +117,28 @@ export function KnowledgeDocumentTable(): React.ReactElement {
                   </td>
                   <td className="px-6 py-3 text-secondary-foreground">{formatDate(doc.updatedAt)}</td>
                   <td className="px-6 py-3">
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      disabled={deleteMutation.isPending}
-                      className="text-destructive hover:text-destructive/80 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      Eliminar
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(doc)}
+                        disabled={deletingId === doc.id}
+                        aria-label={`Editar ${doc.titulo}`}
+                        title="Editar"
+                        className="p-1.5 rounded-md text-secondary-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(doc.id)}
+                        disabled={deletingId === doc.id}
+                        aria-label={`Eliminar ${doc.titulo}`}
+                        title="Eliminar"
+                        className="p-1.5 rounded-md text-secondary-foreground hover:text-destructive hover:bg-destructive-subtle disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

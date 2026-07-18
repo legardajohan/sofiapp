@@ -9,6 +9,8 @@ export interface IKbDocument {
   version: number; // incremental por documento (versionado por empresa)
   estadoIndexacion: EstadoIndexacion;
   chunkCount: number; // 0 hasta indexar
+  isPreset: boolean; // documento base sembrado al crear el tenant (etiqueta de origen)
+  proposito?: string; // guía de qué escribir (placeholder), típica de los presets
   error?: string; // motivo si estadoIndexacion === 'fallido'
   createdAt?: Date;
   updatedAt?: Date;
@@ -37,12 +39,19 @@ export interface CreateKbDocumentDTO {
   contenido: string;
 }
 
+export interface UpdateKbDocumentDTO {
+  contenido: string;
+}
+
 export interface IKbDocumentResponse {
   id: string;
   titulo: string;
+  contenido: string; // el listado lo expone para precargar el editor en modo edición
   estadoIndexacion: EstadoIndexacion;
   version: number;
   chunkCount: number;
+  isPreset: boolean;
+  proposito?: string;
   error?: string;
   createdAt: string;
   updatedAt: string;

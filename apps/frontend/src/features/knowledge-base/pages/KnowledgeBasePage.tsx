@@ -1,7 +1,22 @@
+import { useEffect, useRef, useState } from 'react';
 import { KnowledgeUploadEditor } from '../components/KnowledgeUploadEditor.js';
 import { KnowledgeDocumentTable } from '../components/KnowledgeDocumentTable.js';
+import type { IKbDocument } from '../types/index.js';
 
 export function KnowledgeBasePage(): React.ReactElement {
+  const [editingDocument, setEditingDocument] = useState<IKbDocument | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Al iniciar una edición, lleva el formulario a la vista para que el admin no lo pierda de vista.
+  useEffect(() => {
+    if (!editingDocument) return;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    formRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }, [editingDocument]);
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -22,8 +37,13 @@ export function KnowledgeBasePage(): React.ReactElement {
           </div>
         </div>
 
-        <KnowledgeUploadEditor />
-        <KnowledgeDocumentTable />
+        <div ref={formRef}>
+          <KnowledgeUploadEditor
+            document={editingDocument ?? undefined}
+            onDone={() => setEditingDocument(null)}
+          />
+        </div>
+        <KnowledgeDocumentTable onEdit={(doc) => setEditingDocument(doc)} />
       </div>
     </div>
   );

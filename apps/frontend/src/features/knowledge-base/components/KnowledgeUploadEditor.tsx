@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createKbDocument } from '../../../api/knowledge-base.js';
+import { toast } from 'sonner';
+import { createKbDocument, updateKbDocument } from '../../../api/knowledge-base.js';
+import type { IKbDocument } from '../types/index.js';
+
+const CONTENIDO_MAX = 3000;
+const PLACEHOLDER_GENERICO = 'Escribe o pega aquí la información pertinente…';
 
 function Spinner(): React.ReactElement {
   return (
@@ -20,21 +25,48 @@ function Spinner(): React.ReactElement {
   );
 }
 
-export function KnowledgeUploadEditor(): React.ReactElement {
+interface KnowledgeUploadEditorProps {
+  /** Si viene, el editor entra en modo edición y precarga su contenido. Si no, modo creación. */
+  document?: IKbDocument;
+  /** Se llama al guardar una edición con éxito o al cancelarla, para volver a modo creación. */
+  onDone?: () => void;
+}
+
+export function KnowledgeUploadEditor({
+  document,
+  onDone,
+}: KnowledgeUploadEditorProps): React.ReactElement {
   const queryClient = useQueryClient();
+  const isEdit = document !== undefined;
+
   const [titulo, setTitulo] = useState('');
   const [contenido, setContenido] = useState('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const mutation = useMutation({
-    mutationFn: createKbDocument,
+    mutationFn: (vars: { titulo: string; contenido: string }) =>
+      document
+        ? updateKbDocument(document.id, { contenido: vars.contenido })
+        : createKbDocument({ titulo: vars.titulo, contenido: vars.contenido }),
     onSuccess: (doc) => {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
-      setSuccessMsg(`"${doc.titulo}" recibido. Indexando su contenido…`);
-      setErrorMsg(null);
-      setTitulo('');
-      setContenido('');
+      if (document) {
+        // Al terminar una edición volvemos a modo creación; el feedback va por toast porque el
+        // formulario deja de mostrar este documento.
+        toast.success(
+          doc.contenido.trim().length === 0
+            ? `"${doc.titulo}" guardado. Queda pendiente hasta que agregues contenido.`
+            : `"${doc.titulo}" actualizado. Reindexando su contenido…`,
+        );
+        onDone?.();
+      } else {
+        setSuccessMsg(`"${doc.titulo}" recibido. Indexando su contenido…`);
+        setErrorMsg(null);
+        setTitulo('');
+        setContenido('');
+      }
     },
     onError: (err: Error) => {
       const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -44,6 +76,18 @@ export function KnowledgeUploadEditor(): React.ReactElement {
     },
   });
 
+  // Al cambiar de documento (o volver a creación) se resetea todo: contenido, mensajes y el estado
+  // de la mutación. Así no se filtra nada de una operación a la siguiente. En edición, foco al texto.
+  useEffect(() => {
+    setTitulo(document?.titulo ?? '');
+    setContenido(document?.contenido ?? '');
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    mutation.reset();
+    if (document) textareaRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document?.id]);
+
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
     setSuccessMsg(null);
@@ -51,15 +95,37 @@ export function KnowledgeUploadEditor(): React.ReactElement {
     mutation.mutate({ titulo: titulo.trim(), contenido: contenido.trim() });
   }
 
-  const disabled = mutation.isPending || titulo.trim().length === 0 || contenido.trim().length === 0;
+  // En creación exigimos título y contenido; en edición el contenido puede quedar vacío (vaciar un
+  // documento es válido: queda pendiente sin reindexar) y el título no se edita.
+  const disabled =
+    mutation.isPending || (!isEdit && (titulo.trim().length === 0 || contenido.trim().length === 0));
+
+  const placeholder =
+    isEdit && document?.proposito && contenido.length === 0 ? document.proposito : PLACEHOLDER_GENERICO;
 
   return (
-    <div className="bg-card border border-border rounded-xl shadow-card">
+    <div
+      className={`bg-card border rounded-xl shadow-card transition-shadow ${
+        isEdit ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border'
+      }`}
+    >
       <div className="px-6 py-5 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground">Cargar conocimiento</h2>
-        <p className="text-sm text-secondary-foreground mt-0.5">
-          Pega o escribe el texto con el que la IA responderá a tus prospectos.
-        </p>
+        {isEdit ? (
+          <>
+            <p className="text-xs font-medium uppercase tracking-wide text-primary">Editando</p>
+            <h2 className="text-base font-semibold text-foreground mt-0.5">{document?.titulo}</h2>
+            <p className="text-sm text-secondary-foreground mt-0.5">
+              Corrige el contenido y guarda. La IA se reindexará con el nuevo texto.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="text-base font-semibold text-foreground">Cargar conocimiento</h2>
+            <p className="text-sm text-secondary-foreground mt-0.5">
+              Pega o escribe el texto con el que la IA responderá a tus prospectos.
+            </p>
+          </>
+        )}
       </div>
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
         <div className="space-y-1.5">
@@ -73,11 +139,14 @@ export function KnowledgeUploadEditor(): React.ReactElement {
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ej. Preguntas frecuentes sobre precios"
             maxLength={200}
-            required
-            className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors"
+            required={!isEdit}
+            disabled={isEdit}
+            className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-muted-foreground">
-            Reutilizar un título existente crea una nueva versión del documento.
+            {isEdit
+              ? 'El título no se puede cambiar al editar; solo su contenido.'
+              : 'Reutilizar un título existente crea una nueva versión del documento.'}
           </p>
         </div>
 
@@ -87,33 +156,48 @@ export function KnowledgeUploadEditor(): React.ReactElement {
           </label>
           <textarea
             id="kb-contenido"
+            ref={textareaRef}
             value={contenido}
             onChange={(e) => setContenido(e.target.value)}
-            placeholder="Escribe o pega aquí la información pertinente…"
+            placeholder={placeholder}
             rows={10}
-            maxLength={100_000}
-            required
+            maxLength={CONTENIDO_MAX}
+            required={!isEdit}
             className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors resize-y"
           />
           <p className="text-xs text-muted-foreground text-right">
-            {contenido.length.toLocaleString()} / 100 000 caracteres
+            {contenido.length.toLocaleString()} / {CONTENIDO_MAX.toLocaleString()} caracteres
           </p>
         </div>
 
-        <button
-          type="submit"
-          disabled={disabled}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
-        >
-          {mutation.isPending ? (
-            <>
-              <Spinner />
-              Cargando…
-            </>
-          ) : (
-            'Cargar e indexar'
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={disabled}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+          >
+            {mutation.isPending ? (
+              <>
+                <Spinner />
+                {isEdit ? 'Guardando…' : 'Cargando…'}
+              </>
+            ) : isEdit ? (
+              'Guardar cambios'
+            ) : (
+              'Cargar e indexar'
+            )}
+          </button>
+          {isEdit && (
+            <button
+              type="button"
+              onClick={() => onDone?.()}
+              disabled={mutation.isPending}
+              className="px-4 py-2.5 border border-input text-sm font-medium text-foreground rounded-lg hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+            >
+              Cancelar
+            </button>
           )}
-        </button>
+        </div>
 
         {successMsg && (
           <div className="flex items-center gap-3 p-4 bg-success-subtle border border-success/30 rounded-xl text-sm text-success">

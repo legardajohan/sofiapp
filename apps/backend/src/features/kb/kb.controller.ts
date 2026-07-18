@@ -1,12 +1,20 @@
 import type { RequestHandler } from 'express';
-import { createDocument, listDocuments, deleteDocument } from './kb.service.js';
-import type { CreateKbDocumentDTO } from './kb.types.js';
+import { createDocument, listDocuments, updateDocument, deleteDocument } from './kb.service.js';
+import type { CreateKbDocumentDTO, UpdateKbDocumentDTO } from './kb.types.js';
 
 export const createDocumentController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const dto = req.body as CreateKbDocumentDTO;
   const result = await createDocument(tenantId, dto);
   res.status(201).json(result);
+};
+
+export const updateDocumentController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const { id } = req.params as { id: string };
+  const { contenido } = req.body as UpdateKbDocumentDTO;
+  const result = await updateDocument(tenantId, id, contenido);
+  res.status(200).json(result);
 };
 
 export const listDocumentsController: RequestHandler = async (req, res) => {

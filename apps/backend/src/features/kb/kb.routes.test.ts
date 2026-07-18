@@ -89,6 +89,79 @@ describe('POST /api/kb/documents', () => {
   });
 });
 
+describe('PATCH /api/kb/documents/:id', () => {
+  it('admin edita el contenido de su documento → 200 y versión incrementada', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Editable', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'contenido corregido' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(2);
+    expect(res.body.estadoIndexacion).toBe('pendiente');
+    expect(res.body.contenido).toBe('contenido corregido');
+  });
+
+  it('documento de otro tenant → 404', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const doc = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
+    const tokenB = makeToken(tenantB.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${tokenB}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'hackeado' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('contenido que excede 3000 caracteres → 400', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Largo', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'a'.repeat(3001) });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('id con formato inválido → 400', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const res = await request(app)
+      .patch('/api/kb/documents/no-es-un-objectid')
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'texto' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rol superadmin (no admin) → 403', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Protegido', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'superadmin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'texto' });
+
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('DELETE /api/kb/documents/:id', () => {
   it('admin borra un documento de su propio tenant → 200', async () => {
     const tenantId = new Types.ObjectId();
