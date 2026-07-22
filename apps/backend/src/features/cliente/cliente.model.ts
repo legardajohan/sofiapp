@@ -29,6 +29,19 @@ const ClienteSchema = new Schema<IClienteDocument>(
     objecionPrincipal: { type: String, enum: ['precio', 'tiempo', 'confianza', 'otra'] },
     rolContacto: { type: String, enum: ['decisor', 'usuario', 'desconocido'] },
     interesItemId: { type: Schema.Types.ObjectId, ref: 'CatalogItem' },
+    // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
+    resumenIA: {
+      type: new Schema(
+        {
+          texto: { type: String, required: true },
+          generadoAt: { type: Date, required: true },
+          mensajesHasta: { type: Date, required: true },
+          modelo: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { timestamps: true },
 );

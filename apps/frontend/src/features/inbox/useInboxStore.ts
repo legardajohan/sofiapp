@@ -4,9 +4,14 @@ import { create } from 'zustand';
 interface InboxState {
   activeId: string | null;
   setActiveId: (id: string | null) => void;
+  /** Ficha del contacto (panel lateral, HU-OMNI-03). */
+  contactPanelOpen: boolean;
+  setContactPanelOpen: (open: boolean) => void;
 }
 
 export const useInboxStore = create<InboxState>((set) => ({
   activeId: null,
   setActiveId: (activeId) => set({ activeId }),
+  contactPanelOpen: false,
+  setContactPanelOpen: (contactPanelOpen) => set({ contactPanelOpen }),
 }));

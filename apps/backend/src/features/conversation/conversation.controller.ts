@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import {
+  generateConversationSummary,
   getThread,
   listConversations,
   markRead,
@@ -52,4 +53,11 @@ export const setIaController: RequestHandler = async (req, res) => {
   const { habilitada } = req.body as IaBody;
   const conversation = await setIaHabilitada(tenantId, id, habilitada);
   res.status(200).json(conversation);
+};
+
+export const generateSummaryController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const resumen = await generateConversationSummary(tenantId, id);
+  res.status(200).json(resumen);
 };

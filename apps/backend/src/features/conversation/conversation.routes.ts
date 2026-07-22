@@ -9,9 +9,11 @@ import {
   listConversationsSchema,
   readSchema,
   replySchema,
+  summarySchema,
   threadSchema,
 } from './conversation.validation.js';
 import {
+  generateSummaryController,
   getThreadController,
   listConversationsController,
   markReadController,
@@ -66,6 +68,15 @@ router.patch(
   bandejaRoles,
   validate(iaSchema),
   asyncHandler(setIaController),
+);
+
+router.post(
+  '/:id/summary',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(summarySchema),
+  asyncHandler(generateSummaryController),
 );
 
 export default router;

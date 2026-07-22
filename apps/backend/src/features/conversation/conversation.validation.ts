@@ -40,6 +40,12 @@ export const iaSchema = z.object({
   query: empty,
 });
 
+export const summarySchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 export type ListConversationsQuery = z.infer<typeof listConversationsSchema>['query'];
 export type ThreadQuery = z.infer<typeof threadSchema>['query'];
 export type ReplyBody = z.infer<typeof replySchema>['body'];

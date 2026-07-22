@@ -1,7 +1,24 @@
-import { Types } from 'mongoose';
-import { findOneAndUpdateScoped } from '../../repositories/base.repository.js';
+import { Types, type FilterQuery } from 'mongoose';
+import {
+  countScoped,
+  findByIdScoped,
+  findOneAndUpdateScoped,
+  findScoped,
+} from '../../repositories/base.repository.js';
+import { AppError } from '../../utils/AppError.js';
 import { Cliente } from './cliente.model.js';
-import type { CanalOrigen, IClienteDocument } from './cliente.types.js';
+import { Message } from '../message/message.model.js';
+import type { IMessageDocument } from '../message/message.types.js';
+import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
+import type {
+  CanalOrigen,
+  ICliente,
+  IClienteDocument,
+  IContactCardResponse,
+  IContactHistoryResponse,
+  IResumenResponse,
+} from './cliente.types.js';
+import type { HistoryQuery } from './cliente.validation.js';
 
 export async function upsertByMetaUser(
   tenantId: string | Types.ObjectId,
@@ -29,4 +46,73 @@ export async function upsertByMetaUser(
 
   if (!cliente) throw new Error('Error interno al crear/actualizar cliente.');
   return cliente as unknown as IClienteDocument;
+}
+
+// ─── Historial del contacto (HU-OMNI-03) ────────────────────────────────────────
+
+/** Forma lean del cliente con `createdAt` (de timestamps) para proyectar la ficha. */
+interface IClienteLean extends ICliente {
+  _id: Types.ObjectId;
+  createdAt: Date;
+}
+
+function toContactCard(c: IClienteLean): IContactCardResponse {
+  return {
+    id: String(c._id),
+    nombre: c.nombre ?? null,
+    telefono: c.telefono,
+    canalOrigen: c.canalOrigen,
+    estadoComercial: c.estadoComercial,
+    nivelInteres: c.nivelInteres ?? null,
+    objecionPrincipal: c.objecionPrincipal ?? null,
+    rolContacto: c.rolContacto ?? null,
+    tags: c.tags ?? [],
+    asesorId: c.asesorId ? String(c.asesorId) : null,
+    ultimoMensajeAt: c.ultimoMensajeAt ? c.ultimoMensajeAt.toISOString() : null,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+/** El resumen queda desactualizado si llegaron mensajes después de generarlo. */
+export function toResumenResponse(c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>): IResumenResponse | null {
+  if (!c.resumenIA) return null;
+  const desactualizado = !!c.ultimoMensajeAt && c.ultimoMensajeAt > c.resumenIA.mensajesHasta;
+  return {
+    texto: c.resumenIA.texto,
+    generadoAt: c.resumenIA.generadoAt.toISOString(),
+    desactualizado,
+  };
+}
+
+/**
+ * Ficha del contacto + historial completo de mensajes (paginado, orden ascendente) + estado del
+ * resumen. Todo tenant-safe: el cliente se resuelve con `findByIdScoped` (404 si es de otro tenant)
+ * y los mensajes con `findScoped` por `{ clienteId }`.
+ */
+export async function getContactHistory(
+  tenantId: string,
+  clienteId: string,
+  query: HistoryQuery,
+): Promise<IContactHistoryResponse> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
+  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
+
+  const { page, limit } = query;
+  const filter: FilterQuery<IMessageDocument> = { clienteId: new Types.ObjectId(clienteId) };
+  const total = await countScoped(Message, tenantId, filter);
+
+  // Página de mensajes más recientes (desc), invertida a ascendente para pintar el hilo.
+  const docs = await findScoped(Message, tenantId, filter)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .lean();
+
+  const mensajes = docs.reverse().map((m) => toMessageResponse(m as unknown as IMessageSource));
+
+  return {
+    contacto: toContactCard(cliente),
+    resumen: toResumenResponse(cliente),
+    mensajes: { data: mensajes, page, limit, total },
+  };
 }

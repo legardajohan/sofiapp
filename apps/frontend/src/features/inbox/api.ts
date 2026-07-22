@@ -1,5 +1,12 @@
 import { apiClient } from '../../api/apiClient.js';
-import type { ConversationDTO, FiltroBandeja, MessageDTO, Paginated } from './types.js';
+import type {
+  ContactHistoryDTO,
+  ConversationDTO,
+  FiltroBandeja,
+  MessageDTO,
+  Paginated,
+  ResumenDTO,
+} from './types.js';
 
 export async function fetchConversations(
   filtro: FiltroBandeja,
@@ -45,5 +52,22 @@ export async function setSofiEnabled(
     `/api/conversations/${conversationId}/ia`,
     { habilitada },
   );
+  return data;
+}
+
+/** Ficha del contacto: historial completo + estado del resumen (HU-OMNI-03). */
+export async function fetchContactHistory(
+  clienteId: string,
+  page = 1,
+): Promise<ContactHistoryDTO> {
+  const { data } = await apiClient.get<ContactHistoryDTO>(`/api/clientes/${clienteId}/history`, {
+    params: { page },
+  });
+  return data;
+}
+
+/** Genera/actualiza el resumen por IA de la conversación (bajo demanda). */
+export async function generateSummary(clienteId: string): Promise<ResumenDTO> {
+  const { data } = await apiClient.post<ResumenDTO>(`/api/conversations/${clienteId}/summary`);
   return data;
 }

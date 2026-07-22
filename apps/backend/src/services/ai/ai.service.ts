@@ -13,6 +13,7 @@ import type {
   AiChatParams,
   AiExtractParams,
   AiClassifyParams,
+  AiSummarizeParams,
   ClassifyResult,
 } from './ai-service.types.js';
 
@@ -80,6 +81,26 @@ export class AIService {
     const durationMs = Date.now() - start;
     this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
     return { data: classifyResult, cacheHit: false, ...usage, durationMs };
+  }
+
+  /**
+   * Resume la conversación (transcript en `historial`) usando la plantilla global/tenant `summary`.
+   * No cachea en Redis: la persistencia del resumen vive en `Cliente.resumenIA` (HU-OMNI-03),
+   * cuya invalidación se deriva de `ultimoMensajeAt`. Reutiliza `generateReply`.
+   */
+  async summarize(params: AiSummarizeParams): Promise<AiResult<string>> {
+    const start = Date.now();
+    const template = await this.resolveTemplate(params.tenantId, 'summary');
+
+    const { result, usage } = await this.provider.generateReply({
+      historial: params.historial,
+      tono: template.systemPrompt,
+      instrucciones: template.systemPrompt,
+    });
+
+    const durationMs = Date.now() - start;
+    this.logUsage({ tenantId: params.tenantId, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    return { data: result, cacheHit: false, ...usage, durationMs };
   }
 
   private async resolveTemplate(tenantId: Types.ObjectId, method: string): Promise<IPromptTemplate> {

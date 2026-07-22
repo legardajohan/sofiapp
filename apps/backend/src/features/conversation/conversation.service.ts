@@ -6,9 +6,12 @@ import {
   findScoped,
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
+import { env } from '../../config/env.js';
 import { Cliente } from '../cliente/cliente.model.js';
-import type { IClienteDocument } from '../cliente/cliente.types.js';
+import type { IClienteDocument, IResumenResponse } from '../cliente/cliente.types.js';
 import { Message } from '../message/message.model.js';
+import { getAIService } from '../../services/ai/ai-service.singleton.js';
+import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
@@ -144,6 +147,50 @@ export async function replyMessage(
   }
 
   return message;
+}
+
+/**
+ * Genera (o regenera) el resumen por IA de la conversación de forma síncrona y lo persiste en
+ * `Cliente.resumenIA` (HU-OMNI-03). El transcript se arma desde todos los mensajes del cliente:
+ * `sender 'user'` → `role 'user'`; `bot | agent` → `role 'model'`. La invalidación por mensajes
+ * nuevos es derivada (`ultimoMensajeAt > mensajesHasta`), no requiere escritura extra.
+ */
+export async function generateConversationSummary(
+  tenantId: string,
+  clienteId: string,
+): Promise<IResumenResponse> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  const docs = await findScoped(Message, tenantId, {
+    clienteId: new Types.ObjectId(clienteId),
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const historial: ChatTurn[] = docs.map((m) => ({
+    role: m.sender === 'user' ? 'user' : 'model',
+    content: m.texto ?? nonTextPreview(m.tipo),
+  }));
+
+  if (historial.length === 0) throw new AppError('No hay mensajes para resumir.', 422);
+
+  const { data: texto } = await getAIService().summarize({
+    tenantId: new Types.ObjectId(tenantId),
+    historial,
+  });
+
+  const now = new Date();
+  const mensajesHasta = (cliente as { ultimoMensajeAt?: Date }).ultimoMensajeAt ?? now;
+  await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    { resumenIA: { texto, generadoAt: now, mensajesHasta, modelo: env.GEMINI_MODEL } },
+    { new: true },
+  );
+
+  return { texto, generadoAt: now.toISOString(), desactualizado: false };
 }
 
 export async function markRead(tenantId: string, clienteId: string): Promise<IConversationResponse> {

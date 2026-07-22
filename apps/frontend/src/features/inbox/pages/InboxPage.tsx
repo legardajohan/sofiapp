@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { ConversationList } from '../components/ConversationList.js';
 import { ConversationThread } from '../components/ConversationThread.js';
+import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
@@ -38,6 +40,8 @@ export function InboxPage(): React.ReactElement {
 
   const activeId = useInboxStore((s) => s.activeId);
   const setActiveId = useInboxStore((s) => s.setActiveId);
+  const contactPanelOpen = useInboxStore((s) => s.contactPanelOpen);
+  const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
 
   const { data: conversations, isLoading } = useConversations(filtro);
   const { data: thread, isLoading: threadLoading } = useThread(activeId);
@@ -95,12 +99,21 @@ export function InboxPage(): React.ReactElement {
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{active.telefono}</p>
               </div>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-1">
                 <SofiToggle
                   enabled={active.iaHabilitada}
                   pending={setSofi.isPending}
                   onToggle={(v) => setSofi.mutate(v)}
                 />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Ver ficha del contacto"
+                  title="Ficha del contacto"
+                  onClick={() => setContactPanelOpen(true)}
+                >
+                  <UserRound className="h-4 w-4" />
+                </Button>
               </div>
             </header>
 
@@ -111,6 +124,12 @@ export function InboxPage(): React.ReactElement {
               disabled={!active.ventana24hAbierta}
               pending={sendReply.isPending}
               onSend={(texto) => sendReply.mutate(texto)}
+            />
+
+            <ContactPanel
+              clienteId={activeId}
+              open={contactPanelOpen}
+              onOpenChange={setContactPanelOpen}
             />
           </>
         ) : (
