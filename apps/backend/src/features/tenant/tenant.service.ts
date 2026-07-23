@@ -13,6 +13,7 @@ import type {
   UpdateTenantStatusDTO,
   ITenantResponse,
   ITenantDocument,
+  ITenantActiveDetails,
   ListTenantsQuery,
   TenantsListResponse,
 } from './tenant.types.js';
@@ -118,12 +119,55 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   return mapTenantToResponse(createdTenant);
 }
 
+/**
+ * Bloquea (409 TENANT_ACTIVE) la edición/eliminación de una empresa ACTIVA. Debe invocarse
+ * INMEDIATAMENTE antes de la operación (minimiza la ventana de concurrencia). Para editar o
+ * eliminar una empresa activa, el superadmin debe suspenderla primero (endpoint de estado).
+ */
+export function assertTenantIsNotActive(tenant: Pick<ITenantDocument, 'estado'> & { _id: unknown; nombre: string }): void {
+  if (tenant.estado !== 'activo') return;
+  const details: ITenantActiveDetails = {
+    tenantId: String(tenant._id),
+    tenantName: tenant.nombre,
+    estado: tenant.estado,
+  };
+  throw new AppError(
+    `No se puede editar ni eliminar la empresa ${tenant.nombre} porque está activa. Suspéndela primero.`,
+    409,
+    'TENANT_ACTIVE',
+    details,
+  );
+}
+
 export async function updateTenant(id: string, dto: UpdateTenantDTO): Promise<ITenantResponse> {
-  const tenant = await Tenant.findByIdAndUpdate(
-    id,
-    { $set: dto },
-    { new: true, runValidators: true }
-  ).lean<ITenantDocument>();
+  const existing = await Tenant.findById(id).lean<ITenantDocument>();
+  if (!existing) throw new AppError('Empresa no encontrada.', 404);
+
+  // Bloqueo por empresa activa (409 TENANT_ACTIVE).
+  assertTenantIsNotActive(existing);
+
+  const { planId, ...rest } = dto;
+  const set: Record<string, unknown> = { ...rest };
+  const unset: Record<string, unknown> = {};
+
+  if (planId === null) {
+    // "Sin plan": se quita el plan y su fotografía de contratación (ya no hay contrato vigente).
+    unset['planId'] = '';
+    unset['fotografiaFinancieraContratada'] = '';
+    unset['planContratadoVersion'] = '';
+    unset['fechaContratacion'] = '';
+  } else if (planId !== undefined) {
+    set['planId'] = planId;
+  }
+
+  const update: Record<string, unknown> = {};
+  if (Object.keys(set).length > 0) update['$set'] = set;
+  if (Object.keys(unset).length > 0) update['$unset'] = unset;
+
+  const tenant = await Tenant.findByIdAndUpdate(id, update, {
+    new: true,
+    runValidators: true,
+  }).lean<ITenantDocument>();
 
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
   return mapTenantToResponse(tenant);
@@ -186,6 +230,9 @@ export async function assignPlanToTenant(id: string, planId: string): Promise<IT
 export async function deleteTenant(id: string): Promise<void> {
   const tenant = await Tenant.findById(id);
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+
+  // Bloqueo por empresa activa (409 TENANT_ACTIVE): hay que suspenderla antes de eliminarla.
+  assertTenantIsNotActive(tenant);
 
   const session = await mongoose.startSession();
   try {

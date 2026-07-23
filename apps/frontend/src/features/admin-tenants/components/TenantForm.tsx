@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -98,7 +99,8 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
         nombre: form.nombre,
         nit: form.nit || undefined,
         contacto: { email: form.contactoEmail, telefono: form.contactoTelefono },
-        planId: form.planId || undefined,
+        // "Sin plan" (vacío) → `null` para QUITAR el plan explícitamente. `undefined` no lo tocaría.
+        planId: form.planId ? form.planId : null,
       };
       onSuccess(payload);
     }
@@ -175,13 +177,17 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
         {plans ? (
           <select
             id="tenant-plan-id"
-            className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            className="mt-1 flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
             value={form.planId}
             onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
           >
-            <option value="">Sin plan</option>
+            {/* `bg-background`/`text-foreground` en las opciones para que el desplegable respete el
+                tema (evita el fondo blanco/negro nativo que no seguía el modo oscuro). */}
+            <option value="" className="bg-background text-foreground">
+              Sin plan
+            </option>
             {plans.map((p) => (
-              <option key={p._id} value={p._id}>
+              <option key={p._id} value={p._id} className="bg-background text-foreground">
                 {p.nombre}
               </option>
             ))}
@@ -195,10 +201,17 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
             placeholder="ObjectId del plan (opcional)"
           />
         )}
-        {isEdit && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            También puedes cambiar el plan desde el panel de consumo.
+        {form.planId === '' ? (
+          <p className="mt-1 flex items-start gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>La empresa quedará sin ningún plan asignado.</span>
           </p>
+        ) : (
+          isEdit && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              También puedes cambiar el plan desde el panel de consumo.
+            </p>
+          )
         )}
       </div>
 

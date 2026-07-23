@@ -50,7 +50,9 @@ export const FotografiaFinancieraSchema = new Schema(
 
 const PlanSchema = new Schema<IPlanDocument>(
   {
-    nombre: { type: String, required: true, unique: true, trim: true },
+    // El nombre NO es único por sí solo: puede repetirse si la periodicidad difiere. La unicidad
+    // real es la combinación (nombre, periodicidad) — ver el índice compuesto más abajo.
+    nombre: { type: String, required: true, trim: true },
     descripcion: { type: String, trim: true, maxlength: 500 },
     periodicidad: {
       type: String,
@@ -68,5 +70,11 @@ const PlanSchema = new Schema<IPlanDocument>(
   },
   { timestamps: true },
 );
+
+// Unicidad por (nombre + periodicidad): permite un mismo nombre en periodicidades distintas
+// (p. ej. "Pro" mensual y "Pro" anual), pero no dos planes idénticos en nombre y periodicidad.
+// NOTA de migración: reemplaza el índice único previo sobre `nombre`. En una base existente hay que
+// eliminar el índice viejo `nombre_1` (ver `scripts/fix-plan-indexes.ts`).
+PlanSchema.index({ nombre: 1, periodicidad: 1 }, { unique: true });
 
 export const Plan = model<IPlanDocument>('Plan', PlanSchema);

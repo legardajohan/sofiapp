@@ -57,6 +57,28 @@ export interface IPlan {
 
 export interface IPlanDocument extends IPlan, Document {}
 
+// Referencia mínima de una empresa que usa el plan. `name` (no `nombre`) para respetar el
+// contrato de la respuesta 409 `PLAN_IN_USE` acordado con el frontend.
+export interface IPlanTenantRef {
+  id: string;
+  name: string;
+}
+
+// Uso del plan por parte de empresas ACTIVAS (estado ∈ {activo, prueba}).
+export interface IPlanUsage {
+  enUso: boolean;
+  tenantCount: number;
+  tenants: IPlanTenantRef[];
+}
+
+// Payload estructurado del error 409 `PLAN_IN_USE` (data del envelope de error).
+export interface IPlanInUseDetails {
+  planId: string;
+  planName: string;
+  tenantCount: number;
+  tenants: IPlanTenantRef[];
+}
+
 export interface IPlanResponse {
   _id: string;
   nombre: string;
@@ -69,6 +91,8 @@ export interface IPlanResponse {
   activo: boolean;
   numeroVersion: number;
   fotografiaFinanciera?: IFotografiaFinanciera;
+  // Uso actual del plan por empresas activas (para bloquear edición/eliminación en la UI).
+  uso: IPlanUsage;
   createdAt: string;
   updatedAt: string;
 }

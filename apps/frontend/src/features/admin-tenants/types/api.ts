@@ -19,7 +19,8 @@ export interface UpdateTenantPayload {
   nombre?: string;
   nit?: string;
   contacto?: { email?: string; telefono?: string };
-  planId?: string;
+  // `null` = quitar el plan (dejar la empresa sin plan); `undefined` = no modificar.
+  planId?: string | null;
 }
 
 export interface UpdateTenantStatusPayload {

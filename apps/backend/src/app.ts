@@ -68,8 +68,16 @@ if (env.NODE_ENV !== 'test') {
     .connect(env.MONGODB_URI)
     .then(async () => {
       logger.info('Conectado a MongoDB');
-      await seedSuperadmin();
-      await seedPlans();
+      // El seed NO debe tumbar la API: un fallo aquí (p. ej. un choque de índice) dejaría el
+      // servidor sin escuchar y bloquearía hasta el login. Se registra y se continúa.
+      try {
+        await seedSuperadmin();
+        await seedPlans();
+      } catch (seedErr: unknown) {
+        logger.error('Fallo en el seed inicial (la API arranca igualmente)', {
+          error: String(seedErr),
+        });
+      }
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

@@ -60,6 +60,19 @@ export interface IExchangeRateVigente {
   tasa: IExchangeRateResumen | null; // null solo cuando estado === 'UNAVAILABLE'
 }
 
+// Empresa que usa el plan (espejo de `IPlanTenantRef` del backend). `name`, no `nombre`.
+export interface IPlanTenantRef {
+  id: string;
+  name: string;
+}
+
+// Uso del plan por empresas ACTIVAS. Determina si se pueden editar/eliminar el plan.
+export interface IPlanUsage {
+  enUso: boolean;
+  tenantCount: number;
+  tenants: IPlanTenantRef[];
+}
+
 export interface IPlan {
   _id: string;
   nombre: string;
@@ -74,6 +87,8 @@ export interface IPlan {
   precio: number;
   costoEstimado?: number;
   activo: boolean;
+  // Uso actual del plan (opcional para tolerar respuestas antiguas sin el campo).
+  uso?: IPlanUsage;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,6 +1,7 @@
-import { Coins, DollarSign, Pencil, Trash2, type LucideIcon } from 'lucide-react';
+import { Coins, DollarSign, Lock, Pencil, Trash2, type LucideIcon } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../../../lib/currency.js';
 import { margenUsd, precioEnCop } from '../pricing.js';
+import { isPlanInUse, planLockedReason } from '../planUsage.js';
 import type { IPlan } from '../types/index.js';
 
 interface Props {
@@ -59,6 +60,8 @@ export function PlanTable({ plans, copRate, onEdit, onDelete }: Props): React.Re
           ) : (
             plans.map((plan) => {
               const margen = margenUsd(plan.precio, plan.costoEstimado);
+              const enUso = isPlanInUse(plan);
+              const motivoBloqueo = planLockedReason(plan);
               return (
                 <tr key={plan._id} className="transition-colors duration-150 ease-out hover:bg-muted/50">
                   <td className="px-4 py-3 font-medium text-foreground">{plan.nombre}</td>
@@ -84,22 +87,29 @@ export function PlanTable({ plans, copRate, onEdit, onDelete }: Props): React.Re
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1">
+                    {/* El `title` va en el <span> contenedor: en botones deshabilitados el tooltip
+                        nativo no se dispara, pero sí en el wrapper. */}
+                    <div className="flex items-center gap-1" title={motivoBloqueo}>
+                      {enUso && (
+                        <Lock className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                      )}
                       <button
                         type="button"
                         aria-label="Editar"
-                        title="Editar"
+                        title={enUso ? undefined : 'Editar'}
+                        disabled={enUso}
                         onClick={() => onEdit(plan)}
-                        className="rounded-md p-1.5 text-primary transition-transform duration-150 ease-out hover:bg-primary/10 active:scale-[0.95]"
+                        className="rounded-md p-1.5 text-primary transition-transform duration-150 ease-out hover:bg-primary/10 active:scale-[0.95] disabled:pointer-events-none disabled:opacity-40"
                       >
                         <Pencil className="size-4" />
                       </button>
                       <button
                         type="button"
                         aria-label="Eliminar"
-                        title="Eliminar"
+                        title={enUso ? undefined : 'Eliminar'}
+                        disabled={enUso}
                         onClick={() => onDelete(plan)}
-                        className="rounded-md p-1.5 text-destructive transition-transform duration-150 ease-out hover:bg-destructive/10 active:scale-[0.95]"
+                        className="rounded-md p-1.5 text-destructive transition-transform duration-150 ease-out hover:bg-destructive/10 active:scale-[0.95] disabled:pointer-events-none disabled:opacity-40"
                       >
                         <Trash2 className="size-4" />
                       </button>

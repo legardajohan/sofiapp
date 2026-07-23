@@ -1,5 +1,6 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Trash2 } from 'lucide-react';
 import { TenantStatusSwitch } from './TenantStatusSwitch.js';
+import { isTenantActive, tenantLockedReason } from '../tenantLock.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -64,7 +65,10 @@ export function TenantTable({
                 </TableCell>
               </TableRow>
             ) : (
-              tenants.map((tenant) => (
+              tenants.map((tenant) => {
+                const activa = isTenantActive(tenant);
+                const motivoBloqueo = tenantLockedReason(tenant);
+                return (
                 <TableRow key={tenant._id}>
                   <TableCell className="font-medium text-foreground">{tenant.nombre}</TableCell>
                   <TableCell className="text-muted-foreground">{tenant.slug}</TableCell>
@@ -81,12 +85,18 @@ export function TenantTable({
                     {new Date(tenant.createdAt).toLocaleDateString('es-CO')}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
+                    {/* El `title` va en el contenedor: en botones deshabilitados el tooltip nativo
+                        no se dispara, pero sí en el wrapper. */}
+                    <div className="flex items-center justify-end gap-1" title={motivoBloqueo}>
+                      {activa && (
+                        <Lock className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
                         aria-label="Editar"
-                        title="Editar"
+                        title={activa ? undefined : 'Editar'}
+                        disabled={activa}
                         onClick={() => onEdit(tenant)}
                       >
                         <Pencil className="size-4" />
@@ -95,7 +105,8 @@ export function TenantTable({
                         variant="ghost"
                         size="icon"
                         aria-label="Eliminar"
-                        title="Eliminar"
+                        title={activa ? undefined : 'Eliminar'}
+                        disabled={activa}
                         className="text-destructive hover:text-destructive"
                         onClick={() => onDelete(tenant)}
                       >
@@ -104,7 +115,8 @@ export function TenantTable({
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

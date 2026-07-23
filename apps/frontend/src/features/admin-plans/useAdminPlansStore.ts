@@ -7,10 +7,13 @@ export type PlanViewMode = 'table' | 'cards';
 interface AdminPlansState {
   isModalOpen: boolean;
   planEditing: IPlan | null;
+  planDeleting: IPlan | null;
   viewMode: PlanViewMode;
   openCreate: () => void;
   openEdit: (plan: IPlan) => void;
   closeModal: () => void;
+  openDelete: (plan: IPlan) => void;
+  closeDelete: () => void;
   setViewMode: (mode: PlanViewMode) => void;
 }
 
@@ -20,10 +23,13 @@ export const useAdminPlansStore = create<AdminPlansState>()(
     (set) => ({
       isModalOpen: false,
       planEditing: null,
+      planDeleting: null,
       viewMode: 'table',
       openCreate: () => set({ isModalOpen: true, planEditing: null }),
       openEdit: (plan) => set({ isModalOpen: true, planEditing: plan }),
       closeModal: () => set({ isModalOpen: false, planEditing: null }),
+      openDelete: (plan) => set({ planDeleting: plan }),
+      closeDelete: () => set({ planDeleting: null }),
       setViewMode: (mode) => set({ viewMode: mode }),
     }),
     {

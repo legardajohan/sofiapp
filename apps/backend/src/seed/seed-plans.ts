@@ -38,6 +38,9 @@ const DEFAULT_PLANS: IPlan[] = [
 /** Siembra idempotente de los planes por defecto (no pisa valores ya editados por el superadmin). */
 export async function seedPlans(): Promise<void> {
   for (const plan of DEFAULT_PLANS) {
+    // Idempotencia por `nombre`: hay UN solo plan por nombre en el seed. Se filtra por nombre (no por
+    // (nombre, periodicidad)) para NO insertar un duplicado si el superadmin ya cambió la periodicidad
+    // de un plan sembrado — eso chocaría con el índice y podría tumbar el arranque.
     await Plan.updateOne({ nombre: plan.nombre }, { $setOnInsert: plan }, { upsert: true });
   }
   logger.info('Seed de planes verificado (Básico/Estándar/Pro).');

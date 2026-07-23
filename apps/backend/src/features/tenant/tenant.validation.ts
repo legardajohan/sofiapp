@@ -44,7 +44,8 @@ export const updateTenantSchema = z.object({
         telefono: z.string().min(7).optional(),
       })
       .optional(),
-    planId: objectIdSchema.optional(),
+    // `null` señala "quitar el plan" (dejar la empresa sin plan); `undefined` = no tocar.
+    planId: objectIdSchema.nullable().optional(),
   }),
 });
 

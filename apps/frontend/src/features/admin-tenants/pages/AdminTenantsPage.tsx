@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Plus, Search, X } from 'lucide-react';
+import { Loader2, Plus, Search, TriangleAlert, X } from 'lucide-react';
 import { useAdminTenantsStore } from '../useAdminTenantsStore.js';
 import {
   getAdminTenants,
@@ -13,8 +13,10 @@ import { TenantForm } from '../components/TenantForm.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Modal } from '@/components/ui/modal';
 import { TenantUsagePanel } from '../components/TenantUsagePanel.js';
 import { getAdminPlans } from '../../../api/admin-plans.js';
+import { extractTenantActiveError, isTenantActive } from '../tenantLock.js';
 import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
 export function AdminTenantsPage(): React.ReactElement {
@@ -24,9 +26,12 @@ export function AdminTenantsPage(): React.ReactElement {
     currentPage,
     isModalOpen,
     tenantEditing,
+    tenantDeleting,
     openCreate,
     openEdit,
     closeModal,
+    openDelete,
+    closeDelete,
     setSearch,
     setPage,
   } = useAdminTenantsStore();
@@ -86,6 +91,7 @@ export function AdminTenantsPage(): React.ReactElement {
     mutationFn: deleteAdminTenant,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+      closeDelete();
     },
   });
 
@@ -97,12 +103,23 @@ export function AdminTenantsPage(): React.ReactElement {
     }
   };
 
-  const handleDelete = (tenant: ITenant): void => {
-    const ok = window.confirm(
-      `¿Eliminar la empresa "${tenant.nombre}"? Se borrarán también sus usuarios, clientes y datos asociados. Esta acción no se puede deshacer.`,
-    );
-    if (ok) deleteMutation.mutate(tenant._id);
+  // Guardas defensivas: una empresa activa no se edita ni elimina (el backend es la validación
+  // autoritativa; aquí evitamos incluso abrir la acción).
+  const handleEdit = (tenant: ITenant): void => {
+    if (!isTenantActive(tenant)) openEdit(tenant);
   };
+
+  const handleDelete = (tenant: ITenant): void => {
+    if (!isTenantActive(tenant)) openDelete(tenant);
+  };
+
+  const confirmDelete = (): void => {
+    if (tenantDeleting) deleteMutation.mutate(tenantDeleting._id);
+  };
+
+  // Si una operación falla con 409 TENANT_ACTIVE (p. ej. la empresa se activó entre listar y actuar).
+  const updateActive = extractTenantActiveError(updateMutation.error);
+  const deleteActive = extractTenantActiveError(deleteMutation.error);
 
   return (
     <div className="space-y-6">
@@ -159,10 +176,6 @@ export function AdminTenantsPage(): React.ReactElement {
       {isLoading && <p className="text-muted-foreground">Cargando…</p>}
       {isError && <p className="text-destructive">Error al cargar las empresas.</p>}
 
-      {deleteMutation.isError && (
-        <p className="text-sm text-destructive">No se pudo eliminar la empresa. Intenta de nuevo.</p>
-      )}
-
       {data && (
         <TenantTable
           tenants={data.data}
@@ -171,7 +184,7 @@ export function AdminTenantsPage(): React.ReactElement {
           limit={data.limit}
           planNameById={planNameById}
           onPageChange={setPage}
-          onEdit={openEdit}
+          onEdit={handleEdit}
           onDelete={handleDelete}
         />
       )}
@@ -187,8 +200,15 @@ export function AdminTenantsPage(): React.ReactElement {
             onSuccess={handleFormSuccess}
             onCancel={closeModal}
           />
-          {(createMutation.isError || updateMutation.isError) && (
-            <p className="text-sm text-destructive">Error al guardar. Verifica los datos e intenta de nuevo.</p>
+          {updateActive ? (
+            <p className="text-sm text-destructive">
+              No se puede editar la empresa {updateActive.tenantName} porque está activa. Suspéndela
+              primero.
+            </p>
+          ) : (
+            (createMutation.isError || updateMutation.isError) && (
+              <p className="text-sm text-destructive">Error al guardar. Verifica los datos e intenta de nuevo.</p>
+            )
           )}
           {tenantEditing && (
             <TenantUsagePanel
@@ -199,6 +219,47 @@ export function AdminTenantsPage(): React.ReactElement {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirmación de borrado — Modal reutilizable del UI kit. */}
+      <Modal
+        isOpen={tenantDeleting !== null}
+        onClose={closeDelete}
+        size="sm"
+        title="Eliminar empresa"
+        description={
+          tenantDeleting
+            ? `¿Eliminar la empresa "${tenantDeleting.nombre}"? Se borrarán también sus usuarios, clientes y datos asociados. Esta acción no se puede deshacer.`
+            : undefined
+        }
+        dismissible={!deleteMutation.isPending}
+        footer={
+          <>
+            <Button variant="outline" onClick={closeDelete} disabled={deleteMutation.isPending}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Eliminar
+            </Button>
+          </>
+        }
+      >
+        {deleteMutation.isError &&
+          (deleteActive ? (
+            <p className="flex items-start gap-1.5 text-sm text-destructive">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <span>
+                No se puede eliminar la empresa {deleteActive.tenantName} porque está activa.
+                Suspéndela primero.
+              </span>
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-sm text-destructive">
+              <TriangleAlert className="size-4" />
+              No se pudo eliminar la empresa. Intenta de nuevo.
+            </p>
+          ))}
+      </Modal>
     </div>
   );
 }

@@ -32,6 +32,14 @@ export interface ITenant {
 
 export interface ITenantDocument extends ITenant, Document {}
 
+// Payload estructurado del error 409 `TENANT_ACTIVE` (data del envelope de error): una empresa
+// activa no puede editarse ni eliminarse hasta suspenderla.
+export interface ITenantActiveDetails {
+  tenantId: string;
+  tenantName: string;
+  estado: EstadoTenant;
+}
+
 // DTOs para HU-SAAS-01
 
 export interface IAdminUserDTO {
@@ -53,7 +61,8 @@ export interface UpdateTenantDTO {
   nombre?: string;
   nit?: string;
   contacto?: { email?: string; telefono?: string };
-  planId?: string;
+  // `null` = quitar el plan (empresa sin plan); `undefined` = no modificar el plan actual.
+  planId?: string | null;
 }
 
 export interface UpdateTenantStatusDTO {

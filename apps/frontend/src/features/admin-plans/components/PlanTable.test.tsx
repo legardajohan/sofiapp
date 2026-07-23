@@ -111,3 +111,38 @@ describe('PlanTable — formateo seguro (planes antiguos y v2)', () => {
     expect(celdas[6]).toHaveTextContent('0');
   });
 });
+
+describe('PlanTable — bloqueo por plan en uso (HU-SAAS-02)', () => {
+  const enUso = makePlan({
+    nombre: 'EnUso',
+    uso: {
+      enUso: true,
+      tenantCount: 2,
+      tenants: [
+        { id: 't1', name: 'Empresa ABC' },
+        { id: 't2', name: 'Comercial XYZ' },
+      ],
+    },
+  });
+
+  it('deshabilita Editar y Eliminar cuando el plan está en uso', () => {
+    render(<PlanTable plans={[enUso]} onEdit={noop} onDelete={noop} />);
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Eliminar' })).toBeDisabled();
+  });
+
+  it('muestra el motivo con los nombres de las empresas en el tooltip', () => {
+    render(<PlanTable plans={[enUso]} onEdit={noop} onDelete={noop} />);
+    const wrapper = screen.getByRole('button', { name: 'Editar' }).parentElement;
+    const title = wrapper?.getAttribute('title') ?? '';
+    expect(title).toContain('Empresa ABC');
+    expect(title).toContain('Comercial XYZ');
+    expect(title).toContain('2 empresa');
+  });
+
+  it('mantiene habilitadas las acciones cuando el plan NO está en uso', () => {
+    render(<PlanTable plans={[makePlan({ nombre: 'Libre' })]} onEdit={noop} onDelete={noop} />);
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Eliminar' })).toBeEnabled();
+  });
+});

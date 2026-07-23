@@ -1,6 +1,8 @@
 export type {
   IPlan,
   IPlanLimites,
+  IPlanTenantRef,
+  IPlanUsage,
   PeriodicidadPlan,
   IFotografiaFinanciera,
   ICostoSnapshot,

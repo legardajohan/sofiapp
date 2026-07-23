@@ -6,9 +6,12 @@ interface AdminTenantsState {
   currentPage: number;
   isModalOpen: boolean;
   tenantEditing: ITenant | null;
+  tenantDeleting: ITenant | null;
   openCreate: () => void;
   openEdit: (tenant: ITenant) => void;
   closeModal: () => void;
+  openDelete: (tenant: ITenant) => void;
+  closeDelete: () => void;
   setSearch: (term: string) => void;
   setPage: (page: number) => void;
 }
@@ -18,10 +21,13 @@ export const useAdminTenantsStore = create<AdminTenantsState>((set) => ({
   currentPage: 1,
   isModalOpen: false,
   tenantEditing: null,
+  tenantDeleting: null,
 
   openCreate: () => set({ isModalOpen: true, tenantEditing: null }),
   openEdit: (tenant) => set({ isModalOpen: true, tenantEditing: tenant }),
   closeModal: () => set({ isModalOpen: false, tenantEditing: null }),
+  openDelete: (tenant) => set({ tenantDeleting: tenant }),
+  closeDelete: () => set({ tenantDeleting: null }),
   setSearch: (term) => set({ searchTerm: term, currentPage: 1 }),
   setPage: (page) => set({ currentPage: page }),
 }));

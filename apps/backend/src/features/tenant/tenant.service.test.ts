@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
 import { Plan } from '../plan/plan.model.js';
-import { createTenant, updateTenant, updateTenantStatus } from './tenant.service.js';
+import {
+  createTenant,
+  updateTenant,
+  updateTenantStatus,
+  deleteTenant,
+} from './tenant.service.js';
 import { AppError } from '../../utils/AppError.js';
 
 describe('tenant.service — HU-SAAS-01', () => {
@@ -133,6 +138,114 @@ describe('tenant.service — HU-SAAS-01', () => {
 
       const updated = await updateTenant(created._id, { nombre: 'Empresa Actualizada' });
       expect(updated.nombre).toBe('Empresa Actualizada');
+    });
+
+    it('quita el plan cuando planId es null (empresa queda sin plan)', async () => {
+      const plan = await Plan.create({
+        nombre: 'ParaQuitar',
+        periodicidad: 'mensual',
+        limites: { usuarios: 1, administradores: 1, mensajesMes: 1, leads: 1, campanasMes: 1 },
+        precio: 0,
+      });
+      const created = await createTenant({
+        nombre: 'ConPlan',
+        slug: 'empresa-con-plan-quitar',
+        contacto: { email: 'cpq@t.com', telefono: '3001234598' },
+        planId: plan._id.toString(),
+      });
+      expect(created.planId).toBe(plan._id.toString());
+
+      const updated = await updateTenant(created._id, { planId: null });
+      expect(updated.planId).toBeUndefined();
+    });
+
+    it('planId undefined NO modifica el plan actual', async () => {
+      const plan = await Plan.create({
+        nombre: 'SeConserva',
+        periodicidad: 'mensual',
+        limites: { usuarios: 1, administradores: 1, mensajesMes: 1, leads: 1, campanasMes: 1 },
+        precio: 0,
+      });
+      const created = await createTenant({
+        nombre: 'MantienePlan',
+        slug: 'empresa-mantiene-plan',
+        contacto: { email: 'mp@t.com', telefono: '3001234597' },
+        planId: plan._id.toString(),
+      });
+
+      const updated = await updateTenant(created._id, { nombre: 'Renombrada' });
+      expect(updated.nombre).toBe('Renombrada');
+      expect(updated.planId).toBe(plan._id.toString()); // plan intacto
+    });
+  });
+
+  describe('bloqueo de empresa ACTIVA — editar y eliminar (HU-SAAS-02)', () => {
+    async function crearEmpresaActiva(slug: string, nombre = `Empresa ${slug}`): Promise<string> {
+      const created = await createTenant({
+        nombre,
+        slug,
+        contacto: { email: `${slug}@t.com`, telefono: '3009999999' },
+      });
+      await updateTenantStatus(created._id, { estado: 'activo' });
+      return created._id;
+    }
+
+    it('permite editar una empresa NO activa (prueba)', async () => {
+      const created = await createTenant({
+        nombre: 'Prueba Editable',
+        slug: 'prueba-editable',
+        contacto: { email: 'pe@t.com', telefono: '3001111111' },
+      });
+      const updated = await updateTenant(created._id, { nombre: 'Prueba Editada' });
+      expect(updated.nombre).toBe('Prueba Editada');
+    });
+
+    it('permite eliminar una empresa NO activa (suspendida)', async () => {
+      const created = await createTenant({
+        nombre: 'Susp Borrable',
+        slug: 'susp-borrable',
+        contacto: { email: 'sb@t.com', telefono: '3002222222' },
+      });
+      await updateTenantStatus(created._id, { estado: 'activo' });
+      await updateTenantStatus(created._id, { estado: 'suspendido' });
+      await deleteTenant(created._id);
+      expect(await Tenant.findById(created._id)).toBeNull();
+    });
+
+    it('IMPIDE editar (409 TENANT_ACTIVE) una empresa activa', async () => {
+      const id = await crearEmpresaActiva('activa-edit');
+      await expect(updateTenant(id, { nombre: 'X' })).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'TENANT_ACTIVE',
+      });
+      expect((await Tenant.findById(id))!.nombre).toBe('Empresa activa-edit');
+    });
+
+    it('IMPIDE eliminar (409 TENANT_ACTIVE) una empresa activa y no la borra', async () => {
+      const id = await crearEmpresaActiva('activa-del');
+      await expect(deleteTenant(id)).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'TENANT_ACTIVE',
+      });
+      expect(await Tenant.findById(id)).not.toBeNull();
+    });
+
+    it('el 409 incluye details (tenantName, estado)', async () => {
+      const id = await crearEmpresaActiva('activa-detalle', 'Empresa Viva');
+      await expect(deleteTenant(id)).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'TENANT_ACTIVE',
+        details: { tenantName: 'Empresa Viva', estado: 'activo' },
+      });
+    });
+
+    it('tras SUSPENDER, permite editar y eliminar', async () => {
+      const id = await crearEmpresaActiva('activa-luego-susp');
+      await updateTenantStatus(id, { estado: 'suspendido' });
+      const updated = await updateTenant(id, { nombre: 'Ya Editable' });
+      expect(updated.nombre).toBe('Ya Editable');
+      await deleteTenant(id);
+      expect(await Tenant.findById(id)).toBeNull();
     });
   });
 
