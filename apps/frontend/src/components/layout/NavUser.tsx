@@ -1,6 +1,6 @@
 import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import { logout as logoutRequest } from '@/features/auth/api';
-import { useAuthStore, type UserRol } from '@/stores/authStore';
+import { useAuthStore, type AdminSubrol, type UserRol } from '@/stores/authStore';
 import { useTheme, type Theme } from '@/components/theme/ThemeProvider';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -23,9 +23,19 @@ import {
 const ROL_LABEL: Record<UserRol, string> = {
   superadmin: 'Superadministrador',
   admin: 'Administrador',
-  coordinador: 'Coordinador',
-  asesor: 'Asesor',
 };
+
+const SUBROL_LABEL: Record<AdminSubrol, string> = {
+  director: 'Director',
+  manager: 'Gerente',
+  coordinator: 'Coordinador',
+  secretary: 'Secretaria',
+};
+
+function roleLabel(user: { rol: UserRol; subrol?: AdminSubrol }): string {
+  const base = ROL_LABEL[user.rol];
+  return user.subrol ? `${base} · ${SUBROL_LABEL[user.subrol]}` : base;
+}
 
 function initialsFor(name: string): string {
   return name
@@ -73,7 +83,7 @@ export function NavUser(): React.ReactElement | null {
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{displayName}</span>
-                <span className="truncate text-xs text-muted-foreground">{ROL_LABEL[user.rol]}</span>
+                <span className="truncate text-xs text-muted-foreground">{roleLabel(user)}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -91,7 +101,7 @@ export function NavUser(): React.ReactElement | null {
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{displayName}</span>
-                  <span className="truncate text-xs text-muted-foreground">{ROL_LABEL[user.rol]}</span>
+                  <span className="truncate text-xs text-muted-foreground">{roleLabel(user)}</span>
                 </div>
               </div>
             </DropdownMenuLabel>

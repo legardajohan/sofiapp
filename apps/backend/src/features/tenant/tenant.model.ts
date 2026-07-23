@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { FotografiaFinancieraSchema } from '../plan/plan.model.js';
 import type { ITenantDocument } from './tenant.types.js';
 
 const CampoCapturaSchema = new Schema(
@@ -28,6 +29,10 @@ const TenantSchema = new Schema<ITenantDocument>(
     },
     planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
     camposCaptura: { type: [CampoCapturaSchema], default: [] },
+    // Precio contratado congelado al asignar el plan (no-retroactividad — CA-24).
+    fotografiaFinancieraContratada: { type: FotografiaFinancieraSchema },
+    planContratadoVersion: { type: Number },
+    fechaContratacion: { type: Date },
   },
   { timestamps: true }
 );

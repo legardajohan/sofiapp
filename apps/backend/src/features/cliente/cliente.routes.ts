@@ -10,7 +10,7 @@ import { getContactHistoryController } from './cliente.controller.js';
 const router = Router();
 
 // Mismos roles que la bandeja (HU-OMNI-01): la ficha se abre desde una conversación.
-const bandejaRoles = authorize(['coordinador', 'asesor']);
+const bandejaRoles = authorize(['admin']);
 
 router.get(
   '/:id/history',

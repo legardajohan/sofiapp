@@ -4,16 +4,13 @@ import {
   createTenant,
   updateTenant,
   updateTenantStatus,
+  assignPlanToTenant,
+  deleteTenant,
 } from './tenant.service.js';
 import type { ListTenantsQuery, CreateTenantInput, UpdateTenantInput, UpdateTenantStatusInput } from './tenant.types.js';
 
 export async function listTenantsController(req: Request, res: Response): Promise<void> {
-  const query: ListTenantsQuery = {
-    search: req.query['search'] as string | undefined,
-    page: Number(req.query['page'] ?? 1),
-    limit: Number(req.query['limit'] ?? 20),
-  };
-  const result = await listTenants(query);
+  const result = await listTenants(req.validatedQuery as unknown as ListTenantsQuery);
   res.json(result);
 }
 
@@ -32,4 +29,17 @@ export async function updateTenantStatusController(req: Request, res: Response):
   const { id } = req.params as { id: string };
   const tenant = await updateTenantStatus(id, req.body as UpdateTenantStatusInput);
   res.json(tenant);
+}
+
+export async function assignPlanToTenantController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  const { planId } = req.body as { planId: string };
+  const tenant = await assignPlanToTenant(id, planId);
+  res.json(tenant);
+}
+
+export async function deleteTenantController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  await deleteTenant(id);
+  res.status(204).send();
 }

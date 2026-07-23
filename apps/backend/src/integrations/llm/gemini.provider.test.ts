@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock del SDK antes de importar GeminiProvider
 const mockGenerateContent = vi.fn();
-const mockGetGenerativeModel = vi.fn(() => ({ generateContent: mockGenerateContent }));
+const mockBatchEmbedContents = vi.fn();
+const mockGetGenerativeModel = vi.fn(() => ({
+  generateContent: mockGenerateContent,
+  batchEmbedContents: mockBatchEmbedContents,
+}));
 
 vi.mock('@google/generative-ai', () => {
   class GoogleGenerativeAIFetchError extends Error {
@@ -16,6 +20,7 @@ vi.mock('@google/generative-ai', () => {
     GoogleGenerativeAI: vi.fn(() => ({ getGenerativeModel: mockGetGenerativeModel })),
     GoogleGenerativeAIFetchError,
     SchemaType: { STRING: 'STRING', NUMBER: 'NUMBER', BOOLEAN: 'BOOLEAN', OBJECT: 'OBJECT', ARRAY: 'ARRAY', INTEGER: 'INTEGER' },
+    TaskType: { RETRIEVAL_DOCUMENT: 'RETRIEVAL_DOCUMENT', RETRIEVAL_QUERY: 'RETRIEVAL_QUERY' },
   };
 });
 
@@ -118,6 +123,35 @@ describe('GeminiProvider.classifyLead', () => {
     const provider = new GeminiProvider();
     const { result } = await provider.classifyLead({ historial: HISTORIAL });
     expect(result.objecion).toBeNull();
+  });
+});
+
+describe('GeminiProvider.embedTexts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('lista vacía → no llama al SDK y retorna []', async () => {
+    const provider = new GeminiProvider();
+    const { result } = await provider.embedTexts({ texts: [], taskType: 'RETRIEVAL_QUERY' });
+    expect(result).toEqual([]);
+    expect(mockBatchEmbedContents).not.toHaveBeenCalled();
+  });
+
+  it('retorna un vector por texto de entrada', async () => {
+    mockBatchEmbedContents.mockResolvedValue({
+      embeddings: [{ values: [0.1, 0.2] }, { values: [0.3, 0.4] }],
+    });
+    const provider = new GeminiProvider();
+    const { result } = await provider.embedTexts({
+      texts: ['hola', 'mundo'],
+      taskType: 'RETRIEVAL_DOCUMENT',
+    });
+    expect(result).toEqual([
+      [0.1, 0.2],
+      [0.3, 0.4],
+    ]);
+    expect(mockBatchEmbedContents).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -17,6 +17,7 @@ export const authenticateJWT: RequestHandler = (req, res, next) => {
       sub: String(payload['sub']),
       tenantId: tenantRaw ? new Types.ObjectId(String(tenantRaw)) : null,
       rol: payload['rol'] as SafeUser['rol'],
+      subrol: payload['subrol'] as SafeUser['subrol'],
     };
     req.user = user;
     next();

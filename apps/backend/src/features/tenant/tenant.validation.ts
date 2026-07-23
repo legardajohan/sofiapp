@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const objectIdSchema = z.string().length(24).regex(/^[0-9a-f]{24}$/i, 'ID inválido');
+import { objectIdSchema } from '../../utils/validation.js';
 
 export const listTenantsSchema = z.object({
   query: z.object({
@@ -54,4 +53,14 @@ export const updateTenantStatusSchema = z.object({
   body: z.object({
     estado: z.enum(['activo', 'suspendido']),
   }),
+});
+
+// HU-SAAS-02 — asignación de plan y consulta de uso
+export const assignPlanSchema = z.object({
+  params: z.object({ id: objectIdSchema }),
+  body: z.object({ planId: objectIdSchema }),
+});
+
+export const tenantIdParamSchema = z.object({
+  params: z.object({ id: objectIdSchema }),
 });

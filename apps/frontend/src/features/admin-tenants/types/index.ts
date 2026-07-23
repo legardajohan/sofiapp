@@ -6,3 +6,4 @@ export type {
   UpdateTenantStatusPayload,
   TenantsListResponse,
 } from './api.js';
+export type { QuotaMetric, IMetricUsage, IUsageResponse } from './usage.js';

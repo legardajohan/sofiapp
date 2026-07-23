@@ -34,14 +34,18 @@ de datos y nunca accede a la plataforma.
 | Rol | Función | Accede al panel | Notas |
 |---|---|---|---|
 | **Superadministrador** | Dueño de la plataforma. Crea y suspende empresas (tenants), **activa planes manualmente**, ve métricas globales cross-tenant. | Sí | `User` **global sin `tenantId`**; sus rutas saltan `requireTenant`. |
-| **Administrador** | Responsable máximo dentro de una empresa. Primer usuario al activar el tenant. Gestiona usuarios, conecta WhatsApp, configura catálogo. | Sí | |
-| **Coordinador** | Supervisa al equipo de asesores. Ve todos los clientes del tenant, reasigna, lanza campañas. | Sí | |
-| **Asesor** | Operador del día a día. Atiende la bandeja omnicanal, edita datos del prospecto y cambia su estado. | Sí | |
+| **Administrador** | Único rol dentro de una empresa. Primer usuario al activar el tenant; gestiona usuarios, conecta WhatsApp, configura catálogo, atiende la bandeja omnicanal, edita prospectos y cambia su estado. Todo `admin` ve exactamente las mismas pantallas y endpoints. | Sí | Puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): `director \| manager \| coordinator \| secretary` (Director, Gerente, Coordinador, Secretaria) — ver `AUTH-02`. |
 | **Cliente final / Prospecto** | Lead. Interactúa por WhatsApp/IG/Messenger/web. | **No** | Se modela como documento `Cliente`; nunca inicia sesión. |
 
 > **Cambio respecto al backlog original:** el rol *Verificador de Pagos* se **elimina**. No hay
 > verificación de comprobantes; marcar a un cliente como pagado es un simple cambio de atributo
-> que hace un Asesor o Coordinador (ver §5, Módulo de estados).
+> que hace un `admin` (ver §5, Módulo de estados).
+>
+> **Simplificación de roles (`AUTH-02`):** los roles *Coordinador* y *Asesor* del backlog
+> original se **fusionan en `admin`** — todo usuario de un tenant es `admin` y ve las mismas
+> pantallas; la distinción de función/jerarquía se expresa con el `subrol` (metadata, no afecta
+> autorización). El campo `asesorId` en `Cliente`/conversaciones se conserva con ese nombre, pero
+> ahora referencia al usuario `admin` asignado a la conversación.
 
 ## 4. Captura de datos por IA (alto valor)
 
@@ -60,7 +64,7 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 | Módulo | Estado | Descripción |
 |---|---|---|
 | **INF — Infraestructura y Multi-Tenancy** | MVP | Monorepo, modelo de Tenant, middleware de resolución, esquemas con `tenantId`, deploy, CI/CD. |
-| **AUTH — Autenticación y RBAC** | MVP | JWT con alcance de tenant, motor RBAC (4 roles), gestión de usuarios internos. |
+| **AUTH — Autenticación y RBAC** | MVP | JWT con alcance de tenant, motor RBAC (2 roles: `superadmin`/`admin`, con subroles internos de `admin` como metadata), gestión de usuarios internos. |
 | **SAAS — Panel Superadmin** | MVP | CRUD de empresas, **activación manual de planes**, métricas globales cross-tenant. |
 | **M01 — Bandeja Omnicanal (Meta)** | MVP | Webhook multi-tenant, Embedded Signup por empresa, envío outbound, normalización IG/FB, UI de bandeja. |
 | **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. **Sin tablero Kanban / sin drag&drop.** |
@@ -88,9 +92,9 @@ nuevo → en_gestion → pago_pendiente → pagado
 ```
 
 - `nuevo`: lead recién entrado por cualquier canal.
-- `en_gestion`: asesor en conversación/asesoría.
+- `en_gestion`: un `admin` (asesor asignado) en conversación/asesoría.
 - `pago_pendiente`: acordada la compra, esperando confirmación.
-- `pagado`: cierre ganado (cambio manual de atributo por el asesor/coordinador).
+- `pagado`: cierre ganado (cambio manual de atributo por un `admin`).
 - `perdido`: descartado.
 
 Cada transición emite un evento asíncrono para recalcular métricas de conversión.
@@ -104,7 +108,8 @@ Cada transición emite un evento asíncrono para recalcular métricas de convers
 - **Fase 1 — Núcleo CRM:** M01 (omnicanal) + M02 (estados) + M08 (catálogo).
 - **Fase 2 — Inteligencia:** M04 (IA: slot filling, scoring, objeciones).
 - **Fase 3 — Crecimiento:** M07 (campañas) y luego M06 (flujos visuales).
-- **Fase 4 — Móvil:** React Native (Expo) para asesores.
+- **Fase 4 — Móvil:** React Native (Expo) para los `admin` que atienden la bandeja (función de
+  asesor).
 
 ## 8. Riesgos principales
 

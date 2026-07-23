@@ -13,7 +13,9 @@ export function AuthBootstrap(): React.ReactElement {
     if (status !== 'idle') return;
     setStatus('loading');
     fetchMe()
-      .then((session) => setUser({ sub: session.sub, rol: session.rol, nombre: session.nombre }))
+      .then((session) =>
+        setUser({ sub: session.sub, rol: session.rol, subrol: session.subrol, nombre: session.nombre }),
+      )
       .catch(() => setStatus('unauthenticated'));
   }, [status, setStatus, setUser]);
 

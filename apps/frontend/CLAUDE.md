@@ -100,9 +100,9 @@ apiClient.interceptors.response.use(r => r, (e) => {
 - La UI nunca es la única defensa: el backend siempre re-valida con `authorize([roles])`.
 - Rol → vistas:
   - `superadmin`: panel `/admin` (empresas, planes, métricas globales).
-  - `admin`: usuarios, conexión WhatsApp, catálogo, todo dentro del tenant.
-  - `coordinador`: todos los clientes, reasignación, campañas.
-  - `asesor`: bandeja omnicanal, sus clientes, cambio de estado.
+  - `admin`: usuarios, conexión WhatsApp, catálogo, bandeja omnicanal, clientes, campañas — todo
+    dentro del tenant. El `subrol` interno opcional (Director/Gerente/Coordinador/Secretaria) es
+    solo metadata visible en `NavUser`; no cambia qué ve el `admin` (`AUTH-02`).
 
 ## Tiempo real
 

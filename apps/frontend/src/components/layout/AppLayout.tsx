@@ -7,8 +7,10 @@ export function AppLayout(): React.ReactElement {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
-        <main className="flex-1 overflow-auto p-6">
+      {/* `min-w-0` permite que el contenedor encoja: sin él, una tabla ancha no hace scroll
+          interno y se sobrepone al sidebar (regla de min-width de flexbox). */}
+      <SidebarInset className="min-w-0">
+        <main className="min-w-0 flex-1 overflow-auto p-6">
           <Outlet />
         </main>
       </SidebarInset>

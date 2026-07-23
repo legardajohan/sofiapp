@@ -1,5 +1,7 @@
 import {
+  BookText,
   Building2,
+  CreditCard,
   Inbox,
   LineChart,
   MessageSquareText,
@@ -38,6 +40,7 @@ export const navGroups: NavGroup[] = [
     label: 'Superadmin',
     items: [
       { label: 'Empresas', to: '/admin/tenants', icon: Building2, roles: ['superadmin'] },
+      { label: 'Planes', to: '/admin/plans', icon: CreditCard, roles: ['superadmin'] },
       {
         label: 'Métricas globales',
         to: '/admin/metrics',
@@ -54,7 +57,7 @@ export const navGroups: NavGroup[] = [
         label: 'Bandeja omnicanal',
         to: '/inbox',
         icon: Inbox,
-        roles: ['coordinador', 'asesor'],
+        roles: ['admin'],
         children: [
           { label: 'Todos', to: '/inbox', icon: Inbox },
           { label: 'Míos', to: '/inbox?filtro=mios', icon: UserCheck },
@@ -66,14 +69,14 @@ export const navGroups: NavGroup[] = [
         label: 'Clientes',
         to: '/clientes',
         icon: Users,
-        roles: ['coordinador', 'asesor'],
+        roles: ['admin'],
         disabled: true,
       },
       {
         label: 'Campañas',
         to: '/campanas',
         icon: Megaphone,
-        roles: ['coordinador'],
+        roles: ['admin'],
         disabled: true,
       },
     ],
@@ -85,6 +88,12 @@ export const navGroups: NavGroup[] = [
         label: 'WhatsApp',
         to: '/settings/channels/whatsapp',
         icon: MessageSquareText,
+        roles: ['admin'],
+      },
+      {
+        label: 'Base de Conocimiento',
+        to: '/settings/knowledge',
+        icon: BookText,
         roles: ['admin'],
       },
       { label: 'Usuarios', to: '/usuarios', icon: Users, roles: ['admin'], disabled: true },

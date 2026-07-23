@@ -30,16 +30,37 @@
 // Índices: { slug: 1 } unique
 ```
 
-## plans
+## plans  (catálogo GLOBAL — sin tenantId, como tenants)
 ```js
 {
   _id: ObjectId,
-  nombre: String,                 // ej. "Básico", "Pro"
-  limites: { usuarios: Number, mensajesMes: Number, campanasMes: Number },
+  nombre: String,                 // único. ej. "Básico", "Estándar", "Pro"
+  limites: {
+    usuarios: Number,             // total acumulado de usuarios del tenant
+    mensajesMes: Number,          // mensajes OUTBOUND por periodo (YYYY-MM)
+    leads: Number,                // total acumulado de clientes/leads del tenant
+    campanasMes: Number           // campañas lanzadas por periodo
+  },
   precio: Number,
-  activo: Boolean,
+  costoEstimado: Number?,         // para rentabilidad: margen = precio - costoEstimado
+  activo: Boolean,                // default true
   createdAt, updatedAt
 }
+// Índices: { nombre: 1 } unique
+```
+
+## tenant_usage  (contadores de consumo por empresa y periodo — HU-SAAS-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required, index
+  periodo: String,                // 'YYYY-MM' (UTC). El cambio de periodo reinicia los contadores.
+  mensajesMes: Number,            // default 0. $inc atómico en cada envío outbound
+  campanasMes: Number,            // default 0. $inc atómico al lanzar una campaña
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, periodo: 1 } unique
+// NOTA: usuarios y leads NO se guardan aquí; se derivan con countDocuments scoped al consultar.
 ```
 
 ## users  (usuarios del panel)
@@ -50,7 +71,8 @@
   nombre: String,
   email: String,
   passwordHash: String,           // select:false
-  rol: "superadmin" | "admin" | "coordinador" | "asesor",
+  rol: "superadmin" | "admin",
+  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // opcional, solo admin; metadata, no afecta permisos (AUTH-02)
   activo: Boolean,                // default true
   createdAt, updatedAt
 }
@@ -95,7 +117,7 @@
   objecionPrincipal: "precio" | "tiempo" | "confianza" | "otra" | null,
   // comercial
   estadoComercial: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",  // default "nuevo"
-  asesorId: ObjectId?,            // ref User (asesor asignado)
+  asesorId: ObjectId?,            // ref User (usuario admin asignado a la conversación; el nombre del campo describe la función, no un rol de login — AUTH-02)
   // datos verticales específicos del tenant (ej. colegio, grado en Pre-ICFES)
   customFields: { [key: String]: Mixed },
   tags: [String],
@@ -219,6 +241,47 @@
 // Índices: { tenantId: 1, clienteId: 1 } unique
 ```
 
+## kb_documents  (base de conocimiento — RAG, HU-KB-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  titulo: String,                 // requerido; único por tenant (re-subir = nueva versión)
+  contenido: String,              // texto crudo (fuente para re-indexar)
+  version: Number,                // incremental por documento (versionado del conocimiento por empresa)
+  estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
+  chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
+  error: String?,                 // motivo si estadoIndexacion = "fallido"
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, titulo: 1 } unique
+//          { tenantId: 1, createdAt: -1 }
+```
+
+## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  documentId: ObjectId,           // ref KbDocument
+  version: Number,                // versión del documento a la que pertenece el chunk
+  chunkIndex: Number,             // orden dentro del documento
+  texto: String,                  // fragmento recuperable como contexto (RAG)
+  embedding: [Number],            // vector de dimensión KB_EMBED_DIM (768; gemini-embedding-001 con outputDimensionality=768)
+  createdAt
+}
+// Índices (Mongoose): { tenantId: 1, documentId: 1, version: 1 }
+// Índice vectorial (Atlas Search, NO Mongoose — src/scripts/create-kb-vector-index.ts):
+//   name: KB_VECTOR_INDEX, type: vectorSearch
+//   fields: [ { vector, path: embedding, numDimensions: KB_EMBED_DIM, similarity: cosine },
+//             { filter, path: tenantId },   // OBLIGATORIO: aísla el $vectorSearch por tenant
+//             { filter, path: version } ]
+```
+> **Aislamiento del `$vectorSearch`:** la agregación no pasa por el `base.repository`. Se blinda en
+> `features/kb/kb.repository.ts` (`vectorSearchScoped`), que inyecta SIEMPRE `filter: { tenantId }`
+> del argumento + un `$match { tenantId }` defensivo. El campo `tenantId` como *filter* del índice
+> es lo que hace posible ese aislamiento.
+
 ---
 
 ## Relaciones (resumen)
@@ -231,7 +294,9 @@ Tenant 1──┬──N User
           │        └──1 User (asesorId)
           ├──N CatalogItem
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
+          ├──N KbDocument ──N KbChunk   (RAG: embeddings + Atlas Vector Search)
           └──N Flow ──N FlowState ──1 Cliente
-Plan 1──N Tenant
+Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
+Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)
 User(superadmin) tenantId=null  (global)
 ```

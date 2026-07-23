@@ -1,5 +1,6 @@
 import type { Document, Types } from 'mongoose';
 import { z } from 'zod';
+import type { IFotografiaFinanciera } from '../plan/plan.types.js';
 import {
   createTenantSchema,
   updateTenantSchema,
@@ -23,6 +24,10 @@ export interface ITenant {
   estado: EstadoTenant;
   planId?: Types.ObjectId;
   camposCaptura: ICampoCaptura[];
+  // Precio contratado CONGELADO al asignar el plan (no-retroactividad — CA-24).
+  fotografiaFinancieraContratada?: IFotografiaFinanciera;
+  planContratadoVersion?: number;
+  fechaContratacion?: Date;
 }
 
 export interface ITenantDocument extends ITenant, Document {}
@@ -63,6 +68,9 @@ export interface ITenantResponse {
   contacto: { email: string; telefono: string };
   estado: EstadoTenant;
   planId?: string;
+  fotografiaFinancieraContratada?: IFotografiaFinanciera;
+  planContratadoVersion?: number;
+  fechaContratacion?: string;
   createdAt: string;
   updatedAt: string;
 }

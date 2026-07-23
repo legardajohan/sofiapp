@@ -20,7 +20,7 @@ export const listConversationsController: RequestHandler = async (req, res) => {
   const result = await listConversations(
     tenantId,
     asesorId,
-    req.query as unknown as ListConversationsQuery,
+    req.validatedQuery as unknown as ListConversationsQuery,
   );
   res.status(200).json(result);
 };
@@ -28,7 +28,7 @@ export const listConversationsController: RequestHandler = async (req, res) => {
 export const getThreadController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
-  const result = await getThread(tenantId, id, req.query as unknown as ThreadQuery);
+  const result = await getThread(tenantId, id, req.validatedQuery as unknown as ThreadQuery);
   res.status(200).json(result);
 };
 
