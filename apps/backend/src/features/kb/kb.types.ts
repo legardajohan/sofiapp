@@ -10,6 +10,7 @@ export interface IKbDocument {
   estadoIndexacion: EstadoIndexacion;
   chunkCount: number; // 0 hasta indexar
   isPreset: boolean; // documento base sembrado al crear el tenant (etiqueta de origen)
+  obligatorio: boolean; // preset mínimo que la IA necesita para responder (guía, sin bloqueo backend)
   proposito?: string; // guía de qué escribir (placeholder), típica de los presets
   error?: string; // motivo si estadoIndexacion === 'fallido'
   createdAt?: Date;
@@ -51,6 +52,7 @@ export interface IKbDocumentResponse {
   version: number;
   chunkCount: number;
   isPreset: boolean;
+  obligatorio: boolean;
   proposito?: string;
   error?: string;
   createdAt: string;

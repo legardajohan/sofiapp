@@ -15,6 +15,7 @@ const KbDocumentSchema = new Schema<IKbDocumentDocument>(
     },
     chunkCount: { type: Number, default: 0 },
     isPreset: { type: Boolean, default: false },
+    obligatorio: { type: Boolean, default: false },
     proposito: { type: String, required: false },
     error: { type: String },
   },
