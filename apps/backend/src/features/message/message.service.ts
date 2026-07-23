@@ -4,6 +4,7 @@ import { AppError } from '../../utils/AppError.js';
 import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { findByIdScoped } from '../../repositories/base.repository.js';
+import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from './message.model.js';
 import type { ICreateMessageDto, IMessageDocument, ISendMessageDto, MessageStatus } from './message.types.js';
@@ -24,6 +25,9 @@ export async function sendMessage(
   tenantId: string | Types.ObjectId,
   dto: ISendMessageDto,
 ): Promise<IMessageDocument> {
+  // Cuota de mensajes (outbound): bloqueo duro antes de cualquier envío. HU-SAAS-02.
+  await assertWithinQuota(tenantId, 'mensajesMes');
+
   const cliente = await findByIdScoped(Cliente, tenantId, dto.clienteId).lean();
   if (!cliente) throw new AppError('Cliente no encontrado.', 404);
 
@@ -43,7 +47,7 @@ export async function sendMessage(
     integration.accessToken,
   );
 
-  return createScoped(Message, tenantId, {
+  const message = await createScoped(Message, tenantId, {
     clienteId: new Types.ObjectId(dto.clienteId),
     canal: 'whatsapp',
     direccion: 'outbound',
@@ -53,6 +57,11 @@ export async function sendMessage(
     metaMessageId: messageId,
     status: 'sent',
   } as Record<string, unknown>);
+
+  // Contabiliza el mensaje outbound en la cuota mensual del tenant.
+  await incrementUsage(tenantId, 'mensajesMes');
+
+  return message;
 }
 
 export async function updateDeliveryStatus(

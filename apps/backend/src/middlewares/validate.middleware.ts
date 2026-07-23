@@ -26,9 +26,10 @@ export function validate(schema: InputSchema): RequestHandler {
     if (result.data.body !== undefined) req.body = result.data.body as typeof req.body;
     if (result.data.params !== undefined) req.params = result.data.params as typeof req.params;
     if (result.data.query !== undefined) {
-      // req.query es un getter en Express 5 (no se puede reasignar): se muta en el mismo objeto.
-      for (const key of Object.keys(req.query)) delete (req.query as Record<string, unknown>)[key];
-      Object.assign(req.query, result.data.query);
+      // req.query es un getter en Express 5 que siempre re-parsea el query string crudo:
+      // mutarlo no persiste entre accesos. Guardamos el resultado ya validado/coercionado
+      // aparte; los controllers deben leer `req.validatedQuery`, no `req.query`.
+      req.validatedQuery = result.data.query as Record<string, unknown>;
     }
     next();
   });
