@@ -25,7 +25,10 @@ type TenantId = string | Types.ObjectId;
 
 // Roles que ocupan un "puesto"/asiento comercial (consumen la cuota `administradores`).
 // El `superadmin` es global (no pertenece a un tenant) y NO ocupa asiento.
-const ROLES_CON_PUESTO = ['admin', 'coordinador', 'asesor'] as const;
+// Tras AUTH-02 los roles se colapsaron a superadmin/admin (coordinador/asesor desaparecieron;
+// lo que antes eran esos puestos hoy es un `admin` con `subrol` de metadata). El único rol que
+// ocupa asiento cobrable dentro del tenant es 'admin'; el superadmin es global y no cuenta.
+const ROLES_CON_PUESTO = ['admin'] as const;
 
 /** Periodo actual en formato 'YYYY-MM' (UTC en el MVP). */
 export function getCurrentPeriodo(now: Date = new Date()): string {

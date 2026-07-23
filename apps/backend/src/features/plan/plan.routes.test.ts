@@ -40,7 +40,7 @@ describe('/api/admin/plans — HU-SAAS-02', () => {
     const res = await request(app)
       .post('/api/admin/plans')
       .set(mutHeaders(superadminToken()))
-      .send({ nombre: 'Pro', limites, precio: 199 });
+      .send({ nombre: 'Pro', periodicidad: 'mensual', limites, precio: 199 });
 
     expect(res.status).toBe(201);
     expect(res.body._id).toBeDefined();

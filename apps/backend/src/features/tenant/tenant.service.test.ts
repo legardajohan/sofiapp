@@ -77,7 +77,7 @@ describe('tenant.service — HU-SAAS-01', () => {
       // por lo que debe ver el documento aún no confirmado (requiere pasar la `session`).
       const plan = await Plan.create({
         nombre: 'CeroUsuarios',
-        limites: { usuarios: 0, mensajesMes: 10, leads: 10, campanasMes: 1 },
+        limites: { usuarios: 0, administradores: 1, mensajesMes: 10, leads: 10, campanasMes: 1 },
         precio: 0,
         activo: true,
       });

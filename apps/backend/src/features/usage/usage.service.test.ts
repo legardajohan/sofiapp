@@ -82,7 +82,7 @@ describe('usage.service — HU-SAAS-02', () => {
           nombre: `U${i}`,
           email: `u${i}@empresa-quota.com`,
           passwordHash: 'hash',
-          rol: 'asesor',
+          rol: 'admin',
           activo: true,
         });
       }
@@ -108,7 +108,7 @@ describe('usage.service — HU-SAAS-02', () => {
   });
 
   describe('métrica administradores', () => {
-    it('cuenta solo usuarios con puesto (admin/coordinador/asesor) y bloquea al alcanzar el límite', async () => {
+    it('cuenta solo usuarios con puesto (admin) y bloquea al alcanzar el límite', async () => {
       const { tenant } = await crearTenantConPlan(); // administradores: 2
       // El superadmin es global y NO ocupa asiento: no debe contar.
       await UserModel.create({
@@ -119,7 +119,7 @@ describe('usage.service — HU-SAAS-02', () => {
         rol: 'superadmin',
         activo: true,
       });
-      // Dos puestos ocupados (admin + coordinador) → alcanza el límite (2).
+      // Dos puestos ocupados (dos admins) → alcanza el límite (2).
       await UserModel.create({
         tenantId: tenant._id,
         nombre: 'Ad',
@@ -133,7 +133,7 @@ describe('usage.service — HU-SAAS-02', () => {
         nombre: 'Co',
         email: 'co@empresa-quota.com',
         passwordHash: 'hash',
-        rol: 'coordinador',
+        rol: 'admin',
         activo: true,
       });
       expect(await getMetricUsed(tenant._id.toString(), 'administradores')).toBe(2);
