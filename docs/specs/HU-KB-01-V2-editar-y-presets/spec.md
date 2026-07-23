@@ -82,3 +82,57 @@
 - **Depende de:** HU-KB-01 (KB base: modelos `KbDocument`/`KbChunk`, `createDocument`,
   `deleteManyScoped`, job `kb-index`), INF-02 (middleware de tenant + repositorio scoped).
 - **Bloqueante de:** —
+
+---
+
+## Ampliación V2.1 — UX guiado del módulo KB
+
+> Objetivo de negocio: que un Administrador nuevo entienda en <30 s qué es la KB, qué debe llenar
+> como mínimo y cómo va su progreso. El módulo pasa de "funcional pero frío" a **profesional, guiado
+> e interactivo**, sin agregar fricción ni pasos bloqueantes.
+
+### Alcance V2.1
+
+**P1 — Onboarding**
+- Modal de bienvenida (`Dialog` de shadcn, no tooltip): ícono + 3 frases (qué es la KB, los 2
+  obligatorios, cómo ver el progreso) + botón "Empezar". Se muestra solo la primera vez
+  (`localStorage['kb_onboarding_dismissed']`). Cierra con X/Esc/click-fuera; **no bloqueante**.
+  Botón de ayuda (`?`) en el header lo re-abre.
+
+**P1 — Obligatorios vs opcionales**
+- Backend: campo `obligatorio: boolean` en el modelo, la respuesta y `PRESET_DOCUMENTS`
+  (`true` solo en "Información de la empresa" y "Productos y servicios"). El frontend deja de
+  derivar el "Requerido" por título y lee `doc.obligatorio`.
+- Frontend: badge "Requerido" diferenciado; banner **persistente y no bloqueante** cuando algún
+  obligatorio está vacío, con el impacto ("la IA no podrá responder con precisión…").
+- **Validación blanda (decisión de producto):** no hay wizard ni gate de "continuar"; el faltante se
+  comunica por banner + barra de progreso, **sin** deshabilitar el guardado de ningún documento.
+
+**P2 — Barra de presets → cards**
+- Se reemplazan los chips por **cards** (variante recomendada): ícono por categoría (`lucide`),
+  estado por color, checkmark al indexar, badge "Requerido". Grid responsive (1→2→3 col). Se mantiene
+  click → abre el editor con ese documento.
+
+**P2 — Tabla filtrada**
+- La tabla solo muestra documentos con contenido real o en estado `procesando`/`fallido`. Los presets
+  vacíos viven solo en la barra superior. **Filtro en frontend** (decisión): la query única sigue
+  sirviendo a la barra (que necesita los presets vacíos) y a la tabla (que no) con un solo fetch.
+
+### Mejoras adicionales incluidas
+Barra de progreso global (`n/m completados · k obligatorios`); empty state propio de la tabla;
+skeleton en carga inicial (no durante el polling); contador de caracteres con color (ámbar ≥2.700,
+rojo al tope); toasts `sonner` para eliminar/errores; pase de a11y (contraste de badges de estado,
+`aria`, foco); responsive; micro-interacción mínima (check animado por CSS al indexar, solo en cards).
+**Descartado:** micro-interacción amplia sobre la tabla y un token `--warning` dedicado (se reutiliza
+el ámbar ya presente). **Sin librerías nuevas** (Tailwind + `tailwindcss-animate` ya instalado).
+
+### Criterios de aceptación V2.1
+1. El modal de bienvenida aparece solo la primera vez, es cerrable por cualquier vía y no bloquea la
+   UI; el botón `?` lo re-abre.
+2. `obligatorio` viaja del seed → modelo → respuesta → frontend; los 2 obligatorios muestran badge
+   "Requerido" y, si están vacíos, el banner persistente aparece sin deshabilitar nada.
+3. La barra de presets se renderiza como cards con ícono/estado/checkmark; el click sigue abriendo el
+   editor. La tabla nunca muestra presets vacíos.
+4. Progreso, empty state, skeleton, contador con color y toasts se comportan según lo descrito.
+5. `typecheck`/`test` backend y `build`/`lint` frontend en verde; aislamiento multi-tenant intacto
+   (el campo `obligatorio` no altera ninguna query scoped).

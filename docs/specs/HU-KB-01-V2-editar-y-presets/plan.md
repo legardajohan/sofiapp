@@ -204,3 +204,41 @@ KnowledgeBasePage()
 - `pnpm --filter @sofiapp/api typecheck`
 - `pnpm --filter @sofiapp/api test`  (incluye test de aislamiento del update)
 - `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint`
+
+---
+
+## Ampliación V2.1 — plan (UX guiado)
+
+### Archivos tocados / nuevos
+```
+apps/backend/src/features/kb/
+  kb.types.ts            # (TOCA) obligatorio:boolean en IKbDocument + IKbDocumentResponse
+  kb-document.model.ts   # (TOCA) obligatorio: { type: Boolean, default: false }
+  kb.service.ts          # (TOCA) mapper + PRESET_DOCUMENTS.obligatorio + seedPresetDocuments
+
+apps/frontend/src/features/knowledge-base/
+  lib/kb-presets.ts                      # (NUEVO) helpers: iconos, orden, hasContent/isCompleted,
+                                         #         computeKbProgress (selector de progreso)
+  types/domain.ts                        # (TOCA) obligatorio:boolean en IKbDocument
+  components/KnowledgeOnboardingDialog.tsx  # (NUEVO) modal de bienvenida (Dialog shadcn)
+  components/PresetProgress.tsx             # (NUEVO) barra de progreso global (div + Tailwind)
+  components/RequiredPresetsBanner.tsx      # (NUEVO) banner persistente de obligatorios faltantes
+  components/KnowledgeEmptyState.tsx        # (NUEVO) estado vacío propio de la tabla
+  components/PresetKnowledgeBar.tsx         # (REESCRIBE) chips → cards con icono/estado/checkmark
+  components/KnowledgeDocumentTable.tsx     # (TOCA) skeleton inicial, empty state, toasts delete
+  components/IndexingStatusBadge.tsx        # (TOCA) pendiente → tokens; dark en procesando (contraste)
+  components/KnowledgeUploadEditor.tsx      # (TOCA) contador con color (ámbar/rojo)
+  pages/KnowledgeBasePage.tsx               # (TOCA) monta modal+progreso+banner; filtra tabla
+```
+
+### Decisiones clave
+- **Sin backend nuevo salvo `obligatorio`.** El filtro de tabla es cliente: la query única alimenta la
+  barra (presets vacíos incluidos) y la tabla (`belongsInTable`: contenido o procesando/fallido). Un
+  `?hasContent=true` obligaría a 2 queries; no lo justifica el payload (≤3.000 chars, limit 50).
+- **Validación blanda:** `computeKbProgress().missingObligatorios` alimenta el banner; ningún botón se
+  deshabilita. Alineado con "sin pasos bloqueantes".
+- **`isCompleted` = `estadoIndexacion==='indexado'`** (listo para la IA); `hasContent` = texto no vacío.
+- **Micro-interacción sin librería:** `animate-in zoom-in-50` de `tailwindcss-animate` (ya instalado)
+  con `key={doc.estadoIndexacion}` en el checkmark; sin refs ni timers, sin Framer Motion.
+- **Migración:** los tenants ya sembrados no traen `obligatorio` (mapper → `false`). Para MVP se
+  re-siembra o corre un update puntual; se deja anotado (no hay migración automática en este alcance).

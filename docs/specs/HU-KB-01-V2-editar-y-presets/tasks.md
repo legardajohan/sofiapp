@@ -77,6 +77,30 @@
       el aislamiento quedan cubiertos por los tests de integración con Mongo en memoria; el flujo de
       indexación reutiliza el job `kb-index` de HU-KB-01, ya verificado contra Atlas.)_
 
+## 7. Ampliación V2.1 — UX guiado
+- [x] **Backend `obligatorio`:** `kb.types.ts` (`IKbDocument` + `IKbDocumentResponse`),
+      `kb-document.model.ts` (`default:false`), `kb.service.ts` (mapper `?? false`,
+      `PRESET_DOCUMENTS` con `obligatorio` en los 2 primeros, `seedPresetDocuments` lo escribe).
+- [x] **Helpers frontend:** `lib/kb-presets.ts` (iconos por categoría, `presetOrderIndex`,
+      `hasContent`, `isCompleted`, `computeKbProgress`); `types/domain.ts` gana `obligatorio`.
+- [x] **P1 Onboarding:** `KnowledgeOnboardingDialog.tsx` (Dialog shadcn, `localStorage
+      kb_onboarding_dismissed`, no bloqueante); botón `?` en el header re-abre.
+- [x] **P1 Obligatorios:** badge "Requerido" en cards; `RequiredPresetsBanner.tsx` persistente y no
+      bloqueante; validación blanda (sin deshabilitar guardado).
+- [x] **P2 Cards:** `PresetKnowledgeBar.tsx` reescrito a cards con icono/estado/checkmark + grid
+      responsive; click mantiene apertura del editor.
+- [x] **P2 Tabla filtrada:** `belongsInTable` en la página (contenido o procesando/fallido); presets
+      vacíos nunca en la tabla.
+- [x] **Progreso global:** `PresetProgress.tsx` (`n/m completados · k obligatorios`, `progressbar`).
+- [x] **Empty state:** `KnowledgeEmptyState.tsx` cuando la tabla queda vacía.
+- [x] **Skeleton:** filas skeleton solo en carga inicial (no durante el polling).
+- [x] **Contador con color:** ámbar ≥2.700, `destructive` al tope en `KnowledgeUploadEditor.tsx`.
+- [x] **Toasts:** `sonner` para eliminar (éxito/error); `IndexingStatusBadge` con tokens + dark.
+- [x] **Verificación V2.1:** `@sofiapp/api typecheck` ✅ · `@sofiapp/api test` ✅ (138) ·
+      `@sofiapp/web build` ✅ · `@sofiapp/web lint` ✅.
+- [ ] **Migración de datos:** re-sembrar o `updateMany` para poner `obligatorio` en presets de
+      tenants ya existentes (no automatizado en este alcance).
+
 ## Definición de "hecho"
 El admin puede corregir cualquier documento y la KB se re-indexa sin chunks obsoletos; los tenants
 nuevos nacen con 5 documentos guía listos para llenar; el límite de 3.000 caracteres es coherente en
