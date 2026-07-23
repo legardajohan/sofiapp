@@ -1,9 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { deleteKbDocument } from '../../../api/knowledge-base.js';
 import type { IKbDocument } from '../types/index.js';
 import { IndexingStatusBadge } from './IndexingStatusBadge.js';
+import { KnowledgeEmptyState } from './KnowledgeEmptyState.js';
 
 interface KnowledgeDocumentTableProps {
   /** Documentos ya cargados por el padre (query única compartida con la barra de presets). */
@@ -38,6 +41,10 @@ export function KnowledgeDocumentTable({
     mutationFn: deleteKbDocument,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
+      toast.success('Documento eliminado.');
+    },
+    onError: () => {
+      toast.error('No se pudo eliminar el documento. Intenta de nuevo.');
     },
   });
 
@@ -68,7 +75,17 @@ export function KnowledgeDocumentTable({
       </div>
 
       {isLoading ? (
-        <div className="px-6 py-10 text-center text-sm text-muted-foreground">Cargando…</div>
+        <div className="space-y-3 px-6 py-5" aria-busy="true" aria-label="Cargando documentos">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-4 w-10" />
+              <Skeleton className="h-4 w-10" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ))}
+        </div>
       ) : isError ? (
         <div className="px-6 py-10 text-center text-sm text-destructive">
           <p>No se pudo cargar la lista de documentos.</p>
@@ -77,9 +94,7 @@ export function KnowledgeDocumentTable({
           </button>
         </div>
       ) : documentos.length === 0 ? (
-        <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-          Aún no has cargado conocimiento. Usa el editor de arriba para empezar.
-        </div>
+        <KnowledgeEmptyState />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

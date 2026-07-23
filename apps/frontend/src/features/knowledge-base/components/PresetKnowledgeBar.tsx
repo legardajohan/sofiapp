@@ -1,36 +1,43 @@
-import { Plus } from 'lucide-react';
+import { Plus, Check } from 'lucide-react';
 import type { EstadoIndexacion, IKbDocument } from '../types/index.js';
-
-// Orden de prioridad con que se muestran los presets (coincide con el seed del backend).
-const PRESET_ORDER: readonly string[] = [
-  'Información de la empresa',
-  'Productos y servicios',
-  'Horarios y ubicación',
-  'Políticas y términos',
-  'Preguntas frecuentes',
-] as const;
-
-// Los dos primeros se marcan como "Requerido" (guía visual, sin lógica de bloqueo).
-const REQUIRED_PRESETS: readonly string[] = PRESET_ORDER.slice(0, 2);
-
-// Color del punto según el estado de indexación (misma paleta que IndexingStatusBadge).
-const DOT_BY_ESTADO: Record<EstadoIndexacion, string> = {
-  pendiente: 'bg-gray-400',
-  procesando: 'bg-amber-500 animate-pulse',
-  indexado: 'bg-success',
-  fallido: 'bg-destructive',
-};
-
-function presetOrderIndex(titulo: string): number {
-  const index = PRESET_ORDER.indexOf(titulo);
-  return index === -1 ? PRESET_ORDER.length : index;
-}
+import { presetIcon, presetOrderIndex, hasContent } from '../lib/kb-presets.js';
 
 interface PresetKnowledgeBarProps {
   documents: IKbDocument[];
   editingDocumentId?: string | null;
   onEdit: (doc: IKbDocument) => void;
   onCreateNew: () => void;
+}
+
+/** Estado visual derivado de la indexación + si el preset obligatorio está sin llenar. */
+type PresetStatus = 'indexado' | 'procesando' | 'fallido' | 'falta' | 'pendiente' | 'opcional';
+
+function presetStatus(doc: IKbDocument): PresetStatus {
+  const estado: EstadoIndexacion = doc.estadoIndexacion;
+  if (estado === 'indexado') return 'indexado';
+  if (estado === 'procesando') return 'procesando';
+  if (estado === 'fallido') return 'fallido';
+  if (doc.obligatorio && !hasContent(doc)) return 'falta';
+  if (hasContent(doc)) return 'pendiente';
+  return 'opcional';
+}
+
+const STATUS_META: Record<PresetStatus, { label: string; dot: string; text: string }> = {
+  indexado: { label: 'Indexado', dot: 'bg-success', text: 'text-success' },
+  procesando: { label: 'Procesando…', dot: 'bg-amber-500 animate-pulse', text: 'text-amber-600' },
+  fallido: { label: 'Error al indexar', dot: 'bg-destructive', text: 'text-destructive' },
+  falta: { label: 'Requerido · falta', dot: 'bg-amber-500', text: 'text-amber-600' },
+  pendiente: { label: 'Pendiente', dot: 'bg-gray-400', text: 'text-muted-foreground' },
+  opcional: { label: 'Opcional', dot: 'bg-gray-300', text: 'text-muted-foreground' },
+};
+
+/** Borde/anillo de la card según prioridad: activo > falta obligatorio > indexado > neutro. */
+function cardBorder(status: PresetStatus, active: boolean): string {
+  if (active) return 'border-primary/50 ring-2 ring-primary/30';
+  if (status === 'falta') return 'border-amber-400/60';
+  if (status === 'fallido') return 'border-destructive/40';
+  if (status === 'indexado') return 'border-success/40';
+  return 'border-border';
 }
 
 export function PresetKnowledgeBar({
@@ -46,10 +53,12 @@ export function PresetKnowledgeBar({
   if (presets.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {presets.map((doc) => {
         const active = editingDocumentId === doc.id;
-        const required = REQUIRED_PRESETS.includes(doc.titulo);
+        const status = presetStatus(doc);
+        const meta = STATUS_META[status];
+        const Icon = presetIcon(doc.titulo);
         return (
           <button
             key={doc.id}
@@ -57,17 +66,31 @@ export function PresetKnowledgeBar({
             onClick={() => onEdit(doc)}
             aria-label={`Editar ${doc.titulo}`}
             aria-pressed={active}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border bg-card hover:bg-muted cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40 ${
-              active ? 'ring-2 ring-primary/40' : ''
-            }`}
+            className={`group relative flex items-start gap-3 rounded-xl border bg-card p-3.5 text-left transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring/40 ${cardBorder(status, active)}`}
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${DOT_BY_ESTADO[doc.estadoIndexacion]}`}
-            />
-            {doc.titulo}
-            {required && (
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Requerido
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-secondary-foreground group-hover:bg-card">
+              <Icon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-medium text-foreground">{doc.titulo}</span>
+                {doc.obligatorio && (
+                  <span className="flex-shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    Requerido
+                  </span>
+                )}
+              </span>
+              <span className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${meta.text}`}>
+                <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${meta.dot}`} />
+                {meta.label}
+              </span>
+            </span>
+            {status === 'indexado' && (
+              <span
+                key={doc.estadoIndexacion}
+                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success text-success-foreground animate-in zoom-in-50 duration-300"
+              >
+                <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
               </span>
             )}
           </button>
@@ -77,9 +100,9 @@ export function PresetKnowledgeBar({
       <button
         type="button"
         onClick={onCreateNew}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-muted-foreground/40 bg-transparent hover:bg-muted cursor-pointer transition-colors text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+        className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-muted-foreground/40 bg-transparent p-3.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus className="h-4 w-4" />
         Agregar nuevo conocimiento
       </button>
     </div>

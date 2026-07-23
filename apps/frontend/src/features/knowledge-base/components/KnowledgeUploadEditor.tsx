@@ -5,7 +5,15 @@ import { createKbDocument, updateKbDocument } from '../../../api/knowledge-base.
 import type { IKbDocument } from '../types/index.js';
 
 const CONTENIDO_MAX = 3000;
+const CONTENIDO_WARN = 2700; // 90% del tope: el contador vira a ámbar
 const PLACEHOLDER_GENERICO = 'Escribe o pega aquí la información pertinente…';
+
+/** Color del contador según cercanía al límite: neutro → ámbar (≥90%) → rojo (tope). */
+function counterColor(length: number): string {
+  if (length >= CONTENIDO_MAX) return 'text-destructive font-medium';
+  if (length >= CONTENIDO_WARN) return 'text-amber-600';
+  return 'text-muted-foreground';
+}
 
 function Spinner(): React.ReactElement {
   return (
@@ -165,7 +173,7 @@ export function KnowledgeUploadEditor({
             required={!isEdit}
             className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors resize-y"
           />
-          <p className="text-xs text-muted-foreground text-right">
+          <p className={`text-xs text-right ${counterColor(contenido.length)}`} aria-live="polite">
             {contenido.length.toLocaleString()} / {CONTENIDO_MAX.toLocaleString()} caracteres
           </p>
         </div>

@@ -8,6 +8,7 @@ export interface IKbDocument {
   version: number;
   chunkCount: number;
   isPreset: boolean;
+  obligatorio: boolean;
   proposito?: string;
   error?: string;
   createdAt: string;

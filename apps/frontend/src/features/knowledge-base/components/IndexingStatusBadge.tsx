@@ -6,13 +6,13 @@ const CONFIG: Record<
 > = {
   pendiente: {
     label: 'Pendiente',
-    className: 'bg-gray-100 text-gray-600 border-gray-200',
+    className: 'bg-muted text-muted-foreground border-border',
     dotClassName: 'bg-gray-400',
     pulse: false,
   },
   procesando: {
     label: 'Procesando',
-    className: 'bg-amber-50 text-amber-700 border-amber-200',
+    className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/50',
     dotClassName: 'bg-amber-500',
     pulse: true,
   },
