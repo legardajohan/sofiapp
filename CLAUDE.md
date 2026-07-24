@@ -31,6 +31,15 @@ Aunque hoy opere con un cliente, **todo es multi-tenant desde el día 1** para n
 4. **Validación en el borde con Zod** (`{ body, params, query }`) antes del controller.
 5. **TypeScript `strict`, prohibido `any`.** Tipos de retorno explícitos en funciones exportadas.
 6. Webhooks de Meta responden **HTTP 200 inmediato** y delegan el trabajo pesado a BullMQ.
+7. **Trabajo de frontend con skills de diseño.** Cada vez que se creen o modifiquen componentes, o se
+   toque cualquier cosa de `apps/frontend`, hay que **invocar antes de escribir el componente** las
+   skills `emil-design-eng` (Emil Kowalski), `impeccable:impeccable` y el plugin oficial
+   `frontend-design:frontend-design` de Claude, y aplicar sus criterios. No es opcional ni "solo
+   para pantallas nuevas": aplica también a retoques de componentes existentes. Además, **usar
+   componentes de [shadcn/ui](https://ui.shadcn.com/) siempre que exista uno aplicable** (vendorizado
+   en `src/components/ui/`, o instalado con la CLI si falta) en vez de reinventar el control a mano
+   — mantiene consistencia visual. Todo componente nuevo o tocado debe quedar prolijo en **light y
+   dark** con los tokens semánticos del proyecto.
 
 ## Arquitectura en una frase
 

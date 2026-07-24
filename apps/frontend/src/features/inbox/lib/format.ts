@@ -1,9 +1,14 @@
 /** Iniciales para el avatar a partir del nombre o el teléfono. */
 export function initials(nombre: string | null, telefono: string): string {
   const base = nombre?.trim() || telefono;
-  const parts = base.split(/\s+/).filter(Boolean);
+  return personInitials(base);
+}
+
+/** Iniciales de una persona (responsable de la conversación) a partir de su nombre. */
+export function personInitials(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-  return base.slice(0, 2).toUpperCase();
+  return nombre.slice(0, 2).toUpperCase();
 }
 
 /** Hora corta para hoy (HH:MM); fecha corta para días anteriores. */

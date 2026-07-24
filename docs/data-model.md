@@ -127,6 +127,8 @@
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
   createdAt, updatedAt
 }
+// `asesorId` es el único campo persistido; `asignadoA` (HU-OMNI-02) es el alias público del
+// contrato HTTP (query, body de PATCH /assign, DTO) — mismo valor, sin migración de datos.
 // Índices: { tenantId: 1, estadoComercial: 1 }
 //          { tenantId: 1, asesorId: 1 }
 //          { tenantId: 1, ultimoMensajeAt: -1 }
@@ -282,6 +284,25 @@
 > del argumento + un `$match { tenantId }` defensivo. El campo `tenantId` como *filter* del índice
 > es lo que hace posible ese aislamiento.
 
+## audit_events  (auditoría genérica tenant-scoped — HU-OMNI-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  actorId: ObjectId,              // ref User — quién hizo el cambio
+  accion: String,                 // p.ej. "conversation.assign"
+  entidad: String,                // p.ej. "cliente"
+  entidadId: ObjectId,            // id de la entidad afectada
+  antes: Mixed,                   // snapshot previo (p.ej. { asignadoA: <userId>|null })
+  despues: Mixed,                 // snapshot posterior
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, entidad: 1, entidadId: 1, createdAt: -1 }
+```
+> Se estrena con `conversation.assign` (historial de reasignaciones, `GET
+> /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
+> (cambios de `estadoComercial`, borrados, etc.).
+
 ---
 
 ## Relaciones (resumen)
@@ -295,6 +316,7 @@ Tenant 1──┬──N User
           ├──N CatalogItem
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
           ├──N KbDocument ──N KbChunk   (RAG: embeddings + Atlas Vector Search)
+          ├──N AuditEvent ──1 User (actorId)   (auditoría genérica — HU-OMNI-02)
           └──N Flow ──N FlowState ──1 Cliente
 Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
 Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)

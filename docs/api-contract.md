@@ -66,7 +66,10 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 | PATCH | `/api/admin/tenants/:id/plan` | superadmin | Asignar un plan (activo) a una empresa. |
 | GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
 | GET | `/api/admin/metrics` | superadmin | Métricas globales cross-tenant. |
-| GET/POST | `/api/users` | admin | Gestionar usuarios del tenant. |
+| GET | `/api/users` | admin | Admins activos del tenant (`?activo&rol`); alimenta el selector de asignación (HU-OMNI-02). |
+| GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<estadoComercial>` combinables (HU-OMNI-01/02). |
+| PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
+| GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
 | GET | `/api/clientes` | admin | Listar prospectos (filtrado, paginado). |
 | PATCH | `/api/clientes/:id` | admin | Editar datos / asignar / cambiar estado. |
 | PATCH | `/api/clientes/:id/estado` | admin | Transición de `estadoComercial`. |
@@ -81,4 +84,6 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 
 - Namespace autenticado por JWT.
 - *Rooms* por `tenantId` y por `asesorId` para que cada usuario solo reciba sus conversaciones.
-- Eventos: `message:new`, `cliente:updated`, `cliente:estado-changed`.
+- Eventos: `message:new`, `conversation:updated` (room `tenant:<id>`, refresca la bandeja de todos
+  los admins) y `conversation:assigned` (room `asesor:<destinatario>` **únicamente**, dispara el
+  toast de notificación — HU-OMNI-02).

@@ -10,8 +10,11 @@ type InputSchema = z.ZodType<Partial<{
 
 export function validate(schema: InputSchema): RequestHandler {
   return asyncHandler(async (req, res, next) => {
+    // GET/DELETE sin body: express.json() deja `req.body` en `undefined` (no hay Content-Type
+    // application/json que parsear). Los schemas `{ body: z.object({}) }` esperan un objeto, no
+    // `undefined` — normalizamos aquí en vez de repetir `.optional()` en cada schema del proyecto.
     const result = schema.safeParse({
-      body: req.body,
+      body: req.body ?? {},
       params: req.params,
       query: req.query,
     });
