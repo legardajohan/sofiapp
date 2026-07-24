@@ -50,6 +50,10 @@ router.get('/:id',
 ```
 
 ## Frontend — `apps/frontend/src/features/<feature>/`
+0. **Skills de diseño (obligatorio, `CLAUDE.md` raíz §7):** antes de escribir cada componente nuevo o
+   modificado, invoca `emil-design-eng`, `impeccable:impeccable` y `frontend-design:frontend-design`.
+   Usa componentes de shadcn/ui en vez de controles hechos a mano cuando exista un equivalente, y
+   deja cada componente prolijo en light y dark.
 1. **`types/`** — `domain.ts`, `api.ts`, `store.ts` + `index.ts`.
 2. **`use<Feature>Store.ts`** — Zustand (`isLoading`, `isSubmitting`, `error`, datos) vía `apiClient` de `@/api/apiClient`. **Nunca** `fetch`/`axios` directo. Token en cookie httpOnly; CSRF lo maneja el `apiClient`.
 3. **`components/`** — UI presentacional (`PascalCase.tsx`), sin llamadas a API.

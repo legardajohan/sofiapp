@@ -3,7 +3,7 @@ name: sdd-implement
 description: Implementa un feature SDD de SofiApp ejecutando sus tasks (de tasks.md o embebidas en spec.md), creando la rama feat/<ID> y el código en apps/* y packages/*. Úsala con /sdd-implement <ID>-<slug>.
 argument-hint: <ID>-<slug>
 disable-model-invocation: true
-allowed-tools: Read, Edit(docs/specs/**), Bash(git status *), Bash(git branch *), Bash(git checkout *), Bash(git add *), Bash(pnpm *)
+allowed-tools: Read, Edit(docs/specs/**), Skill, Bash(git status *), Bash(git branch *), Bash(git checkout *), Bash(git add *), Bash(pnpm *)
 ---
 
 # SDD · Implementación
@@ -16,6 +16,11 @@ allowed-tools: Read, Edit(docs/specs/**), Bash(git status *), Bash(git branch *)
 1. Lee las tasks. ¿Algo ambiguo? Pregunta antes de codear.
 2. **Git:** árbol limpio + crea la rama `feat/<ID>`. Si no hay repo git, `git init` primero.
 3. **Código:** ejecuta las tasks en orden — patrón de 6 archivos + montaje (backend) o `types → store → components → page → ruta` (frontend). Lo mínimo para cubrir el `spec`.
+   - **Frontend (obligatorio, `CLAUDE.md` raíz §7):** antes de escribir cada componente nuevo o
+     modificado, invoca `emil-design-eng`, `impeccable:impeccable` y `frontend-design:frontend-design`
+     y aplica sus criterios. Usa componentes de shadcn/ui (`src/components/ui/`, o instálalos con
+     la CLI si falta uno) en vez de controles hechos a mano cuando exista un equivalente. Deja cada
+     componente terminado en light y dark antes de seguir.
 4. Marca las casillas a medida que avanzas (en `tasks.md` o en `spec.md`).
 5. **No cierres hasta verde:**
    - `pnpm --filter backend typecheck` + `test` (incluye **aislamiento multi-tenant**).

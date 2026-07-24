@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchConversations } from '../api.js';
-import type { ConversationDTO, FiltroBandeja, Paginated } from '../types.js';
+import type { ConversationDTO, InboxFiltros, Paginated } from '../types.js';
 
-export function useConversations(filtro: FiltroBandeja) {
+export function useConversations(filtros: InboxFiltros) {
   return useQuery<Paginated<ConversationDTO>>({
-    queryKey: ['conversations', filtro],
-    queryFn: () => fetchConversations(filtro),
+    queryKey: ['conversations', filtros],
+    queryFn: () => fetchConversations(filtros),
   });
 }

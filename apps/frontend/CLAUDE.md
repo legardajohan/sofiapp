@@ -2,13 +2,36 @@
 
 > Reglas del frontend. SPA React 19 + Vite, alojada en Vercel.
 
+## Skills de diseño — obligatorias (regla del `CLAUDE.md` raíz §7)
+
+Antes de **crear o modificar cualquier componente** de `apps/frontend` hay que invocar estas tres
+skills y aplicar lo que dicten. Se invocan *antes* de escribir el código, no como revisión posterior:
+
+| Skill | Qué aporta |
+|---|---|
+| `emil-design-eng` | Pulido de UI, decisiones de animación y micro-interacción, los detalles invisibles (timing, easing, estados de foco/pending). |
+| `impeccable:impeccable` | Auditoría de UX: jerarquía visual, arquitectura de información, carga cognitiva, accesibilidad, estados vacíos/error, copy de interfaz. |
+| `frontend-design:frontend-design` | Dirección visual: tipografía, ritmo, decisiones que evitan que la pantalla se lea como un template por defecto. |
+
+Aplica igual a un componente nuevo (`AssignMenu`) que a un retoque de uno existente
+(`ConversationList`). Lo que salga de las skills se somete siempre a las reglas de este archivo:
+tokens semánticos, UI kit de `src/components/ui/`, light y dark.
+
+**shadcn/ui no es opcional cuando aplica.** Antes de escribir un control a mano (dropdown, select,
+diálogo, tooltip, badge, etc.), usar el componente de [shadcn/ui](https://ui.shadcn.com/)
+correspondiente: el ya vendorizado en `src/components/ui/`, o instalarlo con la CLI (ver "Cómo
+añadir más componentes" abajo) si falta. Un control hecho a mano donde ya existe su equivalente
+shadcn es inconsistencia visual, no una decisión de diseño. Todo componente nuevo o modificado
+debe quedar terminado en **light y dark** (tokens semánticos, cero `bg-[#...]`) antes de darlo por
+cerrado.
+
 ## Principios
 
 - React 19 + Vite + **TypeScript `strict`**.
 - Estado de UI con **Zustand**; estado de servidor (datos del API) con **TanStack Query**
   (caché, revalidación, estados de carga/error). No mezclar ambos roles.
 - **Organización por feature** (igual filosofía que el backend): `src/features/<feature>/`.
-- Estilos con Tailwind (+ shadcn/ui opcional). Sin CSS global disperso.
+- Estilos con Tailwind + shadcn/ui como base de componentes (ver regla arriba). Sin CSS global disperso.
 
 ## Componentes reutilizables (UI kit)
 
