@@ -3,6 +3,6 @@ import type { UserDTO } from './types.js';
 
 /** Administradores activos del propio tenant (alimenta el selector de asignación de HU-OMNI-02). */
 export async function fetchTenantUsers(): Promise<UserDTO[]> {
-  const { data } = await apiClient.get<UserDTO[]>('/api/users');
+  const { data } = await apiClient.get<UserDTO[]>('/users');
   return data;
 }

@@ -55,7 +55,7 @@ router.get('/:id',
    Usa componentes de shadcn/ui en vez de controles hechos a mano cuando exista un equivalente, y
    deja cada componente prolijo en light y dark.
 1. **`types/`** — `domain.ts`, `api.ts`, `store.ts` + `index.ts`.
-2. **`use<Feature>Store.ts`** — Zustand (`isLoading`, `isSubmitting`, `error`, datos) vía `apiClient` de `@/api/apiClient`. **Nunca** `fetch`/`axios` directo. Token en cookie httpOnly; CSRF lo maneja el `apiClient`.
+2. **`use<Feature>Store.ts`** — Zustand (`isLoading`, `isSubmitting`, `error`, datos) vía `apiClient` de `@/api/apiClient`. **Nunca** `fetch`/`axios` directo. Token en cookie httpOnly; CSRF lo maneja el `apiClient`. **Rutas sin prefijo `/api`** (`apiClient.get('/conversations')`, no `'/api/conversations'`): `baseURL` ya lo resuelve — repetirlo produce `/api/api/...` → 404 en dev. Ver `apps/frontend/CLAUDE.md` § "Una sola puerta de salida HTTP".
 3. **`components/`** — UI presentacional (`PascalCase.tsx`), sin llamadas a API.
 4. **`pages/<Feature>Page.tsx`** — orquesta store + componentes.
 5. **Ruta** bajo guarda de rol (RBAC); estado de servidor con **TanStack Query**.

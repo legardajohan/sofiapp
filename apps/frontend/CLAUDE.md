@@ -96,9 +96,20 @@ cerrado.
   reenvía en el header `X-CSRF-Token` en métodos mutadores (POST/PUT/PATCH/DELETE).
 - Interceptor de respuesta: `401 → logout()`.
 
+- **Rutas SIN el prefijo `/api`.** `baseURL` ya lo incluye (ver abajo): todo `apiClient.get/post/
+  patch/delete(...)` recibe la ruta relativa al recurso, **nunca** empezando en `/api`.
+  - ✅ `apiClient.get('/conversations')`, `apiClient.get('/users')`, `apiClient.post('/auth/login')`
+  - ❌ `apiClient.get('/api/conversations')` — con `baseURL` resolviendo a `/api` (el caso normal en
+    dev sin `.env`), esto pega contra `/api/api/conversations` → `404`. Bug real de HU-OMNI-02:
+    `channels/api.ts`, `inbox/api.ts` y `users/api.ts` lo tenían; se corrigió quitando el prefijo.
+    Antes de dar por buena una llamada nueva, comparar contra un `api.ts` ya existente (`auth`,
+    `admin-plans`, `admin-tenants`, `knowledge-base` son la referencia correcta).
+
 ```ts
 // El JWT va en cookie httpOnly (no accesible por JS). withCredentials la adjunta en cada request.
-const apiClient = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL, timeout: 10000, withCredentials: true });
+// baseURL: sin VITE_API_BASE_URL (dev local sin .env) cae a '/api' — de ahí que las rutas de
+// abajo NUNCA repitan ese prefijo.
+const apiClient = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api', timeout: 10000, withCredentials: true });
 apiClient.interceptors.request.use((c) => {
   const method = (c.method ?? 'get').toLowerCase();
   if (['post', 'put', 'patch', 'delete'].includes(method)) {
