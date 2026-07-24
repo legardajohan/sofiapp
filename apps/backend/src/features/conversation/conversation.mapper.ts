@@ -1,6 +1,12 @@
 import type { Types } from 'mongoose';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
-import type { IConversationResponse, IMessageResponse } from './conversation.types.js';
+import type { IUserResponse } from '../users/user.types.js';
+import type { IAuditEventResponse } from '../audit/audit.types.js';
+import type {
+  IAssignmentResponse,
+  IConversationResponse,
+  IMessageResponse,
+} from './conversation.types.js';
 
 /** Forma mínima de un `Cliente` (lean) necesaria para proyectar una conversación. */
 export interface IConversationSource {
@@ -32,7 +38,9 @@ export function toConversationResponse(
   cliente: IConversationSource,
   preview: string | null,
   now: Date = new Date(),
+  asignado: IUserResponse | null = null,
 ): IConversationResponse {
+  const asesorId = cliente.asesorId ? String(cliente.asesorId) : null;
   return {
     id: String(cliente._id),
     nombre: cliente.nombre ?? null,
@@ -41,10 +49,35 @@ export function toConversationResponse(
     ultimoMensajeAt: cliente.ultimoMensajeAt ? cliente.ultimoMensajeAt.toISOString() : null,
     preview,
     noLeidos: cliente.noLeidos ?? 0,
-    asesorId: cliente.asesorId ? String(cliente.asesorId) : null,
+    asesorId,
+    asignadoA: asesorId,
+    asignadoANombre: asignado?.nombre ?? null,
+    asignadoASubrol: asignado?.subrol ?? null,
     iaHabilitada: cliente.iaHabilitada ?? true,
     ventana24hAbierta: !!cliente.ventana24hExpiraEn && cliente.ventana24hExpiraEn > now,
     estadoComercial: cliente.estadoComercial,
+  };
+}
+
+function personFromAuditValue(
+  value: unknown,
+  userMap: Map<string, IUserResponse>,
+): { id: string; nombre: string | null } | null {
+  if (typeof value !== 'string') return null;
+  return { id: value, nombre: userMap.get(value)?.nombre ?? null };
+}
+
+export function toAssignmentResponse(
+  evt: IAuditEventResponse,
+  userMap: Map<string, IUserResponse>,
+): IAssignmentResponse {
+  return {
+    id: evt.id,
+    actorId: evt.actorId,
+    actorNombre: userMap.get(evt.actorId)?.nombre ?? null,
+    de: personFromAuditValue(evt.antes['asignadoA'], userMap),
+    a: personFromAuditValue(evt.despues['asignadoA'], userMap),
+    createdAt: evt.createdAt,
   };
 }
 

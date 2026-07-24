@@ -20,4 +20,13 @@ export type RealtimeEvent =
       tenantId: string;
       conversationId: string;
       conversation: IConversationResponse;
+    }
+  | {
+      type: 'conversation:assigned';
+      tenantId: string;
+      conversationId: string;
+      conversation: IConversationResponse;
+      /** `null` cuando el cambio fue una desasignación (no hay a quién notificar). */
+      targetUserId: string | null;
+      actor: { id: string; nombre: string | null };
     };

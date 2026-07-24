@@ -24,6 +24,7 @@ import clienteRoutes from './features/cliente/cliente.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
+import userRoutes from './features/users/user.routes.js';
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/clientes', clienteRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
+app.use('/api/users', userRoutes);
 
 app.use(errorHandler);
 
