@@ -1,6 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTenantUsage, assignTenantPlan } from '../../../api/admin-tenants.js';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { QuotaMetric } from '../types/index.js';
+
+// Radix Select no admite `value=""` en un item; centinela para "Sin plan".
+const SIN_PLAN = '__sin_plan__';
 
 interface PlanOption {
   _id: string;
@@ -55,19 +65,25 @@ export function TenantUsagePanel({ tenantId, currentPlanId, plans }: Props) {
     <div className="mt-4 border-t border-border pt-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Consumo del periodo</h3>
-        <select
-          className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
-          value={currentPlanId ?? ''}
-          onChange={(e) => e.target.value && assignMutation.mutate(e.target.value)}
+        {/* Select de shadcn (Radix): el popup respeta el modo oscuro (`bg-popover`), a diferencia
+            del <select> nativo cuyo desplegable usaba el tema del sistema. */}
+        <Select
+          value={currentPlanId ?? SIN_PLAN}
+          onValueChange={(value) => value !== SIN_PLAN && assignMutation.mutate(value)}
           disabled={assignMutation.isPending}
         >
-          <option value="">Sin plan</option>
-          {plans.map((p) => (
-            <option key={p._id} value={p._id}>
-              {p.nombre}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-8 w-44 text-sm">
+            <SelectValue placeholder="Sin plan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SIN_PLAN}>Sin plan</SelectItem>
+            {plans.map((p) => (
+              <SelectItem key={p._id} value={p._id}>
+                {p.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">Cargando consumo…</p>}

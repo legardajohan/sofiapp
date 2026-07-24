@@ -3,6 +3,13 @@ import { Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { CreateTenantPayload, UpdateTenantPayload, ITenant } from '../types/index.js';
 
 interface PlanOption {
@@ -16,6 +23,10 @@ interface Props {
   onSuccess: (payload: CreateTenantPayload | UpdateTenantPayload) => void;
   onCancel: () => void;
 }
+
+// Radix Select no admite `value=""` en un item; usamos un centinela para "Sin plan" y lo
+// mapeamos de vuelta a '' en el estado del formulario.
+const SIN_PLAN = '__sin_plan__';
 
 const toSlug = (value: string): string =>
   value
@@ -174,33 +185,26 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
 
       <div>
         <Label htmlFor="tenant-plan-id">Plan</Label>
-        {plans ? (
-          <select
-            id="tenant-plan-id"
-            className="mt-1 flex h-9 w-full rounded-md border border-input bg-background text-foreground px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-            value={form.planId}
-            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
-          >
-            {/* `bg-background`/`text-foreground` en las opciones para que el desplegable respete el
-                tema (evita el fondo blanco/negro nativo que no seguía el modo oscuro). */}
-            <option value="" className="bg-background text-foreground">
-              Sin plan
-            </option>
+        {/* Select de shadcn (Radix): el popup se renderiza en el DOM con `bg-popover`, por lo que
+            respeta el modo oscuro (el <select> nativo pintaba el desplegable con el tema del SO). */}
+        <Select
+          value={form.planId === '' ? SIN_PLAN : form.planId}
+          onValueChange={(value) =>
+            setForm((p) => ({ ...p, planId: value === SIN_PLAN ? '' : value }))
+          }
+        >
+          <SelectTrigger id="tenant-plan-id" className="mt-1">
+            <SelectValue placeholder="Sin plan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SIN_PLAN}>Sin plan</SelectItem>
             {plans.map((p) => (
-              <option key={p._id} value={p._id} className="bg-background text-foreground">
+              <SelectItem key={p._id} value={p._id}>
                 {p.nombre}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-        ) : (
-          <Input
-            id="tenant-plan-id"
-            className="mt-1"
-            value={form.planId}
-            onChange={(e) => setForm((p) => ({ ...p, planId: e.target.value }))}
-            placeholder="ObjectId del plan (opcional)"
-          />
-        )}
+          </SelectContent>
+        </Select>
         {form.planId === '' ? (
           <p className="mt-1 flex items-start gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />

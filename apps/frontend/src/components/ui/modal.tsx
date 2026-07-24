@@ -19,7 +19,11 @@ const SIZE_TO_MAX_WIDTH: Record<ModalSize, string> = {
   xl: 'sm:max-w-4xl',
 };
 
-export interface ModalProps {
+/**
+ * Extiende `React.AriaAttributes`, por lo que acepta **cualquier prop estándar de accesibilidad**
+ * (`aria-label`, `aria-describedby`, `aria-live`, …) que se propaga tal cual al panel del diálogo.
+ */
+export interface ModalProps extends React.AriaAttributes {
   /** Controla la visibilidad. Componente **controlado**: el estado vive en el padre. */
   isOpen: boolean;
   /** Se invoca cuando el usuario pide cerrar (X, Esc o clic fuera). No se llama si `dismissible` es `false`. */
@@ -41,8 +45,6 @@ export interface ModalProps {
   dismissible?: boolean;
   /** Clases extra para el panel de contenido. */
   className?: string;
-  /** Etiqueta accesible alterna cuando `title` no es texto plano. */
-  'aria-label'?: string;
 }
 
 /**
@@ -66,7 +68,7 @@ export function Modal({
   size = 'md',
   dismissible = true,
   className,
-  'aria-label': ariaLabel,
+  ...ariaProps
 }: ModalProps): React.ReactElement {
   const handleOpenChange = (open: boolean): void => {
     if (!open && dismissible) onClose();
@@ -79,7 +81,7 @@ export function Modal({
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
-        aria-label={ariaLabel}
+        {...ariaProps}
         showCloseButton={dismissible}
         onEscapeKeyDown={blockWhenLocked}
         onPointerDownOutside={blockWhenLocked}
