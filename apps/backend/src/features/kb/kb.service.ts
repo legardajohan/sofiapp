@@ -118,22 +118,32 @@ export async function listDocuments(
  * Edita el contenido de un documento existente: re-versiona, limpia los chunks obsoletos y
  * re-encola el job `kb-index` SOLO si el nuevo contenido no está vacío. Con contenido vacío el
  * documento queda en `pendiente` sin indexar (p. ej. un preset todavía sin llenar).
+ *
+ * El primer llenado (contenido previo vacío → texto real, típico de un preset seedeado en `version: 1`)
+ * NO incrementa la versión: el documento queda en `version: 1`. Las ediciones posteriores sobre
+ * contenido ya real sí incrementan `version` normalmente.
  */
 export async function updateDocument(
   tenantId: TenantId,
   id: string,
   contenido: string,
 ): Promise<IKbDocumentResponse> {
-  const existing = await findByIdScoped(KbDocument, tenantId, id).lean().exec();
+  const existing = await findByIdScoped(KbDocument, tenantId, id)
+    .lean<(IKbDocument & { _id: Types.ObjectId }) | null>()
+    .exec();
   if (!existing) throw new AppError('No se encontró el documento.', 404);
+
+  // Primer llenado de un preset (o de cualquier documento vacío): pasa de contenido '' a texto real.
+  // No es una "nueva versión" del conocimiento, sino la versión 1 → no se incrementa `version`.
+  const isFirstFill = !existing.contenido || existing.contenido.trim().length === 0;
 
   const updated = await findOneAndUpdateScoped(
     KbDocument,
     tenantId,
     { _id: id },
     {
-      $set: { contenido, estadoIndexacion: 'pendiente', chunkCount: 0 },
-      $inc: { version: 1 },
+      $set: { contenido, estadoIndexacion: 'pendiente' as const, chunkCount: 0 },
+      ...(isFirstFill ? {} : { $inc: { version: 1 } }),
       $unset: { error: 1 },
     },
     { new: true },

@@ -1,6 +1,6 @@
 import { Plus, Check } from 'lucide-react';
 import type { EstadoIndexacion, IKbDocument } from '../types/index.js';
-import { presetIcon, presetOrderIndex, hasContent } from '../lib/kb-presets.js';
+import { presetIcon, hasContent, mergePresetsWithDocuments } from '../lib/kb-presets.js';
 
 interface PresetKnowledgeBarProps {
   documents: IKbDocument[];
@@ -45,12 +45,10 @@ export function PresetKnowledgeBar({
   editingDocumentId,
   onEdit,
   onCreateNew,
-}: PresetKnowledgeBarProps): React.ReactElement | null {
-  const presets = documents
-    .filter((doc) => doc.isPreset)
-    .sort((a, b) => presetOrderIndex(a.titulo) - presetOrderIndex(b.titulo));
-
-  if (presets.length === 0) return null;
+}: PresetKnowledgeBarProps): React.ReactElement {
+  // Siempre las 5 categorías: los presets sin documento real se muestran como tarjetas virtuales
+  // vacías (estado "opcional"/"falta"), para que eliminar un documento no borre su tarjeta.
+  const presets = mergePresetsWithDocuments(documents);
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

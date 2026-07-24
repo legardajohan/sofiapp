@@ -22,6 +22,8 @@ function isIndexingActive(doc: IKbDocument): boolean {
 
 // La tabla solo muestra conocimiento "real": con contenido, o en un estado accionable
 // (procesando/fallido para reintentar). Los presets vacíos viven solo en la barra superior.
+// Se alimenta de la lista cruda del API, así que los presets virtuales (que solo existen dentro de
+// PresetKnowledgeBar) nunca llegan aquí.
 function belongsInTable(doc: IKbDocument): boolean {
   return hasContent(doc) || doc.estadoIndexacion === 'procesando' || doc.estadoIndexacion === 'fallido';
 }
@@ -98,6 +100,8 @@ export function KnowledgeBasePage(): React.ReactElement {
           onFix={(doc) => setEditingDocument(doc)}
         />
 
+        {/* La barra muestra siempre las 5 categorías; un preset sin documento real llega aquí como
+            documento virtual y el editor lo detecta (id `__preset_*`) para crear en vez de editar. */}
         <PresetKnowledgeBar
           documents={documents}
           editingDocumentId={editingDocument?.id}

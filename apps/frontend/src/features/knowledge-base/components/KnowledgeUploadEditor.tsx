@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { createKbDocument, updateKbDocument } from '../../../api/knowledge-base.js';
+import { isVirtualPresetId } from '../lib/kb-presets.js';
 import type { IKbDocument } from '../types/index.js';
 
 const CONTENIDO_MAX = 3000;
@@ -34,7 +35,11 @@ function Spinner(): React.ReactElement {
 }
 
 interface KnowledgeUploadEditorProps {
-  /** Si viene, el editor entra en modo edición y precarga su contenido. Si no, modo creación. */
+  /**
+   * Si viene, el editor precarga su título/contenido. Un documento real → modo edición (PATCH). Un
+   * preset **virtual** (id `__preset_*`, sin documento en la DB) → modo creación (POST) con el título
+   * fijado y el propósito como placeholder. Sin documento → creación libre.
+   */
   document?: IKbDocument;
   /** Se llama al guardar una edición con éxito o al cancelarla, para volver a modo creación. */
   onDone?: () => void;
@@ -45,7 +50,9 @@ export function KnowledgeUploadEditor({
   onDone,
 }: KnowledgeUploadEditorProps): React.ReactElement {
   const queryClient = useQueryClient();
-  const isEdit = document !== undefined;
+  // Un preset virtual (aún sin documento real) se llena por primera vez → creación, no edición.
+  const isVirtualPreset = document !== undefined && isVirtualPresetId(document.id);
+  const isEdit = document !== undefined && !isVirtualPreset;
 
   const [titulo, setTitulo] = useState('');
   const [contenido, setContenido] = useState('');
@@ -55,12 +62,12 @@ export function KnowledgeUploadEditor({
 
   const mutation = useMutation({
     mutationFn: (vars: { titulo: string; contenido: string }) =>
-      document
+      isEdit && document
         ? updateKbDocument(document.id, { contenido: vars.contenido })
         : createKbDocument({ titulo: vars.titulo, contenido: vars.contenido }),
     onSuccess: (doc) => {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
-      if (document) {
+      if (isEdit) {
         // Al terminar una edición volvemos a modo creación; el feedback va por toast porque el
         // formulario deja de mostrar este documento.
         toast.success(
@@ -68,6 +75,10 @@ export function KnowledgeUploadEditor({
             ? `"${doc.titulo}" guardado. Queda pendiente hasta que agregues contenido.`
             : `"${doc.titulo}" actualizado. Reindexando su contenido…`,
         );
+        onDone?.();
+      } else if (isVirtualPreset) {
+        // Llenar por primera vez un preset lo crea (POST); luego volvemos a modo creación.
+        toast.success(`"${doc.titulo}" recibido. Indexando su contenido…`);
         onDone?.();
       } else {
         setSuccessMsg(`"${doc.titulo}" recibido. Indexando su contenido…`);
@@ -109,7 +120,12 @@ export function KnowledgeUploadEditor({
     mutation.isPending || (!isEdit && (titulo.trim().length === 0 || contenido.trim().length === 0));
 
   const placeholder =
-    isEdit && document?.proposito && contenido.length === 0 ? document.proposito : PLACEHOLDER_GENERICO;
+    (isEdit || isVirtualPreset) && document?.proposito && contenido.length === 0
+      ? document.proposito
+      : PLACEHOLDER_GENERICO;
+
+  // El título va bloqueado tanto al editar como al llenar un preset (su título ya está definido).
+  const tituloLocked = isEdit || isVirtualPreset;
 
   return (
     <div
@@ -147,14 +163,16 @@ export function KnowledgeUploadEditor({
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ej. Preguntas frecuentes sobre precios"
             maxLength={200}
-            required={!isEdit}
-            disabled={isEdit}
+            required={!tituloLocked}
+            disabled={tituloLocked}
             className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           />
           <p className="text-xs text-muted-foreground">
             {isEdit
               ? 'El título no se puede cambiar al editar; solo su contenido.'
-              : 'Reutilizar un título existente crea una nueva versión del documento.'}
+              : isVirtualPreset
+                ? 'Conocimiento predefinido: su título ya está fijado; solo agrega el contenido.'
+                : 'Reutilizar un título existente crea una nueva versión del documento.'}
           </p>
         </div>
 

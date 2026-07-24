@@ -14,6 +14,8 @@ vi.mock('../../config/queues.js', () => ({
 
 import app from '../../app.js';
 import { createDocument } from './kb.service.js';
+import { createScoped } from '../../repositories/base.repository.js';
+import { KbDocument } from './kb-document.model.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -105,6 +107,31 @@ describe('PATCH /api/kb/documents/:id', () => {
     expect(res.body.version).toBe(2);
     expect(res.body.estadoIndexacion).toBe('pendiente');
     expect(res.body.contenido).toBe('contenido corregido');
+  });
+
+  it('primer llenado de un preset vacío → 200 y versión 1 (no incrementa)', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${preset._id.toString()}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'Somos una empresa de ejemplo.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(1);
+    expect(res.body.estadoIndexacion).toBe('pendiente');
+    expect(res.body.contenido).toBe('Somos una empresa de ejemplo.');
   });
 
   it('documento de otro tenant → 404', async () => {

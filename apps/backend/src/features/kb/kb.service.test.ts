@@ -126,6 +126,71 @@ describe('updateDocument', () => {
     });
   });
 
+  it('primer llenado de un preset vacío mantiene la versión en 1, limpia chunks y encola el job', async () => {
+    const tenantId = new Types.ObjectId();
+    // Preset seedeado: nace vacío en version 1 (como lo deja seedPresetDocuments).
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      proposito: 'Nombre, misión, visión',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+    // Chunk residual: no debería sobrevivir al re-indexado aunque el preset naciera vacío.
+    await createScoped(KbChunk, tenantId, {
+      documentId: preset._id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento residual',
+      embedding: [0.1],
+    });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(
+      tenantId,
+      preset._id.toString(),
+      'Contenido real del preset',
+    );
+
+    // Primer llenado (contenido previo vacío) NO incrementa la versión.
+    expect(updated.version).toBe(1);
+    expect(updated.estadoIndexacion).toBe('pendiente');
+    expect(updated.chunkCount).toBe(0);
+    expect(updated.contenido).toBe('Contenido real del preset');
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: preset._id }).exec();
+    expect(chunks).toHaveLength(0);
+
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+    expect(mockAdd).toHaveBeenCalledWith('index-document', {
+      tenantId: tenantId.toString(),
+      documentId: preset._id.toString(),
+      version: 1,
+    });
+  });
+
+  it('secuencia de versiones: preset vacío → primer llenado (v1) → segunda edición (v2)', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Productos y servicios',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    const firstFill = await updateDocument(tenantId, preset._id.toString(), 'Catálogo inicial');
+    expect(firstFill.version).toBe(1); // primer llenado
+
+    const secondEdit = await updateDocument(tenantId, preset._id.toString(), 'Catálogo corregido');
+    expect(secondEdit.version).toBe(2); // ya tenía contenido real → sí incrementa
+  });
+
   it('contenido vacío no encola el job y deja el documento en pendiente', async () => {
     const tenantId = new Types.ObjectId();
     const created = await createDocument(tenantId, { titulo: 'A vaciar', contenido: 'algo' });
