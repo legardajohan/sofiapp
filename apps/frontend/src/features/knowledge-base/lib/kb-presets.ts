@@ -61,16 +61,27 @@ export function hasContent(doc: IKbDocument): boolean {
 /**
  * Combina los 5 presets fijos (`PRESET_META`) con los documentos reales del tenant, en el orden fijo.
  * Por cada preset:
- *  - si existe un documento real con ese título → devuelve el documento real (tal cual la DB).
+ *  - si existe un documento real con ese título → devuelve ese documento, pero **re-imponiendo la
+ *    identidad de preset** (`isPreset:true` + `obligatorio`/`proposito` de la meta). Es necesario
+ *    porque un preset re-creado vía POST nace `isPreset:false`/`obligatorio:false`, y sin este
+ *    sello caería fuera de los conteos por categoría (denominadores 5 y 2 se romperían).
  *  - si no existe (nunca se creó o fue eliminado) → devuelve un documento **virtual** vacío en estado
  *    `pendiente`, con `id` provisional (`__preset_<i>`) que el frontend distingue de un ObjectId real.
  *
- * Garantiza que la barra superior muestre SIEMPRE las 5 categorías, sin importar qué documentos existan.
+ * Garantiza que la barra y el progreso vean SIEMPRE las 5 categorías (2 obligatorias), sin importar
+ * cómo se hayan creado los documentos reales.
  */
 export function mergePresetsWithDocuments(documents: IKbDocument[]): IKbDocument[] {
   return PRESET_META.map((meta, index) => {
     const real = documents.find((doc) => doc.titulo === meta.titulo);
-    if (real) return real;
+    if (real) {
+      return {
+        ...real,
+        isPreset: true,
+        obligatorio: meta.obligatorio,
+        proposito: real.proposito ?? meta.proposito,
+      };
+    }
 
     const now = new Date().toISOString();
     return {

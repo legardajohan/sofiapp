@@ -8,7 +8,7 @@ import { PresetKnowledgeBar } from '../components/PresetKnowledgeBar.js';
 import { PresetProgress } from '../components/PresetProgress.js';
 import { RequiredPresetsBanner } from '../components/RequiredPresetsBanner.js';
 import { KnowledgeOnboardingDialog } from '../components/KnowledgeOnboardingDialog.js';
-import { computeKbProgress, hasContent } from '../lib/kb-presets.js';
+import { computeKbProgress, hasContent, mergePresetsWithDocuments } from '../lib/kb-presets.js';
 import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
 
 const ONBOARDING_KEY = 'kb_onboarding_dismissed';
@@ -44,7 +44,9 @@ export function KnowledgeBasePage(): React.ReactElement {
   });
 
   const documents = data?.data ?? [];
-  const progress = computeKbProgress(documents);
+  // El progreso se calcula sobre la lista FUSIONADA (las 5 categorías siempre presentes): así el
+  // contador de obligatorios queda fijo en "X/2" y la barra no desaparece al eliminar todo.
+  const progress = computeKbProgress(mergePresetsWithDocuments(documents));
   const tableDocuments = documents.filter(belongsInTable);
 
   // Al iniciar una edición, lleva el formulario a la vista para que el admin no lo pierda de vista.
