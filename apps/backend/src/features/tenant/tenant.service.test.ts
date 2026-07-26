@@ -14,6 +14,7 @@ import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
 import { KbDocument } from '../kb/kb-document.model.js';
 import * as kbService from '../kb/kb.service.js';
+import { Plan } from '../plan/plan.model.js';
 import { createTenant, updateTenant, updateTenantStatus } from './tenant.service.js';
 import { AppError } from '../../utils/AppError.js';
 import type { IKbDocument } from '../kb/kb.types.js';
@@ -115,6 +116,33 @@ describe('tenant.service — HU-SAAS-01', () => {
       expect(tenant).not.toBeNull();
 
       spy.mockRestore();
+    });
+
+    it('lanza AppError 429 si el plan asignado ya no admite más usuarios (HU-SAAS-02)', async () => {
+      // Regresión: assertWithinQuota se llama DENTRO de la misma transacción que crea el tenant,
+      // por lo que debe ver el documento aún no confirmado (requiere pasar la `session`).
+      const plan = await Plan.create({
+        nombre: 'CeroUsuarios',
+        limites: { usuarios: 0, administradores: 1, mensajesMes: 10, leads: 10, campanasMes: 1 },
+        precio: 0,
+        activo: true,
+      });
+
+      await expect(
+        createTenant({
+          nombre: 'Empresa Sin Cupo',
+          slug: 'empresa-sin-cupo',
+          contacto: { email: 'cupo@empresa.com', telefono: '3001234580' },
+          planId: plan._id.toString(),
+          adminUser: { nombre: 'Admin Cupo', email: 'admincupo@empresa.com', password: 'password123' },
+        })
+      ).rejects.toMatchObject({ statusCode: 429 });
+
+      // Rollback atómico: ni el tenant ni el usuario deben haberse persistido.
+      const tenant = await Tenant.findOne({ slug: 'empresa-sin-cupo' }).lean();
+      expect(tenant).toBeNull();
+      const user = await UserModel.findOne({ email: 'admincupo@empresa.com' }).lean();
+      expect(user).toBeNull();
     });
 
     it('lanza AppError 409 si slug ya existe', async () => {

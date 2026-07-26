@@ -10,14 +10,21 @@ import { csrfGuard } from './middlewares/csrf.middleware.js';
 import { seedSuperadmin } from './seed/seed-superadmin.js';
 import { createSocketGateway } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
+import { seedPlans } from './seed/seed-plans.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
+import planAdminRoutes from './features/plan/plan.routes.js';
+import platformSettingsRoutes from './features/platform-settings/platform-settings.routes.js';
+import exchangeRateRoutes from './features/exchange-rate/exchange-rate.routes.js';
+import costCatalogRoutes from './features/cost-catalog/cost-catalog.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
 import clienteRoutes from './features/cliente/cliente.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
+import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
+import userRoutes from './features/users/user.routes.js';
 
 const app = express();
 
@@ -35,6 +42,10 @@ app.use('/api/auth', authRoutes);
 
 // Rutas de Superadmin (cross-tenant, sin requireTenant)
 app.use('/api/admin/tenants', tenantAdminRoutes);
+app.use('/api/admin/plans', planAdminRoutes);
+app.use('/api/admin/platform-settings', platformSettingsRoutes);
+app.use('/api/admin/exchange-rate', exchangeRateRoutes);
+app.use('/api/admin/cost-items', costCatalogRoutes);
 
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
@@ -43,6 +54,8 @@ app.use('/api/webhooks/whatsapp', webhookRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
+app.use('/api/admin-profiles', adminProfileRoutes);
+app.use('/api/users', userRoutes);
 
 app.use(errorHandler);
 
@@ -58,6 +71,7 @@ if (env.NODE_ENV !== 'test') {
     .then(async () => {
       logger.info('Conectado a MongoDB');
       await seedSuperadmin();
+      await seedPlans();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

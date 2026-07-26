@@ -1,10 +1,11 @@
 import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import { logout as logoutRequest } from '@/features/auth/api';
-import { useAuthStore, type AdminSubrol, type UserRol } from '@/stores/authStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useTheme, type Theme } from '@/components/theme/ThemeProvider';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { roleLabel } from '@/lib/roles';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,23 +20,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-
-const ROL_LABEL: Record<UserRol, string> = {
-  superadmin: 'Superadministrador',
-  admin: 'Administrador',
-};
-
-const SUBROL_LABEL: Record<AdminSubrol, string> = {
-  director: 'Director',
-  manager: 'Gerente',
-  coordinator: 'Coordinador',
-  secretary: 'Secretaria',
-};
-
-function roleLabel(user: { rol: UserRol; subrol?: AdminSubrol }): string {
-  const base = ROL_LABEL[user.rol];
-  return user.subrol ? `${base} · ${SUBROL_LABEL[user.subrol]}` : base;
-}
 
 function initialsFor(name: string): string {
   return name

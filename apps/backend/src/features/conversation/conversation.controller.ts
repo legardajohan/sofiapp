@@ -1,12 +1,16 @@
 import type { RequestHandler } from 'express';
 import {
+  assignConversation,
   getThread,
+  listAssignments,
   listConversations,
   markRead,
   replyMessage,
   setIaHabilitada,
 } from './conversation.service.js';
 import type {
+  AssignBody,
+  AssignmentsQuery,
   IaBody,
   ListConversationsQuery,
   ReplyBody,
@@ -19,7 +23,7 @@ export const listConversationsController: RequestHandler = async (req, res) => {
   const result = await listConversations(
     tenantId,
     asesorId,
-    req.query as unknown as ListConversationsQuery,
+    req.validatedQuery as unknown as ListConversationsQuery,
   );
   res.status(200).json(result);
 };
@@ -27,7 +31,7 @@ export const listConversationsController: RequestHandler = async (req, res) => {
 export const getThreadController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
-  const result = await getThread(tenantId, id, req.query as unknown as ThreadQuery);
+  const result = await getThread(tenantId, id, req.validatedQuery as unknown as ThreadQuery);
   res.status(200).json(result);
 };
 
@@ -52,4 +56,24 @@ export const setIaController: RequestHandler = async (req, res) => {
   const { habilitada } = req.body as IaBody;
   const conversation = await setIaHabilitada(tenantId, id, habilitada);
   res.status(200).json(conversation);
+};
+
+export const assignController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const actorId = req.user!.sub;
+  const id = req.params['id'] as string;
+  const { asignadoA } = req.body as AssignBody;
+  const conversation = await assignConversation(tenantId, actorId, id, asignadoA);
+  res.status(200).json(conversation);
+};
+
+export const listAssignmentsController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const result = await listAssignments(
+    tenantId,
+    id,
+    req.validatedQuery as unknown as AssignmentsQuery,
+  );
+  res.status(200).json(result);
 };

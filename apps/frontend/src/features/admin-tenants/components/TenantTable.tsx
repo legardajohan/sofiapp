@@ -1,9 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { useAdminTenantsStore } from '../useAdminTenantsStore.js';
+import { Pencil, Trash2 } from 'lucide-react';
 import { TenantStatusSwitch } from './TenantStatusSwitch.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -19,8 +17,11 @@ interface Props {
   total: number;
   page: number;
   limit: number;
+  /** Mapa planId → nombre del plan, para mostrar el nombre en vez del identificador. */
+  planNameById: Map<string, string>;
   onPageChange: (page: number) => void;
   onEdit: (tenant: ITenant) => void;
+  onDelete: (tenant: ITenant) => void;
 }
 
 const estadoBadgeVariant: Record<EstadoTenant, 'success' | 'secondary' | 'outline'> = {
@@ -29,36 +30,23 @@ const estadoBadgeVariant: Record<EstadoTenant, 'success' | 'secondary' | 'outlin
   prueba: 'outline',
 };
 
-export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit }: Props): React.ReactElement {
-  const { setSearch } = useAdminTenantsStore();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearch(value), 300);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
+export function TenantTable({
+  tenants,
+  total,
+  page,
+  limit,
+  planNameById,
+  onPageChange,
+  onEdit,
+  onDelete,
+}: Props): React.ReactElement {
   const totalPages = Math.ceil(total / limit);
 
   return (
     <div>
-      <Input
-        type="text"
-        placeholder="Buscar por nombre o slug…"
-        onChange={handleSearch}
-        className="mb-4"
-      />
-
-      <div className="rounded-lg border border-border bg-card shadow-card">
+      <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card shadow-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>Nombre</TableHead>
               <TableHead>Slug</TableHead>
@@ -86,14 +74,34 @@ export function TenantTable({ tenants, total, page, limit, onPageChange, onEdit 
                       <TenantStatusSwitch tenant={tenant} />
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{tenant.planId ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {tenant.planId ? (planNameById.get(tenant.planId) ?? tenant.planId) : '—'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(tenant.createdAt).toLocaleDateString('es-CO')}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => onEdit(tenant)}>
-                      Editar
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Editar"
+                        title="Editar"
+                        onClick={() => onEdit(tenant)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Eliminar"
+                        title="Eliminar"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => onDelete(tenant)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

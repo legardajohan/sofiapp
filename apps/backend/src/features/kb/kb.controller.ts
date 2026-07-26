@@ -19,7 +19,7 @@ export const updateDocumentController: RequestHandler = async (req, res) => {
 
 export const listDocumentsController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
-  const { page, limit } = req.query as unknown as { page: number; limit: number };
+  const { page, limit } = req.validatedQuery as unknown as { page: number; limit: number };
   const result = await listDocuments(tenantId, page, limit);
   res.status(200).json(result);
 };

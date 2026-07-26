@@ -36,5 +36,6 @@ const ClienteSchema = new Schema<IClienteDocument>(
 ClienteSchema.index({ tenantId: 1, metaUserId: 1 }, { unique: true });
 ClienteSchema.index({ tenantId: 1, estadoComercial: 1 });
 ClienteSchema.index({ tenantId: 1, ultimoMensajeAt: -1 });
+ClienteSchema.index({ tenantId: 1, asesorId: 1 });
 
 export const Cliente = model<IClienteDocument>('Cliente', ClienteSchema);

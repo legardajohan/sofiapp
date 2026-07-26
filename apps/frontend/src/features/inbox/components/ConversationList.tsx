@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { initials, shortTime } from '../lib/format.js';
+import { AssigneeBadge } from './AssigneeBadge.js';
 import type { ConversationDTO } from '../types.js';
 
 interface Props {
@@ -79,17 +80,20 @@ export function ConversationList({ conversations, activeId, onSelect, isLoading 
                 <div className="mt-0.5 flex items-center gap-2">
                   <p
                     className={cn(
-                      'truncate text-xs',
+                      'min-w-0 flex-1 truncate text-xs',
                       unread ? 'text-foreground' : 'text-muted-foreground',
                     )}
                   >
                     {c.preview ?? 'Sin mensajes'}
                   </p>
-                  {unread && (
-                    <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
-                      {c.noLeidos}
-                    </span>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <AssigneeBadge nombre={c.asignadoANombre} subrol={c.asignadoASubrol} />
+                    {unread && (
+                      <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                        {c.noLeidos}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </button>

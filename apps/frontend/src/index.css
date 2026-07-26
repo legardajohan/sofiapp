@@ -52,6 +52,12 @@ body {
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    /* Paleta propia del plan ANUAL (HU-SAAS-02): violeta → magenta → ámbar → cian,
+       distinta y más llamativa que la del semestral (que reusa tokens de marca). */
+    --plan-anual-1: 268 85% 58%;
+    --plan-anual-2: 322 88% 57%;
+    --plan-anual-3: 40 96% 56%;
+    --plan-anual-4: 190 88% 52%;
     --radius: 0.5rem;
     /* Panel del sidebar: capa neutra distinta del canvas (--background) para dar
        profundidad real en vez de dos blancos casi idénticos apilados. */
@@ -96,6 +102,11 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+    /* En dark subimos luminosidad y saturación para que el resplandor "queme" más. */
+    --plan-anual-1: 270 96% 70%;
+    --plan-anual-2: 322 96% 70%;
+    --plan-anual-3: 43 100% 64%;
+    --plan-anual-4: 190 96% 64%;
     --sidebar-background: 228 18% 13%;
     --sidebar-foreground: 250 40% 96%;
     --sidebar-primary: 217 91% 60%;
@@ -106,6 +117,169 @@ body {
        antes por el bug de currentColor en border-r sin color explícito. */
     --sidebar-border: 228 14% 17%;
     --sidebar-ring: 217 91% 60%;
+  }
+
+  /* ── Planes destacados: border gradient animado + resplandor (HU-SAAS-02) ──
+     Todo el efecto vive en pseudo-elementos (::before = anillo nítido, ::after = halo
+     difuso que pulsa) para no chocar con las utilidades Tailwind del <article>. El anillo
+     se recorta con máscara (mask-composite) para que el degradado solo pinte el borde.
+     Los colores por tier llegan como variables: semestral reusa tokens de marca; el plan
+     ANUAL trae su propia paleta (--plan-anual-*), más ancha, brillante y con hover notorio. */
+  .plan-card-glow {
+    position: relative;
+    /* Defaults = tier SEMESTRAL. `.plan-card--anual` los sobreescribe. */
+    --plan-gradient: linear-gradient(
+      120deg,
+      hsl(var(--primary)),
+      hsl(var(--chart-4)),
+      hsl(var(--ring)),
+      hsl(var(--primary))
+    );
+    --plan-glow-a: hsl(var(--primary) / 0.7);
+    --plan-glow-b: hsl(var(--chart-4) / 0.55);
+    --plan-glow-c: hsl(var(--ring) / 0.4);
+    --plan-ring-width: 0.5px;
+    --plan-speed: 5s;
+    --plan-speed-hover: 2.5s;
+    --plan-halo-width: 2.5px;
+    --plan-halo-blur: 6px;
+    --plan-halo-opacity: 0.55;
+  }
+
+  /* Anillo nítido + glow por drop-shadow (traza el borde, dentro y fuera). */
+  .plan-card-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    padding: var(--plan-ring-width);
+    background: var(--plan-gradient);
+    background-size: 300% 300%;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    filter: brightness(1.3) saturate(1.6) drop-shadow(0 0 3px var(--plan-glow-a))
+      drop-shadow(0 0 9px var(--plan-glow-b)) drop-shadow(0 0 18px var(--plan-glow-c));
+    animation: plan-border-pan var(--plan-speed) linear infinite;
+    pointer-events: none;
+  }
+
+  /* Halo difuso: anillo más ancho y desenfocado que pulsa (el "resplandor"). */
+  .plan-card-glow::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    padding: var(--plan-halo-width);
+    background: var(--plan-gradient);
+    background-size: 300% 300%;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    filter: blur(var(--plan-halo-blur)) brightness(1.4) saturate(1.7);
+    opacity: var(--plan-halo-opacity);
+    animation:
+      plan-border-pan var(--plan-speed) linear infinite,
+      plan-glow-pulse 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* Hover: pan más rápido y resplandor más intenso. */
+  .plan-card-glow:hover::before {
+    animation-duration: var(--plan-speed-hover);
+    filter: brightness(1.5) saturate(1.85) drop-shadow(0 0 4px var(--plan-glow-a))
+      drop-shadow(0 0 13px var(--plan-glow-b)) drop-shadow(0 0 26px var(--plan-glow-c));
+  }
+  .plan-card-glow:hover::after {
+    animation-duration: var(--plan-speed-hover), 3.2s;
+    filter: blur(calc(var(--plan-halo-blur) + 3px)) brightness(1.6) saturate(2);
+  }
+
+  /* Plan ANUAL: paleta propia (violeta→magenta→ámbar→cian), más ancho, más brillo,
+     más rápido y hover mucho más marcado. */
+  .plan-card--anual {
+    --plan-gradient: linear-gradient(
+      120deg,
+      hsl(var(--plan-anual-1)),
+      hsl(var(--plan-anual-2)),
+      hsl(var(--plan-anual-3)),
+      hsl(var(--plan-anual-4)),
+      hsl(var(--plan-anual-1))
+    );
+    --plan-glow-a: hsl(var(--plan-anual-2) / 0.9);
+    --plan-glow-b: hsl(var(--plan-anual-1) / 0.65);
+    --plan-glow-c: hsl(var(--plan-anual-3) / 0.55);
+    /* Borde nítido igual de delgado que el semestral; el "grosor" del anual viene del resplandor. */
+    --plan-ring-width: 0.5px;
+    --plan-speed: 3.5s;
+    --plan-speed-hover: 1.5s;
+    /* Mismo grosor de halo que el semestral; el anual se distingue por el aura, no por el borde. */
+    --plan-halo-width: 2.5px;
+    --plan-halo-blur: 6px;
+    --plan-halo-opacity: 0.72;
+    /* Aura exterior que "respira" alrededor de toda la tarjeta (resplandor del anual). */
+    animation: plan-anual-aura 3.2s ease-in-out infinite;
+  }
+
+  /* Hover: el aura pulsa más rápido, en sintonía con el anillo/halo. */
+  .plan-card--anual:hover {
+    animation-duration: 1.5s;
+  }
+
+  @keyframes plan-anual-aura {
+    0%,
+    100% {
+      box-shadow:
+        0 0 16px -4px hsl(var(--plan-anual-2) / 0.17),
+        0 0 42px -12px hsl(var(--plan-anual-1) / 0.15),
+        0 0 72px -20px hsl(var(--plan-anual-4) / 0.14);
+    }
+    50% {
+      box-shadow:
+        0 0 26px -2px hsl(var(--plan-anual-2) / 0.22),
+        0 0 60px -8px hsl(var(--plan-anual-1) / 0.19),
+        0 0 96px -14px hsl(var(--plan-anual-4) / 0.17);
+    }
+  }
+
+  @keyframes plan-border-pan {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 300% 50%;
+    }
+  }
+
+  @keyframes plan-glow-pulse {
+    0%,
+    100% {
+      opacity: var(--plan-halo-opacity);
+    }
+    50% {
+      opacity: calc(var(--plan-halo-opacity) + 0.25);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .plan-card-glow::before,
+    .plan-card-glow::after {
+      animation: none;
+    }
+    /* El aura del anual queda fija (sin latido) pero conserva el resplandor. */
+    .plan-card--anual {
+      animation: none;
+      box-shadow:
+        0 0 20px -3px hsl(var(--plan-anual-2) / 0.18),
+        0 0 50px -10px hsl(var(--plan-anual-1) / 0.15),
+        0 0 84px -16px hsl(var(--plan-anual-4) / 0.15);
+    }
   }
 
   /* Fuerza light aunque un ancestro tenga .dark (usado en /login: DSN-03 §criterio 6). */
