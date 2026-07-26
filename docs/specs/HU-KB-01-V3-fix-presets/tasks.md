@@ -33,10 +33,28 @@
       cambios (sigue siendo correcto).
 - [x] `kb.routes.test.ts`: nuevo test "primer llenado de un preset vacío → 200 y versión 1".
 
-## 4. Verificación final
+## 4. Fix V3.1 — Barra de progreso sobre lista fusionada
+- [x] `pages/KnowledgeBasePage.tsx`: importar `mergePresetsWithDocuments`; cambiar (ubicado por el
+      texto `computeKbProgress(`) `computeKbProgress(documents)` →
+      `computeKbProgress(mergePresetsWithDocuments(documents))`. `computeKbProgress` no se toca.
+- [x] `apps/frontend/tests/kb-progress.test.ts` (nuevo): `node:assert` vía `tsx`, fuera de `src/`.
+      Cubre eliminar todo → `0/2` + barra visible; siempre 5 categorías; `X/2` insensible a
+      opcionales; numerador solo `indexado`; ambos obligatorios indexados → `2/2`.
+
+## 4b. Fix V3.2 — Denominadores fijos (merge re-impone identidad de preset)
+- [x] `lib/kb-presets.ts` · `mergePresetsWithDocuments`: en la rama "existe documento real", devolver
+      `{ ...real, isPreset: true, obligatorio: meta.obligatorio, proposito: real.proposito ?? meta.proposito }`
+      en vez de `return real`. Así los denominadores por categoría no dependen de los flags que traiga
+      la DB (un preset creado por POST nace `isPreset:false`). `computeKbProgress` **no** se toca.
+- [x] `apps/frontend/tests/kb-progress.test.ts`: ampliar con la reproducción exacta (docs
+      `isPreset:false`): 0/5,0/2 → completar obligatorio → 1/5,1/2; opcional no mueve X/2; completar
+      dos → 2/5,2/2; completar los cinco → 5/5,2/2; `missingObligatorios` correcto.
+
+## 5. Verificación final
 - [x] `pnpm --filter @sofiapp/api typecheck` ✅
 - [x] `pnpm --filter @sofiapp/api test` ✅ (141 tests, 23 archivos)
 - [x] `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint` ✅
+- [x] `pnpm --filter @sofiapp/api exec tsx ../../apps/frontend/tests/kb-progress.test.ts` ✅ (9 tests)
 - [x] Checklist PR de aislamiento (`docs/multi-tenancy.md` §9): sin `Model.find/create` directos en el
       código nuevo; `tenantId` del token; todo por el repositorio scoped (el fix de Bug 2 solo cambia
       si se incrementa `version`, no las queries scoped).

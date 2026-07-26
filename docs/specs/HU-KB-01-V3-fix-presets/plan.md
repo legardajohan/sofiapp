@@ -116,12 +116,82 @@ Puntos clave:
 - La **tabla** se alimenta de la lista cruda (`belongsInTable` sobre `documents`), no del merge, así
   que los presets virtuales nunca se cuelan en ella.
 
-### Consistencia con progreso/banner (fuera de alcance)
-`computeKbProgress` y `RequiredPresetsBanner` se siguen alimentando de la lista cruda. Tras eliminar
-un obligatorio, el progreso deja de contarlo hasta que se re-cree. Se documenta como limitación
-aceptada en `spec.md`; no se amplía el alcance a esos componentes ni al backend de creación.
+### Consistencia con progreso/banner (`RequiredPresetsBanner` fuera de alcance)
+`RequiredPresetsBanner` se sigue alimentando de la lista cruda (solo señala obligatorios que existen
+y están vacíos). No se amplía el alcance a ese componente ni al backend de creación.
+
+---
+
+## Fix V3.1 — Barra de progreso sobre la lista fusionada
+
+### Causa
+`KnowledgeBasePage` pasaba a `computeKbProgress(documents)` la lista **cruda** del API.
+`computeKbProgress` deriva el denominador de obligatorios de `documents.filter(d => d.obligatorio)`,
+y `PresetProgress` se oculta cuando `totalPresets === 0`. Así, al eliminar los documentos:
+- el contador `X/2` de obligatorios encogía o desaparecía (menos obligatorios en la lista), y
+- al borrar todo, `totalPresets` caía a 0 y la barra entera se ocultaba.
+
+### Solución
+Alimentar el progreso con la **misma lista fusionada** que la barra de cards:
+
+```ts
+// KnowledgeBasePage.tsx (ubicado por el texto `computeKbProgress(`)
+const progress = computeKbProgress(mergePresetsWithDocuments(documents));
+```
+
+Como `mergePresetsWithDocuments` garantiza las 5 categorías (con sus 2 obligatorios de `PRESET_META`),
+el denominador queda fijo: `totalPresets = 5` (barra siempre visible) y `obligatorios.length = 2`
+(contador siempre `X/2`). El numerador no cambia de semántica: `completedObligatorios` sigue contando
+solo `estadoIndexacion === 'indexado'`. `computeKbProgress` **no** se modifica; solo su entrada.
+
+### Test (sin runner nuevo)
+`apps/frontend/tests/kb-progress.test.ts`: `node:assert` vía `tsx` (ya en el repo), fuera de `src/`
+para no entrar en `build`/`lint` ni en `turbo run test`. Cubre: eliminar todo → `0/2` con barra
+visible; siempre 5 categorías; `X/2` insensible a opcionales; numerador solo `indexado`.
+Ejecutar: `pnpm --filter @sofiapp/api exec tsx ../../apps/frontend/tests/kb-progress.test.ts`.
+
+---
+
+## Fix V3.2 — Denominadores fijos (merge re-impone identidad de preset)
+
+### Causa
+`computeKbProgress` deriva ambos denominadores filtrando por `doc.isPreset` y `doc.obligatorio`.
+`mergePresetsWithDocuments` devolvía el documento real **tal cual la DB** (`if (real) return real;`).
+Un preset completado que nació por **POST** (`createKbDocument`, flujo de un preset virtual) tiene
+`isPreset:false`/`obligatorio:false` porque el backend de creación no setea esos flags. Ese documento
+**fallaba los dos filtros** → salía de `presets` (5→4) y de `obligatorios` (2→1) y tampoco contaba
+como completado → el observado "0/4, 0/1". (No pasa con presets **seedeados**, que se editan por PATCH
+y conservan `isPreset:true`.) La hipótesis de un cálculo "en términos de pendientes" quedó
+**descartada**: `computeKbProgress` ya usa "total fijo + completados".
+
+### Solución
+Como el merge empareja por el **título canónico** de `PRESET_META`, re-impone la identidad de preset
+sobre el documento real emparejado (no se toca `computeKbProgress` ni el backend):
+
+```ts
+// mergePresetsWithDocuments — rama "existe documento real":
+if (real) {
+  return {
+    ...real,
+    isPreset: true,
+    obligatorio: meta.obligatorio,        // 2 obligatorios fijos por PRESET_META
+    proposito: real.proposito ?? meta.proposito,
+  };
+}
+```
+
+Con esto `presets.length === 5` y `obligatorios.length === 2` **siempre**; el numerador
+(`filter(isCompleted)`, solo `indexado`) es lo único que se mueve. Beneficio colateral: el badge
+"Requerido" de la barra también queda correcto para presets creados por POST.
+
+### Test
+Se amplía `apps/frontend/tests/kb-progress.test.ts` con la reproducción exacta (documentos con
+`isPreset:false`): 0/5,0/2 → completar un obligatorio → 1/5,1/2 (no 0/4,0/1); opcional mueve X/5 pero
+no X/2; completar dos → 2/5,2/2; completar los cinco → 5/5,2/2; `missingObligatorios` lista solo lo
+pendiente sin tocar denominadores.
 
 ## Verificación
 - `pnpm --filter @sofiapp/api typecheck`
 - `pnpm --filter @sofiapp/api test`
 - `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint`
+- `pnpm --filter @sofiapp/api exec tsx ../../apps/frontend/tests/kb-progress.test.ts` (progreso)
