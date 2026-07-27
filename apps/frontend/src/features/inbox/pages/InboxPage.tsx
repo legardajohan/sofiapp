@@ -9,7 +9,10 @@ import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
 import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
+import { TagChip } from '@/features/tags/components/TagChip';
+import { TagSelector } from '@/features/tags/components/TagSelector';
 import { useConversations } from '../hooks/useConversations.js';
+import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
@@ -42,16 +45,23 @@ export function InboxPage(): React.ReactElement {
   const estado: EstadoComercial | undefined = ESTADOS.includes(rawEstado as EstadoComercial)
     ? (rawEstado as EstadoComercial)
     : undefined;
+  const etiqueta = params.get('etiqueta') ?? undefined;
 
   const activeId = useInboxStore((s) => s.activeId);
   const setActiveId = useInboxStore((s) => s.setActiveId);
 
-  const { data: conversations, isLoading } = useConversations({ filtro, asignadoA, estado });
+  const { data: conversations, isLoading } = useConversations({
+    filtro,
+    asignadoA,
+    estado,
+    etiqueta,
+  });
   const { data: thread, isLoading: threadLoading } = useThread(activeId);
 
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
   const setSofi = useSetSofi(activeId ?? '');
+  const setTags = useSetConversationTags(activeId);
 
   const active = useMemo(
     () => conversations?.data.find((c) => c.id === activeId) ?? null,
@@ -91,6 +101,8 @@ export function InboxPage(): React.ReactElement {
           onAsignadoAChange={(v) => updateParams({ asignadoA: v })}
           estado={estado}
           onEstadoChange={(v) => updateParams({ estado: v })}
+          etiqueta={etiqueta}
+          onEtiquetaChange={(v) => updateParams({ etiqueta: v })}
         />
         <div className="flex-1 overflow-y-auto">
           <ConversationList
@@ -124,6 +136,11 @@ export function InboxPage(): React.ReactElement {
                   pending={setSofi.isPending}
                   onToggle={(v) => setSofi.mutate(v)}
                 />
+                <TagSelector
+                  aplicadas={active.tags}
+                  pending={setTags.isPending}
+                  onChange={(tagIds) => setTags.mutate(tagIds)}
+                />
                 <AssignMenu
                   conversationId={active.id}
                   asignadoA={active.asignadoA}
@@ -131,6 +148,27 @@ export function InboxPage(): React.ReactElement {
                 />
               </div>
             </header>
+
+            {/* Las etiquetas aplicadas, visibles y quitables sin abrir el menú: es la acción más
+                frecuente una vez etiquetada la conversación. */}
+            {active.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2">
+                {active.tags.map((tag) => (
+                  <TagChip
+                    key={tag.id}
+                    tag={tag}
+                    onRemove={
+                      setTags.isPending
+                        ? undefined
+                        : () =>
+                            setTags.mutate(
+                              active.tags.filter((t) => t.id !== tag.id).map((t) => t.id),
+                            )
+                    }
+                  />
+                ))}
+              </div>
+            )}
 
             <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
 

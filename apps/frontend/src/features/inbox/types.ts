@@ -1,4 +1,5 @@
 import type { AdminSubrol } from '@/stores/authStore';
+import type { TagDTO } from '@/features/tags/types';
 
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
 
@@ -25,6 +26,8 @@ export interface ConversationDTO {
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;
+  /** Etiquetas ya hidratadas por el backend: los chips se pintan sin una segunda llamada. */
+  tags: TagDTO[];
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */
@@ -32,6 +35,8 @@ export interface InboxFiltros {
   filtro: FiltroBandeja;
   asignadoA?: string;
   estado?: EstadoComercial;
+  /** Id de la etiqueta por la que se filtra. */
+  etiqueta?: string;
 }
 
 export interface MessageDTO {

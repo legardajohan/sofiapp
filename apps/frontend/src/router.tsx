@@ -21,6 +21,10 @@ const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
 );
 
+const TagsPage = lazy(() =>
+  import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
+);
+
 const AdminRoutes = lazy(() =>
   import('./routes/AdminRoutes.js').then((m) => ({ default: m.default })),
 );
@@ -75,6 +79,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <InboxPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/etiquetas',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <TagsPage />
                 </Suspense>
               </RequireRole>
             ),

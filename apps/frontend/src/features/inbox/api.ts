@@ -11,6 +11,18 @@ export async function fetchConversations(
   return data;
 }
 
+/** Reemplaza el conjunto de etiquetas: aplicar y quitar varias es una sola llamada. */
+export async function setConversationTags(
+  conversationId: string,
+  tagIds: string[],
+): Promise<ConversationDTO> {
+  const { data } = await apiClient.patch<ConversationDTO>(
+    `/conversations/${conversationId}/tags`,
+    { tagIds },
+  );
+  return data;
+}
+
 export async function assignConversation(
   conversationId: string,
   asignadoA: string | null,
