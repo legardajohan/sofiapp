@@ -13,6 +13,8 @@ import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
+import { assertTagsDelTenant, findTagsByIds } from '../tag/tag.service.js';
+import type { ITagResponse } from '../tag/tag.types.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import {
@@ -51,6 +53,7 @@ function buildFiltro(
   asesorId: string,
   asignadoA?: string,
   estado?: EstadoComercial,
+  etiqueta?: string,
 ): FilterQuery<IClienteDocument> {
   const f: FilterQuery<IClienteDocument> = {};
   if (filtro === 'mios') f.asesorId = new Types.ObjectId(asesorId);
@@ -63,7 +66,20 @@ function buildFiltro(
 
   if (estado) f.estadoComercial = estado;
 
+  // Un ObjectId suelto contra un campo array significa "contiene" en Mongo: no hace falta `$in`.
+  // Cubierto por el índice { tenantId, tagIds }.
+  if (etiqueta) f.tagIds = new Types.ObjectId(etiqueta);
+
   return f;
+}
+
+/** Resuelve las etiquetas de UNA conversación (usado por las mutaciones de un solo `Cliente`). */
+async function resolveTags(
+  tenantId: string,
+  source: IConversationSource,
+): Promise<Map<string, ITagResponse>> {
+  const ids = (source.tagIds ?? []).map((id) => String(id));
+  return findTagsByIds(tenantId, ids);
 }
 
 /** Resuelve el responsable de UNA conversación (usado por las mutaciones de un solo `Cliente`). */
@@ -78,8 +94,8 @@ export async function listConversations(
   asesorId: string,
   query: ListConversationsQuery,
 ): Promise<IPaginated<IConversationResponse>> {
-  const { page, limit, filtro, asignadoA, estado } = query;
-  const filtroMongo = buildFiltro(filtro, asesorId, asignadoA, estado);
+  const { page, limit, filtro, asignadoA, estado, etiqueta } = query;
+  const filtroMongo = buildFiltro(filtro, asesorId, asignadoA, estado, etiqueta);
 
   const clientes = await findScoped(Cliente, tenantId, filtroMongo)
     .sort({ ultimoMensajeAt: -1 })
@@ -113,11 +129,23 @@ export async function listConversations(
     .map((id) => String(id));
   const assigneeMap = await findUsersByIds(tenantId, assigneeIds);
 
+  // Igual que los responsables: TODAS las etiquetas de la página en una sola consulta.
+  const tagIds = clientes.flatMap((c) =>
+    ((c as unknown as IConversationSource).tagIds ?? []).map((id) => String(id)),
+  );
+  const tagMap = await findTagsByIds(tenantId, tagIds);
+
   const now = new Date();
   const data = clientes.map((c) => {
     const source = c as unknown as IConversationSource;
     const asignado = source.asesorId ? (assigneeMap.get(String(source.asesorId)) ?? null) : null;
-    return toConversationResponse(source, previewMap.get(String(c._id)) ?? null, now, asignado);
+    return toConversationResponse(
+      source,
+      previewMap.get(String(c._id)) ?? null,
+      now,
+      asignado,
+      tagMap,
+    );
   });
 
   return { data, page, limit, total };
@@ -171,12 +199,13 @@ export async function replyMessage(
   if (cliente) {
     const source = cliente as unknown as IConversationSource;
     const asignado = await resolveAsignado(tenantId, source.asesorId);
+    const tagMap = await resolveTags(tenantId, source);
     await publishRealtime({
       type: 'message:new',
       tenantId,
       conversationId: clienteId,
       message,
-      conversation: toConversationResponse(source, message.texto, new Date(), asignado),
+      conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
     });
   }
 
@@ -195,7 +224,8 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
 
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
-  const conversation = toConversationResponse(source, null, new Date(), asignado);
+  const tagMap = await resolveTags(tenantId, source);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
 }
@@ -216,8 +246,51 @@ export async function setIaHabilitada(
 
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
-  const conversation = toConversationResponse(source, null, new Date(), asignado);
+  const tagMap = await resolveTags(tenantId, source);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  return conversation;
+}
+
+/**
+ * Reemplaza el conjunto de etiquetas de una conversación (HU-OMNI-04). Aplicar y quitar varias es
+ * una sola operación; `[]` la deja sin etiquetas.
+ *
+ * `assertTagsDelTenant` va ANTES de escribir: los `tagIds` llegan del body, así que es el único
+ * punto por el que una etiqueta de otro tenant podría colarse. Si alguna no pertenece, la
+ * operación falla entera y no se escribe nada.
+ */
+export async function setConversationTags(
+  tenantId: string,
+  clienteId: string,
+  tagIds: string[],
+): Promise<IConversationResponse> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  const unicos = [...new Set(tagIds)];
+  await assertTagsDelTenant(tenantId, unicos);
+
+  const updated = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    { tagIds: unicos.map((id) => new Types.ObjectId(id)) },
+    { new: true },
+  ).lean();
+  if (!updated) throw new AppError('Conversación no encontrada.', 404);
+
+  const source = updated as unknown as IConversationSource;
+  const asignado = await resolveAsignado(tenantId, source.asesorId);
+  const tagMap = await findTagsByIds(tenantId, unicos);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
+
+  await publishRealtime({
+    type: 'conversation:updated',
+    tenantId,
+    conversationId: clienteId,
+    conversation,
+  });
   return conversation;
 }
 
@@ -243,7 +316,7 @@ export async function assignConversation(
 
   if (antes === asignadoA) {
     // Idempotente: mismo valor, sin auditoría ni evento de tiempo real.
-    return toConversationResponse(source, null, new Date(), asignado);
+    return toConversationResponse(source, null, new Date(), asignado, await resolveTags(tenantId, source));
   }
 
   const updated = await findOneAndUpdateScoped(
@@ -264,11 +337,13 @@ export async function assignConversation(
     despues: { asignadoA },
   });
 
+  const updatedSource = updated as unknown as IConversationSource;
   const conversation = toConversationResponse(
-    updated as unknown as IConversationSource,
+    updatedSource,
     null,
     new Date(),
     asignado,
+    await resolveTags(tenantId, updatedSource),
   );
 
   const actorInfo = (await findUsersByIds(tenantId, [actorId])).get(actorId) ?? null;
@@ -334,12 +409,13 @@ export async function notifyInboundMessage(
 
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
+  const tagMap = await resolveTags(tenantId, source);
   const message = toMessageResponse(savedMsg);
   await publishRealtime({
     type: 'message:new',
     tenantId,
     conversationId: clienteId,
     message,
-    conversation: toConversationResponse(source, message.texto, new Date(), asignado),
+    conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
   });
 }

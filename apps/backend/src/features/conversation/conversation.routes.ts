@@ -11,6 +11,7 @@ import {
   listConversationsSchema,
   readSchema,
   replySchema,
+  tagsSchema,
   threadSchema,
 } from './conversation.validation.js';
 import {
@@ -21,6 +22,7 @@ import {
   markReadController,
   replyController,
   setIaController,
+  setTagsController,
 } from './conversation.controller.js';
 
 const router = Router();
@@ -70,6 +72,15 @@ router.patch(
   bandejaRoles,
   validate(iaSchema),
   asyncHandler(setIaController),
+);
+
+router.patch(
+  '/:id/tags',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(tagsSchema),
+  asyncHandler(setTagsController),
 );
 
 router.patch(

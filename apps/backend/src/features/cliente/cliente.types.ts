@@ -21,7 +21,8 @@ export interface ICliente {
   iaHabilitada: boolean;
   asesorId?: Types.ObjectId;
   customFields: Record<string, unknown>;
-  tags: string[];
+  /** Etiquetas de empresa aplicadas a la conversación (HU-OMNI-04). */
+  tagIds: Types.ObjectId[];
   nivelInteres?: 'frio' | 'tibio' | 'caliente';
   objecionPrincipal?: 'precio' | 'tiempo' | 'confianza' | 'otra';
   rolContacto?: 'decisor' | 'usuario' | 'desconocido';

@@ -14,6 +14,7 @@ export const listConversationsSchema = z.object({
     filtro: z.enum(['todos', 'mios', 'sin_asignar', 'sofi']).default('todos'),
     asignadoA: z.union([objectId, z.literal('sin_asignar')]).optional(),
     estado: estadoComercial.optional(),
+    etiqueta: objectId.optional(),
   }),
 });
 
@@ -59,7 +60,16 @@ export const assignmentsSchema = z.object({
   }),
 });
 
+// El PATCH reemplaza el conjunto completo: aplicar y quitar varias etiquetas es una sola
+// operación. `[]` es válido y significa "sin etiquetas".
+export const tagsSchema = z.object({
+  body: z.object({ tagIds: z.array(objectId).max(20) }),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 export type ListConversationsQuery = z.infer<typeof listConversationsSchema>['query'];
+export type TagsBody = z.infer<typeof tagsSchema>['body'];
 export type ThreadQuery = z.infer<typeof threadSchema>['query'];
 export type ReplyBody = z.infer<typeof replySchema>['body'];
 export type IaBody = z.infer<typeof iaSchema>['body'];

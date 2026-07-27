@@ -6,6 +6,7 @@ import {
   listConversations,
   markRead,
   replyMessage,
+  setConversationTags,
   setIaHabilitada,
 } from './conversation.service.js';
 import type {
@@ -14,6 +15,7 @@ import type {
   IaBody,
   ListConversationsQuery,
   ReplyBody,
+  TagsBody,
   ThreadQuery,
 } from './conversation.validation.js';
 
@@ -55,6 +57,14 @@ export const setIaController: RequestHandler = async (req, res) => {
   const id = req.params['id'] as string;
   const { habilitada } = req.body as IaBody;
   const conversation = await setIaHabilitada(tenantId, id, habilitada);
+  res.status(200).json(conversation);
+};
+
+export const setTagsController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const { tagIds } = req.body as TagsBody;
+  const conversation = await setConversationTags(tenantId, id, tagIds);
   res.status(200).json(conversation);
 };
 

@@ -36,7 +36,7 @@ export async function upsertByMetaUser(
 
   const update: Record<string, unknown> = {
     $set: { telefono, ultimoMensajeAt: now, ventana24hExpiraEn },
-    $setOnInsert: { metaUserId, canalOrigen, estadoComercial: 'nuevo', customFields: {}, tags: [] },
+    $setOnInsert: { metaUserId, canalOrigen, estadoComercial: 'nuevo', customFields: {}, tagIds: [] },
   };
   if (nombre) (update['$set'] as Record<string, unknown>)['nombre'] = nombre;
 
