@@ -1,5 +1,13 @@
 import { apiClient } from '../../api/apiClient.js';
-import type { ConversationDTO, InboxFiltros, MessageDTO, Paginated } from './types.js';
+import type {
+  ContactHistoryDTO,
+  ConversationDTO,
+  DatosExtraidosDTO,
+  InboxFiltros,
+  MessageDTO,
+  Paginated,
+  ResumenDTO,
+} from './types.js';
 
 export async function fetchConversations(
   filtros: InboxFiltros,
@@ -68,5 +76,28 @@ export async function setSofiEnabled(
     `/conversations/${conversationId}/ia`,
     { habilitada },
   );
+  return data;
+}
+
+/** Ficha del contacto: historial completo + estado del resumen (HU-OMNI-03). */
+export async function fetchContactHistory(
+  clienteId: string,
+  page = 1,
+): Promise<ContactHistoryDTO> {
+  const { data } = await apiClient.get<ContactHistoryDTO>(`/clientes/${clienteId}/history`, {
+    params: { page },
+  });
+  return data;
+}
+
+/** Genera/actualiza el resumen por IA de la conversación (bajo demanda). */
+export async function generateSummary(clienteId: string): Promise<ResumenDTO> {
+  const { data } = await apiClient.post<ResumenDTO>(`/conversations/${clienteId}/summary`);
+  return data;
+}
+
+/** Extrae nombre completo, correo y teléfono de la conversación con IA (bajo demanda). */
+export async function extractContactData(clienteId: string): Promise<DatosExtraidosDTO> {
+  const { data } = await apiClient.post<DatosExtraidosDTO>(`/clientes/${clienteId}/extract`);
   return data;
 }

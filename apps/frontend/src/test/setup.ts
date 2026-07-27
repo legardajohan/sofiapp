@@ -2,9 +2,9 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-// jsdom no implementa estas APIs y Radix (dropdown, select, dialog) las usa al abrirse. Sin los
-// stubs, cualquier test que despliegue uno de esos primitivos falla por el entorno, no por el
-// código que se está probando.
+// jsdom no implementa estas APIs del DOM y sí las usan Radix (dropdown, select, dialog) al abrirse
+// y el auto-scroll del hilo de mensajes al montar. Sin los stubs, cualquier test que renderice una
+// conversación o despliegue uno de esos primitivos falla por el entorno, no por el código.
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = (): boolean => false;
 }

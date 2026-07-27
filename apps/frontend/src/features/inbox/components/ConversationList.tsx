@@ -6,15 +6,26 @@ import { initials, shortTime } from '../lib/format.js';
 import { AssigneeBadge } from './AssigneeBadge.js';
 import { TagChip } from '@/features/tags/components/TagChip';
 import type { ConversationDTO } from '../types.js';
+import { InboxError } from './InboxError.js';
 
 interface Props {
   conversations: ConversationDTO[];
   activeId: string | null;
   onSelect: (id: string) => void;
   isLoading: boolean;
+  /** Motivo del fallo, o `null` si la carga fue bien. Tiene prioridad sobre el estado vacío. */
+  error: string | null;
+  onRetry: () => void;
 }
 
-export function ConversationList({ conversations, activeId, onSelect, isLoading }: Props): React.ReactElement {
+export function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  isLoading,
+  error,
+  onRetry,
+}: Props): React.ReactElement {
   if (isLoading) {
     return (
       <div className="space-y-1 p-2">
@@ -30,6 +41,9 @@ export function ConversationList({ conversations, activeId, onSelect, isLoading 
       </div>
     );
   }
+
+  // El error va ANTES del estado vacío: si la petición falló no sabemos si hay conversaciones.
+  if (error) return <InboxError message={error} onRetry={onRetry} />;
 
   if (conversations.length === 0) {
     return (

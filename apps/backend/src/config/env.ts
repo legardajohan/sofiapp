@@ -20,7 +20,10 @@ const EnvSchema = z.object({
   // LLM / Gemini — sin fallback: el proceso aborta si GEMINI_API_KEY falta
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
   GEMINI_API_KEY: z.string().min(1),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  // `gemini-2.5-flash` (y `-flash-lite`) devuelven 404 "no longer available to new users" con API
+  // keys creadas recientemente: siguen apareciendo en ListModels pero están cerrados a proyectos
+  // nuevos. Verificado contra la API el 2026-07-26.
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
   LLM_TIMEOUT_MS: z.coerce.number().positive().default(15000),
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),

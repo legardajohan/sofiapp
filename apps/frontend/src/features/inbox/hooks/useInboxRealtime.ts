@@ -21,10 +21,13 @@ export function useInboxRealtime(): void {
     const onMessage = (evt: RealtimeMessageEvent): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['thread', evt.conversationId] });
+      // Refresca la ficha para que el resumen se marque "desactualizado" al llegar mensajes nuevos.
+      void qc.invalidateQueries({ queryKey: ['contact-history', evt.conversationId] });
     };
     const onConversation = (evt: RealtimeConversationEvent): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['thread', evt.conversationId] });
+      void qc.invalidateQueries({ queryKey: ['contact-history', evt.conversationId] });
     };
     const onAssigned = (evt: RealtimeAssignedEvent): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });

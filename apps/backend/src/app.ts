@@ -12,6 +12,7 @@ import { createSocketGateway } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
+import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
@@ -75,6 +76,7 @@ if (env.NODE_ENV !== 'test') {
       logger.info('Conectado a MongoDB');
       await seedSuperadmin();
       await seedPlans();
+      await seedPromptTemplates();
       await backfillSemaforoTags();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);

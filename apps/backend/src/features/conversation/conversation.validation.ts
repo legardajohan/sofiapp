@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
+// No hace falta `.optional()`: `validate.middleware` normaliza `req.body ?? {}` antes de parsear,
+// que es donde se resolvió el cambio de Express 5 (deja `req.body` en `undefined` sin cuerpo).
 const empty = z.object({});
 
 const estadoComercial = z.enum(['nuevo', 'en_gestion', 'pago_pendiente', 'pagado', 'perdido']);
@@ -41,6 +43,12 @@ export const readSchema = z.object({
 
 export const iaSchema = z.object({
   body: z.object({ habilitada: z.boolean() }),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
+export const summarySchema = z.object({
+  body: empty,
   params: z.object({ id: objectId }),
   query: empty,
 });

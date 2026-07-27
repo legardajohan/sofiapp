@@ -8,13 +8,25 @@ import type { ILlmProvider } from '../../integrations/llm/llm-provider.types.js'
 import { PromptTemplateModel, type IPromptTemplate } from './prompt-template.model.js';
 import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
 import { buildCacheKey, getCached, setCached } from './ai-cache.util.js';
+import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type {
   AiResult,
   AiChatParams,
   AiExtractParams,
   AiClassifyParams,
+  AiSummarizeParams,
   ClassifyResult,
 } from './ai-service.types.js';
+
+/**
+ * Gemini rechaza con `400 Requests ending with a model turn are not supported` cualquier petición
+ * cuyo último turno sea del modelo. En chat nunca pasa (el último turno es el mensaje del cliente),
+ * pero al resumir o extraer sobre un transcript cerrado por el asesor sí ocurre. Añadimos el
+ * turno de usuario que formula la tarea: satisface la restricción y explicita la instrucción.
+ */
+function conTurnoDeTarea(historial: ChatTurn[], tarea: string): ChatTurn[] {
+  return [...historial, { role: 'user', content: tarea }];
+}
 
 export class AIService {
   constructor(
@@ -51,7 +63,10 @@ export class AIService {
     await this.resolveTemplate(params.tenantId, 'extract');
 
     const { result, usage } = await this.provider.extractSlots({
-      historial: params.historial,
+      historial: conTurnoDeTarea(
+        params.historial,
+        'Extrae de la conversación anterior los campos solicitados. Deja vacío el que no aparezca.',
+      ),
       camposObjetivo: params.camposObjetivo,
     });
 
@@ -80,6 +95,28 @@ export class AIService {
     const durationMs = Date.now() - start;
     this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
     return { data: classifyResult, cacheHit: false, ...usage, durationMs };
+  }
+
+  /**
+   * Resume la conversación (transcript en `historial`) usando la plantilla global/tenant `summary`.
+   * No cachea en Redis: la persistencia del resumen vive en `Cliente.resumenIA` (HU-OMNI-03),
+   * cuya invalidación se deriva de `ultimoMensajeAt`. Reutiliza `generateReply`.
+   */
+  async summarize(params: AiSummarizeParams): Promise<AiResult<string>> {
+    const start = Date.now();
+    const template = await this.resolveTemplate(params.tenantId, 'summary');
+
+    const { result, usage } = await this.provider.generateReply({
+      historial: conTurnoDeTarea(params.historial, 'Resume la conversación anterior.'),
+      // `generateReply` compone `Tono: ${tono}. ${instrucciones}`. Pasar la plantilla en ambos
+      // campos la duplicaba dentro del system prompt y cobraba sus tokens dos veces por resumen.
+      tono: 'profesional, neutro y conciso',
+      instrucciones: template.systemPrompt,
+    });
+
+    const durationMs = Date.now() - start;
+    this.logUsage({ tenantId: params.tenantId, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    return { data: result, cacheHit: false, ...usage, durationMs };
   }
 
   private async resolveTemplate(tenantId: Types.ObjectId, method: string): Promise<IPromptTemplate> {

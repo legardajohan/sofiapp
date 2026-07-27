@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import {
   assignConversation,
+  generateConversationSummary,
   getThread,
   listAssignments,
   listConversations,
@@ -66,6 +67,13 @@ export const setTagsController: RequestHandler = async (req, res) => {
   const { tagIds } = req.body as TagsBody;
   const conversation = await setConversationTags(tenantId, id, tagIds);
   res.status(200).json(conversation);
+};
+
+export const generateSummaryController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const resumen = await generateConversationSummary(tenantId, id);
+  res.status(200).json(resumen);
 };
 
 export const assignController: RequestHandler = async (req, res) => {
