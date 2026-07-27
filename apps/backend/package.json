@@ -7,6 +7,7 @@
     "dev:web": "tsx watch --env-file .env src/app.ts",
     "dev:worker": "tsx watch --env-file .env src/worker.ts",
     "build": "tsc",
+    "seed:inbox": "tsx --env-file .env src/seed/seed-inbox-demo.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

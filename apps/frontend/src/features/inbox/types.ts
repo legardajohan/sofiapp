@@ -59,9 +59,25 @@ export interface ContactCardDTO {
   createdAt: string;
 }
 
+/** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
+export type TelefonoOrigen = 'conversacion' | 'whatsapp';
+
+/**
+ * Datos de contacto extraídos por IA. `nombreCompleto` y `correo` son `null` si la conversación
+ * no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del contacto).
+ */
+export interface DatosExtraidosDTO {
+  nombreCompleto: string | null;
+  correo: string | null;
+  telefono: string;
+  telefonoOrigen: TelefonoOrigen;
+  extraidoAt: string;
+}
+
 export interface ContactHistoryDTO {
   contacto: ContactCardDTO;
   resumen: ResumenDTO | null;
+  datosExtraidos: DatosExtraidosDTO | null;
   mensajes: Paginated<MessageDTO>;
 }
 

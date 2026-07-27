@@ -4,8 +4,8 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { historySchema } from './cliente.validation.js';
-import { getContactHistoryController } from './cliente.controller.js';
+import { extractSchema, historySchema } from './cliente.validation.js';
+import { extractContactDataController, getContactHistoryController } from './cliente.controller.js';
 
 const router = Router();
 
@@ -19,6 +19,15 @@ router.get(
   bandejaRoles,
   validate(historySchema),
   asyncHandler(getContactHistoryController),
+);
+
+router.post(
+  '/:id/extract',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(extractSchema),
+  asyncHandler(extractContactDataController),
 );
 
 export default router;

@@ -9,6 +9,26 @@ export type EstadoComercial =
   | 'pagado'
   | 'perdido';
 
+/**
+ * Datos de contacto extraídos por IA desde la conversación, bajo demanda (HU-OMNI-03).
+ * Se guardan aparte de `nombre`/`telefono` a propósito: esos campos son la identidad real que
+ * llega por WhatsApp y no deben pisarse con una inferencia del modelo. Cada campo es `null`
+ * cuando la conversación no lo menciona.
+ */
+export interface IDatosExtraidos {
+  nombreCompleto: string | null;
+  correo: string | null;
+  /** Nunca es `null`: si la conversación no dicta ninguno, cae al número de WhatsApp del contacto. */
+  telefono: string;
+  /** De dónde salió `telefono`. Opcional por extracciones guardadas antes de existir este campo. */
+  telefonoOrigen?: TelefonoOrigen;
+  extraidoAt: Date;
+  modelo: string;
+}
+
+/** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
+export type TelefonoOrigen = 'conversacion' | 'whatsapp';
+
 /** Resumen por IA de la conversación, persistido en el cliente (HU-OMNI-03). */
 export interface IResumenIA {
   texto: string;
@@ -37,6 +57,7 @@ export interface ICliente {
   rolContacto?: 'decisor' | 'usuario' | 'desconocido';
   interesItemId?: Types.ObjectId;
   resumenIA?: IResumenIA;
+  datosExtraidos?: IDatosExtraidos;
 }
 
 export interface IClienteDocument extends ICliente, Document {}
@@ -66,9 +87,19 @@ export interface IContactCardResponse {
   createdAt: string;
 }
 
-/** Historial completo del contacto: ficha + resumen + mensajes paginados. */
+/** Datos de contacto extraídos por IA, tal como los consume la ficha. */
+export interface IDatosExtraidosResponse {
+  nombreCompleto: string | null;
+  correo: string | null;
+  telefono: string;
+  telefonoOrigen: TelefonoOrigen;
+  extraidoAt: string;
+}
+
+/** Historial completo del contacto: ficha + resumen + datos extraídos + mensajes paginados. */
 export interface IContactHistoryResponse {
   contacto: IContactCardResponse;
   resumen: IResumenResponse | null;
+  datosExtraidos: IDatosExtraidosResponse | null;
   mensajes: IPaginated<IMessageResponse>;
 }

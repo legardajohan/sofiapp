@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchContactHistory, generateSummary } from '../api.js';
+import { extractContactData, fetchContactHistory, generateSummary } from '../api.js';
 import type { ContactHistoryDTO } from '../types.js';
 
 /** Ficha + historial + estado del resumen. Solo se consulta cuando el panel está abierto. */
@@ -16,6 +16,15 @@ export function useGenerateSummary(clienteId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => generateSummary(clienteId as string),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] }),
+  });
+}
+
+/** Extrae los datos de contacto con IA y refresca la ficha para mostrarlos ya persistidos. */
+export function useExtractContactData(clienteId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => extractContactData(clienteId as string),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] }),
   });
 }

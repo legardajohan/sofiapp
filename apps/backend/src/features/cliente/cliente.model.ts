@@ -42,6 +42,23 @@ const ClienteSchema = new Schema<IClienteDocument>(
       ),
       required: false,
     },
+    // Datos de contacto extraídos por IA bajo demanda (HU-OMNI-03). Cada campo admite `null`
+    // cuando la conversación no lo menciona; nunca sobrescriben `nombre`/`telefono`.
+    datosExtraidos: {
+      type: new Schema(
+        {
+          nombreCompleto: { type: String, default: null },
+          correo: { type: String, default: null },
+          // Siempre presente: si la conversación no dicta uno, se guarda el número de WhatsApp.
+          telefono: { type: String, required: true },
+          telefonoOrigen: { type: String, enum: ['conversacion', 'whatsapp'], required: true },
+          extraidoAt: { type: Date, required: true },
+          modelo: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { timestamps: true },
 );

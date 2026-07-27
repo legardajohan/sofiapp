@@ -11,6 +11,7 @@ import { seedSuperadmin } from './seed/seed-superadmin.js';
 import { createSocketGateway } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
+import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -70,6 +71,7 @@ if (env.NODE_ENV !== 'test') {
       logger.info('Conectado a MongoDB');
       await seedSuperadmin();
       await seedPlans();
+      await seedPromptTemplates();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

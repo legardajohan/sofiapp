@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from '../components/ConversationList.js';
 import { ConversationThread } from '../components/ConversationThread.js';
+import { InboxError } from '../components/InboxError.js';
 import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
@@ -15,6 +16,7 @@ import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useTh
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
 import { initials } from '../lib/format.js';
+import { errorMessage } from '../lib/errors.js';
 import type { FiltroBandeja } from '../types.js';
 
 const FILTROS: FiltroBandeja[] = ['todos', 'mios', 'sin_asignar', 'sofi'];
@@ -42,9 +44,22 @@ export function InboxPage(): React.ReactElement {
   const setActiveId = useInboxStore((s) => s.setActiveId);
   const contactPanelOpen = useInboxStore((s) => s.contactPanelOpen);
   const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
+  const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
 
-  const { data: conversations, isLoading } = useConversations(filtro);
-  const { data: thread, isLoading: threadLoading } = useThread(activeId);
+  const {
+    data: conversations,
+    isLoading,
+    isError,
+    error,
+    refetch: refetchConversations,
+  } = useConversations(filtro);
+  const {
+    data: thread,
+    isLoading: threadLoading,
+    isError: threadIsError,
+    error: threadError,
+    refetch: refetchThread,
+  } = useThread(activeId);
 
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
@@ -79,12 +94,17 @@ export function InboxPage(): React.ReactElement {
             activeId={activeId}
             onSelect={handleSelect}
             isLoading={isLoading}
+            error={
+              isError ? errorMessage(error, 'No se pudieron cargar las conversaciones.') : null
+            }
+            onRetry={() => void refetchConversations()}
           />
         </div>
       </div>
 
-      {/* Panel derecho: hilo de la conversación activa */}
-      <div className="flex flex-1 flex-col">
+      {/* Columna central: hilo de la conversación activa. `min-w-0` para que se encoja al
+          desplegar la ficha en vez de desbordar la fila y romper los `truncate`. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {active ? (
           <>
             <header className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -105,19 +125,31 @@ export function InboxPage(): React.ReactElement {
                   pending={setSofi.isPending}
                   onToggle={(v) => setSofi.mutate(v)}
                 />
+                {/* Único control de la ficha: abre y colapsa. Marcado como interruptor para que
+                    el estado activo se vea, y no parezca que abre algo nuevo cada vez. */}
                 <Button
-                  variant="ghost"
+                  variant={contactPanelOpen ? 'secondary' : 'ghost'}
                   size="icon"
-                  aria-label="Ver ficha del contacto"
-                  title="Ficha del contacto"
-                  onClick={() => setContactPanelOpen(true)}
+                  aria-expanded={contactPanelOpen}
+                  aria-label={
+                    contactPanelOpen ? 'Colapsar la ficha del contacto' : 'Ver ficha del contacto'
+                  }
+                  title={contactPanelOpen ? 'Colapsar la ficha' : 'Ficha del contacto'}
+                  onClick={toggleContactPanel}
                 >
                   <UserRound className="h-4 w-4" />
                 </Button>
               </div>
             </header>
 
-            <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+            {threadIsError ? (
+              <InboxError
+                message={errorMessage(threadError, 'No se pudo cargar la conversación.')}
+                onRetry={() => void refetchThread()}
+              />
+            ) : (
+              <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+            )}
 
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer
@@ -125,17 +157,21 @@ export function InboxPage(): React.ReactElement {
               pending={sendReply.isPending}
               onSend={(texto) => sendReply.mutate(texto)}
             />
-
-            <ContactPanel
-              clienteId={activeId}
-              open={contactPanelOpen}
-              onOpenChange={setContactPanelOpen}
-            />
           </>
         ) : (
           <EmptyThread />
         )}
       </div>
+
+      {/* Tercera columna: la ficha vive fuera del hilo para poder colapsarse a una franja sin
+          taparlo. Solo tiene sentido con una conversación activa. */}
+      {active && (
+        <ContactPanel
+          clienteId={activeId}
+          open={contactPanelOpen}
+          onOpenChange={setContactPanelOpen}
+        />
+      )}
     </div>
   );
 }

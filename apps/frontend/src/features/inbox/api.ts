@@ -2,6 +2,7 @@ import { apiClient } from '../../api/apiClient.js';
 import type {
   ContactHistoryDTO,
   ConversationDTO,
+  DatosExtraidosDTO,
   FiltroBandeja,
   MessageDTO,
   Paginated,
@@ -12,7 +13,7 @@ export async function fetchConversations(
   filtro: FiltroBandeja,
   page = 1,
 ): Promise<Paginated<ConversationDTO>> {
-  const { data } = await apiClient.get<Paginated<ConversationDTO>>('/api/conversations', {
+  const { data } = await apiClient.get<Paginated<ConversationDTO>>('/conversations', {
     params: { filtro, page },
   });
   return data;
@@ -23,7 +24,7 @@ export async function fetchThread(
   page = 1,
 ): Promise<Paginated<MessageDTO>> {
   const { data } = await apiClient.get<Paginated<MessageDTO>>(
-    `/api/conversations/${conversationId}/messages`,
+    `/conversations/${conversationId}/messages`,
     { params: { page } },
   );
   return data;
@@ -31,7 +32,7 @@ export async function fetchThread(
 
 export async function sendReply(conversationId: string, texto: string): Promise<MessageDTO> {
   const { data } = await apiClient.post<MessageDTO>(
-    `/api/conversations/${conversationId}/messages`,
+    `/conversations/${conversationId}/messages`,
     { texto },
   );
   return data;
@@ -39,7 +40,7 @@ export async function sendReply(conversationId: string, texto: string): Promise<
 
 export async function markConversationRead(conversationId: string): Promise<ConversationDTO> {
   const { data } = await apiClient.patch<ConversationDTO>(
-    `/api/conversations/${conversationId}/read`,
+    `/conversations/${conversationId}/read`,
   );
   return data;
 }
@@ -49,7 +50,7 @@ export async function setSofiEnabled(
   habilitada: boolean,
 ): Promise<ConversationDTO> {
   const { data } = await apiClient.patch<ConversationDTO>(
-    `/api/conversations/${conversationId}/ia`,
+    `/conversations/${conversationId}/ia`,
     { habilitada },
   );
   return data;
@@ -60,7 +61,7 @@ export async function fetchContactHistory(
   clienteId: string,
   page = 1,
 ): Promise<ContactHistoryDTO> {
-  const { data } = await apiClient.get<ContactHistoryDTO>(`/api/clientes/${clienteId}/history`, {
+  const { data } = await apiClient.get<ContactHistoryDTO>(`/clientes/${clienteId}/history`, {
     params: { page },
   });
   return data;
@@ -68,6 +69,12 @@ export async function fetchContactHistory(
 
 /** Genera/actualiza el resumen por IA de la conversación (bajo demanda). */
 export async function generateSummary(clienteId: string): Promise<ResumenDTO> {
-  const { data } = await apiClient.post<ResumenDTO>(`/api/conversations/${clienteId}/summary`);
+  const { data } = await apiClient.post<ResumenDTO>(`/conversations/${clienteId}/summary`);
+  return data;
+}
+
+/** Extrae nombre completo, correo y teléfono de la conversación con IA (bajo demanda). */
+export async function extractContactData(clienteId: string): Promise<DatosExtraidosDTO> {
+  const { data } = await apiClient.post<DatosExtraidosDTO>(`/clientes/${clienteId}/extract`);
   return data;
 }
