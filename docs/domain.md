@@ -57,7 +57,32 @@
 > El motor de IA recibe del tenant la definición de qué `customFields` debe intentar capturar
 > (configuración por tenant), además del core fijo.
 
-## 5. Invariantes de dominio
+## 5. Semaforización (HU-OMNI-04)
+
+**Semaforización** es el vocabulario compartido con el que el CRM expresa, de un vistazo, en qué
+punto está una conversación. Se materializa como cuatro **etiquetas de sistema** que existen en
+todos los tenants, con un identificador estable (`Tag.semaforo`):
+
+| `semaforo` | Nombre sembrado | Color | Significado |
+|---|---|---|---|
+| `verde` | Avanza | `#16A34A` | Interesado, la conversación progresa |
+| `naranja` | Requiere atención | `#EA580C` | Estancada o con una objeción pendiente |
+| `rojo` | En riesgo | `#DC2626` | Bloqueada, a punto de perderse |
+| `azul` | Informativo | `#2563EB` | Consulta general, sin intención comercial aún |
+
+Reglas:
+
+- El administrador **puede** renombrarlas y recolorearlas: cada empresa habla su propio idioma.
+- El administrador **no puede** eliminarlas: son el vocabulario compartido, no una etiqueta más.
+- El resto de módulos (CRM-04 métricas, IA-05 clasificación automática, MARK-01 segmentación de
+  campañas) las resuelven **por `semaforo`, nunca por nombre** — el nombre es mutable y hacerlo
+  por él rompería en cuanto una empresa renombrara una etiqueta.
+- Se siembran al crear el tenant y por backfill idempotente al arrancar el servidor.
+
+Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo`), con el mismo
+comportamiento salvo que sí se pueden borrar.
+
+## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.
 2. Un `Message` pertenece a un `Cliente` y a su mismo `Tenant`.
@@ -65,3 +90,5 @@
 4. Un email de usuario de panel es único **globalmente** (`{ email }` único); el login resuelve el
    tenant del usuario hallado (ADR 0003).
 5. El Superadmin no pertenece a ningún tenant (`tenantId = null`).
+6. Un `Tag` pertenece a exactamente un `Tenant`, y una conversación solo puede llevar etiquetas
+   de su propio tenant (validado antes de escribir en `setConversationTags`).
