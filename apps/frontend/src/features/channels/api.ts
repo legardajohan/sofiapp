@@ -14,13 +14,13 @@ export interface IChannelStatusResponse {
 
 export async function connectWhatsApp(dto: IChannelConnectDto): Promise<IChannelStatusResponse> {
   const { data } = await apiClient.post<IChannelStatusResponse>(
-    '/api/channels/whatsapp/connect',
+    '/channels/whatsapp/connect',
     dto,
   );
   return data;
 }
 
 export async function getWhatsAppStatus(): Promise<IChannelStatusResponse> {
-  const { data } = await apiClient.get<IChannelStatusResponse>('/api/channels/whatsapp/status');
+  const { data } = await apiClient.get<IChannelStatusResponse>('/channels/whatsapp/status');
   return data;
 }

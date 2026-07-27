@@ -5,6 +5,8 @@ import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
+  assignSchema,
+  assignmentsSchema,
   iaSchema,
   listConversationsSchema,
   readSchema,
@@ -13,8 +15,10 @@ import {
   threadSchema,
 } from './conversation.validation.js';
 import {
+  assignController,
   generateSummaryController,
   getThreadController,
+  listAssignmentsController,
   listConversationsController,
   markReadController,
   replyController,
@@ -77,6 +81,24 @@ router.post(
   bandejaRoles,
   validate(summarySchema),
   asyncHandler(generateSummaryController),
+);
+
+router.patch(
+  '/:id/assign',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(assignSchema),
+  asyncHandler(assignController),
+);
+
+router.get(
+  '/:id/assignments',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(assignmentsSchema),
+  asyncHandler(listAssignmentsController),
 );
 
 export default router;

@@ -52,6 +52,18 @@ export function subscribeRealtime(io: Server): void {
       logger.error('Evento de tiempo real ilegible', { error: String(parseErr) });
       return;
     }
+    if (evt.type === 'conversation:assigned') {
+      // Todos los admins del tenant refrescan la lista; el toast va SOLO al destinatario.
+      io.to(`tenant:${evt.tenantId}`).emit('conversation:updated', {
+        type: 'conversation:updated',
+        tenantId: evt.tenantId,
+        conversationId: evt.conversationId,
+        conversation: evt.conversation,
+      });
+      if (evt.targetUserId) io.to(`asesor:${evt.targetUserId}`).emit(evt.type, evt);
+      return;
+    }
+
     io.to(`tenant:${evt.tenantId}`).emit(evt.type, evt);
   });
 }

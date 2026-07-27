@@ -1,10 +1,11 @@
 import { z } from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
-// `.optional()` es obligatorio: en Express 5 `req.body` queda `undefined` cuando la petición no
-// trae cuerpo (Express 4 lo inicializaba en `{}`), así que un `z.object({})` a secas rechaza
-// cualquier GET/PATCH sin body con "Required".
-const empty = z.object({}).optional();
+// No hace falta `.optional()`: `validate.middleware` normaliza `req.body ?? {}` antes de parsear,
+// que es donde se resolvió el cambio de Express 5 (deja `req.body` en `undefined` sin cuerpo).
+const empty = z.object({});
+
+const estadoComercial = z.enum(['nuevo', 'en_gestion', 'pago_pendiente', 'pagado', 'perdido']);
 
 export const listConversationsSchema = z.object({
   body: empty,
@@ -13,6 +14,8 @@ export const listConversationsSchema = z.object({
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().max(100).default(20),
     filtro: z.enum(['todos', 'mios', 'sin_asignar', 'sofi']).default('todos'),
+    asignadoA: z.union([objectId, z.literal('sin_asignar')]).optional(),
+    estado: estadoComercial.optional(),
   }),
 });
 
@@ -49,7 +52,24 @@ export const summarySchema = z.object({
   query: empty,
 });
 
+export const assignSchema = z.object({
+  body: z.object({ asignadoA: objectId.nullable() }),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
+export const assignmentsSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+  }),
+});
+
 export type ListConversationsQuery = z.infer<typeof listConversationsSchema>['query'];
 export type ThreadQuery = z.infer<typeof threadSchema>['query'];
 export type ReplyBody = z.infer<typeof replySchema>['body'];
 export type IaBody = z.infer<typeof iaSchema>['body'];
+export type AssignBody = z.infer<typeof assignSchema>['body'];
+export type AssignmentsQuery = z.infer<typeof assignmentsSchema>['query'];

@@ -1,7 +1,10 @@
+import type { AdminSubrol } from '../users/user.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 
 /** Segmentos de la bandeja (submenú del sidebar). */
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
+
+export type EstadoComercial = 'nuevo' | 'en_gestion' | 'pago_pendiente' | 'pagado' | 'perdido';
 
 /** Una conversación es un `Cliente` proyectado para la bandeja (no hay colección propia). */
 export interface IConversationResponse {
@@ -12,10 +15,25 @@ export interface IConversationResponse {
   ultimoMensajeAt: string | null;
   preview: string | null;
   noLeidos: number;
+  /** Campo persistido (`Cliente.asesorId`, HU-OMNI-01). Se conserva por compatibilidad. */
   asesorId: string | null;
+  /** Alias público del contrato HTTP (HU-OMNI-02): mismo valor que `asesorId`. */
+  asignadoA: string | null;
+  asignadoANombre: string | null;
+  asignadoASubrol: AdminSubrol | null;
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;
+}
+
+/** Un evento del historial de reasignaciones de una conversación (`audit_events`). */
+export interface IAssignmentResponse {
+  id: string;
+  actorId: string;
+  actorNombre: string | null;
+  de: { id: string; nombre: string | null } | null;
+  a: { id: string; nombre: string | null } | null;
+  createdAt: string;
 }
 
 export interface IMessageResponse {

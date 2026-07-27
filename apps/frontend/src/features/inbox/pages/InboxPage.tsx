@@ -10,6 +10,7 @@ import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
+import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
 import { useConversations } from '../hooks/useConversations.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
@@ -17,9 +18,10 @@ import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
 import { initials } from '../lib/format.js';
 import { errorMessage } from '../lib/errors.js';
-import type { FiltroBandeja } from '../types.js';
+import type { EstadoComercial, FiltroBandeja } from '../types.js';
 
 const FILTROS: FiltroBandeja[] = ['todos', 'mios', 'sin_asignar', 'sofi'];
+const ESTADOS: EstadoComercial[] = ['nuevo', 'en_gestion', 'pago_pendiente', 'pagado', 'perdido'];
 
 function EmptyThread(): React.ReactElement {
   return (
@@ -39,6 +41,11 @@ export function InboxPage(): React.ReactElement {
   const filtro: FiltroBandeja = FILTROS.includes(rawFiltro as FiltroBandeja)
     ? (rawFiltro as FiltroBandeja)
     : 'todos';
+  const asignadoA = params.get('asignadoA') ?? undefined;
+  const rawEstado = params.get('estado');
+  const estado: EstadoComercial | undefined = ESTADOS.includes(rawEstado as EstadoComercial)
+    ? (rawEstado as EstadoComercial)
+    : undefined;
 
   const activeId = useInboxStore((s) => s.activeId);
   const setActiveId = useInboxStore((s) => s.setActiveId);
@@ -46,13 +53,14 @@ export function InboxPage(): React.ReactElement {
   const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
   const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
 
+  // Filtros combinables de HU-OMNI-02 + estados de error de HU-OMNI-03: ambos hacen falta.
   const {
     data: conversations,
     isLoading,
     isError,
     error,
     refetch: refetchConversations,
-  } = useConversations(filtro);
+  } = useConversations({ filtro, asignadoA, estado });
   const {
     data: thread,
     isLoading: threadLoading,
@@ -76,8 +84,17 @@ export function InboxPage(): React.ReactElement {
     if (conv && conv.noLeidos > 0) markRead.mutate(id);
   }
 
+  function updateParams(patch: Record<string, string | undefined>): void {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) next.delete(key);
+      else next.set(key, value);
+    }
+    setParams(next);
+  }
+
   function handleFilterChange(next: FiltroBandeja): void {
-    setParams(next === 'todos' ? {} : { filtro: next });
+    updateParams({ filtro: next === 'todos' ? undefined : next });
   }
 
   return (
@@ -87,7 +104,14 @@ export function InboxPage(): React.ReactElement {
         <div className="border-b border-border px-4 py-3">
           <h1 className="text-sm font-semibold text-foreground">Bandeja</h1>
         </div>
-        <InboxFilters value={filtro} onChange={handleFilterChange} />
+        <InboxFilters
+          value={filtro}
+          onChange={handleFilterChange}
+          asignadoA={asignadoA}
+          onAsignadoAChange={(v) => updateParams({ asignadoA: v })}
+          estado={estado}
+          onEstadoChange={(v) => updateParams({ estado: v })}
+        />
         <div className="flex-1 overflow-y-auto">
           <ConversationList
             conversations={conversations?.data ?? []}
@@ -119,11 +143,18 @@ export function InboxPage(): React.ReactElement {
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{active.telefono}</p>
               </div>
-              <div className="ml-auto flex items-center gap-1">
+              {/* `gap-2`: intermedio entre el `gap-1` de OMNI-03 y el `gap-3` de OMNI-02, ahora
+                  que la cabecera aloja tres controles en vez de dos. */}
+              <div className="ml-auto flex items-center gap-2">
                 <SofiToggle
                   enabled={active.iaHabilitada}
                   pending={setSofi.isPending}
                   onToggle={(v) => setSofi.mutate(v)}
+                />
+                <AssignMenu
+                  conversationId={active.id}
+                  asignadoA={active.asignadoA}
+                  asignadoANombre={active.asignadoANombre}
                 />
                 {/* Único control de la ficha: abre y colapsa. Marcado como interruptor para que
                     el estado activo se vea, y no parezca que abre algo nuevo cada vez. */}

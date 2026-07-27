@@ -14,20 +14,30 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
+import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
+import type { IUserResponse } from '../users/user.types.js';
+import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import {
+  toAssignmentResponse,
   toConversationResponse,
   toMessageResponse,
   type IConversationSource,
   type IMessageSource,
 } from './conversation.mapper.js';
 import type {
+  EstadoComercial,
   FiltroBandeja,
+  IAssignmentResponse,
   IConversationResponse,
   IMessageResponse,
   IPaginated,
 } from './conversation.types.js';
-import type { ListConversationsQuery, ThreadQuery } from './conversation.validation.js';
+import type {
+  AssignmentsQuery,
+  ListConversationsQuery,
+  ThreadQuery,
+} from './conversation.validation.js';
 
 function nonTextPreview(tipo: string): string {
   const labels: Record<string, string> = {
@@ -39,12 +49,31 @@ function nonTextPreview(tipo: string): string {
   return labels[tipo] ?? '[mensaje]';
 }
 
-function buildFiltro(filtro: FiltroBandeja, asesorId: string): FilterQuery<IClienteDocument> {
+function buildFiltro(
+  filtro: FiltroBandeja,
+  asesorId: string,
+  asignadoA?: string,
+  estado?: EstadoComercial,
+): FilterQuery<IClienteDocument> {
   const f: FilterQuery<IClienteDocument> = {};
   if (filtro === 'mios') f.asesorId = new Types.ObjectId(asesorId);
   else if (filtro === 'sin_asignar') f.asesorId = null;
   else if (filtro === 'sofi') f.iaHabilitada = true;
+
+  // `asignadoA` es más específico que `filtro`: si viene, gana sobre lo anterior.
+  if (asignadoA === 'sin_asignar') f.asesorId = null;
+  else if (asignadoA) f.asesorId = new Types.ObjectId(asignadoA);
+
+  if (estado) f.estadoComercial = estado;
+
   return f;
+}
+
+/** Resuelve el responsable de UNA conversación (usado por las mutaciones de un solo `Cliente`). */
+async function resolveAsignado(tenantId: string, asesorId: unknown): Promise<IUserResponse | null> {
+  if (!asesorId) return null;
+  const id = String(asesorId);
+  return (await findUsersByIds(tenantId, [id])).get(id) ?? null;
 }
 
 export async function listConversations(
@@ -52,8 +81,8 @@ export async function listConversations(
   asesorId: string,
   query: ListConversationsQuery,
 ): Promise<IPaginated<IConversationResponse>> {
-  const { page, limit, filtro } = query;
-  const filtroMongo = buildFiltro(filtro, asesorId);
+  const { page, limit, filtro, asignadoA, estado } = query;
+  const filtroMongo = buildFiltro(filtro, asesorId, asignadoA, estado);
 
   const clientes = await findScoped(Cliente, tenantId, filtroMongo)
     .sort({ ultimoMensajeAt: -1 })
@@ -79,14 +108,20 @@ export async function listConversations(
   const previewMap = new Map<string, string | null>();
   for (const p of previews) previewMap.set(String(p._id), p.texto ?? nonTextPreview(p.tipo));
 
+  // Resuelve todos los responsables de la página en UNA sola consulta (sin N+1 ni `populate`,
+  // que saltaría el repositorio scoped).
+  const assigneeIds = clientes
+    .map((c) => (c as unknown as IConversationSource).asesorId)
+    .filter((id): id is Types.ObjectId | string => !!id)
+    .map((id) => String(id));
+  const assigneeMap = await findUsersByIds(tenantId, assigneeIds);
+
   const now = new Date();
-  const data = clientes.map((c) =>
-    toConversationResponse(
-      c as unknown as IConversationSource,
-      previewMap.get(String(c._id)) ?? null,
-      now,
-    ),
-  );
+  const data = clientes.map((c) => {
+    const source = c as unknown as IConversationSource;
+    const asignado = source.asesorId ? (assigneeMap.get(String(source.asesorId)) ?? null) : null;
+    return toConversationResponse(source, previewMap.get(String(c._id)) ?? null, now, asignado);
+  });
 
   return { data, page, limit, total };
 }
@@ -137,12 +172,14 @@ export async function replyMessage(
   ).lean();
 
   if (cliente) {
+    const source = cliente as unknown as IConversationSource;
+    const asignado = await resolveAsignado(tenantId, source.asesorId);
     await publishRealtime({
       type: 'message:new',
       tenantId,
       conversationId: clienteId,
       message,
-      conversation: toConversationResponse(cliente as unknown as IConversationSource, message.texto),
+      conversation: toConversationResponse(source, message.texto, new Date(), asignado),
     });
   }
 
@@ -203,7 +240,9 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
   ).lean();
   if (!cliente) throw new AppError('Conversación no encontrada.', 404);
 
-  const conversation = toConversationResponse(cliente as unknown as IConversationSource, null);
+  const source = cliente as unknown as IConversationSource;
+  const asignado = await resolveAsignado(tenantId, source.asesorId);
+  const conversation = toConversationResponse(source, null, new Date(), asignado);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
 }
@@ -222,9 +261,103 @@ export async function setIaHabilitada(
   ).lean();
   if (!cliente) throw new AppError('Conversación no encontrada.', 404);
 
-  const conversation = toConversationResponse(cliente as unknown as IConversationSource, null);
+  const source = cliente as unknown as IConversationSource;
+  const asignado = await resolveAsignado(tenantId, source.asesorId);
+  const conversation = toConversationResponse(source, null, new Date(), asignado);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
+}
+
+/**
+ * Asigna, reasigna, auto-asigna o desasigna (`asignadoA: null`) el responsable de una
+ * conversación. Cualquier `admin` del tenant puede reasignar una conversación ya asignada a
+ * otro `admin` (con cualquier subrol): no hay comprobación de propiedad (HU-OMNI-02).
+ */
+export async function assignConversation(
+  tenantId: string,
+  actorId: string,
+  clienteId: string,
+  asignadoA: string | null,
+): Promise<IConversationResponse> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  // Única guarda: el destinatario debe ser un admin activo del propio tenant.
+  const asignado = asignadoA ? await assertAssignableAdmin(tenantId, asignadoA) : null;
+
+  const source = cliente as unknown as IConversationSource;
+  const antes = source.asesorId ? String(source.asesorId) : null;
+
+  if (antes === asignadoA) {
+    // Idempotente: mismo valor, sin auditoría ni evento de tiempo real.
+    return toConversationResponse(source, null, new Date(), asignado);
+  }
+
+  const updated = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    { asesorId: asignadoA ? new Types.ObjectId(asignadoA) : null },
+    { new: true },
+  ).lean();
+  if (!updated) throw new AppError('Conversación no encontrada.', 404);
+
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'conversation.assign',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes: { asignadoA: antes },
+    despues: { asignadoA },
+  });
+
+  const conversation = toConversationResponse(
+    updated as unknown as IConversationSource,
+    null,
+    new Date(),
+    asignado,
+  );
+
+  const actorInfo = (await findUsersByIds(tenantId, [actorId])).get(actorId) ?? null;
+  await publishRealtime({
+    type: 'conversation:assigned',
+    tenantId,
+    conversationId: clienteId,
+    conversation,
+    targetUserId: asignadoA,
+    actor: { id: actorId, nombre: actorInfo?.nombre ?? null },
+  });
+
+  return conversation;
+}
+
+export async function listAssignments(
+  tenantId: string,
+  clienteId: string,
+  query: AssignmentsQuery,
+): Promise<IPaginated<IAssignmentResponse>> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  const { page, limit } = query;
+  const { data, total } = await listAuditEvents(tenantId, 'cliente', clienteId, page, limit);
+
+  const userIds = new Set<string>();
+  for (const evt of data) {
+    userIds.add(evt.actorId);
+    const de = evt.antes['asignadoA'];
+    const a = evt.despues['asignadoA'];
+    if (typeof de === 'string') userIds.add(de);
+    if (typeof a === 'string') userIds.add(a);
+  }
+  const userMap = await findUsersByIds(tenantId, [...userIds]);
+
+  return {
+    data: data.map((evt) => toAssignmentResponse(evt, userMap)),
+    page,
+    limit,
+    total,
+  };
 }
 
 /**
@@ -246,12 +379,14 @@ export async function notifyInboundMessage(
   ).lean();
   if (!cliente) return;
 
+  const source = cliente as unknown as IConversationSource;
+  const asignado = await resolveAsignado(tenantId, source.asesorId);
   const message = toMessageResponse(savedMsg);
   await publishRealtime({
     type: 'message:new',
     tenantId,
     conversationId: clienteId,
     message,
-    conversation: toConversationResponse(cliente as unknown as IConversationSource, message.texto),
+    conversation: toConversationResponse(source, message.texto, new Date(), asignado),
   });
 }

@@ -18,6 +18,10 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
     preview: 'Hola, quisiera información.',
     noLeidos: 0,
     asesorId: null,
+    // Campos de asignación (HU-OMNI-02).
+    asignadoA: null,
+    asignadoANombre: null,
+    asignadoASubrol: null,
     iaHabilitada: false,
     ventana24hAbierta: true,
     estadoComercial: 'nuevo',

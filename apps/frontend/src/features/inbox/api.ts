@@ -3,19 +3,30 @@ import type {
   ContactHistoryDTO,
   ConversationDTO,
   DatosExtraidosDTO,
-  FiltroBandeja,
+  InboxFiltros,
   MessageDTO,
   Paginated,
   ResumenDTO,
 } from './types.js';
 
 export async function fetchConversations(
-  filtro: FiltroBandeja,
+  filtros: InboxFiltros,
   page = 1,
 ): Promise<Paginated<ConversationDTO>> {
   const { data } = await apiClient.get<Paginated<ConversationDTO>>('/conversations', {
-    params: { filtro, page },
+    params: { ...filtros, page },
   });
+  return data;
+}
+
+export async function assignConversation(
+  conversationId: string,
+  asignadoA: string | null,
+): Promise<ConversationDTO> {
+  const { data } = await apiClient.patch<ConversationDTO>(
+    `/conversations/${conversationId}/assign`,
+    { asignadoA },
+  );
   return data;
 }
 
