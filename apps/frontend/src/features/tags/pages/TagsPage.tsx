@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { Pencil, Plus, Tags, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { TagChip } from '../components/TagChip.js';
 import { TagFormDialog } from '../components/TagFormDialog.js';
 import { useCreateTag, useDeleteTag, useTags, useUpdateTag } from '../hooks/useTags.js';
@@ -46,21 +57,70 @@ function Fila({
         >
           <Pencil className="h-4 w-4" />
         </Button>
-        {/* Las de semaforización no ofrecen borrado: en vez de un botón deshabilitado sin
-            explicación, el motivo se cuenta en la línea de ayuda de arriba. */}
-        {!esSemaforo && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onDelete}
-            aria-label={`Eliminar la etiqueta ${tag.nombre}`}
-            className="text-muted-foreground transition-[transform,color] duration-150 ease-out hover:text-destructive motion-safe:active:scale-[0.95]"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
+        {/* Todas se pueden borrar, incluidas las de semaforización. Las de sistema pasan antes por
+            una confirmación, porque su borrado afecta a módulos que no están a la vista. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDelete}
+          aria-label={`Eliminar la etiqueta ${tag.nombre}`}
+          className="text-muted-foreground transition-[transform,color] duration-150 ease-out hover:text-destructive motion-safe:active:scale-[0.95]"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     </li>
+  );
+}
+
+/**
+ * Confirmación para las etiquetas de semaforización. No la pedimos para las normales: ahí el
+ * borrado es del propio administrador sobre algo que él creó, y un diálogo por cada una sería
+ * fricción sin información nueva. Una de semáforo, en cambio, la usan otros módulos del producto,
+ * y ese efecto no se ve desde esta pantalla — es justo lo que el diálogo aporta.
+ */
+function ConfirmarBorradoSemaforo({
+  tag,
+  pending,
+  onOpenChange,
+  onConfirm,
+}: {
+  tag: TagDTO | null;
+  pending: boolean;
+  onOpenChange: (abierto: boolean) => void;
+  onConfirm: () => void;
+}): React.ReactElement {
+  return (
+    <AlertDialog open={tag !== null} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Eliminar «{tag?.nombre}»?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Es una etiqueta de semaforización. Los informes y la clasificación automática dejarán de
+            usarla, y se quitará de todas las conversaciones que la tengan. Podrás volver a crearla,
+            pero como una etiqueta normal.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={pending}
+            onClick={(e) => {
+              // El cierre lo decide la mutación: si el backend falla, el diálogo sigue abierto con
+              // el error en el toast, en vez de desaparecer como si hubiera funcionado.
+              e.preventDefault();
+              onConfirm();
+            }}
+            className={cn(
+              buttonVariants({ variant: 'destructive' }),
+              'transition-transform duration-150 ease-out motion-safe:active:scale-[0.97]',
+            )}
+          >
+            {pending ? 'Eliminando…' : 'Eliminar etiqueta'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -72,6 +132,20 @@ export function TagsPage(): React.ReactElement {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<TagDTO | null>(null);
+  const [porConfirmar, setPorConfirmar] = useState<TagDTO | null>(null);
+
+  function pedirBorrado(tag: TagDTO): void {
+    if (tag.semaforo !== null) {
+      setPorConfirmar(tag);
+      return;
+    }
+    borrar.mutate(tag.id);
+  }
+
+  function confirmarBorrado(): void {
+    if (!porConfirmar) return;
+    borrar.mutate(porConfirmar.id, { onSuccess: () => setPorConfirmar(null) });
+  }
 
   function abrirCrear(): void {
     setEditando(null);
@@ -142,7 +216,7 @@ export function TagsPage(): React.ReactElement {
                 key={tag.id}
                 tag={tag}
                 onEdit={() => abrirEditar(tag)}
-                onDelete={() => borrar.mutate(tag.id)}
+                onDelete={() => pedirBorrado(tag)}
               />
             ))}
           </ul>
@@ -155,6 +229,15 @@ export function TagsPage(): React.ReactElement {
         pending={crear.isPending || actualizar.isPending}
         onOpenChange={setDialogOpen}
         onSubmit={guardar}
+      />
+
+      <ConfirmarBorradoSemaforo
+        tag={porConfirmar}
+        pending={borrar.isPending}
+        onOpenChange={(abierto) => {
+          if (!abierto) setPorConfirmar(null);
+        }}
+        onConfirm={confirmarBorrado}
       />
     </div>
   );

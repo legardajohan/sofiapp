@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TagSelector } from './TagSelector.js';
-import { fetchTags } from '../api.js';
+import { createTag, fetchTags } from '../api.js';
 import type { TagDTO } from '../types.js';
 
 vi.mock('../api.js', () => ({
@@ -14,6 +14,7 @@ vi.mock('../api.js', () => ({
 }));
 
 const mockFetchTags = vi.mocked(fetchTags);
+const mockCreateTag = vi.mocked(createTag);
 
 const URGENTE: TagDTO = { id: 't1', nombre: 'Urgente', color: '#DC2626', semaforo: null };
 const VERDE: TagDTO = { id: 't2', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' };
@@ -90,5 +91,56 @@ describe('TagSelector — envía siempre el conjunto completo', () => {
   it('el disparador comunica cuántas etiquetas tiene la conversación', () => {
     renderSelector([URGENTE, VERDE]);
     expect(screen.getByRole('button', { name: /2 aplicadas/i })).toBeInTheDocument();
+  });
+});
+
+describe('TagSelector — crear una etiqueta sin salir de la conversación', () => {
+  const NUEVA: TagDTO = { id: 't9', nombre: 'Recontactar', color: '#7C3AED', semaforo: null };
+
+  it('ofrece crear una etiqueta desde el menú', async () => {
+    renderSelector([]);
+    await abrirMenu();
+    expect(await screen.findByText(/Crear etiqueta/i)).toBeInTheDocument();
+  });
+
+  it('sin etiquetas creadas invita a crear la primera desde aquí', async () => {
+    mockFetchTags.mockResolvedValue([]);
+    renderSelector([]);
+    await abrirMenu();
+
+    expect(await screen.findByText(/Crea la primera aquí abajo/i)).toBeInTheDocument();
+    expect(screen.getByText(/Crear etiqueta/i)).toBeInTheDocument();
+  });
+
+  it('crear la etiqueta la aplica a la conversación en el mismo paso', async () => {
+    mockCreateTag.mockResolvedValue(NUEVA);
+    const { onChange } = renderSelector([URGENTE]);
+    await abrirMenu();
+
+    await userEvent.click(await screen.findByText(/Crear etiqueta/i));
+
+    // El diálogo se abre con el formulario vacío.
+    const nombre = await screen.findByLabelText(/Nombre/i);
+    await userEvent.type(nombre, 'Recontactar');
+    await userEvent.click(screen.getByRole('button', { name: /Crear etiqueta/i }));
+
+    await waitFor(() => expect(mockCreateTag).toHaveBeenCalledTimes(1));
+    expect(mockCreateTag.mock.calls[0]?.[0]).toMatchObject({ nombre: 'Recontactar' });
+
+    // Lo que importa: no solo se creó, quedó aplicada junto a la que ya había.
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(['t1', 't9']));
+  });
+
+  it('al abrir el diálogo el foco queda en Nombre, no de vuelta en el botón de etiquetas', async () => {
+    renderSelector([]);
+    await abrirMenu();
+
+    await userEvent.click(await screen.findByText(/Crear etiqueta/i));
+
+    // Se puede escribir el nombre de inmediato, sin ir al campo con el ratón. Ojo: en jsdom el
+    // diálogo gana el foco aunque se quite el `onCloseAutoFocus` del menú, así que esto cubre el
+    // `autoFocus` del campo, no la pelea de foco con Radix — esa solo se ve en un navegador real.
+    const nombre = await screen.findByLabelText(/Nombre/i);
+    await waitFor(() => expect(nombre).toHaveFocus());
   });
 });

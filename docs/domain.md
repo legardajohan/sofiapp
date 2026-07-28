@@ -73,14 +73,22 @@ todos los tenants, con un identificador estable (`Tag.semaforo`):
 Reglas:
 
 - El administrador **puede** renombrarlas y recolorearlas: cada empresa habla su propio idioma.
-- El administrador **no puede** eliminarlas: son el vocabulario compartido, no una etiqueta más.
-- El resto de módulos (CRM-04 métricas, IA-05 clasificación automática, MARK-01 segmentación de
-  campañas) las resuelven **por `semaforo`, nunca por nombre** — el nombre es mutable y hacerlo
-  por él rompería en cuanto una empresa renombrara una etiqueta.
-- Se siembran al crear el tenant y por backfill idempotente al arrancar el servidor.
+- El administrador **también puede eliminarlas**. La semaforización es un vocabulario que se
+  ofrece, no una estructura que se impone: una empresa que no trabaja así no debería cargar con
+  cuatro etiquetas que nunca usa. La UI pide confirmación antes de borrar una, porque su efecto
+  alcanza módulos que no se ven desde la pantalla de etiquetas.
+- Por tanto, **una etiqueta de semáforo puede no existir**. El resto de módulos (CRM-04 métricas,
+  IA-05 clasificación automática, MARK-01 segmentación de campañas) las resuelven **por `semaforo`,
+  nunca por nombre** — el nombre es mutable —, y deben tolerar que el slug no esté en lugar de
+  asumir que las cuatro existen siempre.
+- Se siembran **una sola vez** por tenant: al crearlo, o por backfill al arrancar el servidor si es
+  anterior a HU-OMNI-04. La marca `Tenant.semaforoTagsSeeded` registra que ya ocurrió, para que el
+  backfill no resucite una etiqueta que el administrador borró a propósito. Volver a sembrar un
+  tenant ya sembrado no hace nada.
 
-Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo`), con el mismo
-comportamiento salvo que sí se pueden borrar.
+Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo`). El
+comportamiento es el mismo; la única diferencia es que las de semáforo llevan un slug estable y
+piden confirmación al borrarse.
 
 ## 6. Invariantes de dominio
 

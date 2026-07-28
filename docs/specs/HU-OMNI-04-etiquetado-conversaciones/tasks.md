@@ -74,6 +74,12 @@ Orden del patrón de 6 archivos (`docs/../apps/backend/CLAUDE.md`).
 - [x] `features/tags/components/TagFormDialog.tsx`: crear y editar.
 - [x] `features/tags/components/TagSelector.tsx`: `DropdownMenu` de shadcn (portalizado) con
       checkboxes; confirma el conjunto completo vía `PATCH /conversations/:id/tags`.
+      **Añadido después del plan:** acción "Crear etiqueta…" al pie del menú, que abre el mismo
+      `TagFormDialog` de `TagsPage` y **aplica la etiqueta recién creada a la conversación en el
+      mismo paso**. Sin esto, necesitar una etiqueta nueva obligaba a abandonar el hilo, ir a
+      `/etiquetas`, volver y buscar la conversación. El diálogo se monta fuera del
+      `DropdownMenu` (dentro se desmontaría al cerrarse el menú) y el menú suprime su
+      `onCloseAutoFocus` en esa salida para no robarle el foco al campo *Nombre*.
 - [x] `features/tags/pages/TagsPage.tsx`: lista, crear, editar, borrar. Las de semáforo sin acción
       de borrado (no un botón deshabilitado sin explicación: se omite y se indica por qué).
 - [x] `nav-config.ts`: entrada "Etiquetas" con `roles: ['admin']`; ruta `/etiquetas` en `router.tsx`.
@@ -118,6 +124,8 @@ Orden del patrón de 6 archivos (`docs/../apps/backend/CLAUDE.md`).
       contraste texto/fondo es **≥4.5:1** en `light` y en `dark` (criterio 9 del spec).
 - [x] `tag-color.test.ts`: hex inválido → colores de fallback, sin excepción.
 - [x] `TagSelector.test.tsx`: marcar y desmarcar envía el conjunto completo esperado.
+- [x] `TagSelector.test.tsx`: crear desde el menú llama al API y deja la etiqueta nueva aplicada
+      junto a las que ya estaban; el menú vacío invita a crear la primera; el foco cae en *Nombre*.
 - [x] `InboxFilters.test.tsx`: elegir una etiqueta llama al API con ese `tagId`; "Todas" lo omite.
 
 ## Verificación final
@@ -134,8 +142,38 @@ Orden del patrón de 6 archivos (`docs/../apps/backend/CLAUDE.md`).
       actual no hay ningún `Cliente` con `tags`, así que sería un no-op.
 - [ ] **Pendiente:** revisión visual en claro y oscuro por una persona. El contraste está cubierto
       por tests automáticos (`tag-color.test.ts`, 4.5:1 en ambos temas) y el recorte del dropdown
-      se evita usando el portal de Radix, pero nadie ha mirado la pantalla todavía.
+      se evita usando el portal de Radix, pero nadie ha mirado la pantalla todavía. Dos cosas
+      concretas que **solo** se ven en un navegador real y hay que mirar en ese pase:
+  - [ ] Al elegir "Crear etiqueta…" el cursor queda en el campo *Nombre* (en jsdom el diálogo gana
+        el foco pase lo que pase, así que el test no lo demuestra).
+  - [ ] Tras cerrar ese diálogo el `<body>` vuelve a aceptar clics — Radix a veces deja
+        `pointer-events: none` cuando un menú y un modal se solapan.
 - [x] `spec.md` pasa a `**Estado:** implementado`.
+
+## Ajuste posterior — las de semaforización también se borran
+
+Cambio de criterio sobre el CA-6 original, que las declaraba indestructibles (`AppError(409)`).
+Pasan a comportarse como cualquier otra etiqueta, con una confirmación explícita en la UI.
+
+- [x] `deleteTag` deja de rechazar las que tienen `semaforo`; el `$pull` sobre `Cliente.tagIds` ya
+      cubría el caso, así que no hizo falta tocarlo.
+- [x] `Tenant.semaforoTagsSeeded` + siembra de una sola vez. Sin esto el borrado era una ilusión:
+      `backfillSemaforoTags()` corre en **cada arranque** (`app.ts`) y el `upsert` habría recreado
+      la etiqueta con su nombre y color de fábrica en el siguiente despliegue.
+- [x] `backfillSemaforoTags` consulta solo los tenants sin la marca (coste ~0 en arranques
+      posteriores).
+- [x] UI: el botón de borrar aparece en **todas** las filas; las de semáforo pasan por un
+      `AlertDialog` (`ui/alert-dialog`, vendorizado con la CLI de shadcn) que nombra el efecto
+      invisible — informes y clasificación automática dejan de usarla. El diálogo no se cierra
+      hasta que la mutación confirma, para que un fallo del backend no parezca un éxito.
+- [x] Tests backend: borrado de una de semáforo, **no reaparición tras re-sembrar**, y retirada de
+      las conversaciones que la tenían (`tag.service.test.ts`).
+- [x] Tests frontend: confirmación obligatoria en las de semáforo, borrado directo en las normales,
+      y cancelar no borra (`TagsPage.test.tsx`, nuevo).
+- [x] `docs/domain.md` y CA-6 de `spec.md` actualizados, incluida la advertencia a CRM-04 / IA-05 /
+      MARK-01 de que un slug de semáforo **puede no existir**.
+- [ ] **Pendiente:** revisión visual del `AlertDialog` en claro y oscuro (entra en el mismo pase
+      pendiente de más abajo).
 
 ## Definición de "hecho"
 

@@ -74,7 +74,13 @@ export interface ContactCardDTO {
   nivelInteres: string | null;
   objecionPrincipal: string | null;
   rolContacto: string | null;
-  tags: string[];
+  /**
+   * Etiquetas ya hidratadas por el backend (`cliente.service.ts` las resuelve desde `tagIds`).
+   * Eran `string[]` cuando `Cliente.tags` era texto libre; HU-OMNI-04 las convirtió en objetos y
+   * este tipo se quedó atrás. Mientras mintió, `tsc` daba por bueno pintar `{tag}` como hijo de
+   * React y el fallo solo aparecía en runtime.
+   */
+  tags: TagDTO[];
   asesorId: string | null;
   ultimoMensajeAt: string | null;
   createdAt: string;

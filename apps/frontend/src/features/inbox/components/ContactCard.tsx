@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { TagChip } from '@/features/tags/components/TagChip';
 import { initials, shortTime } from '../lib/format.js';
 import type { ContactCardDTO } from '../types.js';
 
@@ -59,10 +60,10 @@ export function ContactCard({ contacto }: { contacto: ContactCardDTO }): React.R
 
       {contacto.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
+          {/* `TagChip` es el único punto que pinta el color del tenant y garantiza su contraste;
+              es el mismo componente que usa la lista de conversaciones para estas etiquetas. */}
           {contacto.tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="font-normal">
-              {tag}
-            </Badge>
+            <TagChip key={tag.id} tag={tag} />
           ))}
         </div>
       )}

@@ -72,8 +72,11 @@ Fuera de alcance (otros features / fases):
    (`tags: [{ id, nombre, color }]`), resueltas **en lote** — sin una consulta por conversación.
 6. Existen 4 etiquetas de **semaforización** por tenant, identificadas por un campo estable
    `semaforo: 'azul' | 'rojo' | 'naranja' | 'verde'`. Se siembran al crear un tenant y por backfill
-   idempotente en los existentes. El administrador puede renombrarlas y recolorearlas, pero
-   **no borrarlas** (`AppError(409)`). Otros módulos las resuelven por `semaforo`, nunca por nombre.
+   en los existentes, **una sola vez** (marca `Tenant.semaforoTagsSeeded`): re-sembrar un tenant ya
+   sembrado no crea nada. El administrador puede renombrarlas, recolorearlas **y borrarlas** como a
+   cualquier otra etiqueta; la UI pide confirmación explícita antes de borrar una, y una vez borrada
+   **no reaparece** en el siguiente arranque. Otros módulos las resuelven por `semaforo`, nunca por
+   nombre, y deben tolerar que el slug no exista.
 7. Los `tags: [String]` existentes se migran a `Tag` reales del tenant y el campo desaparece del
    modelo; el script es idempotente y admite `--dry-run`.
 8. **UI:** la bandeja muestra chips de color por conversación, la cabecera de la conversación tiene

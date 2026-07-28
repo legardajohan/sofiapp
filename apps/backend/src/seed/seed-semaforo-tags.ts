@@ -17,11 +17,20 @@ const SEMAFORO: { semaforo: SemaforoSlug; nombre: string; color: string }[] = [
 ];
 
 /**
- * Siembra las etiquetas de semáforo de UN tenant. Idempotente: `$setOnInsert` no pisa un
- * renombrado ni un recoloreado posterior del administrador.
+ * Siembra las etiquetas de semáforo de UN tenant, **una sola vez en su vida**.
+ *
+ * La marca `Tenant.semaforoTagsSeeded` no es una optimización: es lo único que distingue "este
+ * tenant nunca las tuvo" de "el administrador las borró a propósito". Un `upsert` no puede
+ * diferenciar los dos casos, así que sin la marca cada arranque resucitaría con nombre y color de
+ * fábrica una etiqueta que alguien eliminó deliberadamente. `$setOnInsert` sigue protegiendo el
+ * renombrado y el recoloreado dentro de la única siembra.
  */
 export async function seedSemaforoTags(tenantId: string | Types.ObjectId): Promise<void> {
   const oid = typeof tenantId === 'string' ? new Types.ObjectId(tenantId) : tenantId;
+
+  const tenant = await Tenant.findById(oid, { semaforoTagsSeeded: 1 }).lean();
+  if (tenant?.semaforoTagsSeeded === true) return;
+
   for (const tag of SEMAFORO) {
     await Tag.updateOne(
       { tenantId: oid, semaforo: tag.semaforo },
@@ -29,16 +38,21 @@ export async function seedSemaforoTags(tenantId: string | Types.ObjectId): Promi
       { upsert: true },
     );
   }
+
+  // Se marca al final: si la siembra falla a medias, el siguiente arranque la reintenta.
+  await Tenant.updateOne({ _id: oid }, { $set: { semaforoTagsSeeded: true } });
 }
 
 /**
  * Backfill para los tenants que ya existían antes de HU-OMNI-04. Las etiquetas son por tenant, así
- * que no cabe una semilla global como la de planes: hay que recorrerlos.
+ * que no cabe una semilla global como la de planes: hay que recorrerlos. Los ya sembrados quedan
+ * fuera de la consulta, de modo que el coste tiende a cero y los borrados del administrador
+ * sobreviven a los despliegues.
  */
 export async function backfillSemaforoTags(): Promise<void> {
-  const tenants = await Tenant.find({}, { _id: 1 }).lean();
+  const tenants = await Tenant.find({ semaforoTagsSeeded: { $ne: true } }, { _id: 1 }).lean();
   for (const tenant of tenants) {
     await seedSemaforoTags(tenant._id as Types.ObjectId);
   }
-  logger.info('Seed de etiquetas de semaforización verificado.', { tenants: tenants.length });
+  logger.info('Seed de etiquetas de semaforización verificado.', { sembrados: tenants.length });
 }

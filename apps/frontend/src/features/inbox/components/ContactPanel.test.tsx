@@ -76,6 +76,27 @@ describe('ContactPanel — colapsar sin dejar rastro en el layout', () => {
     expect(screen.getByRole('complementary', { name: /ficha del contacto/i })).toBeInTheDocument();
   });
 
+  // Regresión: la ficha pintaba `{tag}` con el objeto entero y React lanzaba "Objects are not
+  // valid as a React child (found: object with keys {id, nombre, color, semaforo})". El fixture de
+  // arriba trae `tags: []`, así que esa rama no se ejecutaba y la suite pasaba con el bug dentro.
+  it('pinta las etiquetas hidratadas por su nombre, sin reventar', async () => {
+    mockFetch.mockResolvedValue({
+      ...HISTORY,
+      contacto: {
+        ...HISTORY.contacto,
+        tags: [
+          { id: 'tg-1', nombre: 'En riesgo', color: '#DC2626', semaforo: 'rojo' },
+          { id: 'tg-2', nombre: 'Urgente', color: '#EA580C', semaforo: null },
+        ],
+      },
+    });
+
+    renderPanel(true);
+
+    expect(await screen.findByText('En riesgo')).toBeInTheDocument();
+    expect(screen.getByText('Urgente')).toBeInTheDocument();
+  });
+
   it('desplegado ofrece el control para colapsar', async () => {
     const { onOpenChange } = renderPanel(true);
     const boton = await screen.findByRole('button', { name: /colapsar la ficha/i });

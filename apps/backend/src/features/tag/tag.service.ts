@@ -99,16 +99,15 @@ export async function updateTag(
  * Borra la etiqueta y la retira de todas las conversaciones del tenant. Sin el `$pull` quedarían
  * `tagIds` apuntando a un documento inexistente, y la hidratación de la bandeja los descartaría en
  * silencio — un chip que desaparece sin que nadie sepa por qué.
+ *
+ * Las de semaforización se borran como cualquier otra: son sugerencias del sistema, no estructura
+ * fija. Quien las consuma por `semaforo` (CRM-04, IA-05, MARK-01) debe tolerar su ausencia en vez
+ * de asumir que las cuatro existen siempre. La confirmación de esa decisión vive en la UI; el
+ * `Tenant.semaforoTagsSeeded` de la semilla es lo que impide que el borrado se deshaga solo.
  */
 export async function deleteTag(tenantId: TenantId, tagId: string): Promise<void> {
   const tag = await findByIdScoped(Tag, tenantId, tagId).lean<ITagLean>();
   if (!tag) throw new AppError('Etiqueta no encontrada.', 404);
-  if (tag.semaforo) {
-    throw new AppError(
-      'Las etiquetas de semaforización no se pueden eliminar. Puedes renombrarlas o cambiarles el color.',
-      409,
-    );
-  }
 
   const oid = new Types.ObjectId(tagId);
   await findOneAndDeleteScoped(Tag, tenantId, { _id: oid });
