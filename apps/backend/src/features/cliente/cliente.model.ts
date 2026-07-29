@@ -24,11 +24,43 @@ const ClienteSchema = new Schema<IClienteDocument>(
     iaHabilitada: { type: Boolean, default: true },
     asesorId: { type: Schema.Types.ObjectId, ref: 'User' },
     customFields: { type: Schema.Types.Mixed, default: {} },
-    tags: [{ type: String }],
+    // Etiquetas de empresa (HU-OMNI-04). Sustituyen al antiguo `tags: [String]` de texto libre;
+    // la migración vive en `scripts/migrate-cliente-tags.ts`.
+    tagIds: [{ type: Schema.Types.ObjectId, ref: 'Tag' }],
     nivelInteres: { type: String, enum: ['frio', 'tibio', 'caliente'] },
     objecionPrincipal: { type: String, enum: ['precio', 'tiempo', 'confianza', 'otra'] },
     rolContacto: { type: String, enum: ['decisor', 'usuario', 'desconocido'] },
     interesItemId: { type: Schema.Types.ObjectId, ref: 'CatalogItem' },
+    // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
+    resumenIA: {
+      type: new Schema(
+        {
+          texto: { type: String, required: true },
+          generadoAt: { type: Date, required: true },
+          mensajesHasta: { type: Date, required: true },
+          modelo: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
+    // Datos de contacto extraídos por IA bajo demanda (HU-OMNI-03). Cada campo admite `null`
+    // cuando la conversación no lo menciona; nunca sobrescriben `nombre`/`telefono`.
+    datosExtraidos: {
+      type: new Schema(
+        {
+          nombreCompleto: { type: String, default: null },
+          correo: { type: String, default: null },
+          // Siempre presente: si la conversación no dicta uno, se guarda el número de WhatsApp.
+          telefono: { type: String, required: true },
+          telefonoOrigen: { type: String, enum: ['conversacion', 'whatsapp'], required: true },
+          extraidoAt: { type: Date, required: true },
+          modelo: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { timestamps: true },
 );
@@ -37,5 +69,7 @@ ClienteSchema.index({ tenantId: 1, metaUserId: 1 }, { unique: true });
 ClienteSchema.index({ tenantId: 1, estadoComercial: 1 });
 ClienteSchema.index({ tenantId: 1, ultimoMensajeAt: -1 });
 ClienteSchema.index({ tenantId: 1, asesorId: 1 });
+// Filtro de bandeja por etiqueta: un ObjectId suelto contra un array significa "contiene".
+ClienteSchema.index({ tenantId: 1, tagIds: 1 });
 
 export const Cliente = model<IClienteDocument>('Cliente', ClienteSchema);

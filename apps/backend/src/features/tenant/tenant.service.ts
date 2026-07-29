@@ -5,6 +5,7 @@ import { UserModel } from '../users/user.model.js';
 import { Plan } from '../plan/plan.model.js';
 import { assertWithinQuota } from '../usage/usage.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
+import { seedSemaforoTags } from '../../seed/seed-semaforo-tags.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { seedPresetDocuments } from '../kb/kb.service.js';
@@ -129,6 +130,10 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
       error: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // Etiquetas de semaforización (HU-OMNI-04). Fuera de la transacción a propósito: no debe
+  // impedir el alta de la empresa si falla, y `backfillSemaforoTags()` del arranque lo corrige.
+  await seedSemaforoTags(tenant._id.toString());
 
   return mapTenantToResponse(tenant);
 }

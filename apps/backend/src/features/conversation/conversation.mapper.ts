@@ -1,6 +1,7 @@
 import type { Types } from 'mongoose';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 import type { IUserResponse } from '../users/user.types.js';
+import type { ITagResponse } from '../tag/tag.types.js';
 import type { IAuditEventResponse } from '../audit/audit.types.js';
 import type {
   IAssignmentResponse,
@@ -20,6 +21,7 @@ export interface IConversationSource {
   asesorId?: Types.ObjectId | string | null;
   ventana24hExpiraEn?: Date | null;
   estadoComercial: string;
+  tagIds?: (Types.ObjectId | string)[] | null;
 }
 
 /** Forma mínima de un `Message` (lean) necesaria para proyectar un mensaje. */
@@ -39,8 +41,14 @@ export function toConversationResponse(
   preview: string | null,
   now: Date = new Date(),
   asignado: IUserResponse | null = null,
+  tagMap: Map<string, ITagResponse> = new Map(),
 ): IConversationResponse {
   const asesorId = cliente.asesorId ? String(cliente.asesorId) : null;
+  // Un id sin entrada en el mapa es una referencia colgada (borrado a medias): se omite en vez de
+  // romper el render. `deleteTag` hace `$pull`, así que en condiciones normales no ocurre.
+  const tags = (cliente.tagIds ?? [])
+    .map((id) => tagMap.get(String(id)))
+    .filter((t): t is ITagResponse => t !== undefined);
   return {
     id: String(cliente._id),
     nombre: cliente.nombre ?? null,
@@ -56,6 +64,7 @@ export function toConversationResponse(
     iaHabilitada: cliente.iaHabilitada ?? true,
     ventana24hAbierta: !!cliente.ventana24hExpiraEn && cliente.ventana24hExpiraEn > now,
     estadoComercial: cliente.estadoComercial,
+    tags,
   };
 }
 

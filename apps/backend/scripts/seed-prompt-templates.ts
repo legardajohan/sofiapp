@@ -30,6 +30,15 @@ Si un campo no aparece en la conversación, omítelo del resultado.`,
 nivelInteres: 'frio' si no hay interés claro, 'tibio' si hay curiosidad moderada, 'caliente' si hay intención de compra.
 objecion: la principal objeción detectada ('precio', 'tiempo', 'confianza', 'otra') o null si no hay objeción.`,
   },
+  {
+    tenantId: null,
+    method: 'summary' as const,
+    version: '1.0.0',
+    isActive: true,
+    systemPrompt: `Resume la conversación entre el asesor y el prospecto en español, de forma breve y neutral.
+Incluye: la intención o necesidad del prospecto, sus objeciones, los acuerdos alcanzados y el próximo paso pendiente.
+No inventes datos que no aparezcan en la conversación. Devuelve solo el resumen, sin encabezados ni viñetas superfluas.`,
+  },
 ];
 
 async function main(): Promise<void> {

@@ -1,4 +1,5 @@
 import type { AdminSubrol } from '@/stores/authStore';
+import type { TagDTO } from '@/features/tags/types';
 
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
 
@@ -25,6 +26,8 @@ export interface ConversationDTO {
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;
+  /** Etiquetas ya hidratadas por el backend: los chips se pintan sin una segunda llamada. */
+  tags: TagDTO[];
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */
@@ -32,6 +35,8 @@ export interface InboxFiltros {
   filtro: FiltroBandeja;
   asignadoA?: string;
   estado?: EstadoComercial;
+  /** Id de la etiqueta por la que se filtra. */
+  etiqueta?: string;
 }
 
 export interface MessageDTO {
@@ -50,6 +55,57 @@ export interface Paginated<T> {
   page: number;
   limit: number;
   total: number;
+}
+
+// ─── Ficha del contacto + resumen (HU-OMNI-03) ──────────────────────────────────
+
+export interface ResumenDTO {
+  texto: string;
+  generadoAt: string;
+  desactualizado: boolean;
+}
+
+export interface ContactCardDTO {
+  id: string;
+  nombre: string | null;
+  telefono: string;
+  canalOrigen: string;
+  estadoComercial: string;
+  nivelInteres: string | null;
+  objecionPrincipal: string | null;
+  rolContacto: string | null;
+  /**
+   * Etiquetas ya hidratadas por el backend (`cliente.service.ts` las resuelve desde `tagIds`).
+   * Eran `string[]` cuando `Cliente.tags` era texto libre; HU-OMNI-04 las convirtió en objetos y
+   * este tipo se quedó atrás. Mientras mintió, `tsc` daba por bueno pintar `{tag}` como hijo de
+   * React y el fallo solo aparecía en runtime.
+   */
+  tags: TagDTO[];
+  asesorId: string | null;
+  ultimoMensajeAt: string | null;
+  createdAt: string;
+}
+
+/** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
+export type TelefonoOrigen = 'conversacion' | 'whatsapp';
+
+/**
+ * Datos de contacto extraídos por IA. `nombreCompleto` y `correo` son `null` si la conversación
+ * no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del contacto).
+ */
+export interface DatosExtraidosDTO {
+  nombreCompleto: string | null;
+  correo: string | null;
+  telefono: string;
+  telefonoOrigen: TelefonoOrigen;
+  extraidoAt: string;
+}
+
+export interface ContactHistoryDTO {
+  contacto: ContactCardDTO;
+  resumen: ResumenDTO | null;
+  datosExtraidos: DatosExtraidosDTO | null;
+  mensajes: Paginated<MessageDTO>;
 }
 
 /** Payload de los eventos de tiempo real emitidos por el gateway. */

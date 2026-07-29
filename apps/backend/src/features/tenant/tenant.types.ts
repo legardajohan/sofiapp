@@ -28,6 +28,12 @@ export interface ITenant {
   fotografiaFinancieraContratada?: IFotografiaFinanciera;
   planContratadoVersion?: number;
   fechaContratacion?: Date;
+  /**
+   * Marca que las etiquetas de semaforización ya se sembraron en este tenant. Existe para que el
+   * backfill de arranque no vuelva a crearlas: desde HU-OMNI-04 el administrador puede borrarlas,
+   * y sin esta marca el `upsert` las resucitaría en el siguiente despliegue.
+   */
+  semaforoTagsSeeded?: boolean;
 }
 
 export interface ITenantDocument extends ITenant, Document {}
