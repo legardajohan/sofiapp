@@ -33,6 +33,7 @@ const TenantSchema = new Schema<ITenantDocument>(
     fotografiaFinancieraContratada: { type: FotografiaFinancieraSchema },
     planContratadoVersion: { type: Number },
     fechaContratacion: { type: Date },
+    semaforoTagsSeeded: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

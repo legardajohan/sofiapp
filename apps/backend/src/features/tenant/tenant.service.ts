@@ -5,7 +5,10 @@ import { UserModel } from '../users/user.model.js';
 import { Plan } from '../plan/plan.model.js';
 import { assertWithinQuota } from '../usage/usage.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
+import { seedSemaforoTags } from '../../seed/seed-semaforo-tags.js';
 import { AppError } from '../../utils/AppError.js';
+import { logger } from '../../utils/logger.js';
+import { seedPresetDocuments } from '../kb/kb.service.js';
 import type { IPlanDocument } from '../plan/plan.types.js';
 import type {
   CreateTenantDTO,
@@ -115,7 +118,24 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   }
 
   if (!createdTenant) throw new AppError('Error al crear la empresa.', 500);
-  return mapTenantToResponse(createdTenant);
+  const tenant: ITenantDocument = createdTenant;
+
+  // Siembra la KB con documentos base. Nunca debe tumbar la creación del tenant: el tenant ya
+  // quedó creado; si el seeding falla, se registra y se sigue (se puede resembrar aparte).
+  try {
+    await seedPresetDocuments(tenant._id);
+  } catch (err) {
+    logger.error('seedPresetDocuments falló tras crear el tenant', {
+      tenantId: tenant._id.toString(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Etiquetas de semaforización (HU-OMNI-04). Fuera de la transacción a propósito: no debe
+  // impedir el alta de la empresa si falla, y `backfillSemaforoTags()` del arranque lo corrige.
+  await seedSemaforoTags(tenant._id.toString());
+
+  return mapTenantToResponse(tenant);
 }
 
 export async function updateTenant(id: string, dto: UpdateTenantDTO): Promise<ITenantResponse> {

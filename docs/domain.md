@@ -57,7 +57,40 @@
 > El motor de IA recibe del tenant la definición de qué `customFields` debe intentar capturar
 > (configuración por tenant), además del core fijo.
 
-## 5. Invariantes de dominio
+## 5. Semaforización (HU-OMNI-04)
+
+**Semaforización** es el vocabulario compartido con el que el CRM expresa, de un vistazo, en qué
+punto está una conversación. Se materializa como cuatro **etiquetas de sistema** que existen en
+todos los tenants, con un identificador estable (`Tag.semaforo`):
+
+| `semaforo` | Nombre sembrado | Color | Significado |
+|---|---|---|---|
+| `verde` | Avanza | `#16A34A` | Interesado, la conversación progresa |
+| `naranja` | Requiere atención | `#EA580C` | Estancada o con una objeción pendiente |
+| `rojo` | En riesgo | `#DC2626` | Bloqueada, a punto de perderse |
+| `azul` | Informativo | `#2563EB` | Consulta general, sin intención comercial aún |
+
+Reglas:
+
+- El administrador **puede** renombrarlas y recolorearlas: cada empresa habla su propio idioma.
+- El administrador **también puede eliminarlas**. La semaforización es un vocabulario que se
+  ofrece, no una estructura que se impone: una empresa que no trabaja así no debería cargar con
+  cuatro etiquetas que nunca usa. La UI pide confirmación antes de borrar una, porque su efecto
+  alcanza módulos que no se ven desde la pantalla de etiquetas.
+- Por tanto, **una etiqueta de semáforo puede no existir**. El resto de módulos (CRM-04 métricas,
+  IA-05 clasificación automática, MARK-01 segmentación de campañas) las resuelven **por `semaforo`,
+  nunca por nombre** — el nombre es mutable —, y deben tolerar que el slug no esté en lugar de
+  asumir que las cuatro existen siempre.
+- Se siembran **una sola vez** por tenant: al crearlo, o por backfill al arrancar el servidor si es
+  anterior a HU-OMNI-04. La marca `Tenant.semaforoTagsSeeded` registra que ya ocurrió, para que el
+  backfill no resucite una etiqueta que el administrador borró a propósito. Volver a sembrar un
+  tenant ya sembrado no hace nada.
+
+Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo`). El
+comportamiento es el mismo; la única diferencia es que las de semáforo llevan un slug estable y
+piden confirmación al borrarse.
+
+## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.
 2. Un `Message` pertenece a un `Cliente` y a su mismo `Tenant`.
@@ -65,3 +98,5 @@
 4. Un email de usuario de panel es único **globalmente** (`{ email }` único); el login resuelve el
    tenant del usuario hallado (ADR 0003).
 5. El Superadmin no pertenece a ningún tenant (`tenantId = null`).
+6. Un `Tag` pertenece a exactamente un `Tenant`, y una conversación solo puede llevar etiquetas
+   de su propio tenant (validado antes de escribir en `setConversationTags`).

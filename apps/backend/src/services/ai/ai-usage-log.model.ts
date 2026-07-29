@@ -2,7 +2,7 @@ import { Schema, model, type Document, type Types } from 'mongoose';
 
 export interface IAiUsageLog {
   tenantId: Types.ObjectId;
-  method: 'chat' | 'extract' | 'classify';
+  method: 'chat' | 'extract' | 'classify' | 'summary';
   llmModel: string;
   promptTokens: number;
   completionTokens: number;
@@ -19,7 +19,7 @@ export interface IAiUsageLogDocument extends IAiUsageLog, Document {}
 const AiUsageLogSchema = new Schema<IAiUsageLogDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
-    method: { type: String, enum: ['chat', 'extract', 'classify'], required: true },
+    method: { type: String, enum: ['chat', 'extract', 'classify', 'summary'], required: true },
     llmModel: { type: String, required: true },
     promptTokens: { type: Number, required: true },
     completionTokens: { type: Number, required: true },

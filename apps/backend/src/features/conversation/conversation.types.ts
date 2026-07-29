@@ -1,5 +1,6 @@
 import type { AdminSubrol } from '../users/user.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
+import type { ITagResponse } from '../tag/tag.types.js';
 
 /** Segmentos de la bandeja (submenú del sidebar). */
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
@@ -24,6 +25,8 @@ export interface IConversationResponse {
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;
+  /** Etiquetas ya hidratadas (HU-OMNI-04): la bandeja pinta los chips sin una segunda llamada. */
+  tags: ITagResponse[];
 }
 
 /** Un evento del historial de reasignaciones de una conversación (`audit_events`). */

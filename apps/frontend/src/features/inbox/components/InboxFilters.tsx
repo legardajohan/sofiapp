@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTenantUsers } from '@/features/users/hooks/useTenantUsers';
+import { useTags } from '@/features/tags/hooks/useTags';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
 
 const FILTERS: { key: FiltroBandeja; label: string }[] = [
@@ -35,6 +36,8 @@ interface Props {
   onAsignadoAChange: (asignadoA: string | undefined) => void;
   estado?: EstadoComercial;
   onEstadoChange: (estado: EstadoComercial | undefined) => void;
+  etiqueta?: string;
+  onEtiquetaChange: (etiqueta: string | undefined) => void;
 }
 
 export function InboxFilters({
@@ -44,8 +47,11 @@ export function InboxFilters({
   onAsignadoAChange,
   estado,
   onEstadoChange,
+  etiqueta,
+  onEtiquetaChange,
 }: Props): React.ReactElement {
   const { data: admins } = useTenantUsers();
+  const { data: etiquetas } = useTags();
 
   return (
     <div className="flex flex-col gap-2 border-b border-border p-2">
@@ -72,7 +78,10 @@ export function InboxFilters({
           value={asignadoA ?? TODOS}
           onValueChange={(v) => onAsignadoAChange(v === TODOS ? undefined : v)}
         >
-          <SelectTrigger className="h-7 w-auto gap-1 border-none bg-muted/60 px-2 text-xs shadow-none hover:bg-muted">
+          <SelectTrigger
+            aria-label="Filtrar por responsable"
+            className="h-7 w-auto gap-1 border-none bg-muted/60 px-2 text-xs shadow-none hover:bg-muted"
+          >
             <SelectValue placeholder="Responsable" />
           </SelectTrigger>
           <SelectContent>
@@ -90,7 +99,10 @@ export function InboxFilters({
           value={estado ?? TODOS}
           onValueChange={(v) => onEstadoChange(v === TODOS ? undefined : (v as EstadoComercial))}
         >
-          <SelectTrigger className="h-7 w-auto gap-1 border-none bg-muted/60 px-2 text-xs shadow-none hover:bg-muted">
+          <SelectTrigger
+            aria-label="Filtrar por estado comercial"
+            className="h-7 w-auto gap-1 border-none bg-muted/60 px-2 text-xs shadow-none hover:bg-muted"
+          >
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
@@ -102,6 +114,37 @@ export function InboxFilters({
             ))}
           </SelectContent>
         </Select>
+
+        {/* Solo aparece si la empresa tiene etiquetas: un filtro que nunca puede filtrar nada es
+            ruido. Las cuatro de semaforización se siembran, así que en la práctica siempre está. */}
+        {(etiquetas?.length ?? 0) > 0 && (
+          <Select
+            value={etiqueta ?? TODOS}
+            onValueChange={(v) => onEtiquetaChange(v === TODOS ? undefined : v)}
+          >
+            <SelectTrigger
+              aria-label="Filtrar por etiqueta"
+              className="h-7 w-auto gap-1 border-none bg-muted/60 px-2 text-xs shadow-none hover:bg-muted"
+            >
+              <SelectValue placeholder="Etiqueta" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todas las etiquetas</SelectItem>
+              {etiquetas?.map((tag) => (
+                <SelectItem key={tag.id} value={tag.id}>
+                  <span className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {tag.nombre}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </div>
   );

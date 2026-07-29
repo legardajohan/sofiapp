@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+const OBJECT_ID_REGEX = /^[0-9a-f]{24}$/i;
+const CONTENIDO_MAX = 3000;
+const CONTENIDO_MAX_MSG = 'El contenido no puede superar los 3,000 caracteres.';
+
 export const createDocumentSchema = z.object({
   body: z.object({
     titulo: z
@@ -11,7 +15,7 @@ export const createDocumentSchema = z.object({
       .string()
       .trim()
       .min(1, 'El contenido es obligatorio.')
-      .max(100_000, 'El contenido no puede superar los 100,000 caracteres.'),
+      .max(CONTENIDO_MAX, CONTENIDO_MAX_MSG),
   }),
 });
 
@@ -22,6 +26,14 @@ export const listDocumentsSchema = z.object({
   }),
 });
 
+export const updateDocumentSchema = z.object({
+  params: z.object({ id: z.string().regex(OBJECT_ID_REGEX, 'ID inválido') }),
+  // El contenido puede quedar vacío (documento sin llenar); no se indexa hasta que tenga texto.
+  body: z.object({
+    contenido: z.string().trim().max(CONTENIDO_MAX, CONTENIDO_MAX_MSG),
+  }),
+});
+
 export const deleteDocumentSchema = z.object({
-  params: z.object({ id: z.string().regex(/^[0-9a-f]{24}$/i, 'ID inválido') }),
+  params: z.object({ id: z.string().regex(OBJECT_ID_REGEX, 'ID inválido') }),
 });

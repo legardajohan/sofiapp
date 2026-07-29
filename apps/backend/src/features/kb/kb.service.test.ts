@@ -11,7 +11,13 @@ vi.mock('../../config/queues.js', () => ({
   kbIndexQueue: { add: mockAdd },
 }));
 
-import { createDocument, listDocuments, deleteDocument } from './kb.service.js';
+import {
+  createDocument,
+  listDocuments,
+  updateDocument,
+  deleteDocument,
+  seedPresetDocuments,
+} from './kb.service.js';
 import { KbDocument } from './kb-document.model.js';
 import { KbChunk } from './kb-chunk.model.js';
 import { createScoped, findScoped } from '../../repositories/base.repository.js';
@@ -81,6 +87,175 @@ describe('listDocuments — aislamiento multi-tenant', () => {
 
     const docsB = await findScoped(KbDocument, tenantB).exec();
     expect(docsB).toHaveLength(0);
+  });
+});
+
+describe('updateDocument', () => {
+  beforeEach(() => {
+    mockAdd.mockClear();
+  });
+
+  it('re-versiona, limpia chunks viejos y encola el job cuando hay contenido', async () => {
+    const tenantId = new Types.ObjectId();
+    const created = await createDocument(tenantId, { titulo: 'Editable', contenido: 'v1' });
+    await createScoped(KbChunk, tenantId, {
+      documentId: created.id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento viejo',
+      embedding: [0.1],
+    });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, 'contenido corregido');
+
+    expect(updated.id).toBe(created.id);
+    expect(updated.version).toBe(2);
+    expect(updated.estadoIndexacion).toBe('pendiente');
+    expect(updated.chunkCount).toBe(0);
+    expect(updated.contenido).toBe('contenido corregido');
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: created.id }).exec();
+    expect(chunks).toHaveLength(0);
+
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+    expect(mockAdd).toHaveBeenCalledWith('index-document', {
+      tenantId: tenantId.toString(),
+      documentId: created.id,
+      version: 2,
+    });
+  });
+
+  it('primer llenado de un preset vacío mantiene la versión en 1, limpia chunks y encola el job', async () => {
+    const tenantId = new Types.ObjectId();
+    // Preset seedeado: nace vacío en version 1 (como lo deja seedPresetDocuments).
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      proposito: 'Nombre, misión, visión',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+    // Chunk residual: no debería sobrevivir al re-indexado aunque el preset naciera vacío.
+    await createScoped(KbChunk, tenantId, {
+      documentId: preset._id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento residual',
+      embedding: [0.1],
+    });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(
+      tenantId,
+      preset._id.toString(),
+      'Contenido real del preset',
+    );
+
+    // Primer llenado (contenido previo vacío) NO incrementa la versión.
+    expect(updated.version).toBe(1);
+    expect(updated.estadoIndexacion).toBe('pendiente');
+    expect(updated.chunkCount).toBe(0);
+    expect(updated.contenido).toBe('Contenido real del preset');
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: preset._id }).exec();
+    expect(chunks).toHaveLength(0);
+
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+    expect(mockAdd).toHaveBeenCalledWith('index-document', {
+      tenantId: tenantId.toString(),
+      documentId: preset._id.toString(),
+      version: 1,
+    });
+  });
+
+  it('secuencia de versiones: preset vacío → primer llenado (v1) → segunda edición (v2)', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Productos y servicios',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    const firstFill = await updateDocument(tenantId, preset._id.toString(), 'Catálogo inicial');
+    expect(firstFill.version).toBe(1); // primer llenado
+
+    const secondEdit = await updateDocument(tenantId, preset._id.toString(), 'Catálogo corregido');
+    expect(secondEdit.version).toBe(2); // ya tenía contenido real → sí incrementa
+  });
+
+  it('contenido vacío no encola el job y deja el documento en pendiente', async () => {
+    const tenantId = new Types.ObjectId();
+    const created = await createDocument(tenantId, { titulo: 'A vaciar', contenido: 'algo' });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, '   ');
+
+    expect(updated.estadoIndexacion).toBe('pendiente');
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('documento inexistente → AppError 404', async () => {
+    const tenantId = new Types.ObjectId();
+    await expect(
+      updateDocument(tenantId, new Types.ObjectId().toString(), 'texto'),
+    ).rejects.toThrow(AppError);
+  });
+
+  it('aislamiento multi-tenant: tenantB no puede editar un documento de tenantA', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
+    mockAdd.mockClear();
+
+    await expect(updateDocument(tenantB, created.id, 'hackeado')).rejects.toThrow(AppError);
+    expect(mockAdd).not.toHaveBeenCalled();
+
+    const doc = await KbDocument.findById(created.id).lean<IKbDocument>();
+    expect(doc?.contenido).toBe('v1');
+    expect(doc?.version).toBe(1);
+  });
+});
+
+describe('seedPresetDocuments', () => {
+  beforeEach(() => {
+    mockAdd.mockClear();
+  });
+
+  it('inserta 5 presets vacíos con isPreset=true y sin encolar jobs', async () => {
+    const tenantId = new Types.ObjectId();
+
+    await seedPresetDocuments(tenantId);
+
+    const docs = await findScoped(KbDocument, tenantId)
+      .lean<(IKbDocument & { _id: Types.ObjectId })[]>()
+      .exec();
+    expect(docs).toHaveLength(5);
+    for (const doc of docs) {
+      expect(doc.isPreset).toBe(true);
+      expect(doc.contenido).toBe('');
+      expect(doc.estadoIndexacion).toBe('pendiente');
+      expect(doc.version).toBe(1);
+      expect(doc.proposito).toBeTruthy();
+    }
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('aislamiento multi-tenant: los presets de tenantA no son visibles para tenantB', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+
+    await seedPresetDocuments(tenantA);
+
+    const listB = await listDocuments(tenantB, 1, 20);
+    expect(listB.total).toBe(0);
   });
 });
 

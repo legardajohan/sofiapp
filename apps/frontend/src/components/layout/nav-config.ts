@@ -9,6 +9,7 @@ import {
   Megaphone,
   Package,
   Sparkles,
+  Tags,
   UserCheck,
   Users,
   UserX,
@@ -66,6 +67,7 @@ export const navGroups: NavGroup[] = [
           { label: 'Sofi activa', to: '/inbox?filtro=sofi', icon: Sparkles },
         ],
       },
+      { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
       {
         label: 'Clientes',
         to: '/clientes',

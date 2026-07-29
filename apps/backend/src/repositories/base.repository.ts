@@ -37,6 +37,15 @@ export function findOneAndUpdateScoped<T>(
   return m.findOneAndUpdate({ ...filter, tenantId } as FilterQuery<T>, update, options);
 }
 
+export function updateManyScoped<T>(
+  m: Model<T>,
+  tenantId: TenantId,
+  filter: FilterQuery<T>,
+  update: UpdateQuery<T>,
+): ReturnType<Model<T>['updateMany']> {
+  return m.updateMany({ ...filter, tenantId } as FilterQuery<T>, update);
+}
+
 export function findOneAndDeleteScoped<T>(
   m: Model<T>,
   tenantId: TenantId,

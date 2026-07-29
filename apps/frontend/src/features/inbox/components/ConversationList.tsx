@@ -4,16 +4,28 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { initials, shortTime } from '../lib/format.js';
 import { AssigneeBadge } from './AssigneeBadge.js';
+import { TagChip } from '@/features/tags/components/TagChip';
 import type { ConversationDTO } from '../types.js';
+import { InboxError } from './InboxError.js';
 
 interface Props {
   conversations: ConversationDTO[];
   activeId: string | null;
   onSelect: (id: string) => void;
   isLoading: boolean;
+  /** Motivo del fallo, o `null` si la carga fue bien. Tiene prioridad sobre el estado vacío. */
+  error: string | null;
+  onRetry: () => void;
 }
 
-export function ConversationList({ conversations, activeId, onSelect, isLoading }: Props): React.ReactElement {
+export function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  isLoading,
+  error,
+  onRetry,
+}: Props): React.ReactElement {
   if (isLoading) {
     return (
       <div className="space-y-1 p-2">
@@ -29,6 +41,9 @@ export function ConversationList({ conversations, activeId, onSelect, isLoading 
       </div>
     );
   }
+
+  // El error va ANTES del estado vacío: si la petición falló no sabemos si hay conversaciones.
+  if (error) return <InboxError message={error} onRetry={onRetry} />;
 
   if (conversations.length === 0) {
     return (
@@ -50,7 +65,7 @@ export function ConversationList({ conversations, activeId, onSelect, isLoading 
               type="button"
               onClick={() => onSelect(c.id)}
               className={cn(
-                'flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors duration-150 ease-out',
+                'flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors duration-150 ease-out',
                 'hover:bg-muted/60 active:scale-[0.99]',
                 active && 'bg-sidebar-accent hover:bg-sidebar-accent',
               )}
@@ -95,6 +110,16 @@ export function ConversationList({ conversations, activeId, onSelect, isLoading 
                     )}
                   </div>
                 </div>
+
+                {/* Los chips van en su propia línea: compartir fila con el preview obligaría a
+                    recortar el texto del mensaje, que es lo que el asesor lee primero. */}
+                {c.tags.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {c.tags.map((tag) => (
+                      <TagChip key={tag.id} tag={tag} />
+                    ))}
+                  </div>
+                )}
               </div>
             </button>
           </li>

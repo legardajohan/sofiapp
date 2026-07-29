@@ -1,19 +1,26 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { ConversationList } from '../components/ConversationList.js';
 import { ConversationThread } from '../components/ConversationThread.js';
+import { InboxError } from '../components/InboxError.js';
+import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
 import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
+import { TagChip } from '@/features/tags/components/TagChip';
+import { TagSelector } from '@/features/tags/components/TagSelector';
 import { useConversations } from '../hooks/useConversations.js';
+import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
 import { initials } from '../lib/format.js';
+import { errorMessage } from '../lib/errors.js';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
 
 const FILTROS: FiltroBandeja[] = ['todos', 'mios', 'sin_asignar', 'sofi'];
@@ -42,16 +49,34 @@ export function InboxPage(): React.ReactElement {
   const estado: EstadoComercial | undefined = ESTADOS.includes(rawEstado as EstadoComercial)
     ? (rawEstado as EstadoComercial)
     : undefined;
+  const etiqueta = params.get('etiqueta') ?? undefined;
 
   const activeId = useInboxStore((s) => s.activeId);
   const setActiveId = useInboxStore((s) => s.setActiveId);
+  const contactPanelOpen = useInboxStore((s) => s.contactPanelOpen);
+  const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
+  const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
 
-  const { data: conversations, isLoading } = useConversations({ filtro, asignadoA, estado });
-  const { data: thread, isLoading: threadLoading } = useThread(activeId);
+  // Filtros combinables (OMNI-02) + etiqueta (OMNI-04) + estados de error (OMNI-03).
+  const {
+    data: conversations,
+    isLoading,
+    isError,
+    error,
+    refetch: refetchConversations,
+  } = useConversations({ filtro, asignadoA, estado, etiqueta });
+  const {
+    data: thread,
+    isLoading: threadLoading,
+    isError: threadIsError,
+    error: threadError,
+    refetch: refetchThread,
+  } = useThread(activeId);
 
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
   const setSofi = useSetSofi(activeId ?? '');
+  const setTags = useSetConversationTags(activeId);
 
   const active = useMemo(
     () => conversations?.data.find((c) => c.id === activeId) ?? null,
@@ -91,6 +116,8 @@ export function InboxPage(): React.ReactElement {
           onAsignadoAChange={(v) => updateParams({ asignadoA: v })}
           estado={estado}
           onEstadoChange={(v) => updateParams({ estado: v })}
+          etiqueta={etiqueta}
+          onEtiquetaChange={(v) => updateParams({ etiqueta: v })}
         />
         <div className="flex-1 overflow-y-auto">
           <ConversationList
@@ -98,12 +125,17 @@ export function InboxPage(): React.ReactElement {
             activeId={activeId}
             onSelect={handleSelect}
             isLoading={isLoading}
+            error={
+              isError ? errorMessage(error, 'No se pudieron cargar las conversaciones.') : null
+            }
+            onRetry={() => void refetchConversations()}
           />
         </div>
       </div>
 
-      {/* Panel derecho: hilo de la conversación activa */}
-      <div className="flex flex-1 flex-col">
+      {/* Columna central: hilo de la conversación activa. `min-w-0` para que se encoja al
+          desplegar la ficha en vez de desbordar la fila y romper los `truncate`. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {active ? (
           <>
             <header className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -118,21 +150,70 @@ export function InboxPage(): React.ReactElement {
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{active.telefono}</p>
               </div>
-              <div className="ml-auto flex items-center gap-3">
+              {/* `gap-2`: intermedio entre el `gap-1` de OMNI-03 y el `gap-3` de OMNI-02, ahora
+                  que la cabecera aloja tres controles en vez de dos. */}
+              <div className="ml-auto flex items-center gap-2">
                 <SofiToggle
                   enabled={active.iaHabilitada}
                   pending={setSofi.isPending}
                   onToggle={(v) => setSofi.mutate(v)}
+                />
+                <TagSelector
+                  aplicadas={active.tags}
+                  pending={setTags.isPending}
+                  onChange={(tagIds) => setTags.mutate(tagIds)}
                 />
                 <AssignMenu
                   conversationId={active.id}
                   asignadoA={active.asignadoA}
                   asignadoANombre={active.asignadoANombre}
                 />
+                {/* Único control de la ficha: abre y colapsa. Marcado como interruptor para que
+                    el estado activo se vea, y no parezca que abre algo nuevo cada vez. */}
+                <Button
+                  variant={contactPanelOpen ? 'secondary' : 'ghost'}
+                  size="icon"
+                  aria-expanded={contactPanelOpen}
+                  aria-label={
+                    contactPanelOpen ? 'Colapsar la ficha del contacto' : 'Ver ficha del contacto'
+                  }
+                  title={contactPanelOpen ? 'Colapsar la ficha' : 'Ficha del contacto'}
+                  onClick={toggleContactPanel}
+                >
+                  <UserRound className="h-4 w-4" />
+                </Button>
               </div>
             </header>
 
-            <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+            {/* Las etiquetas aplicadas, visibles y quitables sin abrir el menú: es la acción más
+                frecuente una vez etiquetada la conversación. */}
+            {active.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2">
+                {active.tags.map((tag) => (
+                  <TagChip
+                    key={tag.id}
+                    tag={tag}
+                    onRemove={
+                      setTags.isPending
+                        ? undefined
+                        : () =>
+                            setTags.mutate(
+                              active.tags.filter((t) => t.id !== tag.id).map((t) => t.id),
+                            )
+                    }
+                  />
+                ))}
+              </div>
+            )}
+
+            {threadIsError ? (
+              <InboxError
+                message={errorMessage(threadError, 'No se pudo cargar la conversación.')}
+                onRetry={() => void refetchThread()}
+              />
+            ) : (
+              <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+            )}
 
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer
@@ -145,6 +226,16 @@ export function InboxPage(): React.ReactElement {
           <EmptyThread />
         )}
       </div>
+
+      {/* Tercera columna: la ficha vive fuera del hilo para poder colapsarse a una franja sin
+          taparlo. Solo tiene sentido con una conversación activa. */}
+      {active && (
+        <ContactPanel
+          clienteId={activeId}
+          open={contactPanelOpen}
+          onOpenChange={setContactPanelOpen}
+        />
+      )}
     </div>
   );
 }

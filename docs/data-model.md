@@ -120,7 +120,7 @@
   asesorId: ObjectId?,            // ref User (usuario admin asignado a la conversación; el nombre del campo describe la función, no un rol de login — AUTH-02)
   // datos verticales específicos del tenant (ej. colegio, grado en Pre-ICFES)
   customFields: { [key: String]: Mixed },
-  tags: [String],
+  tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
@@ -174,6 +174,29 @@
 // Índices: { tenantId: 1, activo: 1 }
 ```
 
+## tags  (etiquetas de conversación — HU-OMNI-04)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  nombre: String,                 // 1..30, único por tenant ignorando mayúsculas/acentos
+  color: String,                  // "#RRGGBB" elegido por el admin: es DATO, no un token de diseño
+  semaforo: "azul" | "rojo" | "naranja" | "verde" | undefined,
+  createdAt, updatedAt
+}
+```
+Índices:
+- `{ tenantId: 1, nombre: 1 }` **unique** con `collation { locale: 'es', strength: 2 }` —
+  "Urgente", "urgente" y "URGENTE" colisionan dentro del mismo tenant.
+- `{ tenantId: 1, semaforo: 1 }` **unique** con `partialFilterExpression: { semaforo: { $exists: true } }`.
+  Parcial y **no** `sparse`: en un índice compuesto, `sparse` incluye el documento si existe
+  *cualquiera* de sus campos, y `tenantId` existe siempre — con `sparse` esto significaría
+  "una sola etiqueta sin semáforo por tenant".
+
+`semaforo` es el identificador estable de las cuatro etiquetas de sistema (ver `docs/domain.md`
+§ Semaforización). El admin puede renombrarlas y recolorearlas; el slug no cambia, y es por él que
+CRM-04, IA-05 y MARK-01 las resuelven.
+
 ## campaigns  (remarketing)
 ```js
 {
@@ -182,7 +205,7 @@
   nombre: String,
   filtros: {                      // segmentación dinámica
     nivelInteres: [String]?, estadoComercial: [String]?,
-    interesItemId: ObjectId?, tags: [String]?, customFields: Object?
+    interesItemId: ObjectId?, tagIds: [ObjectId]?, customFields: Object?
   },
   plantillaHSM: String,           // nombre de la plantilla aprobada por Meta
   estado: "borrador" | "en_curso" | "completada" | "fallida",
@@ -243,21 +266,25 @@
 // Índices: { tenantId: 1, clienteId: 1 } unique
 ```
 
-## kb_documents  (base de conocimiento — RAG, HU-KB-01)
+## kb_documents  (base de conocimiento — RAG, HU-KB-01 · HU-KB-01-V2)
 ```js
 {
   _id: ObjectId,
   tenantId: ObjectId,
   titulo: String,                 // requerido; único por tenant (re-subir = nueva versión)
-  contenido: String,              // texto crudo (fuente para re-indexar)
+  contenido: String,              // texto crudo (fuente para re-indexar); default "" (presets nacen vacíos)
   version: Number,                // incremental por documento (versionado del conocimiento por empresa)
   estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
   chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
+  isPreset: Boolean,              // V2: documento base sembrado al crear el tenant (default false)
+  proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
 //          { tenantId: 1, createdAt: -1 }
+// Contenido tope 3.000 caracteres (validación Zod). Editar (PATCH) re-versiona, limpia chunks y
+// re-indexa solo si el contenido no está vacío. Los 5 presets se siembran vacíos al crear el tenant.
 ```
 
 ## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)

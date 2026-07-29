@@ -14,6 +14,8 @@ vi.mock('../../config/queues.js', () => ({
 
 import app from '../../app.js';
 import { createDocument } from './kb.service.js';
+import { createScoped } from '../../repositories/base.repository.js';
+import { KbDocument } from './kb-document.model.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -86,6 +88,104 @@ describe('POST /api/kb/documents', () => {
       .send({ titulo: 'X', contenido: '' });
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe('PATCH /api/kb/documents/:id', () => {
+  it('admin edita el contenido de su documento → 200 y versión incrementada', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Editable', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'contenido corregido' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(2);
+    expect(res.body.estadoIndexacion).toBe('pendiente');
+    expect(res.body.contenido).toBe('contenido corregido');
+  });
+
+  it('primer llenado de un preset vacío → 200 y versión 1 (no incrementa)', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${preset._id.toString()}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'Somos una empresa de ejemplo.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(1);
+    expect(res.body.estadoIndexacion).toBe('pendiente');
+    expect(res.body.contenido).toBe('Somos una empresa de ejemplo.');
+  });
+
+  it('documento de otro tenant → 404', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const doc = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
+    const tokenB = makeToken(tenantB.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${tokenB}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'hackeado' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('contenido que excede 3000 caracteres → 400', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Largo', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'a'.repeat(3001) });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('id con formato inválido → 400', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const res = await request(app)
+      .patch('/api/kb/documents/no-es-un-objectid')
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'texto' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rol superadmin (no admin) → 403', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Protegido', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'superadmin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'texto' });
+
+    expect(res.status).toBe(403);
   });
 });
 
