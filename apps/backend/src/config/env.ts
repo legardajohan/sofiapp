@@ -20,8 +20,15 @@ const EnvSchema = z.object({
   // LLM / Gemini — sin fallback: el proceso aborta si GEMINI_API_KEY falta
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
   GEMINI_API_KEY: z.string().min(1),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
-  LLM_TIMEOUT_MS: z.coerce.number().positive().default(15000),
+  // `gemini-2.5-flash` (y `-flash-lite`) devuelven 404 "no longer available to new users" con API
+  // keys creadas recientemente: siguen apareciendo en ListModels pero están cerrados a proyectos
+  // nuevos. Verificado contra la API el 2026-07-26.
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
+  // 45 s, no 15 s: `gemini-3.6-flash` razona antes de responder y gasta tokens de *thinking* que no
+  // aparecen en `promptTokens`/`completionTokens`. Un resumen de 11 mensajes medido contra la API
+  // real tardó 6,9 / 22,8 / 25,9 s — con 15 s abortaba dos de cada tres veces, y el abort no es
+  // reintentable (`isRetryable` solo cubre 429/5xx), así que fallaba de una.
+  LLM_TIMEOUT_MS: z.coerce.number().positive().default(45000),
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
 

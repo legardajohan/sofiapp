@@ -30,4 +30,9 @@ export interface AiClassifyParams {
   historial: ChatTurn[];
 }
 
+export interface AiSummarizeParams {
+  tenantId: Types.ObjectId;
+  historial: ChatTurn[];
+}
+
 export type ClassifyResult = { nivelInteres: NivelInteres; objecion: Objecion | null };
