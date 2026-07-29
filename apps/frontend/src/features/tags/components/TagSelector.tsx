@@ -5,10 +5,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useCreateTag, useTags } from '../hooks/useTags.js';
 import { TagChip } from './TagChip.js';
@@ -94,16 +94,36 @@ export function TagSelector({ aplicadas, pending, onChange }: Props): React.Reac
             e.preventDefault();
           }}
         >
-          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-            Etiquetas de la conversación
-          </DropdownMenuLabel>
+          <div className="flex items-center justify-between px-2 py-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              Etiquetas de la conversación
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    abriendoDialogo.current = true;
+                    setCrearOpen(true);
+                  }}
+                  aria-label="Crear etiqueta"
+                  className="-mr-0.5 flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground transition-[color,background-color] duration-150 ease-out hover:bg-muted hover:text-foreground motion-safe:active:scale-[0.92] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                Crear etiqueta
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <DropdownMenuSeparator />
 
           {isLoading ? (
             <p className="px-2 py-3 text-center text-xs text-muted-foreground">Cargando…</p>
           ) : (disponibles?.length ?? 0) === 0 ? (
             <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              Aún no hay etiquetas. Crea la primera aquí abajo.
+              Aún no hay etiquetas. Crea la primera aquí arriba.
             </p>
           ) : (
             disponibles?.map((tag) => {
@@ -125,20 +145,6 @@ export function TagSelector({ aplicadas, pending, onChange }: Props): React.Reac
               );
             })
           )}
-
-          <DropdownMenuSeparator />
-          {/* Sin `preventDefault`: aquí sí queremos que el menú se cierre, porque lo que se abre
-            es un diálogo modal y dos capas superpuestas se pelearían por el foco. */}
-          <DropdownMenuItem
-            className="gap-2"
-            onSelect={() => {
-              abriendoDialogo.current = true;
-              setCrearOpen(true);
-            }}
-          >
-            <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="text-xs">Crear etiqueta…</span>
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
