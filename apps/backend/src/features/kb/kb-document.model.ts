@@ -5,7 +5,8 @@ const KbDocumentSchema = new Schema<IKbDocumentDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
     titulo: { type: String, required: true, trim: true },
-    contenido: { type: String, required: true },
+    // Puede quedar vacío en presets sin llenar; el borde Zod exige contenido al crear vía HTTP.
+    contenido: { type: String, default: '' },
     version: { type: Number, required: true, default: 1 },
     estadoIndexacion: {
       type: String,
@@ -13,6 +14,9 @@ const KbDocumentSchema = new Schema<IKbDocumentDocument>(
       default: 'pendiente',
     },
     chunkCount: { type: Number, default: 0 },
+    isPreset: { type: Boolean, default: false },
+    obligatorio: { type: Boolean, default: false },
+    proposito: { type: String, required: false },
     error: { type: String },
   },
   { timestamps: true },

@@ -5,6 +5,10 @@ export interface CreateKbDocumentPayload {
   contenido: string;
 }
 
+export interface UpdateKbDocumentPayload {
+  contenido: string;
+}
+
 export interface KbDocumentsListResponse {
   data: IKbDocument[];
   total: number;

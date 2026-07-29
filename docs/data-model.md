@@ -266,21 +266,25 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 // Índices: { tenantId: 1, clienteId: 1 } unique
 ```
 
-## kb_documents  (base de conocimiento — RAG, HU-KB-01)
+## kb_documents  (base de conocimiento — RAG, HU-KB-01 · HU-KB-01-V2)
 ```js
 {
   _id: ObjectId,
   tenantId: ObjectId,
   titulo: String,                 // requerido; único por tenant (re-subir = nueva versión)
-  contenido: String,              // texto crudo (fuente para re-indexar)
+  contenido: String,              // texto crudo (fuente para re-indexar); default "" (presets nacen vacíos)
   version: Number,                // incremental por documento (versionado del conocimiento por empresa)
   estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
   chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
+  isPreset: Boolean,              // V2: documento base sembrado al crear el tenant (default false)
+  proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
 //          { tenantId: 1, createdAt: -1 }
+// Contenido tope 3.000 caracteres (validación Zod). Editar (PATCH) re-versiona, limpia chunks y
+// re-indexa solo si el contenido no está vacío. Los 5 presets se siembran vacíos al crear el tenant.
 ```
 
 ## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)

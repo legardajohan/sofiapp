@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient.js';
 import type {
   CreateKbDocumentPayload,
+  UpdateKbDocumentPayload,
   KbDocumentsListResponse,
   IKbDocument,
 } from '../features/knowledge-base/types/index.js';
@@ -9,6 +10,14 @@ export const createKbDocument = async (
   payload: CreateKbDocumentPayload,
 ): Promise<IKbDocument> => {
   const res = await apiClient.post<IKbDocument>('/kb/documents', payload);
+  return res.data;
+};
+
+export const updateKbDocument = async (
+  id: string,
+  payload: UpdateKbDocumentPayload,
+): Promise<IKbDocument> => {
+  const res = await apiClient.patch<IKbDocument>(`/kb/documents/${id}`, payload);
   return res.data;
 };
 
