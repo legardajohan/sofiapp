@@ -17,6 +17,10 @@ const KnowledgeBasePage = lazy(() =>
   import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeBasePage })),
 );
 
+const KnowledgeFaqsPage = lazy(() =>
+  import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeFaqsPage })),
+);
+
 const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
 );
@@ -65,6 +69,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <KnowledgeBasePage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/knowledge/faqs',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <KnowledgeFaqsPage />
                 </Suspense>
               </RequireRole>
             ),

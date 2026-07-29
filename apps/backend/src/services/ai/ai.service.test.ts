@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { AIService } from './ai.service.js';
 import type { ILlmProvider, ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import { PromptTemplateModel } from './prompt-template.model.js';
-import { AiUsageLogModel } from './ai-usage-log.model.js';
+import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
 import { findScoped } from '../../repositories/base.repository.js';
+import type { FaqMatcher } from './ai-service.types.js';
 
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
 
@@ -84,6 +85,17 @@ describe('AIService.chat()', () => {
     expect(result2.data).toBe('Respuesta del modelo');
   });
 
+  it('sin matcher cableado, el comportamiento previo a HU-KB-02 se mantiene', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).toHaveBeenCalledTimes(1);
+    expect(result.fromFaq).toBe(false);
+  });
+
   it('tenantId diferente → caché independiente', async () => {
     await seedGlobalTemplate('chat');
     const tenantB = new Types.ObjectId();
@@ -96,6 +108,122 @@ describe('AIService.chat()', () => {
 
     // Ambos deben llamar al provider (caches independientes por tenantId)
     expect(provider.generateReply).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── chat() · cortocircuito por FAQ (HU-KB-02) ────────────────────────────────
+describe('AIService.chat() — cortocircuito por FAQ', () => {
+  let tenantId: Types.ObjectId;
+  beforeEach(() => { tenantId = new Types.ObjectId(); });
+
+  const RESPUESTA_FAQ = 'El curso cuesta $500.000 COP.';
+  const matcherConMatch: FaqMatcher = vi
+    .fn()
+    .mockResolvedValue({ matched: true, respuesta: RESPUESTA_FAQ, confianza: 0.93 });
+  const matcherSinMatch: FaqMatcher = vi.fn().mockResolvedValue({ matched: false });
+
+  it('con match → NO invoca al modelo y devuelve la respuesta literal con cero tokens', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(), matcherConMatch);
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).not.toHaveBeenCalled();
+    expect(result.data).toBe(RESPUESTA_FAQ);
+    expect(result.fromFaq).toBe(true);
+    expect(result.cacheHit).toBe(true);
+    expect(result.totalTokens).toBe(0);
+    expect(result.promptTokens).toBe(0);
+    expect(result.completionTokens).toBe(0);
+  });
+
+  it('el matcher recibe el último turno del usuario, no todo el historial', async () => {
+    await seedGlobalTemplate('chat');
+    const matcher = vi.fn().mockResolvedValue({ matched: false });
+    const service = new AIService(makeProvider(), makeRedisMock(), matcher);
+
+    await service.chat({
+      tenantId,
+      historial: [
+        { role: 'user', content: 'Hola' },
+        { role: 'model', content: '¡Hola! ¿En qué te ayudo?' },
+        { role: 'user', content: '¿Cuánto cuesta?' },
+      ],
+    });
+
+    expect(matcher).toHaveBeenCalledWith(tenantId, '¿Cuánto cuesta?');
+  });
+
+  it('sin match → cae al flujo normal (RAG + LLM)', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(), matcherSinMatch);
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).toHaveBeenCalledTimes(1);
+    expect(result.data).toBe('Respuesta del modelo');
+    expect(result.fromFaq).toBe(false);
+    expect(result.totalTokens).toBe(USAGE.totalTokens);
+  });
+
+  it('con hit de caché exacta, el matcher NO se llama (la caché es más barata)', async () => {
+    await seedGlobalTemplate('chat');
+    const matcher = vi.fn().mockResolvedValue({ matched: false });
+    const redisCache = new Map<string, string>();
+    const service = new AIService(makeProvider(), makeRedisMock(redisCache), matcher);
+
+    await service.chat({ tenantId, historial: HISTORIAL }); // llena la caché
+    matcher.mockClear();
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(result.cacheHit).toBe(true);
+    expect(result.fromFaq).toBe(false);
+    expect(matcher).not.toHaveBeenCalled();
+  });
+
+  it('historial sin turnos de usuario → el matcher no se llama y el flujo sigue normal', async () => {
+    await seedGlobalTemplate('chat');
+    const matcher = vi.fn().mockResolvedValue({ matched: false });
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(), matcher);
+
+    const result = await service.chat({
+      tenantId,
+      historial: [{ role: 'model', content: '¿En qué te ayudo?' }],
+    });
+
+    expect(matcher).not.toHaveBeenCalled();
+    expect(provider.generateReply).toHaveBeenCalledTimes(1);
+    expect(result.fromFaq).toBe(false);
+  });
+
+  it('un match con `matched: true` pero sin respuesta no cortocircuita', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const matcher = vi.fn().mockResolvedValue({ matched: true, confianza: 0.9 });
+    const service = new AIService(provider, makeRedisMock(), matcher);
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).toHaveBeenCalledTimes(1);
+    expect(result.fromFaq).toBe(false);
+  });
+
+  it('registra el ahorro en AiUsageLog con fromFaq: true y tokens en cero', async () => {
+    await seedGlobalTemplate('chat');
+    const service = new AIService(makeProvider(), makeRedisMock(), matcherConMatch);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    // Pequeña espera para que el fire-and-forget termine
+    await new Promise((r) => setTimeout(r, 50));
+
+    const logs = await findScoped(AiUsageLogModel, tenantId).lean<IAiUsageLog[]>().exec();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.fromFaq).toBe(true);
+    expect(logs[0]?.totalTokens).toBe(0);
+    expect(logs[0]?.method).toBe('chat');
   });
 });
 

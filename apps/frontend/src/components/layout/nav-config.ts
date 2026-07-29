@@ -4,6 +4,7 @@ import {
   CreditCard,
   Inbox,
   LineChart,
+  MessageCircleQuestion,
   MessageSquareText,
   Megaphone,
   Package,
@@ -95,6 +96,14 @@ export const navGroups: NavGroup[] = [
         to: '/settings/knowledge',
         icon: BookText,
         roles: ['admin'],
+        children: [
+          { label: 'Documentos', to: '/settings/knowledge', icon: BookText },
+          {
+            label: 'Preguntas frecuentes',
+            to: '/settings/knowledge/faqs',
+            icon: MessageCircleQuestion,
+          },
+        ],
       },
       { label: 'Usuarios', to: '/usuarios', icon: Users, roles: ['admin'], disabled: true },
       { label: 'Catálogo', to: '/catalogo', icon: Package, roles: ['admin'], disabled: true },

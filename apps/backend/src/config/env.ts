@@ -40,6 +40,12 @@ const EnvSchema = z.object({
   KB_VECTOR_INDEX: z.string().default('kb_chunks_vector'),
   KB_RETRIEVAL_K: z.coerce.number().positive().default(5),
 
+  // FAQ semántica (HU-KB-02) — cortocircuito del LLM por coincidencia de preguntas frecuentes.
+  // OJO con la escala: Atlas normaliza el coseno a (1 + cos) / 2, así que 0.85 ≈ coseno 0.70.
+  // Calibrar con POST /api/kb/faqs/test, nunca a ojo.
+  FAQ_VECTOR_INDEX: z.string().default('kb_faqs_vector'),
+  FAQ_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

@@ -4,7 +4,7 @@
 > `tasks.md`. HU-KB-01 dio a la IA *contexto* que siempre consume tokens; HU-KB-02 añade pares
 > pregunta→respuesta que **cortocircuitan** al LLM cuando la consulta es una repetida de siempre.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Historia
 
@@ -107,10 +107,12 @@
 
 9. **UI completa en light y dark:** la ruta `/settings/knowledge/faqs` está protegida con
    `RequireRole roles={['admin']}` y aparece como sub-ítem de «Base de Conocimiento» en el sidebar.
-   Muestra tabla con columnas `Pregunta`, `Respuesta` (truncada), `Activo` (badge) y Acciones
+   Muestra tabla con columnas `Pregunta`, `Respuesta` (truncada), `Activa` y Acciones
    (`Pencil` / `Trash2` con `aria-label` y estado `disabled` durante mutaciones), un formulario en
    `Dialog` con `Input` de pregunta + `Textarea` de respuesta + `Switch` de activo, y el probador
-   con su score. Se usan **exclusivamente** componentes de `src/components/ui/` y tokens semánticos
+   con su score. *(Ajuste durante la implementación: la columna `Activa` usa un `Switch` en vez de
+   un `Badge`. Comunica el mismo estado y además permite silenciar una FAQ sin abrir el diálogo; la
+   fila inactiva se atenúa para reforzar la lectura.)* Se usan **exclusivamente** componentes de `src/components/ui/` y tokens semánticos
    de Tailwind — cero colores crudos, cero `<table>` a mano.
 
 10. **Aislamiento multi-tenant (severidad máxima):** todo acceso a Mongo pasa por el repositorio

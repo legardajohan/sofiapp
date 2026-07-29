@@ -467,7 +467,9 @@ resultado en light **y** dark con tokens semánticos.
 - **`embedTexts` devuelve `usage` en cero** (`ZERO_USAGE` en `gemini.provider.ts`): el coste del
   embedding de matching no se contabiliza en `AiUsageLog`. Es de todos modos órdenes de magnitud
   menor que una generación, y `fromFaq: true` marca claramente la fila como "no hubo generación".
-- **`services/ai/` no importa `features/kb-faq/`.** El único punto de contacto es `createAIService`.
+- **La clase `AIService` no depende de `features/kb-faq/`**: solo conoce el tipo `FaqMatcher`, así
+  que se puede instanciar y testear con un matcher falso. El único punto que importa el feature es
+  la factoría `createAIService`, al final de `ai.service.ts`.
 - **`$vectorSearch` no existe en `mongodb-memory-server`**: los tests validan el pipeline construido
   (patrón de `kb.repository.test.ts`), no su ejecución. La verificación real del matching es manual
   contra Atlas.
