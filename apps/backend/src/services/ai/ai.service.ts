@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { findOneScoped, createScoped } from '../../repositories/base.repository.js';
+import { Tenant } from '../../features/tenant/tenant.model.js';
 import { GeminiProvider } from '../../integrations/llm/gemini.provider.js';
 import type { ILlmProvider } from '../../integrations/llm/llm-provider.types.js';
 import { PromptTemplateModel, type IPromptTemplate } from './prompt-template.model.js';
@@ -43,8 +44,10 @@ export class AIService {
   async chat(params: AiChatParams): Promise<AiResult<string>> {
     const start = Date.now();
     const template = await this.resolveTemplate(params.tenantId, 'chat');
+    const kbVersion = await this.getTenantKbVersion(params.tenantId);
+    const cacheVersion = `${template.version}:${kbVersion}`;
     const cacheInput = JSON.stringify({ historial: params.historial, tono: params.tono, instrucciones: params.instrucciones });
-    const cacheKey = buildCacheKey(params.tenantId.toString(), 'chat', cacheInput, template.version);
+    const cacheKey = buildCacheKey(params.tenantId.toString(), 'chat', cacheInput, cacheVersion);
 
     const cached = await getCached<string>(this.redis, cacheKey);
     if (cached !== null) {
@@ -134,7 +137,7 @@ export class AIService {
     });
 
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, durationMs });
+    this.logUsage({ tenantId: params.tenantId, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: result, cacheHit: false, ...usage, durationMs };
   }
 
@@ -153,6 +156,15 @@ export class AIService {
     if (globalTpl) return globalTpl;
 
     throw new AppError(`No hay plantilla activa para el método: ${method}`, 500);
+  }
+
+  /**
+   * `.lean()` no aplica el `default: 1` del schema a documentos que no tenían el campo en Mongo
+   * (tenants creados antes de HU-KB-03): de ahí el `?? 1` explícito, sin confiar en el default.
+   */
+  private async getTenantKbVersion(tenantId: Types.ObjectId): Promise<number> {
+    const tenant = await Tenant.findById(tenantId, { kbVersion: 1 }).lean<{ kbVersion?: number }>();
+    return tenant?.kbVersion ?? 1;
   }
 
   private logUsage(log: Omit<IAiUsageLog, 'createdAt'>): void {

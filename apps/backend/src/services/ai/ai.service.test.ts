@@ -6,6 +6,7 @@ import { AIService } from './ai.service.js';
 import type { ILlmProvider, ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import { PromptTemplateModel } from './prompt-template.model.js';
 import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
+import { Tenant } from '../../features/tenant/tenant.model.js';
 import { findScoped } from '../../repositories/base.repository.js';
 import type { FaqMatcher } from './ai-service.types.js';
 
@@ -50,6 +51,15 @@ function makeProvider(): ILlmProvider {
 }
 
 const HISTORIAL: ChatTurn[] = [{ role: 'user', content: '¿Cuánto cuesta?' }];
+
+async function createTenant(): Promise<Types.ObjectId> {
+  const tenant = await Tenant.create({
+    nombre: 'Tenant HU-KB-03',
+    slug: `hukb03-${new Types.ObjectId().toString()}`,
+    contacto: { email: 'hukb03@example.com', telefono: '3000000000' },
+  });
+  return tenant._id;
+}
 
 // ─── chat() ───────────────────────────────────────────────────────────────────
 describe('AIService.chat()', () => {
@@ -224,6 +234,70 @@ describe('AIService.chat() — cortocircuito por FAQ', () => {
     expect(logs[0]?.fromFaq).toBe(true);
     expect(logs[0]?.totalTokens).toBe(0);
     expect(logs[0]?.method).toBe('chat');
+  });
+});
+
+// ─── chat() · invalidación de caché por kbVersion (HU-KB-03) ─────────────────
+describe('AIService.chat() — invalidación por Tenant.kbVersion (HU-KB-03)', () => {
+  it('mismo kbVersion → la segunda llamada sigue siendo cache-hit', async () => {
+    await seedGlobalTemplate('chat');
+    const tenantId = await createTenant();
+    const provider = makeProvider();
+    const redisCache = new Map<string, string>();
+    const service = new AIService(provider, makeRedisMock(redisCache));
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    const result2 = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).toHaveBeenCalledTimes(1);
+    expect(result2.cacheHit).toBe(true);
+  });
+
+  it('bump de kbVersion entre llamadas → la caché anterior queda inalcanzable', async () => {
+    await seedGlobalTemplate('chat');
+    const tenantId = await createTenant();
+    const provider = makeProvider();
+    const redisCache = new Map<string, string>();
+    const service = new AIService(provider, makeRedisMock(redisCache));
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    // Simula el bump que hace kb.service.ts al editar/borrar un documento.
+    await Tenant.updateOne({ _id: tenantId }, { $inc: { kbVersion: 1 } });
+    const result2 = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(provider.generateReply).toHaveBeenCalledTimes(2);
+    expect(result2.cacheHit).toBe(false);
+  });
+
+  it('tenant sin campo kbVersion en Mongo (creado antes de HU-KB-03) no rompe chat()', async () => {
+    await seedGlobalTemplate('chat');
+    const tenantId = await createTenant();
+    await Tenant.updateOne({ _id: tenantId }, { $unset: { kbVersion: 1 } });
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(result.cacheHit).toBe(false);
+    expect(result.data).toBe('Respuesta del modelo');
+  });
+
+  it('aislamiento: bump de kbVersion en tenantA no invalida la caché de tenantB', async () => {
+    await seedGlobalTemplate('chat');
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const provider = makeProvider();
+    const redisCache = new Map<string, string>();
+    const service = new AIService(provider, makeRedisMock(redisCache));
+
+    await service.chat({ tenantId: tenantA, historial: HISTORIAL });
+    await service.chat({ tenantId: tenantB, historial: HISTORIAL });
+    await Tenant.updateOne({ _id: tenantA }, { $inc: { kbVersion: 1 } });
+
+    const resultB = await service.chat({ tenantId: tenantB, historial: HISTORIAL });
+
+    expect(resultB.cacheHit).toBe(true);
+    expect(provider.generateReply).toHaveBeenCalledTimes(2); // solo las 2 llamadas iniciales
   });
 });
 
