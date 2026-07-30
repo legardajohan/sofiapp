@@ -3,12 +3,20 @@ import type { IMessageResponse, IPaginated } from '../conversation/conversation.
 import type { ITagResponse } from '../tag/tag.types.js';
 
 export type CanalOrigen = 'whatsapp' | 'instagram' | 'messenger' | 'formulario' | 'web';
-export type EstadoComercial =
-  | 'nuevo'
-  | 'en_gestion'
-  | 'pago_pendiente'
-  | 'pagado'
-  | 'perdido';
+
+/**
+ * Fuente única del pipeline comercial: la usan el enum de Mongoose y el tipo, así que no pueden
+ * divergir. `Lead.estado` (HU-CRM-01) la reutiliza en vez de declarar etapas propias.
+ */
+export const ESTADOS_COMERCIALES = [
+  'nuevo',
+  'en_gestion',
+  'pago_pendiente',
+  'pagado',
+  'perdido',
+] as const;
+
+export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
 
 /**
  * Datos de contacto extraídos por IA desde la conversación, bajo demanda (HU-OMNI-03).
@@ -88,6 +96,8 @@ export interface IContactCardResponse {
   asesorId: string | null;
   ultimoMensajeAt: string | null;
   createdAt: string;
+  /** Lead al que ya se convirtió este contacto, o `null` (HU-CRM-01). */
+  leadId: string | null;
 }
 
 /** Datos de contacto extraídos por IA, tal como los consume la ficha. */

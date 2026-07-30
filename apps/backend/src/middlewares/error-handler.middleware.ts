@@ -5,7 +5,8 @@ import { logger } from '../utils/logger.js';
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ message: err.message });
+    // `details` primero: así una clave `message` colada ahí no puede pisar el mensaje real.
+    res.status(err.statusCode).json({ ...err.details, message: err.message });
     return;
   }
 

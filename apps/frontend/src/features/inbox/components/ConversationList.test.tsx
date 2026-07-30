@@ -27,6 +27,8 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
     estadoComercial: 'nuevo',
     // Etiquetas (HU-OMNI-04).
     tags: [],
+    // Sin convertir a lead (HU-CRM-01).
+    leadId: null,
     ...overrides,
   };
 }

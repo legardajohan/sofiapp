@@ -18,6 +18,7 @@ import { toMessageResponse, type IMessageSource } from '../conversation/conversa
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type {
   CanalOrigen,
@@ -89,6 +90,7 @@ interface IClienteLean extends ICliente {
 function toContactCard(
   c: IClienteLean,
   tagMap: Map<string, ITagResponse> = new Map(),
+  leadId: string | null = null,
 ): IContactCardResponse {
   return {
     id: String(c._id),
@@ -106,6 +108,7 @@ function toContactCard(
     asesorId: c.asesorId ? String(c.asesorId) : null,
     ultimoMensajeAt: c.ultimoMensajeAt ? c.ultimoMensajeAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
+    leadId,
   };
 }
 
@@ -165,8 +168,12 @@ export async function getContactHistory(
     (cliente.tagIds ?? []).map((id) => String(id)),
   );
 
+  // La ficha necesita saber si ya hay lead para pintar su tarjeta en vez de invitar a convertir
+  // otra vez (HU-CRM-01).
+  const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
+
   return {
-    contacto: toContactCard(cliente, tagMap),
+    contacto: toContactCard(cliente, tagMap, leadId),
     resumen: toResumenResponse(cliente),
     datosExtraidos: toDatosExtraidosResponse(cliente.datosExtraidos),
     mensajes: { data: mensajes, page, limit, total },

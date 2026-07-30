@@ -6,7 +6,8 @@
 |---|---|
 | **Tenant / Empresa** | Entidad comercial que alquila SofiApp. Raíz del aislamiento multi-tenant. |
 | **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): Director, Gerente, Coordinador, Secretaria (`AUTH-02`). |
-| **Cliente / Prospecto** | Lead. Entidad de datos (`Cliente`), nunca inicia sesión. |
+| **Cliente / Prospecto** | Contacto. Entidad de datos (`Cliente`), nunca inicia sesión. Es a la vez el contacto y la conversación. |
+| **Lead / Oportunidad** | Intento de venta concreto (`Lead`, HU-CRM-01), creado al convertir una conversación. Único **por teléfono** dentro del tenant, mientras el `Cliente` es único por `metaUserId`: un mismo contacto puede generar varios leads en el tiempo (recompra, segundo producto, ciclo reabierto). |
 | **Canal** | Origen de la comunicación: `whatsapp | instagram | messenger | formulario | web`. |
 | **WABA** | WhatsApp Business Account; cada tenant conecta la suya (modelo BSP). |
 | **Slot filling** | Extracción por IA de datos del prospecto desde la conversación. |
@@ -19,8 +20,8 @@
 
 ## 2. Entidades del dominio
 
-`Tenant`, `Plan`, `User`, `MetaIntegration`, `Cliente`, `Message`, `CatalogItem`, `Campaign`,
-`Flow` (Fase 3). Esquemas en `data-model.md`.
+`Tenant`, `Plan`, `User`, `MetaIntegration`, `Cliente`, `Message`, `Tag`, `Lead`, `CatalogItem`,
+`Campaign`, `AuditEvent`, `Flow` (Fase 3). Esquemas en `data-model.md`.
 
 ## 3. Estados del prospecto (`estadoComercial`)
 
@@ -100,3 +101,8 @@ piden confirmación al borrarse.
 5. El Superadmin no pertenece a ningún tenant (`tenantId = null`).
 6. Un `Tag` pertenece a exactamente un `Tenant`, y una conversación solo puede llevar etiquetas
    de su propio tenant (validado antes de escribir en `setConversationTags`).
+7. Un `Lead` pertenece a exactamente un `Tenant`, y su `clienteId` es del mismo tenant (validado
+   antes de escribir en `createLeadFromConversation`). Su `telefono` es único **por tenant**, nunca
+   globalmente: dos empresas pueden trabajar el mismo número sin verse. Borrarlo (`deleteLead`) es
+   definitivo y exige un motivo del enum cerrado; libera el teléfono y deja rastro en `AuditEvent`.
+   Un lead que se pierde no se borra: pasa a `estado: 'perdido'`.
