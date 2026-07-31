@@ -21,6 +21,9 @@ export default defineConfig({
       META_VERIFY_TOKEN: 'test-verify-token',
       META_GRAPH_VERSION: 'v19.0',
       TENANT_TOKEN_ENC_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      // Clave de los datos personales del contacto (HU-CRM-02). Distinta de la de arriba a
+      // propósito: si fueran la misma, el test no detectaría que se cruzaron las claves.
+      DATA_ENC_KEY: 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
       LLM_PROVIDER: 'gemini',
       GEMINI_API_KEY: 'test-fake-gemini-api-key-for-unit-tests',
       GEMINI_MODEL: 'gemini-2.5-flash',

@@ -121,7 +121,16 @@
   estadoComercial: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",  // default "nuevo"
   asesorId: ObjectId?,            // ref User (usuario admin asignado a la conversación; el nombre del campo describe la función, no un rol de login — AUTH-02)
   // datos verticales específicos del tenant (ej. colegio, grado en Pre-ICFES)
-  customFields: { [key: String]: Mixed },
+  customFields: { [key: String]: Mixed },   // SUPERADO por `atributos` (HU-CRM-02); ver nota abajo
+  // datos sensibles registrados a mano por el asesor (HU-CRM-02) — cifrados en reposo
+  correoEnc: String?,             // AES-256-GCM con DATA_ENC_KEY, prefijo "enc:v1:"
+  documentoEnc: String?,          // documento de identidad, mismo cifrado
+  atributos: [{                   // subdoc con _id: false; orden significativo (el que dio el asesor)
+    key: String,                  // slug 1..40, /^[a-z0-9][a-z0-9_-]*$/; estable aunque cambie el label
+    label: String,                // 1..60
+    valor: String,                // 1..500; CIFRADO cuando `sensible` es true
+    sensible: Boolean             // default false
+  }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
@@ -139,6 +148,18 @@
 ```
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
+
+> **Los campos cifrados NO se indexan ni se buscan (HU-CRM-02).** `correoEnc`, `documentoEnc` y el
+> `valor` de los atributos sensibles se cifran con IV aleatorio, así que dos cifrados del mismo
+> texto son distintos: no son comparables ni indexables. Buscar por correo exigiría un índice ciego
+> (HMAC determinista) y su propio feature. El prefijo `enc:v1:` distingue un valor cifrado de uno
+> legado en texto plano, lo que permite leer ambos sin migración.
+
+> **`atributos` supera a `customFields`.** `customFields` es un `Record<String, Mixed>` plano y no
+> puede llevar el metadato `sensible` por campo sin anidar objetos (lo que rompería su propio tipo),
+> ni conserva el orden. `atributos` sí. `customFields` **no se migra ni se elimina**: hoy vale `{}`
+> en todos los documentos, así que no hay dato que mover; retirarlo del schema es una limpieza
+> aparte.
 
 ## messages  (historial de conversación, colección separada)
 ```js
@@ -331,6 +352,41 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > Se estrena con `conversation.assign` (historial de reasignaciones, `GET
 > /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
 > (cambios de `estadoComercial`, borrados, etc.).
+>
+> Acciones registradas hoy: `conversation.assign`, `cliente.update` y `contact-note.create`
+> (HU-CRM-02).
+>
+> **La bitácora nunca guarda un valor sensible.** Esta colección no tiene control de acceso por
+> subrol, así que volcar aquí el antes/después en claro de un campo cifrado dejaría una copia
+> legible del dato que el cifrado protege. En `cliente.update`, `correo`, `documento` y los
+> atributos sensibles se guardan como la cadena `"[cifrado]"` — queda constancia de **qué** cambió,
+> nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
+> texto.
+
+## contact_notes  (notas de seguimiento del contacto — HU-CRM-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  clienteId: ObjectId,            // ref Cliente — el contacto al que pertenece
+  autorId: ObjectId,              // ref User — quién la escribió
+  textoEnc: String,               // 1..2000 en claro; se persiste CIFRADO (prefijo "enc:v1:")
+  createdAt, updatedAt
+}
+// Índice: { tenantId: 1, clienteId: 1, createdAt: -1 }   (es exactamente la consulta de la tarjeta)
+```
+> **Colección propia, no un subdocumento de `clientes`.** Mismo motivo que `messages`: el documento
+> del contacto no debe crecer sin techo, y paginar o auditar notas sueltas desde un array embebido
+> es incómodo.
+
+> **La nota es sensible entera, no por campos.** Es prosa libre donde acaba cualquier cosa
+> (condiciones de pago, datos de un tercero, un motivo personal) y no hay forma de enmascararla
+> selectivamente. Por eso su gate va a nivel de **ruta** (`authorizeSubrol`) y no de campo: un
+> `coordinator`/`secretary` recibe `403` tanto al leerlas como al crearlas. Consecuencia de producto
+> asumida a conciencia.
+
+> **Solo se agrega.** No hay editar ni borrar: una nota es un asiento del historial. Tampoco hay
+> adjuntos.
 
 ---
 

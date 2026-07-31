@@ -18,6 +18,16 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = (): void => {};
 }
 
+// `Select` de Radix mide su trigger con ResizeObserver, que jsdom tampoco trae. Un stub inerte
+// basta: en el test no hay layout que observar.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
 // Limpia el DOM renderizado entre tests para evitar fugas de estado.
 afterEach(() => {
   cleanup();

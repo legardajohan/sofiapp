@@ -71,8 +71,11 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
 | GET | `/api/clientes` | admin | Listar prospectos (filtrado, paginado). |
-| PATCH | `/api/clientes/:id` | admin | Editar datos / asignar / cambiar estado. |
+| PATCH | `/api/clientes/:id` | admin | Edita la ficha del contacto: `nombre`, `correo`, `documento`, `nivelInteres`, `objecionPrincipal`, `rolContacto`, `atributos` (HU-CRM-02). Campo ausente = sin cambio; `null` = borrar. Schema `.strict()`: `telefono`, `estadoComercial`, `tagIds`, `asesorId`, `customFields` y demás tienen dueño en otro feature → `400`. Escribir `correo`/`documento`/atributos sensibles exige subrol `director`/`manager` (o `admin` sin subrol) → si no, `403` **sin escribir nada del body**. |
 | PATCH | `/api/clientes/:id/estado` | admin | Transición de `estadoComercial`. |
+| GET | `/api/clientes/:id/history` | admin | Ficha + resumen + datos extraídos + mensajes paginados (HU-OMNI-03). Los datos sensibles llegan en claro o enmascarados (`d••••@dominio.com`, `••••1234`, `••••••`) según el subrol; la respuesta incluye `puedeVerSensibles` (HU-CRM-02). |
+| POST | `/api/clientes/:id/notas` | admin + subrol | Crea una nota de seguimiento (`{ texto }`, 1–2000) → `201`. El texto se guarda cifrado. Solo `director`/`manager` (o `admin` sin subrol); el resto recibe `403` (HU-CRM-02). |
+| GET | `/api/clientes/:id/notas` | admin + subrol | Notas del contacto paginadas, más reciente primero, con el autor resuelto a `{ id, nombre }`. Mismo gate de subrol (HU-CRM-02). |
 | GET | `/api/clientes/:id/messages` | admin | Hilo de conversación. |
 | POST | `/api/messages/send` | admin | Envío outbound por canal. |
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |

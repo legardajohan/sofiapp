@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { TagSelector } from './TagSelector.js';
 import { createTag, fetchTags } from '../api.js';
 import type { TagDTO } from '../types.js';
@@ -25,7 +26,11 @@ function renderSelector(aplicadas: TagDTO[]): { onChange: ReturnType<typeof vi.f
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <TagSelector aplicadas={aplicadas} pending={false} onChange={onChange} />
+      {/* En la app el provider lo monta el AppShell (`SidebarProvider`); aislado hay que ponerlo,
+          o el `Tooltip` del chip lanza "must be used within TooltipProvider". */}
+      <TooltipProvider>
+        <TagSelector aplicadas={aplicadas} pending={false} onChange={onChange} />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
   return { onChange };

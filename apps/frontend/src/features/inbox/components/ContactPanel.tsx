@@ -1,6 +1,10 @@
-import { AlertCircle, ChevronsRight } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, ChevronsRight, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { ContactEditDialog } from '@/features/contacts/components/ContactEditDialog';
+import { ContactNotesCard } from '@/features/contacts/components/ContactNotesCard';
 import { ContactCard } from './ContactCard.js';
 import { ContactExtractCard } from './ContactExtractCard.js';
 import { ContactSummaryCard } from './ContactSummaryCard.js';
@@ -11,6 +15,9 @@ import {
   useGenerateSummary,
 } from '../hooks/useContactHistory.js';
 import { errorMessage } from '../lib/errors.js';
+
+const pressable =
+  'transition-[transform,color,background-color] duration-150 ease-out motion-safe:active:scale-[0.98]';
 
 interface Props {
   clienteId: string | null;
@@ -40,6 +47,7 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
   const { data: history, isLoading, isError } = useContactHistory(open ? clienteId : null);
   const generate = useGenerateSummary(clienteId);
   const extract = useExtractContactData(clienteId);
+  const [editando, setEditando] = useState(false);
 
   // Colapsada no deja rastro en el layout: el control para volver a abrirla es el avatar del
   // contacto en la cabecera de la conversación, no una franja propia.
@@ -79,6 +87,26 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="space-y-4 overflow-y-auto border-b border-border px-5 py-4">
             <ContactCard contacto={history.contacto} />
+            {/* Editar es la acción principal de la ficha, pero no compite con las tarjetas de IA:
+                va justo bajo los datos que modifica, en variante `outline`. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn('w-full', pressable)}
+              onClick={() => setEditando(true)}
+            >
+              <Pencil className="h-4 w-4" />
+              Editar datos
+            </Button>
+            <ContactNotesCard
+              clienteId={history.contacto.id}
+              puedeVerSensibles={history.contacto.puedeVerSensibles}
+            />
+            <ContactEditDialog
+              contacto={history.contacto}
+              open={editando}
+              onOpenChange={setEditando}
+            />
             <ContactExtractCard
               datos={history.datosExtraidos}
               pending={extract.isPending}

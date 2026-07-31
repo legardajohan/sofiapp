@@ -1,5 +1,16 @@
 import { Schema, model } from 'mongoose';
-import type { IClienteDocument } from './cliente.types.js';
+import type { IAtributoPersonalizado, IClienteDocument } from './cliente.types.js';
+
+/** Atributo personalizado del contacto (HU-CRM-02). `valor` va cifrado cuando `sensible`. */
+const AtributoSchema = new Schema<IAtributoPersonalizado>(
+  {
+    key: { type: String, required: true },
+    label: { type: String, required: true },
+    valor: { type: String, required: true },
+    sensible: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
 
 const ClienteSchema = new Schema<IClienteDocument>(
   {
@@ -31,6 +42,11 @@ const ClienteSchema = new Schema<IClienteDocument>(
     objecionPrincipal: { type: String, enum: ['precio', 'tiempo', 'confianza', 'otra'] },
     rolContacto: { type: String, enum: ['decisor', 'usuario', 'desconocido'] },
     interesItemId: { type: Schema.Types.ObjectId, ref: 'CatalogItem' },
+    // Datos sensibles cifrados en reposo (HU-CRM-02). Deliberadamente SIN índice: un valor cifrado
+    // con IV aleatorio no es comparable ni buscable, así que indexarlo solo gastaría espacio.
+    correoEnc: { type: String },
+    documentoEnc: { type: String },
+    atributos: { type: [AtributoSchema], default: [] },
     // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
     resumenIA: {
       type: new Schema(

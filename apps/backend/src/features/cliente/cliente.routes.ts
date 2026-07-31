@@ -4,8 +4,12 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { extractSchema, historySchema } from './cliente.validation.js';
-import { extractContactDataController, getContactHistoryController } from './cliente.controller.js';
+import { extractSchema, historySchema, updateClienteSchema } from './cliente.validation.js';
+import {
+  extractContactDataController,
+  getContactHistoryController,
+  updateClienteController,
+} from './cliente.controller.js';
 
 const router = Router();
 
@@ -28,6 +32,17 @@ router.post(
   bandejaRoles,
   validate(extractSchema),
   asyncHandler(extractContactDataController),
+);
+
+// Edición de la ficha (HU-CRM-02). SIN `authorizeSubrol`: el gate de los datos sensibles es por
+// campo, dentro del service, para no quitarle al `coordinator` la edición de los no sensibles.
+router.patch(
+  '/:id',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(updateClienteSchema),
+  asyncHandler(updateClienteController),
 );
 
 export default router;
