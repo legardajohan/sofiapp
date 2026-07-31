@@ -20,9 +20,27 @@ import {
 } from './kb.service.js';
 import { KbDocument } from './kb-document.model.js';
 import { KbChunk } from './kb-chunk.model.js';
+import { Tenant } from '../tenant/tenant.model.js';
 import { createScoped, findScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import type { IKbDocument } from './kb.types.js';
+
+// Los tests de arriba usan `new Types.ObjectId()` sin `Tenant` real (el bump de kbVersion hace
+// un `updateOne` que simplemente no matchea nada, sin lanzar). Los de kbVersion sí necesitan un
+// `Tenant` real para leer el contador después.
+async function createTenant(): Promise<Types.ObjectId> {
+  const tenant = await Tenant.create({
+    nombre: 'Tenant KB-03',
+    slug: `kb03-${new Types.ObjectId().toString()}`,
+    contacto: { email: 'kb03@example.com', telefono: '3000000000' },
+  });
+  return tenant._id;
+}
+
+async function readKbVersion(tenantId: Types.ObjectId): Promise<number | undefined> {
+  const tenant = await Tenant.findById(tenantId).lean<{ kbVersion?: number }>();
+  return tenant?.kbVersion;
+}
 
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts.
 
@@ -297,5 +315,114 @@ describe('deleteDocument', () => {
 
     const doc = await KbDocument.findById(created.id);
     expect(doc).not.toBeNull();
+  });
+});
+
+describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
+  beforeEach(() => {
+    mockAdd.mockClear();
+  });
+
+  it('editar contenido real incrementa kbVersion en 1', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, { titulo: 'Editable', contenido: 'v1' });
+
+    await updateDocument(tenantId, created.id, 'contenido corregido');
+
+    expect(await readKbVersion(tenantId)).toBe(2);
+  });
+
+  it('vaciar un documento que tenía contenido incrementa kbVersion', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, { titulo: 'A vaciar', contenido: 'algo' });
+
+    await updateDocument(tenantId, created.id, '   ');
+
+    expect(await readKbVersion(tenantId)).toBe(2);
+  });
+
+  it('primer llenado de un preset vacío incrementa kbVersion aunque la versión del documento no suba', async () => {
+    const tenantId = await createTenant();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: '',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    const updated = await updateDocument(tenantId, preset._id.toString(), 'Contenido real');
+
+    expect(updated.version).toBe(1); // el contador del documento no sube (comportamiento previo)
+    expect(await readKbVersion(tenantId)).toBe(2); // pero sí cambió contenido real de la KB
+  });
+
+  it('editar de vacío a vacío no incrementa kbVersion', async () => {
+    const tenantId = await createTenant();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Preset vacío',
+      contenido: '',
+      isPreset: true,
+      obligatorio: false,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    await updateDocument(tenantId, preset._id.toString(), '   ');
+
+    expect(await readKbVersion(tenantId)).toBe(1);
+  });
+
+  it('aislamiento multi-tenant: editar un documento de tenantA no toca kbVersion de tenantB', async () => {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
+
+    await updateDocument(tenantA, created.id, 'editado');
+
+    expect(await readKbVersion(tenantA)).toBe(2);
+    expect(await readKbVersion(tenantB)).toBe(1);
+  });
+});
+
+describe('deleteDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
+  it('borrar un documento con contenido incrementa kbVersion', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, { titulo: 'A borrar', contenido: 'x' });
+
+    await deleteDocument(tenantId, created.id);
+
+    expect(await readKbVersion(tenantId)).toBe(2);
+  });
+
+  it('borrar un documento vacío (preset sin llenar) también incrementa kbVersion', async () => {
+    const tenantId = await createTenant();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Preset sin llenar',
+      contenido: '',
+      isPreset: true,
+      obligatorio: false,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    await deleteDocument(tenantId, preset._id.toString());
+
+    expect(await readKbVersion(tenantId)).toBe(2);
+  });
+
+  it('aislamiento multi-tenant: borrar un documento de tenantA no toca kbVersion de tenantB', async () => {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'x' });
+
+    await deleteDocument(tenantA, created.id);
+
+    expect(await readKbVersion(tenantA)).toBe(2);
+    expect(await readKbVersion(tenantB)).toBe(1);
   });
 });

@@ -34,6 +34,8 @@ export interface ITenant {
    * y sin esta marca el `upsert` las resucitaría en el siguiente despliegue.
    */
   semaforoTagsSeeded?: boolean;
+  /** Contador de cambios de contenido en la KB; invalida la caché exacta de respuestas de IA (HU-KB-03). */
+  kbVersion?: number;
 }
 
 export interface ITenantDocument extends ITenant, Document {}
