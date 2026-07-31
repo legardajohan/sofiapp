@@ -8,6 +8,8 @@ export interface IAiUsageLog {
   completionTokens: number;
   totalTokens: number;
   cacheHit: boolean;
+  /** Respuesta servida desde una FAQ, sin generación del modelo (HU-KB-02). */
+  fromFaq: boolean;
   durationMs: number;
   createdAt?: Date;
 }
@@ -23,6 +25,7 @@ const AiUsageLogSchema = new Schema<IAiUsageLogDocument>(
     completionTokens: { type: Number, required: true },
     totalTokens: { type: Number, required: true },
     cacheHit: { type: Boolean, required: true },
+    fromFaq: { type: Boolean, required: true, default: false },
     durationMs: { type: Number, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

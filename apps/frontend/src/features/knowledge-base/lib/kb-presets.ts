@@ -17,7 +17,7 @@ export const PRESET_META: readonly PresetMeta[] = [
   { titulo: 'Productos y servicios', proposito: 'Catálogo de lo que ofrece', obligatorio: true },
   { titulo: 'Horarios y ubicación', proposito: 'Datos de contacto', obligatorio: false },
   { titulo: 'Políticas y términos', proposito: 'Reglas, garantías, devoluciones', obligatorio: false },
-  { titulo: 'Preguntas frecuentes', proposito: 'FAQ comunes', obligatorio: false },
+  { titulo: 'Información Complementaria', proposito: 'Texto de referencia adicional que la IA puede consultar', obligatorio: false },
 ] as const;
 
 /** Orden de prioridad con que se muestran los presets (coincide con el seed del backend). */
@@ -41,7 +41,7 @@ const PRESET_ICON_BY_TITULO: Record<string, LucideIcon> = {
   'Productos y servicios': Package,
   'Horarios y ubicación': Clock,
   'Políticas y términos': Scale,
-  'Preguntas frecuentes': HelpCircle,
+  'Información Complementaria': HelpCircle,
 };
 
 export function presetIcon(titulo: string): LucideIcon {

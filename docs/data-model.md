@@ -25,6 +25,8 @@
   planId: ObjectId,               // ref Plan
   // configuración de captura por IA específica del tenant
   camposCaptura: [ { key: String, label: String, tipo: "string"|"number"|"enum", opciones: [String] } ],
+  kbVersion: Number,              // default 1. Contador de cambios de contenido en la KB; invalida
+                                   // la caché exacta de respuestas de IA (HU-KB-03)
   createdAt, updatedAt
 }
 // Índices: { slug: 1 } unique

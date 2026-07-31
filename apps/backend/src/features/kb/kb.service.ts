@@ -13,6 +13,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { KbDocument } from './kb-document.model.js';
 import { KbChunk } from './kb-chunk.model.js';
+import { Tenant } from '../tenant/tenant.model.js';
 import type {
   CreateKbDocumentDTO,
   DeleteKbDocumentResponse,
@@ -22,6 +23,16 @@ import type {
 } from './kb.types.js';
 
 type TenantId = string | Types.ObjectId;
+
+/**
+ * Invalida la caché exacta de respuestas de IA del tenant: `AIService.chat()` incorpora
+ * `kbVersion` a su clave de caché, así que un bump vuelve inalcanzables las entradas anteriores
+ * (expiran solas por TTL). `Tenant` es la entidad raíz consultada por su propio `_id`, no por
+ * `tenantId` — no aplica `*Scoped` (esa regla es para colecciones hijas de un tenant).
+ */
+async function bumpKbVersion(tenantId: TenantId): Promise<void> {
+  await Tenant.updateOne({ _id: tenantId }, { $inc: { kbVersion: 1 } });
+}
 
 export function mapKbDocumentToResponse(doc: IKbDocument & { _id: Types.ObjectId }): IKbDocumentResponse {
   return {
@@ -155,6 +166,14 @@ export async function updateDocument(
   // Los embeddings anteriores ya no corresponden al nuevo texto.
   await deleteManyScoped(KbChunk, tenantId, { documentId: id });
 
+  // Invalida la caché de IA solo si el cambio afecta contenido real (edición, vaciado de un
+  // documento con texto, o primer llenado de un preset). Vacío→vacío no mueve el contador.
+  const hadContent = existing.contenido.trim().length > 0;
+  const hasContentNow = contenido.trim().length > 0;
+  if (hadContent || hasContentNow) {
+    await bumpKbVersion(tenantId);
+  }
+
   if (contenido.trim().length > 0) {
     await kbIndexQueue.add(KB_INDEX_JOB_NAME, {
       tenantId: tenantId.toString(),
@@ -175,6 +194,7 @@ export async function deleteDocument(
 
   await deleteManyScoped(KbChunk, tenantId, { documentId: id });
   await findOneAndDeleteScoped(KbDocument, tenantId, { _id: id });
+  await bumpKbVersion(tenantId);
 
   return { deleted: true };
 }
@@ -189,7 +209,7 @@ const PRESET_DOCUMENTS: ReadonlyArray<{ titulo: string; proposito: string; oblig
   { titulo: 'Productos y servicios', proposito: 'Catálogo de lo que ofrece', obligatorio: true },
   { titulo: 'Horarios y ubicación', proposito: 'Datos de contacto', obligatorio: false },
   { titulo: 'Políticas y términos', proposito: 'Reglas, garantías, devoluciones', obligatorio: false },
-  { titulo: 'Preguntas frecuentes', proposito: 'FAQ comunes', obligatorio: false },
+  { titulo: 'Información Complementaria', proposito: 'Datos adicionales de referencia para la IA', obligatorio: false },
 ];
 
 /**

@@ -4,3 +4,10 @@ export type {
   UpdateKbDocumentPayload,
   KbDocumentsListResponse,
 } from './api.js';
+export type {
+  IKbFaq,
+  CreateFaqPayload,
+  UpdateFaqPayload,
+  KbFaqsListResponse,
+  FaqTestResult,
+} from './faq.js';
