@@ -199,6 +199,52 @@
 § Semaforización). El admin puede renombrarlas y recolorearlas; el slug no cambia, y es por él que
 CRM-04, IA-05 y MARK-01 las resuelven.
 
+## leads  (oportunidades comerciales — HU-CRM-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  nombre: String,                 // 1..120
+  telefono: String,               // normalizado a solo dígitos; único por tenant
+  correo: String?,
+  clienteId: ObjectId,            // ref Cliente — el contacto ("¿con quién hablo?")
+  origen: {                       // trazabilidad; subdoc con _id: false
+    tipo: "conversacion",
+    conversacionId: ObjectId,     // ref Cliente — la conversación ("¿de dónde salió?")
+    convertidoPor: ObjectId,      // ref User
+    convertidoAt: ISODate
+  },
+  responsableId: ObjectId,        // ref User; por defecto, quien convirtió
+  estado: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",   // default "nuevo"
+  createdAt, updatedAt
+}
+```
+Índices:
+- `{ tenantId: 1, telefono: 1 }` **unique** — un teléfono, un lead por empresa. Es la única defensa
+  real contra dos conversiones simultáneas (entre el `find` y el `create` cabe otra petición); el
+  service traduce el `E11000` a un `409` que adjunta el `leadId` existente. Es único **por tenant**:
+  dos empresas pueden tener el mismo número.
+- `{ tenantId: 1, clienteId: 1 }` — responde "¿esta conversación ya se convirtió?" en lote, para la
+  bandeja y la ficha del contacto (`leadId`).
+
+> **Borrado duro, no archivado.** `DELETE /api/leads/:id?motivo=…` elimina el documento; no hay
+> `deletedAt` ni bandera de baja. La razón es el índice único de arriba: un lead marcado como
+> borrado seguiría ocupando su teléfono y bloquearía con un `409` la reconversión de su propia
+> conversación. Lo que sobrevive es el `AuditEvent` `lead.delete`, que guarda el lead completo en
+> `antes` y el motivo (`duplicado` | `spam` | `prueba` | `sin_respuesta` | `no_interesado`) en
+> `despues`. Un lead legítimo que se pierde no se borra: se mueve a `estado: "perdido"`.
+
+> **`clienteId` y `origen.conversacionId` coinciden hoy** y no es redundancia por descuido: una
+> conversación **es** un `Cliente` (ver `domain.md`), pero los dos campos responden preguntas
+> distintas y el día que la conversación deje de ser un `Cliente`, el origen sobrevive.
+
+> **No confundir con la métrica de cuota.** `plans.limites.leads` y `QuotaMetric = 'leads'` cuentan
+> documentos de **`clientes`** vía `countScoped`, no esta colección. HU-CRM-01 no toca cuotas.
+
+> `estado` reutiliza la unión de `clientes.estadoComercial` (fuente única:
+> `ESTADOS_COMERCIALES` en `cliente.types.ts`). El lead **no** introduce etapas ni pipeline propio;
+> Kanban sigue descartado por `product.md` §5.
+
 ## campaigns  (remarketing)
 ```js
 {
@@ -331,6 +377,10 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > Se estrena con `conversation.assign` (historial de reasignaciones, `GET
 > /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
 > (cambios de `estadoComercial`, borrados, etc.).
+>
+> Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete`. En `lead.delete`
+> el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado duro, es la única
+> copia que queda — y el `despues` lleva solo `{ motivo }`.
 
 ---
 

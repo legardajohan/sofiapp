@@ -38,11 +38,20 @@ Rutas Superadmin: `authenticateJWT → authorize(['superadmin']) → validate �
 // ZodError (validación) → 400
 { "message": "Error de validación.", "errors": [ { "path": "body.email", "message": "Email inválido." } ] }
 
+// AppError con datos adjuntos → status explícito + las claves de `details`
+{ "message": "Ya existe un lead con ese teléfono.", "leadId": "68f1a2..." }
+
 // No controlado → 500
 { "message": "Error interno del servidor." }
 ```
 Los controllers **no** hacen `try/catch`: lanzan `AppError(msg, code)` desde el service o dejan
 propagar; `asyncHandler` + `errorHandler` resuelven.
+
+`AppError` acepta un tercer argumento opcional `details: Record<string, unknown>`, para los errores
+donde el cliente necesita algo más que el texto para poder reaccionar (HU-CRM-01: el `409` adjunta
+el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde **antes** de
+`message`, de modo que una clave `message` dentro de `details` no puede pisar el mensaje real. Sin
+`details` la respuesta sigue siendo exactamente `{ message }`.
 
 ## 5. Paginación y filtros
 
@@ -67,9 +76,12 @@ propagar; `asyncHandler` + `errorHandler` resuelven.
 | GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
 | GET | `/api/admin/metrics` | superadmin | Métricas globales cross-tenant. |
 | GET | `/api/users` | admin | Admins activos del tenant (`?activo&rol`); alimenta el selector de asignación (HU-OMNI-02). |
-| GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<estadoComercial>` combinables (HU-OMNI-01/02). |
+| GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<estadoComercial>`, `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
+| POST | `/api/leads` | admin | Convierte una conversación en lead (`{ nombre, telefono, correo?, clienteId }`) → `201`. Duplicado por teléfono en el tenant → `409` con el `leadId` existente (HU-CRM-01). |
+| GET | `/api/leads/:id` | admin | Detalle del lead con contacto, responsable y autor de la conversión ya resueltos (HU-CRM-01). |
+| DELETE | `/api/leads/:id?motivo=<motivo>` | admin | Borra el lead **definitivamente** → `204`. `motivo` es obligatorio y va en la query (un cuerpo en `DELETE` lo pierden proxies y clientes); enum: `duplicado`, `spam`, `prueba`, `sin_respuesta`, `no_interesado`. Otro valor o ausencia → `400`. Queda `AuditEvent` `lead.delete` con el lead completo en `antes` y el motivo en `despues`. El teléfono se libera: la conversación puede volver a convertirse (HU-CRM-01). |
 | GET | `/api/clientes` | admin | Listar prospectos (filtrado, paginado). |
 | PATCH | `/api/clientes/:id` | admin | Editar datos / asignar / cambiar estado. |
 | PATCH | `/api/clientes/:id/estado` | admin | Transición de `estadoComercial`. |

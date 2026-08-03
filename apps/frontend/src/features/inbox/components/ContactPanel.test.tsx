@@ -30,6 +30,8 @@ const HISTORY: ContactHistoryDTO = {
     asesorId: null,
     ultimoMensajeAt: '2026-07-27T12:00:00.000Z',
     createdAt: '2026-07-24T12:00:00.000Z',
+    // Sin convertir a lead (HU-CRM-01): la ficha no monta la tarjeta.
+    leadId: null,
   },
   resumen: null,
   datosExtraidos: null,
