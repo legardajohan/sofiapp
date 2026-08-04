@@ -1,6 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { deleteKbDocument } from '../../../api/knowledge-base.js';
@@ -52,13 +63,7 @@ export function KnowledgeDocumentTable({
   const deletingId = deleteMutation.isPending ? deleteMutation.variables : null;
 
   function handleDelete(id: string): void {
-    if (
-      window.confirm(
-        '¿Eliminar este documento? Se borrarán todos sus fragmentos y no se podrá recuperar.',
-      )
-    ) {
-      deleteMutation.mutate(id);
-    }
+    deleteMutation.mutate(id);
   }
 
   const documentos = documents;
@@ -142,16 +147,33 @@ export function KnowledgeDocumentTable({
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(doc.id)}
-                        disabled={deletingId === doc.id}
-                        aria-label={`Eliminar ${doc.titulo}`}
-                        title="Eliminar"
-                        className="p-1.5 rounded-md text-secondary-foreground hover:text-destructive hover:bg-destructive-subtle disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            type="button"
+                            disabled={deletingId === doc.id}
+                            aria-label={`Eliminar ${doc.titulo}`}
+                            title="Eliminar"
+                            className="p-1.5 rounded-md text-secondary-foreground hover:text-destructive hover:bg-destructive-subtle disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar "{doc.titulo}"?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Se borrarán todos sus fragmentos y no se podrá recuperar.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(doc.id)}>
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </td>
                 </tr>
