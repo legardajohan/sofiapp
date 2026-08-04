@@ -1,4 +1,4 @@
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
@@ -8,6 +8,7 @@ import { GeminiProvider } from '../../integrations/llm/gemini.provider.js';
 import type { ILlmProvider } from '../../integrations/llm/llm-provider.types.js';
 import { PromptTemplateModel, type IPromptTemplate } from './prompt-template.model.js';
 import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
+import { AiResponseContextModel, type IRetrievedChunk } from './ai-response-context.model.js';
 import { buildCacheKey, getCached, setCached } from './ai-cache.util.js';
 import { matchFaq } from '../../features/kb-faq/kb-faq.service.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
@@ -45,13 +46,17 @@ export class AIService {
     const start = Date.now();
     const template = await this.resolveTemplate(params.tenantId, 'chat');
     const kbVersion = await this.getTenantKbVersion(params.tenantId);
+    // Pre-generado para poder enlazar AiResponseContext sin awaitear el insert de AiUsageLog
+    // (HU-KB-04): ambas escrituras siguen siendo fire-and-forget, en paralelo.
+    const usageLogId = new Types.ObjectId();
     const cacheVersion = `${template.version}:${kbVersion}`;
     const cacheInput = JSON.stringify({ historial: params.historial, tono: params.tono, instrucciones: params.instrucciones });
     const cacheKey = buildCacheKey(params.tenantId.toString(), 'chat', cacheInput, cacheVersion);
 
     const cached = await getCached<string>(this.redis, cacheKey);
     if (cached !== null) {
-      this.logUsage({ tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, []);
       return { data: cached, cacheHit: true, fromFaq: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
@@ -63,7 +68,8 @@ export class AIService {
       const faq = await this.faqMatcher(params.tenantId, ultimaPregunta);
       if (faq.matched && faq.respuesta) {
         const durationMs = Date.now() - start;
-        this.logUsage({ tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: true, durationMs });
+        this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: true, durationMs });
+        this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, []);
         return { data: faq.respuesta, cacheHit: true, fromFaq: true, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs };
       }
     }
@@ -76,7 +82,8 @@ export class AIService {
 
     await setCached(this.redis, cacheKey, reply, env.AI_CACHE_TTL_CHAT_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, []);
     return { data: reply, cacheHit: false, fromFaq: false, ...usage, durationMs };
   }
 
@@ -167,9 +174,34 @@ export class AIService {
     return tenant?.kbVersion ?? 1;
   }
 
-  private logUsage(log: Omit<IAiUsageLog, 'createdAt'>): void {
+  private logUsage(log: Omit<IAiUsageLog, 'createdAt'> & { _id?: Types.ObjectId }): void {
     // fire-and-forget: no bloquea la respuesta al caller
     void createScoped(AiUsageLogModel, log.tenantId, log);
+  }
+
+  /**
+   * Snapshot de auditoría (HU-KB-04): qué prompt y qué kbVersion sustentaron una respuesta de
+   * `chat()`. `retrievedChunks` viaja vacío hasta que una HU de Fase 3 conecte `searchKnowledge()`
+   * dentro de `chat()`; el modelo y el endpoint ya están listos para recibirlos. Fire-and-forget,
+   * igual que `logUsage`: no bloquea la respuesta al caller.
+   */
+  private writeResponseContext(
+    usageLogId: Types.ObjectId,
+    tenantId: Types.ObjectId,
+    template: IPromptTemplate,
+    kbVersion: number,
+    retrievedChunks: IRetrievedChunk[],
+  ): void {
+    void createScoped(AiResponseContextModel, tenantId, {
+      usageLogId,
+      promptSnapshot: {
+        method: template.method,
+        version: template.version,
+        systemPrompt: template.systemPrompt,
+      },
+      retrievedChunks,
+      kbVersion,
+    });
   }
 }
 

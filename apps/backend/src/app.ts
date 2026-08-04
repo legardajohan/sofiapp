@@ -30,6 +30,7 @@ import kbFaqRoutes from './features/kb-faq/kb-faq.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
+import aiRoutes from './features/ai/ai.routes.js';
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/ai/responses', aiRoutes);
 
 app.use(errorHandler);
 

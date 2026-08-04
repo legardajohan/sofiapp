@@ -6,8 +6,9 @@ import { AIService } from './ai.service.js';
 import type { ILlmProvider, ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import { PromptTemplateModel } from './prompt-template.model.js';
 import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
+import { AiResponseContextModel, type IAiResponseContext } from './ai-response-context.model.js';
 import { Tenant } from '../../features/tenant/tenant.model.js';
-import { findScoped } from '../../repositories/base.repository.js';
+import { findScoped, findOneScoped } from '../../repositories/base.repository.js';
 import type { FaqMatcher } from './ai-service.types.js';
 
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
@@ -298,6 +299,86 @@ describe('AIService.chat() — invalidación por Tenant.kbVersion (HU-KB-03)', (
 
     expect(resultB.cacheHit).toBe(true);
     expect(provider.generateReply).toHaveBeenCalledTimes(2); // solo las 2 llamadas iniciales
+  });
+});
+
+// ─── chat() · AiResponseContext (HU-KB-04) ────────────────────────────────────
+describe('AIService.chat() — AiResponseContext (HU-KB-04)', () => {
+  let tenantId: Types.ObjectId;
+  beforeEach(() => { tenantId = new Types.ObjectId(); });
+
+  it('en generación real: crea un AiResponseContext enlazado al AiUsageLog de la misma llamada', async () => {
+    await seedGlobalTemplate('chat');
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const logs = await findScoped(AiUsageLogModel, tenantId)
+      .lean<(IAiUsageLog & { _id: Types.ObjectId })[]>()
+      .exec();
+    expect(logs).toHaveLength(1);
+
+    const contexts = await findScoped(AiResponseContextModel, tenantId)
+      .lean<IAiResponseContext[]>()
+      .exec();
+    expect(contexts).toHaveLength(1);
+    expect(String(contexts[0]?.usageLogId)).toBe(String(logs[0]?._id));
+    expect(contexts[0]?.promptSnapshot).toEqual({
+      method: 'chat',
+      version: '1.0.0',
+      systemPrompt: 'Plantilla global de prueba para chat',
+    });
+    expect(contexts[0]?.retrievedChunks).toEqual([]);
+  });
+
+  it('en un hit de caché exacta: también crea su propio AiResponseContext', async () => {
+    await seedGlobalTemplate('chat');
+    const redisCache = new Map<string, string>();
+    const service = new AIService(makeProvider(), makeRedisMock(redisCache));
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const contexts = await findScoped(AiResponseContextModel, tenantId)
+      .lean<IAiResponseContext[]>()
+      .exec();
+    expect(contexts).toHaveLength(2);
+  });
+
+  it('en un hit de FAQ: crea su AiResponseContext con retrievedChunks vacío', async () => {
+    await seedGlobalTemplate('chat');
+    const matcher: FaqMatcher = vi
+      .fn()
+      .mockResolvedValue({ matched: true, respuesta: 'Respuesta de FAQ', confianza: 0.9 });
+    const service = new AIService(makeProvider(), makeRedisMock(), matcher);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const contexts = await findScoped(AiResponseContextModel, tenantId)
+      .lean<IAiResponseContext[]>()
+      .exec();
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]?.retrievedChunks).toEqual([]);
+  });
+
+  it('aislamiento: AiResponseContext de tenantA no es visible con findOneScoped de tenantB', async () => {
+    await seedGlobalTemplate('chat');
+    const tenantB = new Types.ObjectId();
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const contextA = await findOneScoped(AiResponseContextModel, tenantId).exec();
+    expect(contextA).not.toBeNull();
+
+    const contextFromB = await findOneScoped(AiResponseContextModel, tenantB, {
+      usageLogId: contextA?.usageLogId,
+    }).exec();
+    expect(contextFromB).toBeNull();
   });
 });
 
