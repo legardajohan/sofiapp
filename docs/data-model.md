@@ -382,6 +382,55 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado duro, es la única
 > copia que queda — y el `despues` lleva solo `{ motivo }`.
 
+## ai_usage_logs  (métricas de cada llamada a AIService — HT-AI-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  method: "chat" | "extract" | "classify" | "summary",
+  llmModel: String,               // p.ej. "gemini-1.5-flash" (env.GEMINI_MODEL)
+  promptTokens: Number,
+  completionTokens: Number,
+  totalTokens: Number,
+  cacheHit: Boolean,
+  fromFaq: Boolean,                // respondida por cortocircuito de FAQ, sin generación (HU-KB-02)
+  durationMs: Number,
+  createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
+}
+// Índices: { tenantId: 1 }, { tenantId: 1, createdAt: -1 }
+// TTL: { createdAt: 1 }, expireAfterSeconds: 7776000 (90 días) — ciclo de vida de MÉTRICAS
+// operativas. La auditoría persistente vive aparte, en ai_response_contexts (sin TTL).
+```
+> Es la entidad "respuesta de IA" que expone `GET /api/ai/responses` y el `:id` de
+> `GET /api/ai/responses/:id/context` (HU-KB-04): se crea una fila por cada llamada a
+> `AIService.chat/extract/classify/summarize`, exista o no trace de auditoría asociado.
+
+## ai_response_contexts  (trazabilidad de fuentes/contexto — HU-KB-04)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  usageLogId: ObjectId,            // ref AiUsageLog — 1:1, la llamada que este trace documenta
+  promptSnapshot: {
+    method: "chat" | "extract" | "classify" | "summary",
+    version: String,               // versión del PromptTemplate VIGENTE en el momento de generar
+    systemPrompt: String,          // texto completo del prompt de sistema usado
+  },
+  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // [] hasta Fase 3
+  kbVersion: Number | null,        // Tenant.kbVersion en el momento de la llamada
+  createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
+}
+// Índices: { tenantId: 1, usageLogId: 1 } unique
+// SIN índice TTL: retención indefinida (auditoría). Política de expiración/compliance pendiente
+// de una HU futura — ver docs/specs/HU-KB-04-contexto-ia/spec.md → Fuera de alcance.
+```
+> Se escribe fire-and-forget desde `AIService.chat()` (los tres caminos: hit de caché exacta, hit
+> de FAQ y generación real), sin bloquear la respuesta al llamador. `retrievedChunks` se persiste
+> vacío hasta que una HU de Fase 3 conecte `searchKnowledge()` (RAG) dentro de `chat()`; el modelo
+> y el endpoint ya están listos para recibirlos sin cambios de esquema. `extract()`, `classify()`
+> y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas" auditables
+> en el sentido de esta HU.
+
 ---
 
 ## Relaciones (resumen)
@@ -396,6 +445,7 @@ Tenant 1──┬──N User
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
           ├──N KbDocument ──N KbChunk   (RAG: embeddings + Atlas Vector Search)
           ├──N AuditEvent ──1 User (actorId)   (auditoría genérica — HU-OMNI-02)
+          ├──N AiUsageLog ──1 AiResponseContext (usageLogId, 1:1, sin TTL — HU-KB-04)
           └──N Flow ──N FlowState ──1 Cliente
 Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
 Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)
