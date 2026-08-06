@@ -48,14 +48,61 @@ export function presetIcon(titulo: string): LucideIcon {
   return PRESET_ICON_BY_TITULO[titulo] ?? FileText;
 }
 
-export function presetOrderIndex(titulo: string): number {
-  const index = PRESET_ORDER.indexOf(titulo);
-  return index === -1 ? PRESET_ORDER.length : index;
-}
-
 /** Un documento "tiene contenido" si su texto crudo no está vacío (aún sin indexar). */
 export function hasContent(doc: IKbDocument): boolean {
   return doc.contenido.trim().length > 0;
+}
+
+/** Normaliza un título para compararlo: sin espacios sobrantes y sin distinguir mayúsculas. */
+export function normalizeTitulo(titulo: string): string {
+  return titulo.trim().toLocaleLowerCase('es');
+}
+
+/**
+ * `true` si el título ya está ocupado por un documento real del tenant o **reservado** por
+ * `PRESET_META` (aunque ese preset siga siendo virtual: al llenarlo nacerá con ese mismo título).
+ *
+ * Comparación normalizada, a propósito **más estricta que el backend**: allí `createDocument` busca
+ * con `findOneScoped({ titulo })` —igualdad exacta— y, si encuentra, re-versiona en silencio el
+ * documento existente en vez de rechazar. Bloquear aquí las variantes por mayúsculas o espacios
+ * evita que el admin fabrique duplicados casi idénticos sin darse cuenta.
+ */
+export function isTitleTaken(titulo: string, documents: IKbDocument[]): boolean {
+  const objetivo = normalizeTitulo(titulo);
+  if (objetivo.length === 0) return false;
+  return (
+    PRESET_META.some((meta) => normalizeTitulo(meta.titulo) === objetivo) ||
+    documents.some((doc) => normalizeTitulo(doc.titulo) === objetivo)
+  );
+}
+
+/**
+ * Lista completa que pinta la grilla: los 5 presets fusionados (en el orden fijo de `PRESET_ORDER`)
+ * seguidos de los documentos **libres** —los que no corresponden a ninguna categoría predefinida—
+ * ordenados por `createdAt` ascendente.
+ *
+ * El orden es estable a propósito: con `updatedAt` descendente, guardar una tarjeta la haría saltar
+ * de posición justo después de tocarla. En una vista que se usa para verificar qué falta, saber
+ * dónde está cada cosa vale más que ver primero lo reciente.
+ */
+export function buildKbGrid(documents: IKbDocument[]): IKbDocument[] {
+  const libres = documents
+    .filter((doc) => !PRESET_ORDER.includes(doc.titulo))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return [...mergePresetsWithDocuments(documents), ...libres];
+}
+
+/**
+ * Versión con la que quedará el documento tras "Guardar e indexar". Réplica del `isFirstFill` de
+ * `apps/backend/src/features/kb/kb.service.ts`:
+ *  - preset virtual → lo crea un POST, que nace en `version: 1`.
+ *  - documento real con contenido vacío → primer llenado: el PATCH **no** incrementa la versión.
+ *  - documento real con contenido → edición normal: `version + 1`.
+ */
+export function nextVersion(doc: IKbDocument): number {
+  if (isVirtualPresetId(doc.id)) return 1;
+  return hasContent(doc) ? doc.version + 1 : doc.version;
 }
 
 /**
@@ -107,31 +154,44 @@ export function isCompleted(doc: IKbDocument): boolean {
 
 export interface KbProgress {
   presets: IKbDocument[];
-  /** Presets ordenados por prioridad de visualización. */
-  presetsSorted: IKbDocument[];
   totalPresets: number;
   completedPresets: number;
   obligatorios: IKbDocument[];
   completedObligatorios: number;
   /** Obligatorios que todavía no tienen contenido (motivan el banner de aviso). */
   missingObligatorios: IKbDocument[];
+  /** Toda la grilla: los 5 presets fusionados + los documentos libres del tenant. */
+  documentos: IKbDocument[];
+  /** Denominador del contador "Y/Z documentos indexados": crece con cada documento libre. */
+  totalDocumentos: number;
+  /** Numerador del mismo contador: documentos ya indexados, presets y libres por igual. */
+  completedDocumentos: number;
 }
 
-/** Deriva todo el estado de progreso de presets a partir de la lista de documentos. */
+/**
+ * Deriva el estado de progreso a partir de la lista de la grilla (`buildKbGrid`).
+ *
+ * Dos contadores con contratos distintos y deliberados:
+ *  - **Obligatorios (X/2):** denominador fijo. `presets`/`obligatorios` siguen filtrando por
+ *    `isPreset`, que es el invariante que arregló HU-KB-01-V3 — un preset re-creado por POST nace
+ *    `isPreset:false` y `mergePresetsWithDocuments` le devuelve su identidad por título.
+ *  - **Documentos indexados (Y/Z):** denominador dinámico sobre TODA la grilla. Los presets
+ *    virtuales cuentan en Z y nunca en Y (nacen `pendiente`), así un tenant nuevo arranca en 0/5 y
+ *    pasa a 0/6 en cuanto crea su primer documento propio.
+ */
 export function computeKbProgress(documents: IKbDocument[]): KbProgress {
   const presets = documents.filter((doc) => doc.isPreset);
-  const presetsSorted = [...presets].sort(
-    (a, b) => presetOrderIndex(a.titulo) - presetOrderIndex(b.titulo),
-  );
   const obligatorios = presets.filter((doc) => doc.obligatorio);
 
   return {
     presets,
-    presetsSorted,
     totalPresets: presets.length,
     completedPresets: presets.filter(isCompleted).length,
     obligatorios,
     completedObligatorios: obligatorios.filter(isCompleted).length,
     missingObligatorios: obligatorios.filter((doc) => !hasContent(doc)),
+    documentos: documents,
+    totalDocumentos: documents.length,
+    completedDocumentos: documents.filter(isCompleted).length,
   };
 }
