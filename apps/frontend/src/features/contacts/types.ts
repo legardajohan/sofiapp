@@ -14,12 +14,45 @@ export interface AtributoInput {
  */
 export interface ContactPatchPayload {
   nombre?: string | null;
+  /** Solo dígitos con indicativo, sin `+` ni separadores: el mismo formato que escribe el webhook. */
+  telefono?: string | null;
   correo?: string | null;
   documento?: string | null;
-  nivelInteres?: 'frio' | 'tibio' | 'caliente' | null;
-  objecionPrincipal?: 'precio' | 'tiempo' | 'confianza' | 'otra' | null;
-  rolContacto?: 'decisor' | 'usuario' | 'desconocido' | null;
+  // Claves del catálogo del tenant, no uniones cerradas: interés, objeción y rol son listas que
+  // cada empresa administra desde el propio diálogo de edición (ver `OpcionDTO`).
+  nivelInteres?: string | null;
+  objecionPrincipal?: string | null;
+  rolContacto?: string | null;
   atributos?: AtributoInput[];
+}
+
+// ─── Catálogos de interés / objeción / rol (HU-CRM-02) ──────────────────────────
+
+export const TIPOS_OPCION = ['interes', 'objecion', 'rol'] as const;
+
+export type TipoOpcion = (typeof TIPOS_OPCION)[number];
+
+export interface OpcionDTO {
+  id: string;
+  tipo: TipoOpcion;
+  /** Lo que se guarda en el contacto. No cambia al renombrar la opción. */
+  key: string;
+  label: string;
+  /** `#RRGGBB` elegido por la empresa. Se pinta siempre a través de `tagColors`, nunca crudo. */
+  color: string;
+  orden: number;
+  /** `false` = archivada: fuera del desplegable, pero aún resuelve su etiqueta en fichas antiguas. */
+  activo: boolean;
+  esDefecto: boolean;
+}
+
+export type OpcionesPorTipo = Record<TipoOpcion, OpcionDTO[]>;
+
+/** El backend archiva en vez de borrar cuando algún contacto todavía usa la opción. */
+export interface BorradoOpcionDTO {
+  eliminada: boolean;
+  enUso: number;
+  opcion: OpcionDTO | null;
 }
 
 export interface NotaDTO {

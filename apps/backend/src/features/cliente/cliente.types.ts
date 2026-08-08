@@ -30,9 +30,19 @@ export interface IDatosExtraidos {
 /** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
 export type TelefonoOrigen = 'conversacion' | 'whatsapp';
 
-export type NivelInteres = 'frio' | 'tibio' | 'caliente';
-export type ObjecionPrincipal = 'precio' | 'tiempo' | 'confianza' | 'otra';
-export type RolContacto = 'decisor' | 'usuario' | 'desconocido';
+/**
+ * Clave de una opción del catálogo `contact_options` del tenant (HU-CRM-02).
+ *
+ * Los tres campos que la usan —`nivelInteres`, `objecionPrincipal`, `rolContacto`— eran uniones
+ * cerradas heredadas del vertical Pre-ICFES. Dejaron de serlo cuando cada empresa pasó a poder
+ * crear, renombrar y archivar sus propias opciones: un tipo literal aquí volvería a clavar en el
+ * código una lista que ahora vive en la base de datos. La integridad la aporta
+ * `assertOpcionesValidas` en el servicio, no el compilador.
+ *
+ * Ojo: el `NivelInteres` de `integrations/llm/llm-provider.types.ts` **es otra cosa** y sigue siendo
+ * una unión cerrada — es la escala con la que el modelo clasifica, no el catálogo del tenant.
+ */
+export type OpcionContactoKey = string;
 
 /**
  * Atributo personalizado del contacto (HU-CRM-02). No reutiliza `customFields` —un
@@ -44,7 +54,7 @@ export interface IAtributoPersonalizado {
   /** Slug estable derivado del label al crearlo; no cambia aunque el label se renombre. */
   key: string;
   label: string;
-  /** Cifrado (con marcador `enc:v1:`) cuando `sensible` es `true`. */
+  /** Valor tal cual se guarda. Con `sensible: true` solo lo devuelve la API a quien puede verlo. */
   valor: string;
   sensible: boolean;
 }
@@ -73,14 +83,17 @@ export interface ICliente {
   customFields: Record<string, unknown>;
   /** Etiquetas de empresa aplicadas a la conversación (HU-OMNI-04). */
   tagIds: Types.ObjectId[];
-  nivelInteres?: NivelInteres;
-  objecionPrincipal?: ObjecionPrincipal;
-  rolContacto?: RolContacto;
+  nivelInteres?: OpcionContactoKey;
+  objecionPrincipal?: OpcionContactoKey;
+  rolContacto?: OpcionContactoKey;
   interesItemId?: Types.ObjectId;
   resumenIA?: IResumenIA;
   datosExtraidos?: IDatosExtraidos;
-  // ─── Datos sensibles (HU-CRM-02) — cifrados en reposo, nunca indexados ───────
-  /** Correo registrado a mano por el asesor. Sufijo `Enc` como `MetaIntegration.accessTokenEnc`. */
+  // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por subrol al leerlos ───
+  /**
+   * Correo registrado a mano por el asesor. El sufijo `Enc` es histórico: el cifrado en reposo está
+   * desactivado (ver `utils/field-crypto.util`) y el valor se guarda en claro.
+   */
   correoEnc?: string;
   /** Documento de identidad. */
   documentoEnc?: string;
@@ -142,12 +155,19 @@ export interface IAtributoResponse {
  * golpe, y un merge por `key` obligaría a inventar una semántica de borrado que el array ya tiene.
  */
 export interface UpdateClienteDTO {
-  nombre?: string | null;
+  /** Sin `null`: el nombre se corrige, no se borra (ver `updateClienteSchema`). */
+  nombre?: string;
+  /**
+   * Sin `null`: es obligatorio en el documento. Ojo — en un contacto de WhatsApp el webhook lo
+   * resincroniza desde Meta en cada mensaje entrante (`upsertByMetaUser`), así que editarlo a mano
+   * ahí es una corrección temporal. Donde manda de verdad es en los canales sin webhook.
+   */
+  telefono?: string;
   correo?: string | null;
   documento?: string | null;
-  nivelInteres?: NivelInteres | null;
-  objecionPrincipal?: ObjecionPrincipal | null;
-  rolContacto?: RolContacto | null;
+  nivelInteres?: OpcionContactoKey | null;
+  objecionPrincipal?: OpcionContactoKey | null;
+  rolContacto?: OpcionContactoKey | null;
   atributos?: IAtributoPersonalizado[];
 }
 

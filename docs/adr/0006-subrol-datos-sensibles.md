@@ -44,9 +44,10 @@ contacto.** AUTH-02 sigue vigente para todo lo demás.
    (`d••••@dominio.com`, `••••1234`, `••••••`), más el flag `puedeVerSensibles` en la respuesta. La
    diferencia entre "no hay correo" y "no puedes ver el correo" tiene que ser visible, o el asesor
    volverá a pedirle al cliente un dato que ya está registrado.
-5. El control de acceso **convive con** el cifrado en reposo (`DATA_ENC_KEY`), no lo sustituye: el
-   cifrado responde "¿qué pasa si alguien se lleva la colección?" y el gate responde "¿quién puede
-   mirarlo desde dentro?".
+5. El control de acceso es **independiente** del cifrado en reposo (`DATA_ENC_KEY`): el cifrado
+   responde "¿qué pasa si alguien se lleva la colección?" y el gate responde "¿quién puede mirarlo
+   desde dentro?". El cifrado se desactivó después (ver Consecuencias); este gate no se enteró, y
+   ahí está la gracia de que fueran mecanismos separados.
 
 ## Alternativas consideradas
 
@@ -75,3 +76,9 @@ contacto.** AUTH-02 sigue vigente para todo lo demás.
 - La UI duplica el helper (`src/lib/roles.ts`) para **ocultar** lo que el backend **decide**. La
   duplicación es deliberada: si divergen, manda el servidor y lo peor que pasa es que la UI ofrezca
   una acción que devuelve `403`.
+- **El cifrado en reposo quedó desactivado (2026-08-03).** `DATA_ENC_KEY` es opcional y sin ella
+  cualquier guardado de un dato sensible respondía `500`, así que los campos pasaron a persistirse
+  en claro (`utils/field-crypto.util`, nota en `docs/data-model.md`). **Este gate no cambia**: era
+  el mecanismo independiente y sigue siendo el único que decide quién ve el dato. Lo que se pierde
+  es la defensa ante un volcado de la base o un backup extraviado; reactivarlo es un cambio de un
+  solo archivo y el camino de lectura ya entiende los valores `enc:v1:` heredados.

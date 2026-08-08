@@ -47,6 +47,29 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
 
   // ─── Campos no sensibles ──────────────────────────────────────────────────────
 
+  it('edita el teléfono y lo persiste', async () => {
+    const id = await seedCliente({ telefono: '573001112233' });
+    const res = await updateCliente(tenantId, actorId, id, { telefono: '573009998877' }, true);
+
+    expect(res.telefono).toBe('573009998877');
+
+    const guardado = await Cliente.findById(id).lean();
+    expect(guardado?.telefono).toBe('573009998877');
+  });
+
+  it('el cambio de teléfono queda en la bitácora con su valor real', async () => {
+    const id = await seedCliente({ telefono: '573001112233' });
+    await updateCliente(tenantId, actorId, id, { telefono: '573009998877' }, true);
+
+    const evento = await AuditEvent.findOne({ entidadId: id, accion: 'cliente.update' })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // No es un dato sensible: va en claro, a diferencia de correo/documento.
+    expect(evento?.antes?.['telefono']).toBe('573001112233');
+    expect(evento?.despues?.['telefono']).toBe('573009998877');
+  });
+
   it('edita los campos no sensibles y los persiste', async () => {
     const id = await seedCliente();
     const res = await updateCliente(
@@ -78,9 +101,9 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
     expect(doc?.nivelInteres).toBe('tibio');
   });
 
-  // ─── Cifrado en reposo ────────────────────────────────────────────────────────
+  // ─── Persistencia de los sensibles (en claro: el cifrado está desactivado) ────
 
-  it('correo y documento quedan CIFRADOS en Mongo y en claro para un autorizado', async () => {
+  it('correo y documento se guardan EN CLARO y se devuelven a un autorizado', async () => {
     const id = await seedCliente();
     const res = await updateCliente(
       tenantId,
@@ -93,16 +116,13 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
     expect(res.correo).toBe('diego@empresa.com');
     expect(res.documento).toBe('1085271234');
 
-    // Lo que hay en la colección no contiene el texto claro por ningún lado.
+    // Sin cifrado en reposo: lo persistido es exactamente lo que envió el asesor, legible.
     const doc = await Cliente.findById(id).lean();
-    const crudo = JSON.stringify(doc);
-    expect(crudo).not.toContain('diego@empresa.com');
-    expect(crudo).not.toContain('1085271234');
-    expect(doc?.correoEnc?.startsWith('enc:v1:')).toBe(true);
-    expect(doc?.documentoEnc?.startsWith('enc:v1:')).toBe(true);
+    expect(doc?.correoEnc).toBe('diego@empresa.com');
+    expect(doc?.documentoEnc).toBe('1085271234');
   });
 
-  it('solo cifra los atributos marcados como sensibles', async () => {
+  it('los atributos se guardan en claro, sensibles o no', async () => {
     const id = await seedCliente();
     await updateCliente(
       tenantId,
@@ -120,8 +140,25 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
     const doc = await Cliente.findById(id).lean();
     const [publico, privado] = doc!.atributos;
     expect(publico?.valor).toBe('San José');
-    expect(privado?.valor.startsWith('enc:v1:')).toBe(true);
-    expect(JSON.stringify(doc)).not.toContain('Sura-99887');
+    expect(privado?.valor).toBe('Sura-99887');
+    // Lo que distingue al sensible no es cómo se guarda, sino quién puede leerlo.
+    expect(privado?.sensible).toBe(true);
+  });
+
+  it('un valor heredado cifrado y sin clave para leerlo NO tumba la ficha', async () => {
+    // Escenario real de una base donde sí se llegó a escribir cifrado: `DATA_ENC_KEY` ya no existe
+    // (ver `vitest.config.ts`). El dato sale ilegible, pero la ficha responde en vez de dar 500.
+    const heredado = 'enc:v1:ZmFrZS1jaXBoZXJ0ZXh0';
+    const id = await seedCliente({ correoEnc: heredado });
+
+    const { contacto } = await getContactHistory(
+      tenantId.toString(),
+      id,
+      { page: 1, limit: 10 },
+      true,
+    );
+
+    expect(contacto.correo).toBe(heredado);
   });
 
   // ─── Gate por subrol ──────────────────────────────────────────────────────────
@@ -236,7 +273,7 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
     expect(crudo).not.toContain('1085271234');
     expect(crudo).not.toContain('Sura-99887');
     // Sí queda constancia de QUÉ cambió, y el valor no sensible se guarda tal cual.
-    expect(crudo).toContain('[cifrado]');
+    expect(crudo).toContain('[oculto]');
     expect((evento?.despues as Record<string, unknown>)['nombre']).toBe('Ana');
   });
 
@@ -261,8 +298,9 @@ describe('updateClienteSchema — validación en el borde (HU-CRM-02)', () => {
 
   it('rechaza los campos con dueño en otro feature', () => {
     // `.strict()`: la clave desconocida falla en el borde en vez de ignorarse en silencio.
+    // `telefono` YA NO está en esta lista: pasó a ser editable desde la ficha. Los demás siguen
+    // teniendo dueño en otro feature (máquina de estados, HU-OMNI-02/04, identidad de WhatsApp).
     for (const ajeno of [
-      { telefono: '573001112233' },
       { estadoComercial: 'pagado' },
       { tagIds: [] },
       { asesorId: new Types.ObjectId().toString() },
@@ -289,5 +327,73 @@ describe('updateClienteSchema — validación en el borde (HU-CRM-02)', () => {
     const res = validarBody({ atributos: [{ key: 'eps', label: 'EPS', valor: 'Sura' }] });
     expect(res.success).toBe(true);
     if (res.success) expect(res.data.body.atributos?.[0]?.sensible).toBe(false);
+  });
+
+  // ─── Nombre no vaciable y atributos sin repetir ───────────────────────────────
+
+  it('rechaza vaciar el nombre: se corrige, no se borra', () => {
+    expect(validarBody({ nombre: null }).success).toBe(false);
+    expect(validarBody({ nombre: '   ' }).success).toBe(false);
+    expect(validarBody({ nombre: 'Ana Gómez' }).success).toBe(true);
+  });
+
+  // ─── Teléfono editable ────────────────────────────────────────────────────────
+
+  it('acepta el teléfono en el formato del webhook y rechaza el resto', () => {
+    expect(validarBody({ telefono: '573001112233' }).success).toBe(true);
+    // Ni `+`, ni espacios, ni guiones: dos formatos para el mismo dato harían que el mismo número
+    // no se reconociera a sí mismo.
+    expect(validarBody({ telefono: '+57 300 111 2233' }).success).toBe(false);
+    expect(validarBody({ telefono: '300-111-2233' }).success).toBe(false);
+    expect(validarBody({ telefono: '123' }).success).toBe(false);
+    expect(validarBody({ telefono: null }).success).toBe(false);
+  });
+
+
+  it('rechaza un atributo sin nombre o sin valor', () => {
+    expect(validarBody({ atributos: [{ key: 'eps', label: '  ', valor: 'Sura' }] }).success).toBe(
+      false,
+    );
+    expect(validarBody({ atributos: [{ key: 'eps', label: 'EPS', valor: '  ' }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('rechaza dos atributos con el mismo nombre, aunque difieran en mayúsculas o tildes', () => {
+    const repetido = validarBody({
+      atributos: [
+        { key: 'colegio', label: 'Colegio', valor: 'San José' },
+        { key: 'colegio-2', label: 'colegio', valor: 'Otro' },
+      ],
+    });
+    expect(repetido.success).toBe(false);
+
+    const conTilde = validarBody({
+      atributos: [
+        { key: 'accion', label: 'Acción', valor: 'A' },
+        { key: 'accion-2', label: 'accion', valor: 'B' },
+      ],
+    });
+    expect(conTilde.success).toBe(false);
+  });
+
+  it('rechaza dos atributos con la misma clave', () => {
+    const res = validarBody({
+      atributos: [
+        { key: 'eps', label: 'EPS', valor: 'Sura' },
+        { key: 'eps', label: 'Aseguradora', valor: 'Nueva EPS' },
+      ],
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it('admite atributos distintos que solo se parecen', () => {
+    const res = validarBody({
+      atributos: [
+        { key: 'colegio', label: 'Colegio', valor: 'San José' },
+        { key: 'colegio-anterior', label: 'Colegio anterior', valor: 'La Salle' },
+      ],
+    });
+    expect(res.success).toBe(true);
   });
 });

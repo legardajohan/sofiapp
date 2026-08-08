@@ -12,6 +12,7 @@ import { createSocketGateway } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
+import { backfillContactOptions } from './seed/seed-contact-options.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
@@ -25,6 +26,7 @@ import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
 import clienteRoutes from './features/cliente/cliente.routes.js';
 import contactNoteRoutes from './features/contact-note/contact-note.routes.js';
+import contactOptionRoutes from './features/contact-option/contact-option.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import kbFaqRoutes from './features/kb-faq/kb-faq.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
@@ -59,6 +61,7 @@ app.use('/api/webhooks/whatsapp', webhookRoutes);
 // La ruta más específica primero, igual que `/api/kb/faqs` antes de `/api/kb`.
 app.use('/api/clientes/:clienteId/notas', contactNoteRoutes);
 app.use('/api/clientes', clienteRoutes);
+app.use('/api/opciones-contacto', contactOptionRoutes);
 app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
@@ -83,6 +86,7 @@ if (env.NODE_ENV !== 'test') {
       await seedPlans();
       await seedPromptTemplates();
       await backfillSemaforoTags();
+      await backfillContactOptions();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

@@ -6,7 +6,9 @@ const ContactNoteSchema = new Schema<IContactNoteDocument>(
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
     clienteId: { type: Schema.Types.ObjectId, ref: 'Cliente', required: true },
     autorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    // Cifrado con `DATA_ENC_KEY` (marcador `enc:v1:`). Nunca indexado: no es buscable por diseño.
+    // Texto de la nota. El cifrado en reposo está desactivado (ver `field-crypto.util`), así que se
+    // guarda en claro; el nombre conserva el sufijo para no migrar los documentos existentes.
+    // Nunca indexado: no es buscable por diseño.
     textoEnc: { type: String, required: true },
   },
   { timestamps: true, collection: 'contact_notes' },

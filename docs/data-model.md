@@ -122,13 +122,13 @@
   asesorId: ObjectId?,            // ref User (usuario admin asignado a la conversación; el nombre del campo describe la función, no un rol de login — AUTH-02)
   // datos verticales específicos del tenant (ej. colegio, grado en Pre-ICFES)
   customFields: { [key: String]: Mixed },   // SUPERADO por `atributos` (HU-CRM-02); ver nota abajo
-  // datos sensibles registrados a mano por el asesor (HU-CRM-02) — cifrados en reposo
-  correoEnc: String?,             // AES-256-GCM con DATA_ENC_KEY, prefijo "enc:v1:"
-  documentoEnc: String?,          // documento de identidad, mismo cifrado
+  // datos sensibles registrados a mano por el asesor (HU-CRM-02) — EN CLARO (ver nota abajo)
+  correoEnc: String?,             // sufijo `Enc` histórico; el cifrado en reposo está desactivado
+  documentoEnc: String?,          // documento de identidad, igual
   atributos: [{                   // subdoc con _id: false; orden significativo (el que dio el asesor)
     key: String,                  // slug 1..40, /^[a-z0-9][a-z0-9_-]*$/; estable aunque cambie el label
     label: String,                // 1..60
-    valor: String,                // 1..500; CIFRADO cuando `sensible` es true
+    valor: String,                // 1..500; en claro (con `sensible` solo cambia quién puede leerlo)
     sensible: Boolean             // default false
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
@@ -149,11 +149,16 @@
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
 
-> **Los campos cifrados NO se indexan ni se buscan (HU-CRM-02).** `correoEnc`, `documentoEnc` y el
-> `valor` de los atributos sensibles se cifran con IV aleatorio, así que dos cifrados del mismo
-> texto son distintos: no son comparables ni indexables. Buscar por correo exigiría un índice ciego
-> (HMAC determinista) y su propio feature. El prefijo `enc:v1:` distingue un valor cifrado de uno
-> legado en texto plano, lo que permite leer ambos sin migración.
+> **El cifrado en reposo de estos campos está DESACTIVADO (HU-CRM-02).** `correoEnc`,
+> `documentoEnc`, `textoEnc` de las notas y el `valor` de los atributos sensibles se guardan **en
+> claro**. Dependían de `DATA_ENC_KEY`, una variable opcional, y sin ella cualquier guardado moría
+> con un 500. Lo que protege el dato es el **control de acceso por subrol** (`authorizeSubrol` +
+> enmascarado), que nunca dependió del cifrado; lo que se pierde es la protección ante un volcado de
+> la base o un backup extraviado. Los valores escritos mientras estuvo activo llevan el prefijo
+> `enc:v1:` y se siguen leyendo (`utils/field-crypto.util`), así que no hizo falta migrar.
+>
+> **Siguen sin indexarse ni buscarse.** No hay índice ni filtro sobre ellos: buscar por correo
+> exigiría su propio feature (y volvería a chocar con el cifrado si se reactiva).
 
 > **`atributos` supera a `customFields`.** `customFields` es un `Record<String, Mixed>` plano y no
 > puede llevar el metadato `sensible` por campo sin anidar objetos (lo que rompería su propio tipo),
@@ -357,9 +362,9 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > (HU-CRM-02).
 >
 > **La bitácora nunca guarda un valor sensible.** Esta colección no tiene control de acceso por
-> subrol, así que volcar aquí el antes/después en claro de un campo cifrado dejaría una copia
-> legible del dato que el cifrado protege. En `cliente.update`, `correo`, `documento` y los
-> atributos sensibles se guardan como la cadena `"[cifrado]"` — queda constancia de **qué** cambió,
+> subrol, así que volcar aquí el antes/después de un campo sensible lo dejaría al alcance de quien
+> no puede verlo en la ficha. En `cliente.update`, `correo`, `documento` y los
+> atributos sensibles se guardan como la cadena `"[oculto]"` — queda constancia de **qué** cambió,
 > nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
 > texto.
 
@@ -370,7 +375,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   tenantId: ObjectId,             // required + index
   clienteId: ObjectId,            // ref Cliente — el contacto al que pertenece
   autorId: ObjectId,              // ref User — quién la escribió
-  textoEnc: String,               // 1..2000 en claro; se persiste CIFRADO (prefijo "enc:v1:")
+  textoEnc: String,               // 1..2000; sufijo `Enc` histórico — se persiste en claro
   createdAt, updatedAt
 }
 // Índice: { tenantId: 1, clienteId: 1, createdAt: -1 }   (es exactamente la consulta de la tarjeta)
@@ -387,6 +392,43 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 
 > **Solo se agrega.** No hay editar ni borrar: una nota es un asiento del historial. Tampoco hay
 > adjuntos.
+
+## contact_options  (catálogos de interés / objeción / rol — HU-CRM-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  tipo: "interes" | "objecion" | "rol",
+  key: String,                    // 1..40, slug derivado del label AL CREARLA; NO cambia al renombrar
+  label: String,                  // 1..60
+  color: String,                  // "#RRGGBB": DATO del tenant, igual que en `tags`. default #475569
+  orden: Number,                  // posición en el desplegable, la decide el admin (no alfabético)
+  activo: Boolean,                // false = archivada
+  esDefecto: Boolean,             // sembrada por el sistema; informativa, se edita como cualquier otra
+  createdAt, updatedAt
+}
+```
+Índices:
+- `{ tenantId: 1, tipo: 1, key: 1 }` **unique**, incluidas las archivadas: si no, "crear" una con la
+  clave de una archivada duplicaría el valor que los contactos ya llevan grabado.
+- `{ tenantId: 1, tipo: 1, orden: 1 }` — la lectura del catálogo, siempre ordenada.
+
+> **Estos tres campos dejaron de ser `enum` en `clientes`.** Eran un supuesto del vertical Pre-ICFES
+> metido en el modelo: una inmobiliaria no objeta por "tiempo". Ahora son datos del tenant, y quien
+> valida que una clave exista y esté activa es `assertOpcionesValidas`, no Mongoose.
+
+> **`key` estable, `label` y `color` mutables.** `Cliente.nivelInteres` guarda la `key`, no una
+> referencia: renombrar "Frío" a "Poco interés" o cambiarle el color debe conservar el vínculo con
+> los contactos ya clasificados. Mismo criterio que `Tag.semaforo`.
+
+> **Borrar archiva si está en uso.** Un `DELETE` de una opción que algún contacto tiene registrada
+> la pone `activo: false` en vez de eliminarla, para que esas fichas sigan resolviendo su etiqueta en
+> lugar de mostrar la clave cruda. La respuesta dice cuál de las dos cosas pasó.
+
+> **El color de fábrica del interés es un semáforo térmico:** frío `#2563EB` (azul), tibio `#CA8A04`
+> (ámbar), caliente `#DC2626` (rojo). Los hex salen de la misma gama que ofrece el selector de
+> etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
+> pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
 
 ---
 

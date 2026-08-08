@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { MOTIVO_DATOS_SENSIBLES } from '@/lib/roles';
 import type { AtributoInput } from '../types.js';
+import type { ErroresAtributos } from '../lib/validate.js';
 
 interface Props {
   atributos: AtributoInput[];
@@ -13,6 +14,8 @@ interface Props {
   /** Sin permiso, las filas sensibles se ven pero no se tocan. */
   puedeEditarSensibles: boolean;
   disabled: boolean;
+  /** Mensaje por fila (índice → texto): nombre repetido, fila a medio llenar. */
+  errores?: ErroresAtributos;
 }
 
 const MAX_ATRIBUTOS = 30;
@@ -25,6 +28,7 @@ export function AtributosEditor({
   onChange,
   puedeEditarSensibles,
   disabled,
+  errores = {},
 }: Props): React.ReactElement {
   function actualizar(indice: number, cambios: Partial<AtributoInput>): void {
     onChange(atributos.map((a, i) => (i === indice ? { ...a, ...cambios } : a)));
@@ -57,10 +61,16 @@ export function AtributosEditor({
           {atributos.map((atributo, i) => {
             // Una fila sensible preexistente queda intacta para quien no puede tocarla.
             const bloqueada = atributo.sensible && !puedeEditarSensibles;
+            const error = errores[i];
+            const errorId = `atributo-error-${i}`;
             return (
               <li
                 key={atributo.key || `nuevo-${i}`}
-                className="space-y-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2"
+                className={cn(
+                  'space-y-2 rounded-lg border bg-muted/30 px-2.5 py-2',
+                  // El borde marca la fila entera: el mensaje dice qué pasa, el color dice dónde.
+                  error ? 'border-destructive/50' : 'border-border',
+                )}
               >
                 <div className="flex items-center gap-2">
                   <Input
@@ -70,6 +80,8 @@ export function AtributosEditor({
                     value={atributo.label}
                     disabled={disabled || bloqueada}
                     maxLength={60}
+                    aria-invalid={error !== undefined}
+                    aria-describedby={error ? errorId : undefined}
                     // La clave NO se deriva aquí: al teclear letra a letra saldría de la primera
                     // ("Colegio" → `c`). Se asigna al guardar, con la etiqueta ya completa.
                     onChange={(e) => actualizar(i, { label: e.target.value })}
@@ -94,8 +106,16 @@ export function AtributosEditor({
                   value={atributo.valor}
                   disabled={disabled || bloqueada}
                   maxLength={500}
+                  aria-invalid={error !== undefined}
+                  aria-describedby={error ? errorId : undefined}
                   onChange={(e) => actualizar(i, { valor: e.target.value })}
                 />
+
+                {error && (
+                  <p id={errorId} className="text-[11px] text-destructive">
+                    {error}
+                  </p>
+                )}
 
                 <div className="flex items-center gap-2">
                   <Switch
@@ -109,7 +129,9 @@ export function AtributosEditor({
                     className="flex cursor-pointer items-center gap-1 text-[11px] font-normal text-muted-foreground"
                   >
                     {atributo.sensible && <Lock className="h-3 w-3" aria-hidden="true" />}
-                    {atributo.sensible ? 'Sensible: se cifra y se oculta' : 'Marcar como sensible'}
+                    {atributo.sensible
+                      ? 'Sensible: solo lo ven Dirección y Gerencia'
+                      : 'Marcar como sensible'}
                   </Label>
                 </div>
 

@@ -48,7 +48,7 @@ describe('contact-note.service (HU-CRM-02)', () => {
     return (user._id as Types.ObjectId).toString();
   }
 
-  it('crea la nota con el texto CIFRADO en Mongo y el autor resuelto en la respuesta', async () => {
+  it('crea la nota con el texto en claro en Mongo y el autor resuelto en la respuesta', async () => {
     const clienteId = await seedCliente();
     const autorId = await seedAutor('Ana Gómez');
 
@@ -57,9 +57,9 @@ describe('contact-note.service (HU-CRM-02)', () => {
     expect(nota.texto).toBe('Pidió descuento por pago anticipado');
     expect(nota.autor).toEqual({ id: autorId, nombre: 'Ana Gómez' });
 
+    // Sin cifrado en reposo (ver `field-crypto.util`): el texto se persiste legible.
     const doc = await ContactNote.findById(nota.id).lean();
-    expect(doc?.textoEnc.startsWith('enc:v1:')).toBe(true);
-    expect(JSON.stringify(doc)).not.toContain('descuento');
+    expect(doc?.textoEnc).toBe('Pidió descuento por pago anticipado');
   });
 
   it('lista las notas más reciente primero, paginadas', async () => {

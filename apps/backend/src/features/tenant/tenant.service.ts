@@ -6,6 +6,7 @@ import { Plan } from '../plan/plan.model.js';
 import { assertWithinQuota } from '../usage/usage.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
 import { seedSemaforoTags } from '../../seed/seed-semaforo-tags.js';
+import { seedContactOptions } from '../../seed/seed-contact-options.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { seedPresetDocuments } from '../kb/kb.service.js';
@@ -134,6 +135,10 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   // Etiquetas de semaforización (HU-OMNI-04). Fuera de la transacción a propósito: no debe
   // impedir el alta de la empresa si falla, y `backfillSemaforoTags()` del arranque lo corrige.
   await seedSemaforoTags(tenant._id.toString());
+
+  // Catálogos de interés / objeción / rol de la ficha del contacto (HU-CRM-02). Mismo criterio:
+  // fuera de la transacción, y `backfillContactOptions()` del arranque lo corrige si falla.
+  await seedContactOptions(tenant._id.toString());
 
   return mapTenantToResponse(tenant);
 }

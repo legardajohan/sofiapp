@@ -6,7 +6,7 @@ import {
   findScoped,
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
-import { decryptField, encryptField } from '../../utils/field-crypto.util.js';
+import { fromStoredValue, toStoredValue } from '../../utils/field-crypto.util.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import { findUsersByIds } from '../users/user.service.js';
@@ -24,7 +24,7 @@ function toNotaResponse(
   const autorId = String(nota.autorId);
   return {
     id: String(nota._id),
-    texto: decryptField(nota.textoEnc),
+    texto: fromStoredValue(nota.textoEnc),
     autor: { id: autorId, nombre: userMap.get(autorId)?.nombre ?? null },
     createdAt: nota.createdAt.toISOString(),
   };
@@ -52,14 +52,14 @@ export async function createNota(
   const creada = await createScoped(ContactNote, tenantId, {
     clienteId: new Types.ObjectId(clienteId),
     autorId: new Types.ObjectId(autorId),
-    textoEnc: encryptField(texto),
+    textoEnc: toStoredValue(texto),
   });
 
   // `as unknown as`: `createdAt` lo pone Mongoose vía `timestamps` y no está en `IContactNote`.
   const nota = creada.toObject() as unknown as IContactNoteLean;
 
   // La bitácora registra que se creó una nota, jamás su contenido: `audit_events` no tiene gate por
-  // subrol y volcar ahí el texto dejaría una copia legible de lo que el cifrado protege.
+  // subrol y volcar ahí el texto lo dejaría al alcance de quien no puede ver la nota.
   await recordAuditEvent(tenantId, {
     actorId: autorId,
     accion: 'contact-note.create',

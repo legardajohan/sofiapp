@@ -9,61 +9,87 @@ vi.mock('../../src/config/env.js', () => ({
 }));
 
 const { env } = await import('../../src/config/env.js');
-const { encryptField, decryptField, isEncrypted, encryptOptional, decryptOptional } = await import(
-  '../../src/utils/field-crypto.util.js'
-);
+const { encryptWith } = await import('../../src/utils/crypto.util.js');
+const { toStoredValue, fromStoredValue, isEncrypted, toStoredOptional, fromStoredOptional } =
+  await import('../../src/utils/field-crypto.util.js');
 
-describe('field-crypto.util — cifrado de campo (HU-CRM-02)', () => {
+/** Valor tal y como quedó en Mongo mientras el cifrado en reposo estuvo activo. */
+function heredadoCifrado(texto: string, claveHex: string): string {
+  return 'enc:v1:' + encryptWith(Buffer.from(claveHex, 'hex'), texto);
+}
+
+describe('field-crypto.util — persistencia de datos sensibles (HU-CRM-02)', () => {
   beforeEach(() => {
     (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = CLAVE_A;
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = CLAVE_A;
+    vi.restoreAllMocks();
   });
 
-  it('ida y vuelta: descifrar lo cifrado devuelve el original', () => {
-    const original = 'diego@empresa.com';
-    expect(decryptField(encryptField(original))).toBe(original);
+  // ─── Escritura: en claro ──────────────────────────────────────────────────────
+
+  it('el valor se persiste EN CLARO, sin marcador (el cifrado está desactivado)', () => {
+    const guardado = toStoredValue('diego@empresa.com');
+    expect(guardado).toBe('diego@empresa.com');
+    expect(isEncrypted(guardado)).toBe(false);
   });
 
-  it('el valor cifrado lleva el marcador de versión y no contiene el texto claro', () => {
-    const cifrado = encryptField('1085271234');
-    expect(isEncrypted(cifrado)).toBe(true);
-    expect(cifrado.startsWith('enc:v1:')).toBe(true);
-    expect(cifrado).not.toContain('1085271234');
+  it('ida y vuelta: lo leído es idéntico a lo escrito', () => {
+    const original = '1085271234';
+    expect(fromStoredValue(toStoredValue(original))).toBe(original);
   });
 
-  it('cifrar dos veces el mismo texto da resultados distintos (IV aleatorio)', () => {
-    const uno = encryptField('mismo texto');
-    const dos = encryptField('mismo texto');
-    expect(uno).not.toBe(dos);
-    expect(decryptField(uno)).toBe(decryptField(dos));
+  it('escribir y leer NO lanzan sin DATA_ENC_KEY configurada', () => {
+    // Regresión: con la variable ausente, guardar un correo, un documento o una nota moría con un
+    // 500 y el asesor solo veía "error interno". Ya no depende de ninguna clave.
+    (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = undefined;
+
+    expect(toStoredValue('algo')).toBe('algo');
+    expect(fromStoredValue('algo')).toBe('algo');
   });
 
-  it('un valor SIN marcador se devuelve tal cual (dato legado anterior a HU-CRM-02)', () => {
-    // Es el caso de `datosExtraidos.correo` guardado en plano por HU-OMNI-03: debe seguir leyéndose
-    // sin script de migración.
-    expect(decryptField('legado@empresa.com')).toBe('legado@empresa.com');
+  // ─── Lectura: compatibilidad con lo que sí quedó cifrado ──────────────────────
+
+  it('un valor heredado con marcador se descifra al leerlo', () => {
+    expect(fromStoredValue(heredadoCifrado('diego@empresa.com', CLAVE_A))).toBe(
+      'diego@empresa.com',
+    );
+  });
+
+  it('un valor sin marcador se devuelve tal cual', () => {
+    expect(fromStoredValue('legado@empresa.com')).toBe('legado@empresa.com');
     expect(isEncrypted('legado@empresa.com')).toBe(false);
   });
 
-  it('descifrar con otra clave falla (el authTag de GCM no valida)', () => {
-    const cifrado = encryptField('secreto');
+  it('un heredado ilegible (clave rotada) NO lanza: degrada y avisa por el log', () => {
+    // Reventar aquí tumbaría la ficha completa del contacto por un único campo ilegible.
+    const almacenado = heredadoCifrado('secreto', CLAVE_A);
     (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = CLAVE_B;
-    expect(() => decryptField(cifrado)).toThrow();
+
+    expect(fromStoredValue(almacenado)).toBe(almacenado);
+    expect(console.warn).toHaveBeenCalled();
   });
 
-  it('sin DATA_ENC_KEY configurada, cifrar lanza con un mensaje accionable', () => {
+  it('un heredado sin clave para leerlo NO lanza: degrada y avisa por el log', () => {
+    const almacenado = heredadoCifrado('secreto', CLAVE_A);
     (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = undefined;
-    expect(() => encryptField('algo')).toThrow(/DATA_ENC_KEY/);
+
+    expect(fromStoredValue(almacenado)).toBe(almacenado);
+    expect(console.warn).toHaveBeenCalled();
   });
 
-  it('los helpers opcionales tratan null/undefined sin tocar la clave', () => {
+  // ─── Opcionales ───────────────────────────────────────────────────────────────
+
+  it('los helpers opcionales tratan null/undefined sin tocar el valor', () => {
     (env as { DATA_ENC_KEY?: string }).DATA_ENC_KEY = undefined;
-    expect(encryptOptional(null)).toBeUndefined();
-    expect(encryptOptional(undefined)).toBeUndefined();
-    expect(decryptOptional(null)).toBeNull();
-    expect(decryptOptional(undefined)).toBeNull();
+    expect(toStoredOptional(null)).toBeUndefined();
+    expect(toStoredOptional(undefined)).toBeUndefined();
+    expect(toStoredOptional('valor')).toBe('valor');
+    expect(fromStoredOptional(null)).toBeNull();
+    expect(fromStoredOptional(undefined)).toBeNull();
+    expect(fromStoredOptional('valor')).toBe('valor');
   });
 });

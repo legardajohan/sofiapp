@@ -2,6 +2,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { TagChip } from '@/features/tags/components/TagChip';
 import { SensitiveValue } from '@/features/contacts/components/SensitiveValue';
+import { OpcionChip } from '@/features/contacts/components/OpcionChip';
+import { opcionesPorKey, useContactOptions } from '@/features/contacts/hooks/useContactOptions';
 import { initials, shortTime } from '../lib/format.js';
 import type { ContactCardDTO } from '../types.js';
 
@@ -13,17 +15,41 @@ const ESTADO_LABEL: Record<string, string> = {
   perdido: 'Perdido',
 };
 
-const NIVEL_LABEL: Record<string, string> = {
-  frio: 'Frío',
-  tibio: 'Tibio',
-  caliente: 'Caliente',
-};
 
 function Field({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="truncate text-right text-xs font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Fila de un campo de catálogo (interés / objeción / rol). Va como chip de color y no como texto
+ * plano porque estos tres son los que se leen de un vistazo: el color hace que "Caliente" se
+ * reconozca sin llegar a leer la palabra. `opcion` es `undefined` si la clave guardada ya no existe
+ * en el catálogo — ahí se muestra la clave cruda antes que nada.
+ */
+function CatalogoField({
+  label,
+  keyGuardada,
+  opcion,
+}: {
+  label: string;
+  keyGuardada: string;
+  opcion: { label: string; color: string; activo: boolean } | undefined;
+}): React.ReactElement {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-right">
+        {opcion ? (
+          <OpcionChip label={opcion.label} color={opcion.color} archivada={!opcion.activo} />
+        ) : (
+          <span className="truncate text-xs font-medium text-foreground">{keyGuardada}</span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -49,6 +75,14 @@ function SensitiveField({
 }
 
 export function ContactCard({ contacto }: { contacto: ContactCardDTO }): React.ReactElement {
+  // Interés y objeción se guardan como clave del catálogo del tenant (HU-CRM-02), así que la ficha
+  // tiene que resolver su etiqueta. Incluye las opciones archivadas: un contacto clasificado antes
+  // de retirar la opción debe seguir leyéndose "Precio", no `precio`.
+  const opciones = useContactOptions();
+  const interes = opcionesPorKey(opciones.data?.interes);
+  const objeciones = opcionesPorKey(opciones.data?.objecion);
+  const roles = opcionesPorKey(opciones.data?.rol);
+
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-3">
@@ -79,10 +113,25 @@ export function ContactCard({ contacto }: { contacto: ContactCardDTO }): React.R
           oculto={!contacto.puedeVerSensibles}
         />
         {contacto.nivelInteres && (
-          <Field label="Interés" value={NIVEL_LABEL[contacto.nivelInteres] ?? contacto.nivelInteres} />
+          <CatalogoField
+            label="Interés"
+            keyGuardada={contacto.nivelInteres}
+            opcion={interes.get(contacto.nivelInteres)}
+          />
         )}
         {contacto.objecionPrincipal && (
-          <Field label="Objeción" value={contacto.objecionPrincipal} />
+          <CatalogoField
+            label="Objeción"
+            keyGuardada={contacto.objecionPrincipal}
+            opcion={objeciones.get(contacto.objecionPrincipal)}
+          />
+        )}
+        {contacto.rolContacto && (
+          <CatalogoField
+            label="Rol"
+            keyGuardada={contacto.rolContacto}
+            opcion={roles.get(contacto.rolContacto)}
+          />
         )}
         <Field label="Cliente desde" value={shortTime(contacto.createdAt)} />
       </dl>

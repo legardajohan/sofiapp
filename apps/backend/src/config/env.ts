@@ -16,10 +16,11 @@ const EnvSchema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)')
     .optional(),
-  // Cifrado en reposo de los datos personales del contacto (HU-CRM-02): correo, documento, notas y
-  // atributos sensibles. Clave SEPARADA de la de los tokens de Meta a propósito: rotar una no debe
-  // obligar a rotar la otra. Opcional como aquella — el arranque no revienta sin ella, pero el
-  // primer intento de guardar un dato sensible lanza. Generar con `openssl rand -hex 32`.
+  // Cifrado en reposo de los datos personales del contacto (HU-CRM-02). **Ya no se usa para
+  // escribir**: el cifrado está desactivado y los campos se guardan en claro (ver
+  // `utils/field-crypto.util`). Sigue aquí para poder LEER lo que quedó cifrado en bases donde sí
+  // llegó a escribirse; sin ella, esos valores heredados se devuelven ilegibles pero nada falla.
+  // Clave SEPARADA de la de los tokens de Meta: rotar una no obliga a rotar la otra.
   DATA_ENC_KEY: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)')

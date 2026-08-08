@@ -18,8 +18,13 @@ import { toMessageResponse, type IMessageSource } from '../conversation/conversa
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import { assertOpcionesValidas } from '../contact-option/contact-option.service.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
-import { decryptField, decryptOptional, encryptField } from '../../utils/field-crypto.util.js';
+import {
+  fromStoredOptional,
+  fromStoredValue,
+  toStoredValue,
+} from '../../utils/field-crypto.util.js';
 import { MASK_VALOR, maskCorreo, maskDocumento } from '../../utils/mask.util.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type {
@@ -92,13 +97,13 @@ interface IClienteLean extends ICliente {
   createdAt: Date;
 }
 
-/** Un atributo sensible se descifra solo para quien puede verlo; al resto le llega el marcador. */
+/** El valor de un atributo sensible solo sale para quien puede verlo; al resto le llega la máscara. */
 function toAtributoResponse(a: IAtributoPersonalizado, puedeVer: boolean): IAtributoResponse {
   const oculto = a.sensible && !puedeVer;
   return {
     key: a.key,
     label: a.label,
-    valor: oculto ? MASK_VALOR : a.sensible ? decryptField(a.valor) : a.valor,
+    valor: oculto ? MASK_VALOR : a.sensible ? fromStoredValue(a.valor) : a.valor,
     sensible: a.sensible,
     oculto,
   };
@@ -109,10 +114,11 @@ function toContactCard(
   tagMap: Map<string, ITagResponse> = new Map(),
   puedeVerSensibles = false,
 ): IContactCardResponse {
-  // Se descifra siempre y se enmascara después: enmascarar el texto cifrado no diría nada útil
-  // (ni siquiera el dominio del correo), que es justo lo que la máscara pretende conservar.
-  const correo = decryptOptional(c.correoEnc);
-  const documento = decryptOptional(c.documentoEnc);
+  // Se resuelve el valor legible primero y se enmascara después: enmascarar un valor heredado aún
+  // cifrado no diría nada útil (ni siquiera el dominio del correo), que es justo lo que la máscara
+  // pretende conservar.
+  const correo = fromStoredOptional(c.correoEnc);
+  const documento = fromStoredOptional(c.documentoEnc);
 
   return {
     id: String(c._id),
@@ -149,17 +155,17 @@ export function toResumenResponse(c: Pick<IClienteLean, 'resumenIA' | 'ultimoMen
 }
 
 /**
- * El `correo` extraído por IA se guarda cifrado desde HU-CRM-02 y se enmascara con la misma regla
- * que el correo manual: tenerlo en claro al lado de su gemelo cifrado haría decorativo el cifrado.
- * `decryptOptional` devuelve tal cual los valores sin marcador, así que las extracciones guardadas
- * antes de este feature siguen leyéndose sin migración.
+ * El `correo` extraído por IA se enmascara con la misma regla que el correo manual: es el mismo dato
+ * personal y no puede quedar a la vista solo por venir del modelo. `fromStoredOptional` resuelve
+ * tanto el valor en claro como una extracción heredada que quedó cifrada, así que no hace falta
+ * migrar nada.
  */
 export function toDatosExtraidosResponse(
   datos: IDatosExtraidos | undefined,
   puedeVerSensibles = false,
 ): IDatosExtraidosResponse | null {
   if (!datos) return null;
-  const correo = decryptOptional(datos.correo);
+  const correo = fromStoredOptional(datos.correo);
   return {
     nombreCompleto: datos.nombreCompleto,
     correo: correo === null ? null : puedeVerSensibles ? correo : maskCorreo(correo),
@@ -213,13 +219,19 @@ export async function getContactHistory(
 // ─── Edición de la ficha del contacto (HU-CRM-02) ───────────────────────────────
 
 /** Lo que el `AuditEvent` guarda en lugar del valor real de un campo sensible. */
-const SENSIBLE_MARKER = '[cifrado]';
+const SENSIBLE_MARKER = '[oculto]';
 
 /** Campos simples, no sensibles: van al documento tal cual y a la auditoría con su valor real. */
-const CAMPOS_SIMPLES = ['nombre', 'nivelInteres', 'objecionPrincipal', 'rolContacto'] as const;
+const CAMPOS_SIMPLES = [
+  'nombre',
+  'telefono',
+  'nivelInteres',
+  'objecionPrincipal',
+  'rolContacto',
+] as const;
 
-/** Campos sensibles y la columna cifrada donde se persisten. */
-const CAMPOS_CIFRADOS = [
+/** Campos sensibles y la columna (sufijo `Enc`, hoy en claro) donde se persisten. */
+const CAMPOS_SENSIBLES = [
   ['correo', 'correoEnc'],
   ['documento', 'documentoEnc'],
 ] as const;
@@ -270,6 +282,16 @@ export async function updateCliente(
     throw new AppError('No tienes permiso para editar los datos sensibles del contacto.', 403);
   }
 
+  // Interés, objeción y rol dejaron de tener `enum` en el schema (HU-CRM-02: son catálogos que cada
+  // empresa administra), así que esta es la comprobación que impide escribir una clave inventada o
+  // una de otro tenant. Va ANTES del `$set`, con el resto de validaciones: el parche es
+  // todo-o-nada, y una opción inválida no puede dejar guardado medio formulario.
+  await assertOpcionesValidas(tenantId, {
+    interes: dto.nivelInteres,
+    objecion: dto.objecionPrincipal,
+    rol: dto.rolContacto,
+  });
+
   const $set: Record<string, unknown> = {};
   const $unset: Record<string, unknown> = {};
   const antes: Record<string, unknown> = {};
@@ -284,16 +306,16 @@ export async function updateCliente(
     else $set[campo] = valor;
   }
 
-  for (const [campo, columna] of CAMPOS_CIFRADOS) {
+  for (const [campo, columna] of CAMPOS_SENSIBLES) {
     const valor = dto[campo];
     if (valor === undefined) continue;
     // La bitácora registra QUE cambió, nunca a qué: `audit_events` no tiene gate por subrol, así
-    // que volcar ahí el antes/después en claro reabriría por detrás el agujero que este feature
-    // viene a cerrar.
+    // que volcar ahí el antes/después reabriría por detrás el agujero que este feature viene a
+    // cerrar.
     antes[campo] = cliente[columna] ? SENSIBLE_MARKER : null;
     despues[campo] = valor === null ? null : SENSIBLE_MARKER;
     if (valor === null) $unset[columna] = '';
-    else $set[columna] = encryptField(valor);
+    else $set[columna] = toStoredValue(valor);
   }
 
   if (dto.atributos !== undefined) {
@@ -301,7 +323,7 @@ export async function updateCliente(
       key: a.key,
       label: a.label,
       sensible: a.sensible,
-      valor: a.sensible ? encryptField(a.valor) : a.valor,
+      valor: a.sensible ? toStoredValue(a.valor) : a.valor,
     }));
     antes['atributos'] = resumirAtributos(atributosActuales);
     despues['atributos'] = resumirAtributos(dto.atributos);
@@ -441,11 +463,11 @@ export async function extractContactData(
   // está viendo un dato que el cliente dio (p. ej. un fijo alterno) o su propio WhatsApp.
   const telefonoDictado = data.telefono;
   const telefonoOrigen: TelefonoOrigen = telefonoDictado === null ? 'whatsapp' : 'conversacion';
-  // El correo se persiste **cifrado** (HU-CRM-02): es el mismo dato personal que el correo manual y
-  // no puede quedarse en claro solo por venir del modelo.
+  // El correo pasa por el mismo camino de persistencia que el correo manual (HU-CRM-02): es el mismo
+  // dato personal y queda bajo el mismo gate por subrol al leerlo.
   const datosExtraidos: IDatosExtraidos = {
     nombreCompleto: data.nombreCompleto,
-    correo: data.correo === null ? null : encryptField(data.correo),
+    correo: data.correo === null ? null : toStoredValue(data.correo),
     telefono: telefonoDictado ?? cliente.telefono,
     telefonoOrigen,
     extraidoAt: new Date(),

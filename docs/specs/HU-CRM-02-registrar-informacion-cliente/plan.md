@@ -3,6 +3,12 @@
 > El QUÉ está en `spec.md`; la ejecución en `tasks.md`. Aquí van rutas exactas, contratos y el
 > orden en que hay que tocar las cosas.
 
+> ⚠️ **Desactualizado en un punto (2026-08-03):** todo lo que este plan dice sobre **cifrar** los
+> datos sensibles ya no aplica — `AES-256-GCM`, `DATA_ENC_KEY` obligatoria en `.env`, el
+> `encryptField` de `field-crypto.util`. Los campos se guardan **en claro**; solo queda el camino de
+> lectura del marcador `enc:v1:`. Ver la nota de `spec.md` y `utils/field-crypto.util`. El resto del
+> plan (rutas, contratos, gate por subrol, auditoría, UI) sigue siendo la referencia válida.
+
 ## Archivos a crear
 
 ```

@@ -104,9 +104,10 @@ piden confirmación al borrarse.
 6. Un `Tag` pertenece a exactamente un `Tenant`, y una conversación solo puede llevar etiquetas
    de su propio tenant (validado antes de escribir en `setConversationTags`).
 7. Una `ContactNote` pertenece a exactamente un `Tenant` y su `clienteId` es del mismo tenant
-   (validado antes de escribir en `createNota`). Su texto se persiste **cifrado** y solo lo leen los
-   subroles autorizados. No se edita ni se borra: es un asiento del historial (HU-CRM-02).
+   (validado antes de escribir en `createNota`). Solo la leen los subroles autorizados. No se edita
+   ni se borra: es un asiento del historial (HU-CRM-02).
 8. Un dato sensible del contacto (`correoEnc`, `documentoEnc`, `atributos[].valor` con
-   `sensible: true`) **nunca** se persiste en claro, ni siquiera en `audit_events`, donde se guarda
-   como `"[cifrado]"`. Editarlo exige subrol autorizado; leerlo sin él devuelve el valor
-   enmascarado, nunca vacío (HU-CRM-02, ADR 0006).
+   `sensible: true`) **nunca** sale hacia quien no puede verlo, ni por la API ni por
+   `audit_events`, donde se guarda como `"[oculto]"`. Editarlo exige subrol autorizado; leerlo sin
+   él devuelve el valor enmascarado, nunca vacío (HU-CRM-02, ADR 0006). El cifrado en reposo está
+   desactivado: en la base el valor está en claro (ver `docs/data-model.md`).

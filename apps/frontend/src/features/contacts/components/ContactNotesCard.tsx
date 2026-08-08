@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { shortTime } from '@/features/inbox/lib/format';
 import { useCreateNota, useNotas } from '../hooks/useNotas.js';
 import { esSinPermiso } from '../lib/errors.js';
+import { fechaCompleta, fechaHora } from '../lib/fecha.js';
 
 interface Props {
   clienteId: string;
@@ -75,7 +75,13 @@ export function ContactNotesCard({
                 {nota.texto}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {nota.autor.nombre ?? 'Usuario eliminado'} · {shortTime(nota.createdAt)}
+                <span className="font-medium text-foreground/70">
+                  {nota.autor.nombre ?? 'Usuario eliminado'}
+                </span>
+                {' · '}
+                <time dateTime={nota.createdAt} title={fechaCompleta(nota.createdAt)}>
+                  {fechaHora(nota.createdAt)}
+                </time>
               </p>
             </li>
           ))}
@@ -101,7 +107,10 @@ export function ContactNotesCard({
           disabled={!puedeGuardar}
         >
           {crear.isPending ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Guardando…
+            </>
           ) : (
             'Agregar nota'
           )}

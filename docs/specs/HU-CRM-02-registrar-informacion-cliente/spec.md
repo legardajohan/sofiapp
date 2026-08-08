@@ -6,14 +6,22 @@
 
 **Estado:** implementado
 
+> **Cambio posterior (2026-08-03) — el cifrado en reposo queda DESACTIVADO.** `DATA_ENC_KEY` es una
+> variable opcional y sin ella cualquier guardado de un dato sensible respondía `500`: el asesor
+> solo veía "error interno" al registrar un correo o una nota. Los campos (`correoEnc`,
+> `documentoEnc`, `textoEnc`, `atributos[].valor` sensible y `datosExtraidos.correo`) pasan a
+> persistirse **en claro**; los nombres con sufijo `Enc` se conservan para no migrar documentos.
+> Afecta al **criterio 4** y a la parte de cifrado del **9**; **todo lo demás sigue vigente tal
+> cual**, en particular el gate por subrol (criterios 5, 6, 7) y la auditoría (8), que nunca
+> dependieron del cifrado. Detalle en `utils/field-crypto.util`, `docs/data-model.md` y ADR 0006.
+
 ## Objetivo
 
 Permitir que un **Administrador**, desde la conversación de la bandeja, **registre y edite** la
 información relevante del contacto —correo, documento, nivel de interés, objeción, rol de contacto,
-atributos personalizados— y **deje notas** de seguimiento. Los datos personales quedan **cifrados en
-reposo** (AES-256-GCM) y **solo se muestran en claro a los subroles autorizados**; el resto los ve
-enmascarados. Todo cambio deja rastro en `AuditEvent` sin que la propia bitácora filtre lo que el
-cifrado protege.
+atributos personalizados— y **deje notas** de seguimiento. Los datos personales **solo se muestran a
+los subroles autorizados**; el resto los ve enmascarados. Todo cambio deja rastro en `AuditEvent`
+sin que la propia bitácora filtre lo que el gate protege.
 
 Con esto el módulo **M02 — Gestión de prospectos** deja de depender de lo que la IA logre extraer:
 el asesor puede corregirla y completarla a mano.
@@ -60,8 +68,8 @@ Incluye:
     `contact_notes`: `POST` y `GET /api/clientes/:clienteId/notas`.
   - Campos nuevos en `Cliente`: `correoEnc`, `documentoEnc` y `atributos[]` (atributos
     personalizados con metadato `sensible` por campo).
-  - Cifrado de campo con AES-256-GCM y clave propia (`DATA_ENC_KEY`), con un marcador de versión
-    que permite leer los documentos ya guardados en texto plano sin migración.
+  - Helper único de persistencia de los campos sensibles (`utils/field-crypto.util`), hoy sin
+    cifrado y con lectura retrocompatible del marcador `enc:v1:`.
   - Enmascarado en la respuesta para quien no está autorizado, y `403` al intentar **escribir** un
     campo sensible sin permiso.
   - Registro en `AuditEvent` de `cliente.update` y `contact-note.create`, con los valores sensibles
@@ -101,6 +109,11 @@ Fuera de alcance (otros features / fases):
    con la ficha actualizada (`IContactCardResponse`). La semántica de parche es explícita: un campo
    **ausente** no se toca; un campo enviado como **`null`** se borra. Sin esa distinción no habría
    forma de vaciar un correo mal escrito.
+
+   **Excepción: `nombre` no se puede vaciar** (`null` o cadena vacía → `400`). Es lo que identifica
+   al contacto en la bandeja; borrarlo lo deja irrecuperable para quien lo busque después. Se
+   corrige, no se borra. Que un contacto llegue *sin* nombre desde WhatsApp sigue siendo válido: lo
+   que se prohíbe es dejarlo vacío a mano.
 2. El endpoint **rechaza** con `400` cualquier intento de tocar `telefono`, `metaUserId`,
    `estadoComercial`, `tagIds`, `asesorId`, `tenantId` o `customFields`. El schema Zod es
    `.strict()`: la clave desconocida falla **en el borde**, antes del controller, y no se ignora en
@@ -113,12 +126,11 @@ Fuera de alcance (otros features / fases):
    resuelto a `{ id, nombre }` — la tarjeta muestra "Ana Gómez", no un `ObjectId`. La hidratación
    del autor es **en lote** (`findUsersByIds`, el mismo patrón de HU-OMNI-02 y HU-CRM-01): una
    consulta por página, no una por nota.
-4. **Cifrado en reposo.** `correo`, `documento`, el `texto` de cada nota y el `valor` de todo
-   atributo marcado `sensible` se persisten cifrados con AES-256-GCM bajo una clave propia
-   (`DATA_ENC_KEY`, distinta de la de los tokens de Meta para que rotar una no obligue a rotar la
-   otra). Es verificable leyendo las colecciones en crudo: **ningún documento contiene el texto
-   claro**. Los valores llevan el prefijo de versión `enc:v1:`, que es lo que permite distinguir un
-   dato cifrado de uno legado en plano y leer ambos sin migración.
+4. ~~**Cifrado en reposo.**~~ **Anulado el 2026-08-03** (ver la nota de arriba). `correo`,
+   `documento`, el `texto` de cada nota y el `valor` de todo atributo `sensible` se persisten **en
+   claro**: dependían de `DATA_ENC_KEY` y sin ella el guardado moría con un `500`. La lectura sigue
+   entendiendo el prefijo `enc:v1:` de lo que sí se escribió cifrado, así que no hubo migración.
+   Reactivarlo es un cambio de un solo archivo (`utils/field-crypto.util`).
 5. **Gate por subrol en lectura.** Solo un `admin` con `subrol` `director` o `manager` —**o sin
    `subrol`**, por retrocompatibilidad: los usuarios que existen hoy no tienen ninguno y no pueden
    perder acceso de golpe— recibe los valores sensibles en claro. Para `coordinator` y `secretary`
@@ -135,18 +147,17 @@ Fuera de alcance (otros features / fases):
    consecuencia de producto asumida a conciencia: una nota de seguimiento es texto libre donde
    acaba cualquier cosa (condiciones de pago, datos de un tercero, un motivo personal), y no hay
    forma de enmascarar selectivamente prosa.
-8. **La auditoría no filtra lo que el cifrado protege.** El `AuditEvent` de `cliente.update` guarda
+8. **La auditoría no filtra lo que el gate protege.** El `AuditEvent` de `cliente.update` guarda
    en `antes`/`despues` el valor real de los campos **no** sensibles, y para los sensibles solo el
-   **nombre del campo** con el marcador `'[cifrado]'`. Guardar el antes/después en claro dejaría
-   una copia legible de todo lo cifrado en una colección sin control de acceso por subrol — el
-   agujero exacto que este feature viene a cerrar. `contact-note.create` registra el id de la nota y
-   el `clienteId`, nunca su texto.
-9. **`datosExtraidos.correo` deja de estar en claro.** El correo que la IA extrae (HU-OMNI-03) se
-   persiste cifrado con el mismo helper y se enmascara con la misma regla que el correo manual.
-   Cerrar este hueco es parte del criterio 4, no un extra: tener el mismo dato personal en texto
-   plano al lado de su gemelo cifrado haría decorativo el cifrado. La lectura es
-   retrocompatible —un valor sin el prefijo `enc:v1:` se devuelve tal cual—, así que las
-   extracciones ya guardadas siguen funcionando sin script de migración.
+   **nombre del campo** con el marcador `'[oculto]'`. Guardar el antes/después dejaría una copia
+   legible de todo lo protegido en una colección sin control de acceso por subrol — el agujero
+   exacto que este feature viene a cerrar. `contact-note.create` registra el id de la nota y el
+   `clienteId`, nunca su texto.
+9. **`datosExtraidos.correo` queda bajo la misma regla que el correo manual.** El correo que la IA
+   extrae (HU-OMNI-03) pasa por el mismo helper de persistencia y se **enmascara** igual al leerlo:
+   tener el mismo dato personal accesible por un camino distinto haría decorativo el gate. La
+   lectura es retrocompatible con las extracciones que quedaron cifradas, así que no hizo falta
+   script de migración.
 10. **UI:** la ficha del contacto (`ContactPanel`) ofrece "Editar datos", que abre un diálogo con
     todos los campos editables y un editor de atributos personalizados (añadir, quitar, renombrar,
     marcar como sensible). Resuelto en **claro y oscuro** con los tokens semánticos, con estados de
@@ -169,6 +180,43 @@ Fuera de alcance (otros features / fases):
     existencia del recurso ajeno. **Test de aislamiento en verde** para los cuatro casos.
 14. `pnpm --filter @sofiapp/api typecheck` y `pnpm --filter @sofiapp/api test` en verde;
     `pnpm --filter @sofiapp/web build`, `lint` y `test` sin errores.
+
+15. **Atributos personalizados sin duplicados ni a medias.** El schema rechaza con `400` un atributo
+    sin `label` o sin `valor`, dos atributos con la misma `key`, y dos con el mismo `label`
+    comparando sin mayúsculas ni tildes ("Colegio" y "colegio" son el mismo atributo). El máximo de
+    30 se mantiene. En la UI cada regla se avisa en la fila que la incumple **antes** de enviar, y
+    una fila a medio escribir ya no se descarta en silencio al guardar: quien tecleó algo y ve la
+    fila desaparecer no sabe si se guardó mal o si nunca existió. Una fila **en blanco** sí se
+    descarta: es una que se agregó y no se llegó a usar, y ahí no hay nada que perder.
+
+16. **Guardar cambios cuenta lo que está pasando.** El botón pasa a "Guardando…" y queda
+    deshabilitado mientras dura la petición (un segundo clic no dispara un segundo `PATCH`), el
+    éxito se confirma con un toast y el cierre del diálogo, y el fallo deja el diálogo **abierto con
+    todo lo escrito intacto** y un mensaje junto al botón, además del toast. Volver a teclear un
+    formulario porque se cayó la red no es una opción aceptable.
+
+17. **`telefono` es editable desde la ficha.** Sale de la lista de campos prohibidos del criterio 2:
+    se corrige desde el formulario, en el formato del webhook (solo dígitos con indicativo, 7–15,
+    sin `+` ni separadores), y **no se puede vaciar** — es obligatorio en el documento y es por donde
+    se contacta a la persona. **Límite conocido y asumido:** en un contacto de WhatsApp
+    `upsertByMetaUser` reescribe `telefono` con el número desde el que llega cada mensaje, así que la
+    edición manual dura hasta el siguiente mensaje entrante. Donde manda de verdad es en los canales
+    sin webhook. El formulario lo dice en el propio campo en vez de dejar que el asesor lo descubra.
+
+18. **Las opciones de los tres catálogos llevan color.** `contact_options` gana `color` (`#RRGGBB`),
+    editable por opción desde el mismo panel que las crea y renombra. El interés se siembra como un
+    semáforo térmico —frío azul, tibio ámbar, caliente rojo— y las opciones nuevas nacen en gris
+    hasta que alguien les da un significado. El color se elige de una gama de ocho, los mismos hex
+    que ofrece el selector de etiquetas: que el rojo de "Caliente" y el de una etiqueta en riesgo
+    sean el mismo rojo es lo que hace que el color signifique algo en todo el CRM. Se pinta siempre
+    a través de `tagColors` (contraste 4.5:1 garantizado en claro y oscuro), nunca crudo. Los tres
+    catálogos —interés, objeción y rol— comparten exactamente el mismo CRUD.
+
+19. **Las notas llevan autor, fecha y hora.** La hora es parte del dato en un asiento del historial:
+    con solo la fecha no se puede reconstruir el orden de una negociación dentro del mismo día. Por
+    eso las notas no reutilizan `shortTime` de la bandeja, que descarta la hora en cuanto la fila no
+    es de hoy; usan su propio formato ("Hoy, 14:32" / "5 ago, 09:10") con la fecha completa en el
+    `title`.
 
 ## Nota sobre `atributos[]` vs `customFields` (decisión de datos)
 

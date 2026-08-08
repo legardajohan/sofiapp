@@ -1,54 +1,77 @@
 import { env } from '../config/env.js';
-import { decryptWith, encryptWith } from './crypto.util.js';
+import { decryptWith } from './crypto.util.js';
+import { logger } from './logger.js';
 
 /**
- * Cifrado de campo para los datos personales del contacto (HU-CRM-02): correo, documento, texto de
- * las notas y el valor de los atributos marcados como sensibles.
+ * Persistencia de los datos personales del contacto (HU-CRM-02): correo, documento, texto de las
+ * notas y el valor de los atributos marcados como sensibles.
  *
- * Protege el contenido frente a un volcado de la base, un backup extraviado o un acceso directo a
- * Atlas. **No** sustituye al control de acceso por subrol (eso lo hace `authorize-subrol`), ni
- * protege frente a quien tenga el proceso Node, que sostiene la clave en memoria.
+ * **El cifrado en reposo está DESACTIVADO: estos campos se guardan en claro.** Dependía de
+ * `DATA_ENC_KEY`, una variable opcional, y sin ella cualquier intento de guardar un correo, un
+ * documento o una nota moría con un 500 — se prefirió que el CRM funcione siempre a que dependa de
+ * una clave de despliegue. Las columnas conservan el sufijo `Enc` (`correoEnc`, `documentoEnc`,
+ * `textoEnc`) para no arrastrar una migración de datos ni de índices.
+ *
+ * Lo que sigue protegiendo el dato es el **control de acceso por subrol** (`authorize-subrol` + el
+ * enmascarado de `mask.util`), que nunca dependió del cifrado. Lo que se pierde es la protección
+ * frente a un volcado de la base o un backup extraviado; queda anotado en `docs/adr/0006`.
+ *
+ * Reactivarlo es un cambio de **un solo archivo**: `toStoredValue` vuelve a cifrar. El camino de
+ * lectura ya entiende ambos formatos, así que no haría falta migrar lo escrito en claro.
  */
 
 /**
- * Marcador de versión. Es lo que permite distinguir un valor cifrado de uno legado en texto plano
- * —`datosExtraidos.correo` se guardó así hasta HU-CRM-02— y por tanto leer ambos sin script de
- * migración. Un futuro `enc:v2:` podría convivir con este sin ambigüedad.
+ * Marcador de versión de los valores que SÍ se escribieron cifrados, mientras el cifrado estuvo
+ * activo. Ya no se produce, pero sigue siendo lo que distingue un valor cifrado de uno en claro al
+ * leer, y por eso ambos conviven sin script de migración.
  */
 const MARKER = 'enc:v1:';
-
-function getKey(): Buffer {
-  if (!env.DATA_ENC_KEY) {
-    throw new Error(
-      'DATA_ENC_KEY no está configurada: no se pueden guardar datos sensibles del contacto.',
-    );
-  }
-  return Buffer.from(env.DATA_ENC_KEY, 'hex');
-}
 
 export function isEncrypted(value: string): boolean {
   return value.startsWith(MARKER);
 }
 
-/** Cifra y antepone el marcador. Lanza si `DATA_ENC_KEY` no está configurada. */
-export function encryptField(plaintext: string): string {
-  return MARKER + encryptWith(getKey(), plaintext);
+/**
+ * Valor tal y como se persiste. Hoy es la identidad; existe para que cada punto de escritura de un
+ * dato sensible siga siendo explícito y para que reactivar el cifrado no obligue a tocar services.
+ */
+export function toStoredValue(plaintext: string): string {
+  return plaintext;
 }
 
 /**
- * Descifra un valor con marcador. Un valor **sin** marcador se devuelve tal cual: es un dato
- * anterior a HU-CRM-02 y sigue siendo legible, no un error.
+ * Valor tal y como se lee. Lo normal es que venga en claro; los que llevan el marcador se
+ * escribieron mientras el cifrado estaba activo y se descifran aquí.
+ *
+ * **Nunca lanza.** Un fallo de descifrado (clave ausente, rotada o dato corrupto) degrada a
+ * devolver lo almacenado y dejar rastro en el log: reventar aquí tumbaría la ficha completa del
+ * contacto —o toda la lista de notas— por un único campo ilegible.
  */
-export function decryptField(stored: string): string {
+export function fromStoredValue(stored: string): string {
   if (!isEncrypted(stored)) return stored;
-  return decryptWith(getKey(), stored.slice(MARKER.length));
+
+  if (!env.DATA_ENC_KEY) {
+    logger.warn(
+      'Valor heredado cifrado y sin DATA_ENC_KEY para leerlo: se devuelve sin descifrar.',
+    );
+    return stored;
+  }
+
+  try {
+    return decryptWith(Buffer.from(env.DATA_ENC_KEY, 'hex'), stored.slice(MARKER.length));
+  } catch (err) {
+    logger.warn('No se pudo descifrar un valor heredado (¿DATA_ENC_KEY rotada?).', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return stored;
+  }
 }
 
 /** Azúcar para los campos opcionales, que son casi todos los de este feature. */
-export function encryptOptional(plaintext: string | null | undefined): string | undefined {
-  return plaintext === null || plaintext === undefined ? undefined : encryptField(plaintext);
+export function toStoredOptional(plaintext: string | null | undefined): string | undefined {
+  return plaintext === null || plaintext === undefined ? undefined : toStoredValue(plaintext);
 }
 
-export function decryptOptional(stored: string | null | undefined): string | null {
-  return stored === null || stored === undefined ? null : decryptField(stored);
+export function fromStoredOptional(stored: string | null | undefined): string | null {
+  return stored === null || stored === undefined ? null : fromStoredValue(stored);
 }

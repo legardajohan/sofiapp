@@ -102,11 +102,6 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
               clienteId={history.contacto.id}
               puedeVerSensibles={history.contacto.puedeVerSensibles}
             />
-            <ContactEditDialog
-              contacto={history.contacto}
-              open={editando}
-              onOpenChange={setEditando}
-            />
             <ContactExtractCard
               datos={history.datosExtraidos}
               pending={extract.isPending}
@@ -124,6 +119,18 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
             />
           </div>
           <ConversationThread messages={history.mensajes.data} isLoading={false} />
+
+          {/* Fuera del contenedor con scroll: Radix lo lleva a un portal, así que anidarlo dentro
+              de un `overflow-y-auto` solo confunde al leer el árbol. */}
+          {/* La extracción de IA (HU-OMNI-03) alimenta el formulario: propone lo que el contacto
+              todavía no tiene registrado, sin pisar lo ya guardado. */}
+          <ContactEditDialog
+            contacto={history.contacto}
+            datosExtraidos={history.datosExtraidos}
+            open={editando}
+            onOpenChange={setEditando}
+          />
+
         </div>
       )}
     </aside>
