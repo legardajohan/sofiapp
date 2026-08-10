@@ -375,3 +375,191 @@ describe('KnowledgeBasePage — presets eliminados (HU-KB-06)', () => {
     expect(screen.queryByRole('button', { name: /Horarios y ubicación/ })).toBeNull();
   });
 });
+
+/**
+ * HU-KB-07 — los dos modos del modal, sobre la página real.
+ *
+ * `COMPLEMENTARIA` es la única categoría con schema registrado en esta HU, así que es la única que
+ * puede abrir el formulario guiado. El resto sigue en modo legado hasta HU-KB-08 y siguientes.
+ */
+describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
+  const COMPLEMENTARIA = 'Información Complementaria';
+
+  async function abrir(
+    user: ReturnType<typeof userEvent.setup>,
+    nombre: RegExp,
+  ): Promise<HTMLElement> {
+    await user.click(await screen.findByRole('button', { name: nombre }));
+    return screen.findByRole('dialog');
+  }
+
+  it('un documento con texto libre abre el textarea de siempre', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: LIBRE, contenido: 'Convenio con Acme S.A.' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Convenios con empresas/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Convenio con Acme S.A.');
+    // Nada del formulario guiado se cuela en el modo legado.
+    expect(within(dialog).queryByLabelText('Información adicional')).toBeNull();
+  });
+
+  it('el tope del modo legado subió a 10.000', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE })]));
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Convenios con empresas/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveAttribute('maxlength', '10000');
+    expect(within(dialog).getByText(/\/ 10\.000/)).toBeInTheDocument();
+  });
+
+  it('guardar en modo legado sigue enviando solo el contenido, sin estructura', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE, contenido: 'v1' })]));
+    mockUpdate.mockResolvedValue(makeDoc({ titulo: LIBRE, contenido: 'v2' }));
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Convenios con empresas/);
+    await user.type(within(dialog).getByLabelText('Contenido'), ' corregido');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    expect(mockUpdate).toHaveBeenCalledWith(`id-${LIBRE}`, { contenido: 'v1 corregido' });
+  });
+
+  it('una categoría con texto libre NO se convierte en formulario: la retrocompatibilidad manda', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: COMPLEMENTARIA, contenido: 'Texto que ya escribí a mano.' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Editar ${COMPLEMENTARIA}`));
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Texto que ya escribí a mano.');
+    expect(within(dialog).queryByLabelText('Información adicional')).toBeNull();
+  });
+
+  it('la misma categoría vacía SÍ abre el formulario guiado', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: COMPLEMENTARIA, contenido: '', estadoIndexacion: 'pendiente' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${COMPLEMENTARIA}`));
+
+    expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+    expect(within(dialog).getByText('Texto que leerá la IA')).toBeInTheDocument();
+  });
+
+  it('una categoría SIN schema registrado sigue en legado aunque esté vacía', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    // «Horarios y ubicación» llega como preset virtual: vacío, pero sin schema hasta HU-KB-09.
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Información adicional')).toBeNull();
+  });
+
+  it('el contador global mide el texto SERIALIZADO, no lo tecleado en un campo', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: COMPLEMENTARIA, contenido: '', estadoIndexacion: 'pendiente' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${COMPLEMENTARIA}`));
+    await user.type(within(dialog).getByLabelText('Información adicional'), 'Hola');
+
+    // 4 tecleados + los 25 del encabezado «## Información adicional\n» que añade el serializer.
+    expect(within(dialog).getByText('29 / 10.000')).toBeInTheDocument();
+  });
+
+  it('guardar en estructurado envía contenido Y estructura en el mismo payload', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: COMPLEMENTARIA, contenido: '', estadoIndexacion: 'pendiente' })]),
+    );
+    mockUpdate.mockResolvedValue(makeDoc({ titulo: COMPLEMENTARIA }));
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${COMPLEMENTARIA}`));
+    await user.type(within(dialog).getByLabelText('Información adicional'), 'Cerramos en enero');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    expect(mockUpdate).toHaveBeenCalledWith(`id-${COMPLEMENTARIA}`, {
+      contenido: '## Información adicional\nCerramos en enero',
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'generico',
+        campos: {},
+        adicional: 'Cerramos en enero',
+      },
+    });
+  });
+
+  it('un documento que YA tiene estructura abre guiado y la precarga', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({
+          titulo: LIBRE,
+          contenido: '## Información adicional\nLo de siempre',
+          estructura: {
+            schemaVersion: 1,
+            schemaId: 'generico',
+            campos: {},
+            adicional: 'Lo de siempre',
+          },
+        }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Convenios con empresas/);
+
+    // Abre guiado por su `estructura`, aunque su título no esté en el registry.
+    expect(within(dialog).getByLabelText('Información adicional')).toHaveValue('Lo de siempre');
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+  });
+
+  it('la leyenda avisa cuando solo cambió la estructura, sin prometer versión nueva', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({
+          titulo: LIBRE,
+          version: 3,
+          contenido: '## Información adicional\nHola',
+          estructura: {
+            schemaVersion: 1,
+            schemaId: 'generico',
+            campos: {},
+            adicional: 'Hola',
+          },
+        }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Convenios con empresas/);
+    expect(within(dialog).getByText(/Sin cambios por guardar/)).toBeInTheDocument();
+
+    // Un espacio al final: el texto normalizado no cambia, pero la estructura sí.
+    await user.type(within(dialog).getByLabelText('Información adicional'), ' ');
+
+    expect(
+      within(dialog).getByText(/Se guardarán tus cambios sin crear una versión nueva/),
+    ).toBeInTheDocument();
+  });
+});

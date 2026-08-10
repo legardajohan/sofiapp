@@ -16,6 +16,7 @@ import app from '../../app.js';
 import { createDocument } from './kb.service.js';
 import { createScoped } from '../../repositories/base.repository.js';
 import { KbDocument } from './kb-document.model.js';
+import type { KbEstructura } from './kb.types.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -165,18 +166,20 @@ describe('PATCH /api/kb/documents/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('contenido que excede 3000 caracteres → 400', async () => {
+  it('contenido que excede 10.000 caracteres → 400, y 10.000 exactos → 200 (HU-KB-07)', async () => {
     const tenantId = new Types.ObjectId();
     const doc = await createDocument(tenantId, { titulo: 'Largo', contenido: 'v1' });
     const token = makeToken(tenantId.toString(), 'admin');
+    const patch = (contenido: string) =>
+      request(app)
+        .patch(`/api/kb/documents/${doc.id}`)
+        .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+        .set('X-CSRF-Token', CSRF)
+        .send({ contenido });
 
-    const res = await request(app)
-      .patch(`/api/kb/documents/${doc.id}`)
-      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
-      .set('X-CSRF-Token', CSRF)
-      .send({ contenido: 'a'.repeat(3001) });
-
-    expect(res.status).toBe(400);
+    expect((await patch('a'.repeat(10_001))).status).toBe(400);
+    // El tope viejo (3.000) ya no rechaza: lo subió HU-KB-07 porque el texto es la suma de campos.
+    expect((await patch('a'.repeat(10_000))).status).toBe(200);
   });
 
   it('id con formato inválido → 400', async () => {
@@ -277,5 +280,123 @@ describe('DELETE /api/kb/documents/:id', () => {
       .set('X-CSRF-Token', CSRF);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('estructura en el borde HTTP (HU-KB-07)', () => {
+  const estructura: KbEstructura = {
+    schemaVersion: 1,
+    schemaId: 'generico',
+    campos: { nombre: { tipo: 'texto', valor: 'Acme' } },
+    adicional: 'Notas',
+  };
+
+  const post = (token: string, body: Record<string, unknown>) =>
+    request(app)
+      .post('/api/kb/documents')
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send(body);
+
+  it('POST con estructura → 201, la devuelve y el GET la lista', async () => {
+    const tenantId = new Types.ObjectId();
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await post(token, { titulo: 'Empresa', contenido: 'Nombre: Acme', estructura });
+    expect(res.status).toBe(201);
+    expect(res.body.estructura).toEqual(estructura);
+
+    const lista = await request(app).get('/api/kb/documents').set('Cookie', `token=${token}`);
+    expect(lista.body.data[0].estructura).toEqual(estructura);
+  });
+
+  it('PATCH con estructura → 200 y la devuelve', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Empresa', contenido: 'v1' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'Nombre: Acme', estructura });
+
+    expect(res.status).toBe(200);
+    expect(res.body.estructura).toEqual(estructura);
+  });
+
+  it('sobre inválido → 400 (falta `adicional`, y `schemaVersion: 0`)', async () => {
+    const tenantId = new Types.ObjectId();
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const sinAdicional = await post(token, {
+      titulo: 'A',
+      contenido: 'x',
+      estructura: { schemaVersion: 1, schemaId: 'generico', campos: {} },
+    });
+    expect(sinAdicional.status).toBe(400);
+
+    const versionCero = await post(token, {
+      titulo: 'B',
+      contenido: 'x',
+      estructura: { ...estructura, schemaVersion: 0 },
+    });
+    expect(versionCero.status).toBe(400);
+  });
+
+  it('estructura que supera el tope de tamaño → 400', async () => {
+    const tenantId = new Types.ObjectId();
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const gorda = {
+      ...estructura,
+      campos: Object.fromEntries(
+        Array.from({ length: 400 }, (_, i) => [`campo${i}`, { tipo: 'texto', valor: 'x'.repeat(100) }]),
+      ),
+    };
+
+    const res = await post(token, { titulo: 'Gorda', contenido: 'x', estructura: gorda });
+    expect(res.status).toBe(400);
+  });
+
+  it('un documento sin estructura recorre create/list/update igual que antes', async () => {
+    const tenantId = new Types.ObjectId();
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const creado = await post(token, { titulo: 'Libre', contenido: 'Texto suelto' });
+    expect(creado.status).toBe(201);
+    expect(creado.body.estructura).toBeUndefined();
+
+    const editado = await request(app)
+      .patch(`/api/kb/documents/${creado.body.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'Texto corregido' });
+
+    expect(editado.status).toBe(200);
+    expect(editado.body.version).toBe(2);
+    expect(editado.body.estructura).toBeUndefined();
+  });
+
+  it('cross-tenant: PATCH con estructura sobre un documento ajeno → 404 y no lo toca', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const doc = await createDocument(tenantA, {
+      titulo: 'Solo A',
+      contenido: 'Nombre: Acme',
+      estructura,
+    });
+    const tokenB = makeToken(tenantB.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${tokenB}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'hackeado', estructura: { ...estructura, adicional: 'hackeado' } });
+
+    expect(res.status).toBe(404);
+
+    const saved = await KbDocument.findById(doc.id).lean<{ estructura?: unknown }>();
+    expect(saved?.estructura).toEqual(estructura);
   });
 });

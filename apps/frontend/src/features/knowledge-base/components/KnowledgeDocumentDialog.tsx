@@ -6,8 +6,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { isVirtualPresetId, nextVersion } from '../lib/kb-presets.js';
-import type { IKbDocument } from '../types/index.js';
+import { hayCambios, isVirtualPresetId, nextVersion } from '../lib/kb-presets.js';
+import { emptyEstructura, modoEditor, schemaDeDocumento } from '../lib/kb-schemas.js';
+import { serializeEstructura } from '../lib/kb-serialize.js';
+import type { IKbDocument, KbEstructura } from '../types/index.js';
 import { KnowledgeUploadEditor } from './KnowledgeUploadEditor.js';
 
 /** Qué está haciendo el modal. `null` en la página = cerrado. */
@@ -17,17 +19,24 @@ export type KbDialogTarget =
 
 /**
  * Explica en una frase qué le pasará a la versión al guardar, replicando las reglas del backend.
- * Se recalcula con el texto tecleado, así que la promesa es cierta **antes** de guardar.
+ * Se recalcula con el texto vigente, así que la promesa es cierta **antes** de guardar.
  *
- * Las dos partes menos evidentes se dicen con todas las letras en vez de mostrar "v1 → v1": que el
- * primer contenido no crea versión nueva, y que guardar sin cambios no cuesta nada.
+ * Los tres casos que no se explican solos se dicen con todas las letras en vez de mostrar "v1 → v1":
+ * que el primer contenido no crea versión, que guardar sin cambios no cuesta nada, y —desde
+ * HU-KB-07— que un cambio que no altera el texto se guarda igual pero sin re-versionar.
  */
-function leyendaVersion(doc: IKbDocument, contenido: string): string {
+function leyendaVersion(doc: IKbDocument, contenido: string, estructura?: KbEstructura): string {
   if (isVirtualPresetId(doc.id)) return 'Aún sin contenido. Se guardará como v1.';
+
   const destino = nextVersion(doc, contenido);
   if (destino !== doc.version) return `Versión v${doc.version}. Al guardar pasará a v${destino}.`;
-  return doc.contenido.trim().length === 0
-    ? `Versión v${doc.version}. El primer contenido no crea una versión nueva.`
+
+  if (doc.contenido.trim().length === 0) {
+    return `Versión v${doc.version}. El primer contenido no crea una versión nueva.`;
+  }
+
+  return hayCambios(doc, contenido, estructura)
+    ? `Versión v${doc.version}. Se guardarán tus cambios sin crear una versión nueva.`
     : `Versión v${doc.version}. Sin cambios por guardar.`;
 }
 
@@ -38,16 +47,35 @@ interface DocumentDialogBodyProps {
 }
 
 /**
- * Encabezado + formulario. Es dueño del `contenido` porque lo necesitan los dos: la leyenda de
- * versión del encabezado y el textarea del editor. Al montarse con `key` por documento, cada
- * apertura del modal arranca limpia sin depender de un `useEffect` de reset.
+ * Encabezado + formulario. Es dueño de lo que se va a guardar porque el encabezado lo necesita para
+ * anticipar la versión de destino mientras se edita.
+ *
+ * En modo estructurado la fuente de verdad es la **estructura**, y el `contenido` se deriva de ella
+ * en cada render. Esa dirección es de una sola vía a propósito: dejar editar el texto derivado a
+ * mano rompería la coherencia con los campos, y a la siguiente apertura el formulario lo
+ * sobrescribiría sin avisar. La vía libre es «Información adicional».
+ *
+ * Al montarse con `key` por documento, cada apertura arranca limpia sin depender de un `useEffect`.
  */
 function DocumentDialogBody({
   doc,
   documents,
   onDone,
 }: DocumentDialogBodyProps): React.ReactElement {
-  const [contenido, setContenido] = useState(doc?.contenido ?? '');
+  const modo = modoEditor(doc);
+  const schema = schemaDeDocumento(doc);
+
+  const [contenidoLibre, setContenidoLibre] = useState(doc?.contenido ?? '');
+  const [estructura, setEstructura] = useState<KbEstructura | undefined>(() =>
+    modo === 'estructurado' && schema !== undefined
+      ? (doc?.estructura ?? emptyEstructura(schema))
+      : undefined,
+  );
+
+  const contenido =
+    estructura !== undefined && schema !== undefined
+      ? serializeEstructura(estructura, schema)
+      : contenidoLibre;
 
   return (
     <>
@@ -55,7 +83,7 @@ function DocumentDialogBody({
         <DialogTitle className="pr-6">{doc ? doc.titulo : 'Nuevo conocimiento'}</DialogTitle>
         <DialogDescription>
           {doc
-            ? leyendaVersion(doc, contenido)
+            ? leyendaVersion(doc, contenido, estructura)
             : 'Dale un nombre y pega el texto que la IA usará al responder sobre este tema.'}
         </DialogDescription>
       </DialogHeader>
@@ -63,8 +91,12 @@ function DocumentDialogBody({
       <KnowledgeUploadEditor
         doc={doc}
         documents={documents}
+        modo={modo}
+        {...(schema !== undefined ? { schema } : {})}
         contenido={contenido}
-        onContenidoChange={setContenido}
+        onContenidoChange={setContenidoLibre}
+        {...(estructura !== undefined ? { estructura } : {})}
+        onEstructuraChange={setEstructura}
         onDone={onDone}
       />
     </>

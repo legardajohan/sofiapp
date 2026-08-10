@@ -1,4 +1,11 @@
-export type { EstadoIndexacion, IKbDocument } from './domain.js';
+export type {
+  EstadoIndexacion,
+  IKbDocument,
+  KbEstructura,
+  KbFieldValue,
+  KbScheduleDay,
+  KbTriEstado,
+} from './domain.js';
 export type {
   CreateKbDocumentPayload,
   UpdateKbDocumentPayload,

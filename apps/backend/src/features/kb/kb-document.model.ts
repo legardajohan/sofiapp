@@ -23,6 +23,9 @@ const KbDocumentSchema = new Schema<IKbDocumentDocument>(
     oculto: { type: Boolean, default: false },
     proposito: { type: String, required: false },
     error: { type: String },
+    // HU-KB-07. JSON opaco para el backend: quien lo interpreta y quien deriva `contenido` a partir
+    // de él es el frontend, dueño de los schemas de campo. Sin índice: no se consulta por él.
+    estructura: { type: Schema.Types.Mixed, required: false },
   },
   { timestamps: true },
 );

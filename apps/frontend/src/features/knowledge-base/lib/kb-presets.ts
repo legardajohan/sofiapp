@@ -1,5 +1,5 @@
 import { Building2, Package, Clock, Scale, HelpCircle, FileText, type LucideIcon } from 'lucide-react';
-import type { EstadoIndexacion, IKbDocument } from '../types/index.js';
+import type { EstadoIndexacion, IKbDocument, KbEstructura } from '../types/index.js';
 
 export interface PresetMeta {
   titulo: string;
@@ -17,7 +17,7 @@ export const PRESET_META: readonly PresetMeta[] = [
   { titulo: 'Productos y servicios', proposito: 'Catálogo de lo que ofrece', obligatorio: true },
   { titulo: 'Horarios y ubicación', proposito: 'Datos de contacto', obligatorio: false },
   { titulo: 'Políticas y términos', proposito: 'Reglas, garantías, devoluciones', obligatorio: false },
-  { titulo: 'Información Complementaria', proposito: 'Texto de referencia adicional que la IA puede consultar', obligatorio: false },
+  { titulo: 'Información Complementaria', proposito: 'Datos adicionales de referencia para la IA', obligatorio: false },
 ] as const;
 
 /** Orden de prioridad con que se muestran los presets (coincide con el seed del backend). */
@@ -143,6 +143,25 @@ export function nextVersion(doc: IKbDocument, contenido: string): number {
   if (isVirtualPresetId(doc.id)) return 1;
   if (normalizeContenido(contenido) === normalizeContenido(doc.contenido)) return doc.version;
   return hasContent(doc) ? doc.version + 1 : doc.version;
+}
+
+/**
+ * `true` si guardar escribiría algo. Distingue el caso que trajo HU-KB-07: el texto para la IA no
+ * cambió, **pero la estructura sí** (reordenar una lista, corregir un espacio que se colapsa). El
+ * backend lo persiste sin re-versionar ni re-indexar, así que la leyenda no puede decir "sin
+ * cambios" ni prometer una versión nueva.
+ *
+ * La comparación de estructura es por JSON y sirve solo para el copy del modal: quien decide de
+ * verdad es `updateDocument`, que compara con `isDeepStrictEqual`.
+ */
+export function hayCambios(
+  doc: IKbDocument,
+  contenido: string,
+  estructura?: KbEstructura,
+): boolean {
+  if (normalizeContenido(contenido) !== normalizeContenido(doc.contenido)) return true;
+  if (estructura === undefined) return false;
+  return JSON.stringify(estructura) !== JSON.stringify(doc.estructura);
 }
 
 /**

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError.js';
 import { kbIndexQueue, KB_INDEX_JOB_NAME } from '../../config/queues.js';
@@ -20,6 +21,8 @@ import type {
   IKbDocument,
   IKbDocumentResponse,
   KbDocumentsListResponse,
+  KbEstructura,
+  UpdateKbDocumentDTO,
 } from './kb.types.js';
 
 type TenantId = string | Types.ObjectId;
@@ -49,6 +52,27 @@ export function normalizeContenido(texto: string): string {
   return texto.trim().replace(/\s+/g, ' ');
 }
 
+/**
+ * `true` si la `estructura` entrante no aporta nada nuevo. Una estructura **ausente** en el DTO
+ * significa "no tocar" (nunca "borrar"): guardar desde el modo legado no puede destruir la
+ * estructura de un documento que ya la tenía.
+ *
+ * `isDeepStrictEqual` compara por valor e ignora el orden de las claves, que es justo lo que hace
+ * falta con un objeto que ha ido y vuelto de Mongo.
+ */
+function estructuraSinCambios(
+  entrante: KbEstructura | undefined,
+  guardada: KbEstructura | undefined,
+): boolean {
+  if (entrante === undefined) return true;
+  return isDeepStrictEqual(entrante, guardada);
+}
+
+/** `$set` de `estructura` solo cuando el DTO la trae, para no pisar la guardada con `undefined`. */
+function setEstructura(estructura: KbEstructura | undefined): { estructura?: KbEstructura } {
+  return estructura === undefined ? {} : { estructura };
+}
+
 export function mapKbDocumentToResponse(doc: IKbDocument & { _id: Types.ObjectId }): IKbDocumentResponse {
   return {
     id: doc._id.toString(),
@@ -62,9 +86,37 @@ export function mapKbDocumentToResponse(doc: IKbDocument & { _id: Types.ObjectId
     oculto: doc.oculto ?? false,
     ...(doc.proposito ? { proposito: doc.proposito } : {}),
     ...(doc.error ? { error: doc.error } : {}),
+    ...(doc.estructura ? { estructura: doc.estructura } : {}),
     createdAt: (doc.createdAt ?? new Date()).toISOString(),
     updatedAt: (doc.updatedAt ?? new Date()).toISOString(),
   };
+}
+
+/**
+ * Persiste **solo** la `estructura`, sin mover nada aguas abajo: sin versión nueva, sin borrar
+ * chunks, sin encolar `kb-index` y sin invalidar la caché de IA.
+ *
+ * Es el caso del admin que reordena dos ítems o corrige un espacio: el texto que ve la IA queda
+ * idéntico, así que re-versionar o re-indexar sería mentirle sobre qué cambió y quemar embeddings
+ * para nada. Pero el dato es trabajo suyo y no puede perderse, que es lo que pasaría si este camino
+ * cayera en el no-op total. `updatedAt` sí avanza: hubo una escritura real.
+ */
+async function guardarSoloEstructura(
+  tenantId: TenantId,
+  id: Types.ObjectId | string,
+  estructura: KbEstructura | undefined,
+): Promise<IKbDocument & { _id: Types.ObjectId }> {
+  const actualizado = await findOneAndUpdateScoped(
+    KbDocument,
+    tenantId,
+    { _id: id },
+    { $set: setEstructura(estructura) },
+    { new: true },
+  )
+    .lean<(IKbDocument & { _id: Types.ObjectId }) | null>()
+    .exec();
+  if (!actualizado) throw new AppError('No se pudo actualizar el documento.', 500);
+  return actualizado;
 }
 
 /**
@@ -88,7 +140,10 @@ export async function createDocument(
   if (existing) {
     // Guardado sin cambios reales: no re-versiona, no borra chunks, no encola y no toca `updatedAt`.
     if (normalizeContenido(dto.contenido) === normalizeContenido(existing.contenido ?? '')) {
-      return mapKbDocumentToResponse(existing);
+      if (estructuraSinCambios(dto.estructura, existing.estructura)) {
+        return mapKbDocumentToResponse(existing);
+      }
+      return mapKbDocumentToResponse(await guardarSoloEstructura(tenantId, existing._id, dto.estructura));
     }
 
     // Re-subida del mismo título → nueva versión + re-indexado.
@@ -103,6 +158,7 @@ export async function createDocument(
           chunkCount: 0,
           // Re-alta: si el documento estaba oculto por un borrado previo, vuelve al panel.
           oculto: false,
+          ...setEstructura(dto.estructura),
         },
         $inc: { version: 1 },
         $unset: { error: 1 },
@@ -120,6 +176,7 @@ export async function createDocument(
       version: 1,
       estadoIndexacion: 'pendiente',
       chunkCount: 0,
+      ...setEstructura(dto.estructura),
     });
     doc = created.toObject() as IKbDocument & { _id: Types.ObjectId };
   }
@@ -168,21 +225,30 @@ export async function listDocuments(
  * Si el contenido entrante es equivalente al guardado (comparación normalizada de whitespace) el
  * guardado es un NO-OP TOTAL: sin versión nueva, sin borrar chunks, sin re-indexar, sin invalidar la
  * caché de IA y sin tocar `updatedAt`. Abrir el modal y guardar sin escribir no cuesta nada.
+ *
+ * HU-KB-07 añade el caso intermedio: si el contenido no cambió **pero la `estructura` sí**, se
+ * persiste solo la estructura (ver `guardarSoloEstructura`). Sin esa rama el no-op se tragaría en
+ * silencio la edición guiada del admin.
  */
 export async function updateDocument(
   tenantId: TenantId,
   id: string,
-  contenido: string,
+  dto: UpdateKbDocumentDTO,
 ): Promise<IKbDocumentResponse> {
+  const { contenido } = dto;
+
   const existing = await findByIdScoped(KbDocument, tenantId, id)
     .lean<(IKbDocument & { _id: Types.ObjectId }) | null>()
     .exec();
   if (!existing) throw new AppError('No se encontró el documento.', 404);
 
-  // Nada cambió: se devuelve el documento tal cual, sin ejecutar una sola escritura. Al no llegar a
-  // `findOneAndUpdateScoped`, Mongoose tampoco estampa `updatedAt` — la fecha se queda donde estaba.
   if (normalizeContenido(contenido) === normalizeContenido(existing.contenido ?? '')) {
-    return mapKbDocumentToResponse(existing);
+    // Nada cambió: se devuelve el documento tal cual, sin ejecutar una sola escritura. Al no llegar
+    // a `findOneAndUpdateScoped`, Mongoose tampoco estampa `updatedAt`.
+    if (estructuraSinCambios(dto.estructura, existing.estructura)) {
+      return mapKbDocumentToResponse(existing);
+    }
+    return mapKbDocumentToResponse(await guardarSoloEstructura(tenantId, id, dto.estructura));
   }
 
   // Primer llenado de un preset (o de cualquier documento vacío): pasa de contenido '' a texto real.
@@ -194,7 +260,12 @@ export async function updateDocument(
     tenantId,
     { _id: id },
     {
-      $set: { contenido, estadoIndexacion: 'pendiente' as const, chunkCount: 0 },
+      $set: {
+        contenido,
+        estadoIndexacion: 'pendiente' as const,
+        chunkCount: 0,
+        ...setEstructura(dto.estructura),
+      },
       ...(isFirstFill ? {} : { $inc: { version: 1 } }),
       $unset: { error: 1 },
     },

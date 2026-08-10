@@ -329,12 +329,14 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   oculto: Boolean,                // HU-KB-06: soft-delete de un preset eliminado (default false)
   proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
+  estructura: Mixed?,             // HU-KB-07: conocimiento capturado campo a campo (JSON opaco)
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
 //          { tenantId: 1, createdAt: -1 }
-// Contenido tope 3.000 caracteres (validación Zod). Editar (PATCH) re-versiona, limpia chunks y
-// re-indexa solo si el contenido no está vacío. Los 5 presets se siembran vacíos al crear el tenant.
+// Contenido tope 10.000 caracteres (validación Zod; eran 3.000 hasta HU-KB-07). Editar (PATCH)
+// re-versiona, limpia chunks y re-indexa solo si el contenido no está vacío. Los 5 presets se
+// siembran vacíos al crear el tenant.
 //
 // HU-KB-06 — semántica de escritura:
 //  · Guardar contenido equivalente al ya almacenado (comparación normalizada: trim + colapso de
@@ -346,6 +348,24 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 //  · El listado SIGUE devolviendo los ocultos con su flag: el frontend los necesita para distinguir
 //    "el preset nunca se creó" de "el admin lo eliminó" y no reponer la tarjeta. Re-crear ese
 //    título es una re-alta sobre el mismo documento (`oculto: false`), nunca un duplicado.
+//
+// HU-KB-07 — campo `estructura` y su semántica de escritura:
+//  · Forma: { schemaVersion: Number, schemaId: String, campos: { <id>: <valor> }, adicional: String }.
+//    Cada valor lleva su propio discriminante `tipo` ("texto" | "lista" | "triestado" | "horario" |
+//    "repetible"), de modo que se puede leer sin conocer el schema con que se guardó. `adicional` es
+//    «Información adicional» y SIEMPRE está presente (puede ser "").
+//  · El backend NO la interpreta ni deriva `contenido` a partir de ella: el frontend serializa y
+//    envía ambos en el mismo POST/PATCH. Zod valida solo el sobre (las 4 claves) y un tope de 40.000
+//    caracteres del JSON. Añadir campos nuevos NO requiere tocar el backend.
+//  · `contenido` sigue siendo la fuente de verdad de indexación, chunkCount, versionado, isFirstFill
+//    y retrieval. `estructura` lo es solo de la edición guiada del modal.
+//  · Ausente en el DTO significa NO TOCAR, nunca borrar: guardar desde el modo legado no destruye la
+//    estructura de un documento que ya la tenía. No hay camino de borrado.
+//  · Contenido igual + estructura DISTINTA → se persiste solo `estructura`: sin $inc de version, sin
+//    borrar chunks, sin encolar kb-index y sin bumpKbVersion (el texto que ve la IA no cambió).
+//    `updatedAt` sí avanza, porque hubo escritura. Contenido igual + estructura igual sigue siendo el
+//    NO-OP total de HU-KB-06.
+//  · Retrocompatible: un documento sin `estructura` se comporta exactamente como antes de HU-KB-07.
 ```
 
 ## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)

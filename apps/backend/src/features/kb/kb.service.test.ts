@@ -23,7 +23,7 @@ import { KbChunk } from './kb-chunk.model.js';
 import { Tenant } from '../tenant/tenant.model.js';
 import { createScoped, findScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
-import type { IKbDocument } from './kb.types.js';
+import type { IKbDocument, KbEstructura } from './kb.types.js';
 
 // Los tests de arriba usan `new Types.ObjectId()` sin `Tenant` real (el bump de kbVersion hace
 // un `updateOne` que simplemente no matchea nada, sin lanzar). Los de kbVersion sí necesitan un
@@ -160,7 +160,7 @@ describe('updateDocument', () => {
     });
     mockAdd.mockClear();
 
-    const updated = await updateDocument(tenantId, created.id, 'contenido corregido');
+    const updated = await updateDocument(tenantId, created.id, { contenido: 'contenido corregido' });
 
     expect(updated.id).toBe(created.id);
     expect(updated.version).toBe(2);
@@ -205,7 +205,7 @@ describe('updateDocument', () => {
     const updated = await updateDocument(
       tenantId,
       preset._id.toString(),
-      'Contenido real del preset',
+      { contenido: 'Contenido real del preset' },
     );
 
     // Primer llenado (contenido previo vacío) NO incrementa la versión.
@@ -237,10 +237,10 @@ describe('updateDocument', () => {
       chunkCount: 0,
     });
 
-    const firstFill = await updateDocument(tenantId, preset._id.toString(), 'Catálogo inicial');
+    const firstFill = await updateDocument(tenantId, preset._id.toString(), { contenido: 'Catálogo inicial' });
     expect(firstFill.version).toBe(1); // primer llenado
 
-    const secondEdit = await updateDocument(tenantId, preset._id.toString(), 'Catálogo corregido');
+    const secondEdit = await updateDocument(tenantId, preset._id.toString(), { contenido: 'Catálogo corregido' });
     expect(secondEdit.version).toBe(2); // ya tenía contenido real → sí incrementa
   });
 
@@ -249,7 +249,7 @@ describe('updateDocument', () => {
     const created = await createDocument(tenantId, { titulo: 'A vaciar', contenido: 'algo' });
     mockAdd.mockClear();
 
-    const updated = await updateDocument(tenantId, created.id, '   ');
+    const updated = await updateDocument(tenantId, created.id, { contenido: '   ' });
 
     expect(updated.estadoIndexacion).toBe('pendiente');
     expect(mockAdd).not.toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('updateDocument', () => {
   it('documento inexistente → AppError 404', async () => {
     const tenantId = new Types.ObjectId();
     await expect(
-      updateDocument(tenantId, new Types.ObjectId().toString(), 'texto'),
+      updateDocument(tenantId, new Types.ObjectId().toString(), { contenido: 'texto' }),
     ).rejects.toThrow(AppError);
   });
 
@@ -275,7 +275,7 @@ describe('updateDocument', () => {
     const kbVersionAntes = await readKbVersion(tenantId);
     mockAdd.mockClear();
 
-    const updated = await updateDocument(tenantId, created.id, 'texto estable');
+    const updated = await updateDocument(tenantId, created.id, { contenido: 'texto estable' });
 
     expect(updated.version).toBe(created.version);
     expect(updated.updatedAt).toBe(created.updatedAt); // la fecha NO se toca
@@ -293,7 +293,7 @@ describe('updateDocument', () => {
     const created = await createDocument(tenantId, { titulo: 'Whitespace', contenido: 'hola mundo' });
     mockAdd.mockClear();
 
-    const updated = await updateDocument(tenantId, created.id, '  hola\n\n   mundo  ');
+    const updated = await updateDocument(tenantId, created.id, { contenido: '  hola\n\n   mundo  ' });
 
     expect(updated.version).toBe(created.version);
     expect(updated.contenido).toBe('hola mundo'); // conserva el texto original, no el reformateado
@@ -305,7 +305,7 @@ describe('updateDocument', () => {
     const created = await createDocument(tenantId, { titulo: 'Ciudad', contenido: 'Bogotá' });
     mockAdd.mockClear();
 
-    const updated = await updateDocument(tenantId, created.id, 'bogotá');
+    const updated = await updateDocument(tenantId, created.id, { contenido: 'bogotá' });
 
     expect(updated.version).toBe(2);
     expect(mockAdd).toHaveBeenCalledTimes(1);
@@ -317,7 +317,7 @@ describe('updateDocument', () => {
     const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
     mockAdd.mockClear();
 
-    await expect(updateDocument(tenantB, created.id, 'hackeado')).rejects.toThrow(AppError);
+    await expect(updateDocument(tenantB, created.id, { contenido: 'hackeado' })).rejects.toThrow(AppError);
     expect(mockAdd).not.toHaveBeenCalled();
 
     const doc = await KbDocument.findById(created.id).lean<IKbDocument>();
@@ -573,7 +573,7 @@ describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
     const tenantId = await createTenant();
     const created = await createDocument(tenantId, { titulo: 'Editable', contenido: 'v1' });
 
-    await updateDocument(tenantId, created.id, 'contenido corregido');
+    await updateDocument(tenantId, created.id, { contenido: 'contenido corregido' });
 
     expect(await readKbVersion(tenantId)).toBe(2);
   });
@@ -582,7 +582,7 @@ describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
     const tenantId = await createTenant();
     const created = await createDocument(tenantId, { titulo: 'A vaciar', contenido: 'algo' });
 
-    await updateDocument(tenantId, created.id, '   ');
+    await updateDocument(tenantId, created.id, { contenido: '   ' });
 
     expect(await readKbVersion(tenantId)).toBe(2);
   });
@@ -599,7 +599,7 @@ describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
       chunkCount: 0,
     });
 
-    const updated = await updateDocument(tenantId, preset._id.toString(), 'Contenido real');
+    const updated = await updateDocument(tenantId, preset._id.toString(), { contenido: 'Contenido real' });
 
     expect(updated.version).toBe(1); // el contador del documento no sube (comportamiento previo)
     expect(await readKbVersion(tenantId)).toBe(2); // pero sí cambió contenido real de la KB
@@ -617,7 +617,7 @@ describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
       chunkCount: 0,
     });
 
-    await updateDocument(tenantId, preset._id.toString(), '   ');
+    await updateDocument(tenantId, preset._id.toString(), { contenido: '   ' });
 
     expect(await readKbVersion(tenantId)).toBe(1);
   });
@@ -627,7 +627,7 @@ describe('updateDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
     const tenantB = await createTenant();
     const created = await createDocument(tenantA, { titulo: 'Solo A', contenido: 'v1' });
 
-    await updateDocument(tenantA, created.id, 'editado');
+    await updateDocument(tenantA, created.id, { contenido: 'editado' });
 
     expect(await readKbVersion(tenantA)).toBe(2);
     expect(await readKbVersion(tenantB)).toBe(1);
@@ -670,5 +670,184 @@ describe('deleteDocument — bump de Tenant.kbVersion (HU-KB-03)', () => {
 
     expect(await readKbVersion(tenantA)).toBe(2);
     expect(await readKbVersion(tenantB)).toBe(1);
+  });
+});
+
+describe('estructura — conocimiento estructurado (HU-KB-07)', () => {
+  beforeEach(() => {
+    mockAdd.mockClear();
+  });
+
+  function makeEstructura(nombre: string): KbEstructura {
+    return {
+      schemaVersion: 1,
+      schemaId: 'generico',
+      campos: { nombre: { tipo: 'texto', valor: nombre } },
+      adicional: 'Notas sueltas',
+    };
+  }
+
+  it('createDocument persiste la estructura junto al contenido derivado', async () => {
+    const tenantId = new Types.ObjectId();
+    const estructura = makeEstructura('Acme');
+
+    const res = await createDocument(tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: 'Nombre: Acme',
+      estructura,
+    });
+
+    expect(res.estructura).toEqual(estructura);
+
+    const saved = await KbDocument.findById(res.id).lean<IKbDocument>();
+    expect(saved?.estructura).toEqual(estructura);
+  });
+
+  it('un documento sin estructura se crea igual que antes (retrocompatibilidad)', async () => {
+    const tenantId = new Types.ObjectId();
+    const res = await createDocument(tenantId, { titulo: 'Libre', contenido: 'Texto suelto' });
+
+    expect(res.estructura).toBeUndefined();
+    expect(res.version).toBe(1);
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('contenido igual + estructura igual → NO-OP total (ni updatedAt)', async () => {
+    const tenantId = new Types.ObjectId();
+    const estructura = makeEstructura('Acme');
+    const created = await createDocument(tenantId, {
+      titulo: 'Empresa',
+      contenido: 'Nombre: Acme',
+      estructura,
+    });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, {
+      contenido: 'Nombre: Acme',
+      estructura,
+    });
+
+    expect(updated.version).toBe(created.version);
+    expect(updated.updatedAt).toBe(created.updatedAt); // la fecha NO se toca
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('contenido igual + estructura distinta → persiste la estructura y nada más', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, {
+      titulo: 'Empresa',
+      contenido: 'Nombre: Acme',
+      estructura: makeEstructura('Acme'),
+    });
+    await createScoped(KbChunk, tenantId, {
+      documentId: created.id,
+      version: created.version,
+      chunkIndex: 0,
+      texto: 'Nombre: Acme',
+      embedding: [0.1, 0.2],
+    });
+    const kbVersionAntes = await readKbVersion(tenantId);
+    mockAdd.mockClear();
+
+    // Mismo texto serializado, pero el admin tocó «Información adicional».
+    const otraEstructura: KbEstructura = { ...makeEstructura('Acme'), adicional: 'Otras notas' };
+    const updated = await updateDocument(tenantId, created.id, {
+      contenido: 'Nombre: Acme',
+      estructura: otraEstructura,
+    });
+
+    expect(updated.estructura).toEqual(otraEstructura);
+    expect(updated.version).toBe(created.version); // no re-versiona
+    expect(mockAdd).not.toHaveBeenCalled(); // no re-indexa
+    expect(await readKbVersion(tenantId)).toBe(kbVersionAntes); // no invalida la caché de IA
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: created.id });
+    expect(chunks).toHaveLength(1); // los fragmentos siguen siendo válidos
+
+    expect(updated.updatedAt).not.toBe(created.updatedAt); // pero SÍ hubo escritura
+  });
+
+  it('contenido distinto → camino completo y estructura guardada en la misma escritura', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, {
+      titulo: 'Empresa',
+      contenido: 'Nombre: Acme',
+      estructura: makeEstructura('Acme'),
+    });
+    mockAdd.mockClear();
+
+    const nueva = makeEstructura('Acme S.A.');
+    const updated = await updateDocument(tenantId, created.id, {
+      contenido: 'Nombre: Acme S.A.',
+      estructura: nueva,
+    });
+
+    expect(updated.version).toBe(2);
+    expect(updated.estructura).toEqual(nueva);
+    expect(updated.estadoIndexacion).toBe('pendiente');
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('el primer llenado con estructura sigue sin incrementar la versión', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información Complementaria',
+      contenido: '',
+      isPreset: true,
+      obligatorio: false,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    const updated = await updateDocument(tenantId, preset._id.toString(), {
+      contenido: 'Información adicional\nAlgo que contar',
+      estructura: makeEstructura('Acme'),
+    });
+
+    expect(updated.version).toBe(1);
+    expect(updated.estructura).toBeDefined();
+  });
+
+  it('estructura ausente en el DTO no borra la estructura guardada', async () => {
+    const tenantId = new Types.ObjectId();
+    const estructura = makeEstructura('Acme');
+    const created = await createDocument(tenantId, {
+      titulo: 'Empresa',
+      contenido: 'Nombre: Acme',
+      estructura,
+    });
+
+    // Guardado "a la vieja usanza": solo contenido, como haría el modo legado.
+    const updated = await updateDocument(tenantId, created.id, { contenido: 'Nombre: Acme Corp' });
+
+    expect(updated.version).toBe(2);
+    expect(updated.estructura).toEqual(estructura); // intacta
+  });
+
+  it('aislamiento multi-tenant: tenantB no lee ni sobrescribe la estructura de tenantA', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const estructuraA = makeEstructura('Solo de A');
+    const created = await createDocument(tenantA, {
+      titulo: 'Empresa',
+      contenido: 'Nombre: Solo de A',
+      estructura: estructuraA,
+    });
+
+    // Leer: el listado de B no ve el documento de A.
+    const listaB = await listDocuments(tenantB, 1, 20);
+    expect(listaB.data).toHaveLength(0);
+
+    // Escribir: B no puede pisar la estructura de A ni con el id correcto.
+    await expect(
+      updateDocument(tenantB, created.id, {
+        contenido: 'Nombre: hackeado',
+        estructura: makeEstructura('hackeado'),
+      }),
+    ).rejects.toThrow(AppError);
+
+    const saved = await KbDocument.findById(created.id).lean<IKbDocument>();
+    expect(saved?.estructura).toEqual(estructuraA);
   });
 });

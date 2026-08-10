@@ -2,6 +2,43 @@ import type { Document, Types } from 'mongoose';
 
 export type EstadoIndexacion = 'pendiente' | 'procesando' | 'indexado' | 'fallido';
 
+// ─── Conocimiento estructurado (HU-KB-07) ───────────────────────────────────
+
+export type KbTriEstado = 'si' | 'no' | 'na';
+
+export interface KbScheduleDay {
+  dia: string; // 'lunes' … 'domingo'; el orden lo impone el schema del frontend
+  cerrado: boolean;
+  intervalos: Array<{ desde: string; hasta: string }>; // 'HH:mm'
+}
+
+/**
+ * Valor de un campo del formulario guiado. **Auto-descriptivo**: cada valor lleva su propio
+ * discriminante `tipo`, así una versión futura puede leer una `estructura` guardada con un schema
+ * viejo sin tener que adivinar cómo interpretarla.
+ */
+export type KbFieldValue =
+  | { tipo: 'texto'; valor: string }
+  | { tipo: 'lista'; valores: string[] }
+  | { tipo: 'triestado'; valor: KbTriEstado; detalle?: string }
+  | { tipo: 'horario'; dias: KbScheduleDay[] }
+  | { tipo: 'repetible'; items: Array<Record<string, string>> };
+
+/**
+ * Conocimiento capturado campo a campo por el modal guiado. El backend lo **guarda sin
+ * interpretarlo**: quien lo entiende (y quien deriva el `contenido` textual a partir de él) es el
+ * frontend, dueño de los schemas de campo. Ver `docs/specs/HU-KB-07-estructura-kb/plan.md`.
+ */
+export interface KbEstructura {
+  /** Versión del CONTRATO de esquema, no del documento. Empieza en 1. */
+  schemaVersion: number;
+  /** Qué formulario la produjo: 'generico' hoy; 'empresa', 'horarios'… en HU-KB-08 y siguientes. */
+  schemaId: string;
+  campos: Record<string, KbFieldValue>;
+  /** «Información adicional». Obligatorio en el contrato (puede ser ''), nunca ausente. */
+  adicional: string;
+}
+
 export interface IKbDocument {
   tenantId: Types.ObjectId;
   titulo: string;
@@ -14,6 +51,9 @@ export interface IKbDocument {
   oculto: boolean; // soft-delete de un preset eliminado: sigue existiendo pero no se muestra
   proposito?: string; // guía de qué escribir (placeholder), típica de los presets
   error?: string; // motivo si estadoIndexacion === 'fallido'
+  // Fuente de verdad de la EDICIÓN guiada; `contenido` lo sigue siendo de la indexación. Ausente en
+  // los documentos de texto libre, que son la mayoría hasta que HU-KB-08 y siguientes los cubran.
+  estructura?: KbEstructura;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -39,10 +79,14 @@ export interface IKbChunkDocument extends IKbChunk, Document {
 export interface CreateKbDocumentDTO {
   titulo: string;
   contenido: string;
+  estructura?: KbEstructura;
 }
 
 export interface UpdateKbDocumentDTO {
   contenido: string;
+  // Ausente significa **NO TOCAR**, nunca "borrar": un guardado desde el modo legado no puede
+  // destruir la estructura de un documento que ya la tenía.
+  estructura?: KbEstructura;
 }
 
 export interface IKbDocumentResponse {
@@ -59,6 +103,8 @@ export interface IKbDocumentResponse {
   oculto: boolean;
   proposito?: string;
   error?: string;
+  // Presente solo en documentos con edición guiada; el modal decide por ella en qué modo abrir.
+  estructura?: KbEstructura;
   createdAt: string;
   updatedAt: string;
 }

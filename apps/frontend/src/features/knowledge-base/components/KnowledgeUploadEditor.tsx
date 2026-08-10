@@ -24,18 +24,17 @@ import {
   updateKbDocument,
 } from '../../../api/knowledge-base.js';
 import { isTitleTaken, isVirtualPresetId } from '../lib/kb-presets.js';
-import type { IKbDocument } from '../types/index.js';
+import { camposFaltantes, type KbEditorMode, type KbSchemaDef } from '../lib/kb-schemas.js';
+import type { IKbDocument, KbEstructura } from '../types/index.js';
+import { FieldCounter } from './fields/KnowledgeField.js';
+import { KnowledgeStructuredForm } from './KnowledgeStructuredForm.js';
 
-const CONTENIDO_MAX = 3000;
-const CONTENIDO_WARN = 2700; // 90% del tope: el contador vira a ámbar
+/**
+ * HU-KB-07: 3.000 → 10.000. El contenido dejó de ser un texto libre para pasar a ser la suma de los
+ * campos de un formulario. Debe seguir en lockstep con `CONTENIDO_MAX` de `kb.validation.ts`.
+ */
+const CONTENIDO_MAX = 10_000;
 const PLACEHOLDER_GENERICO = 'Escribe o pega aquí la información pertinente…';
-
-/** Color del contador según cercanía al límite: neutro → ámbar (≥90%) → rojo (tope). */
-function counterColor(length: number): string {
-  if (length >= CONTENIDO_MAX) return 'text-destructive font-medium';
-  if (length >= CONTENIDO_WARN) return 'text-amber-600 dark:text-amber-400';
-  return 'text-muted-foreground';
-}
 
 /** Mensaje del servidor si vino, o el de reserva. */
 function errorMessage(err: unknown, fallback: string): string {
@@ -53,12 +52,19 @@ interface KnowledgeUploadEditorProps {
   doc?: IKbDocument;
   /** Documentos reales del tenant: fuente de verdad para detectar títulos ya usados. */
   documents: IKbDocument[];
+  /** Con qué formulario abre. Lo resuelve `modoEditor` en el diálogo (ver `kb-schemas.ts`). */
+  modo: KbEditorMode;
+  /** Solo en modo estructurado: el schema que gobierna el formulario. */
+  schema?: KbSchemaDef;
   /**
-   * Contenido en edición. Vive en `KnowledgeDocumentDialog` porque el encabezado lo necesita para
-   * anticipar la versión de destino mientras se escribe; aquí llega controlado.
+   * Texto que se guardará. En modo legado es lo que el admin teclea; en modo estructurado es el
+   * **derivado** de la estructura, y por eso aquí llega ya calculado y no se edita a mano.
    */
   contenido: string;
   onContenidoChange: (value: string) => void;
+  /** Solo en modo estructurado. */
+  estructura?: KbEstructura;
+  onEstructuraChange?: (estructura: KbEstructura) => void;
   /** Cierra el modal: guardado con éxito, borrado con éxito o cancelación. */
   onDone: () => void;
 }
@@ -66,14 +72,20 @@ interface KnowledgeUploadEditorProps {
 /**
  * Cuerpo del modal de conocimiento: campos, guardado e (cuando procede) borrado.
  *
- * El chrome —título fijo y leyenda de versión— lo pone `KnowledgeDocumentDialog`; aquí vive todo lo
- * que depende del estado de las mutaciones, incluido el botón Eliminar.
+ * Dos formularios detrás de un mismo pie de página. La rama **legada** es la de siempre —un
+ * textarea— y se conserva intacta salvo por el tope nuevo; la **estructurada** delega en
+ * `KnowledgeStructuredForm`. Comparten mutación, toasts, borrado y botones a propósito: lo que
+ * cambia es cómo se captura el conocimiento, no qué significa guardarlo.
  */
 export function KnowledgeUploadEditor({
   doc,
   documents,
+  modo,
+  schema,
   contenido,
   onContenidoChange,
+  estructura,
+  onEstructuraChange,
   onDone,
 }: KnowledgeUploadEditorProps): React.ReactElement {
   const queryClient = useQueryClient();
@@ -82,16 +94,25 @@ export function KnowledgeUploadEditor({
   const isVirtualPreset = doc !== undefined && isVirtualPresetId(doc.id);
   const isEdit = doc !== undefined && !isVirtualPreset;
   const tituloEditable = doc === undefined;
+  const estructurado = modo === 'estructurado' && estructura !== undefined && schema !== undefined;
 
   const [titulo, setTitulo] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  // Los errores rojos por campo esperan a que el admin empiece a llenar: señalarle lo que le falta
+  // antes de que haya hecho nada es regañarlo por abrir el modal.
+  const [tocado, setTocado] = useState(false);
 
   const saveMutation = useMutation({
-    mutationFn: (vars: { titulo: string; contenido: string }): Promise<IKbDocument> =>
-      isEdit && doc
-        ? updateKbDocument(doc.id, { contenido: vars.contenido })
-        : createKbDocument({ titulo: vars.titulo, contenido: vars.contenido }),
+    mutationFn: (vars: { titulo: string; contenido: string }): Promise<IKbDocument> => {
+      const payload = {
+        contenido: vars.contenido,
+        ...(estructurado ? { estructura } : {}),
+      };
+      return isEdit && doc
+        ? updateKbDocument(doc.id, payload)
+        : createKbDocument({ titulo: vars.titulo, ...payload });
+    },
     onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
       toast.success(
@@ -125,13 +146,22 @@ export function KnowledgeUploadEditor({
   // Solo aplica al crear: al editar, el título ya es de este documento y no se toca.
   const tituloDuplicado = tituloEditable && tituloTrimmed.length > 0 && isTitleTaken(tituloTrimmed, documents);
 
+  const faltantes = estructurado ? camposFaltantes(schema, estructura) : [];
+
   // Al crear, el backend exige contenido; al editar, vaciar un documento es válido (queda pendiente).
   const contenidoListo = isEdit || contenido.trim().length > 0;
   const tituloListo = !tituloEditable || (tituloTrimmed.length > 0 && !tituloDuplicado);
-  const puedeGuardar = contenidoListo && tituloListo && !ocupado;
+  const dentroDelTope = contenido.length <= CONTENIDO_MAX;
+  const puedeGuardar =
+    contenidoListo && tituloListo && dentroDelTope && faltantes.length === 0 && !ocupado;
 
   // Un preset virtual no tiene nada que borrar; un obligatorio no se puede quedar sin su categoría.
   const puedeEliminar = doc !== undefined && !isVirtualPreset && !doc.obligatorio;
+
+  function handleEstructuraChange(siguiente: KbEstructura): void {
+    setTocado(true);
+    onEstructuraChange?.(siguiente);
+  }
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
@@ -174,25 +204,49 @@ export function KnowledgeUploadEditor({
         </div>
       )}
 
-      <div>
-        <div className="flex items-baseline justify-between">
-          <Label htmlFor="kb-contenido">Contenido</Label>
-          <span className={`text-xs tabular-nums ${counterColor(contenido.length)}`} aria-live="polite">
-            {contenido.length.toLocaleString('es-CO')} / {CONTENIDO_MAX.toLocaleString('es-CO')}
-          </span>
+      {estructurado ? (
+        <>
+          <KnowledgeStructuredForm
+            schema={schema}
+            estructura={estructura}
+            onEstructuraChange={handleEstructuraChange}
+            mostrarErrores={tocado}
+          />
+
+          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
+            <span className="text-xs text-muted-foreground">Texto que leerá la IA</span>
+            <FieldCounter length={contenido.length} max={CONTENIDO_MAX} />
+          </div>
+
+          {tocado && faltantes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Falta completar{' '}
+              {faltantes.length === 1
+                ? `«${faltantes[0]?.etiqueta}»`
+                : `${faltantes.length} campos obligatorios`}
+              .
+            </p>
+          )}
+        </>
+      ) : (
+        <div>
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="kb-contenido">Contenido</Label>
+            <FieldCounter length={contenido.length} max={CONTENIDO_MAX} />
+          </div>
+          <Textarea
+            id="kb-contenido"
+            className="mt-1.5 resize-y"
+            value={contenido}
+            onChange={(e) => onContenidoChange(e.target.value)}
+            placeholder={placeholder}
+            rows={10}
+            maxLength={CONTENIDO_MAX}
+            required={!isEdit}
+            autoFocus={!tituloEditable}
+          />
         </div>
-        <Textarea
-          id="kb-contenido"
-          className="mt-1.5 resize-y"
-          value={contenido}
-          onChange={(e) => onContenidoChange(e.target.value)}
-          placeholder={placeholder}
-          rows={10}
-          maxLength={CONTENIDO_MAX}
-          required={!isEdit}
-          autoFocus={!tituloEditable}
-        />
-      </div>
+      )}
 
       {errorMsg && (
         <p className="rounded-lg border border-destructive/30 bg-destructive-subtle px-3 py-2 text-sm text-destructive">
