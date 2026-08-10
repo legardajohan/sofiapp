@@ -80,6 +80,41 @@ describe('createDocument', () => {
     const total = await KbDocument.countDocuments({ tenantId });
     expect(total).toBe(1);
   });
+
+  it('re-subir el mismo título con contenido idéntico no re-versiona ni encola (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const first = await createDocument(tenantId, { titulo: 'Manual', contenido: 'texto estable' });
+    mockAdd.mockClear();
+
+    const second = await createDocument(tenantId, { titulo: 'Manual', contenido: 'texto estable' });
+
+    expect(second.version).toBe(first.version);
+    expect(second.updatedAt).toBe(first.updatedAt);
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('re-subir el título de un preset oculto lo resucita sobre el mismo documento (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Horarios y ubicación',
+      contenido: 'horario viejo',
+      isPreset: true,
+      obligatorio: false,
+      oculto: true,
+      version: 2,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    const revivido = await createDocument(tenantId, {
+      titulo: 'Horarios y ubicación',
+      contenido: 'horario nuevo',
+    });
+
+    expect(revivido.id).toBe(preset._id.toString());
+    expect(revivido.oculto).toBe(false);
+    expect(await KbDocument.countDocuments({ tenantId })).toBe(1);
+  });
 });
 
 describe('listDocuments — aislamiento multi-tenant', () => {
@@ -227,6 +262,55 @@ describe('updateDocument', () => {
     ).rejects.toThrow(AppError);
   });
 
+  it('guardar contenido idéntico es un no-op total (HU-KB-06)', async () => {
+    const tenantId = await createTenant();
+    const created = await createDocument(tenantId, { titulo: 'Estable', contenido: 'texto estable' });
+    await createScoped(KbChunk, tenantId, {
+      documentId: created.id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento vigente',
+      embedding: [0.1],
+    });
+    const kbVersionAntes = await readKbVersion(tenantId);
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, 'texto estable');
+
+    expect(updated.version).toBe(created.version);
+    expect(updated.updatedAt).toBe(created.updatedAt); // la fecha NO se toca
+    expect(updated.chunkCount).toBe(created.chunkCount);
+    expect(mockAdd).not.toHaveBeenCalled();
+    expect(await readKbVersion(tenantId)).toBe(kbVersionAntes);
+
+    // Los chunks vigentes sobreviven: no había nada que re-indexar.
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: created.id }).exec();
+    expect(chunks).toHaveLength(1);
+  });
+
+  it('cambios que son solo whitespace se tratan como sin cambios (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const created = await createDocument(tenantId, { titulo: 'Whitespace', contenido: 'hola mundo' });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, '  hola\n\n   mundo  ');
+
+    expect(updated.version).toBe(created.version);
+    expect(updated.contenido).toBe('hola mundo'); // conserva el texto original, no el reformateado
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('cambiar solo la capitalización SÍ re-versiona: la normalización no baja a minúsculas (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const created = await createDocument(tenantId, { titulo: 'Ciudad', contenido: 'Bogotá' });
+    mockAdd.mockClear();
+
+    const updated = await updateDocument(tenantId, created.id, 'bogotá');
+
+    expect(updated.version).toBe(2);
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
   it('aislamiento multi-tenant: tenantB no puede editar un documento de tenantA', async () => {
     const tenantA = new Types.ObjectId();
     const tenantB = new Types.ObjectId();
@@ -315,6 +399,168 @@ describe('deleteDocument', () => {
 
     const doc = await KbDocument.findById(created.id);
     expect(doc).not.toBeNull();
+  });
+});
+
+describe('deleteDocument — obligatorios y soft-delete de presets (HU-KB-06)', () => {
+  it('rechaza con 400 el borrado de un documento obligatorio, sin tocar nada', async () => {
+    const tenantId = new Types.ObjectId();
+    const obligatorio = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: 'misión y visión',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'indexado',
+      chunkCount: 1,
+    });
+    await createScoped(KbChunk, tenantId, {
+      documentId: obligatorio._id,
+      version: 1,
+      chunkIndex: 0,
+      texto: 'fragmento',
+      embedding: [0.1],
+    });
+
+    await expect(deleteDocument(tenantId, obligatorio._id.toString())).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    expect(await KbDocument.findById(obligatorio._id)).not.toBeNull();
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: obligatorio._id }).exec();
+    expect(chunks).toHaveLength(1);
+  });
+
+  it('un preset no obligatorio se oculta en vez de borrarse, y pierde sus chunks', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Políticas y términos',
+      contenido: 'devoluciones a 30 días',
+      isPreset: true,
+      obligatorio: false,
+      version: 2,
+      estadoIndexacion: 'indexado',
+      chunkCount: 1,
+    });
+    await createScoped(KbChunk, tenantId, {
+      documentId: preset._id,
+      version: 2,
+      chunkIndex: 0,
+      texto: 'fragmento',
+      embedding: [0.1],
+    });
+
+    await deleteDocument(tenantId, preset._id.toString());
+
+    const saved = await KbDocument.findById(preset._id).lean<IKbDocument>();
+    expect(saved).not.toBeNull();
+    expect(saved?.oculto).toBe(true);
+    expect(saved?.contenido).toBe('');
+    expect(saved?.chunkCount).toBe(0);
+    expect(saved?.estadoIndexacion).toBe('pendiente');
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId: preset._id }).exec();
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('un preset re-creado por POST (isPreset:false) también se oculta: la identidad es el título', async () => {
+    const tenantId = new Types.ObjectId();
+    // createDocument no puede marcar isPreset — el borde HTTP solo acepta titulo y contenido.
+    const recreado = await createDocument(tenantId, {
+      titulo: 'Horarios y ubicación',
+      contenido: 'L-V 8am a 5pm',
+    });
+    const antes = await KbDocument.findById(recreado.id).lean<IKbDocument>();
+    expect(antes?.isPreset).toBe(false); // se documenta el punto de partida del caso
+
+    await deleteDocument(tenantId, recreado.id);
+
+    const saved = await KbDocument.findById(recreado.id).lean<IKbDocument>();
+    expect(saved).not.toBeNull();
+    expect(saved?.oculto).toBe(true);
+  });
+
+  it('un documento libre conserva el borrado duro', async () => {
+    const tenantId = new Types.ObjectId();
+    const libre = await createDocument(tenantId, { titulo: 'Notas propias', contenido: 'texto' });
+
+    await deleteDocument(tenantId, libre.id);
+
+    expect(await KbDocument.findById(libre.id)).toBeNull();
+  });
+
+  it('listDocuments sigue devolviendo los ocultos, con el flag en el DTO', async () => {
+    const tenantId = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantId, {
+      titulo: 'Políticas y términos',
+      contenido: 'texto',
+      isPreset: true,
+      obligatorio: false,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    await deleteDocument(tenantId, preset._id.toString());
+
+    const listado = await listDocuments(tenantId, 1, 20);
+    expect(listado.data).toHaveLength(1);
+    expect(listado.data[0]?.oculto).toBe(true);
+  });
+
+  it('aislamiento multi-tenant: tenantB no puede ocultar un preset de tenantA', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const preset = await createScoped(KbDocument, tenantA, {
+      titulo: 'Políticas y términos',
+      contenido: 'texto de A',
+      isPreset: true,
+      obligatorio: false,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    await expect(deleteDocument(tenantB, preset._id.toString())).rejects.toMatchObject({
+      statusCode: 404,
+    });
+
+    const saved = await KbDocument.findById(preset._id).lean<IKbDocument>();
+    expect(saved?.oculto ?? false).toBe(false);
+    expect(saved?.contenido).toBe('texto de A');
+  });
+
+  it('aislamiento multi-tenant: el 404 gana al 400 sobre un obligatorio ajeno', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const obligatorio = await createScoped(KbDocument, tenantA, {
+      titulo: 'Información de la empresa',
+      contenido: 'texto de A',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+
+    // Un tenant ajeno no debe poder distinguir "no existe" de "existe pero es obligatorio".
+    await expect(deleteDocument(tenantB, obligatorio._id.toString())).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
+  it('ocultar un preset de tenantA no afecta el listado de tenantB', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    await seedPresetDocuments(tenantA);
+    await seedPresetDocuments(tenantB);
+
+    const presetA = await KbDocument.findOne({ tenantId: tenantA, titulo: 'Políticas y términos' })
+      .lean<IKbDocument & { _id: Types.ObjectId }>();
+    await deleteDocument(tenantA, presetA!._id.toString());
+
+    const listadoB = await listDocuments(tenantB, 1, 20);
+    expect(listadoB.data.every((doc) => doc.oculto === false)).toBe(true);
   });
 });
 

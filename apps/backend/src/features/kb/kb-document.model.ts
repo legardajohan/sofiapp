@@ -16,6 +16,11 @@ const KbDocumentSchema = new Schema<IKbDocumentDocument>(
     chunkCount: { type: Number, default: 0 },
     isPreset: { type: Boolean, default: false },
     obligatorio: { type: Boolean, default: false },
+    // Soft-delete de presets: eliminar una categoría predefinida la oculta en vez de borrarla, para
+    // que el merge del frontend no la reponga como tarjeta virtual "Sin llenar". El índice único
+    // { tenantId, titulo } sigue vigente sobre el documento oculto: re-crear ese título es una
+    // RE-ALTA de la misma entidad (createDocument devuelve `oculto` a false), nunca un duplicado.
+    oculto: { type: Boolean, default: false },
     proposito: { type: String, required: false },
     error: { type: String },
   },

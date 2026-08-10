@@ -134,6 +134,22 @@ describe('PATCH /api/kb/documents/:id', () => {
     expect(res.body.contenido).toBe('Somos una empresa de ejemplo.');
   });
 
+  it('guardar el mismo contenido → 200 sin subir de versión (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const doc = await createDocument(tenantId, { titulo: 'Estable', contenido: 'texto estable' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .patch(`/api/kb/documents/${doc.id}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ contenido: 'texto estable' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(doc.version);
+    expect(res.body.updatedAt).toBe(doc.updatedAt);
+  });
+
   it('documento de otro tenant → 404', async () => {
     const tenantA = new Types.ObjectId();
     const tenantB = new Types.ObjectId();
@@ -202,6 +218,28 @@ describe('DELETE /api/kb/documents/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ deleted: true });
+  });
+
+  it('documento obligatorio → 400, aunque la UI ya esconda el botón (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const obligatorio = await createScoped(KbDocument, tenantId, {
+      titulo: 'Información de la empresa',
+      contenido: 'misión y visión',
+      isPreset: true,
+      obligatorio: true,
+      version: 1,
+      estadoIndexacion: 'pendiente',
+      chunkCount: 0,
+    });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await request(app)
+      .delete(`/api/kb/documents/${obligatorio._id.toString()}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('obligatorio');
   });
 
   it('documento de otro tenant → 404 (no se filtra existencia entre tenants)', async () => {

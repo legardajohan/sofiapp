@@ -10,7 +10,8 @@ export interface IKbDocument {
   estadoIndexacion: EstadoIndexacion;
   chunkCount: number; // 0 hasta indexar
   isPreset: boolean; // documento base sembrado al crear el tenant (etiqueta de origen)
-  obligatorio: boolean; // preset mínimo que la IA necesita para responder (guía, sin bloqueo backend)
+  obligatorio: boolean; // preset mínimo que la IA necesita para responder (no se puede eliminar)
+  oculto: boolean; // soft-delete de un preset eliminado: sigue existiendo pero no se muestra
   proposito?: string; // guía de qué escribir (placeholder), típica de los presets
   error?: string; // motivo si estadoIndexacion === 'fallido'
   createdAt?: Date;
@@ -53,6 +54,9 @@ export interface IKbDocumentResponse {
   chunkCount: number;
   isPreset: boolean;
   obligatorio: boolean;
+  // El listado expone los ocultos a propósito: el frontend reconstruye la grilla desde su catálogo
+  // de presets y necesita distinguir "nunca se creó" de "se eliminó" para no reponer la tarjeta.
+  oculto: boolean;
   proposito?: string;
   error?: string;
   createdAt: string;
