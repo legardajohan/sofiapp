@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,16 +16,59 @@ export type KbDialogTarget =
   | { mode: 'edit'; doc: IKbDocument }; // documento real o preset virtual
 
 /**
- * Explica en una frase qué le pasará a la versión al guardar, replicando el `isFirstFill` del
- * backend. Que el primer contenido NO cree una versión nueva es la parte menos evidente, así que se
- * dice con todas las letras en vez de mostrar "v1 → v1".
+ * Explica en una frase qué le pasará a la versión al guardar, replicando las reglas del backend.
+ * Se recalcula con el texto tecleado, así que la promesa es cierta **antes** de guardar.
+ *
+ * Las dos partes menos evidentes se dicen con todas las letras en vez de mostrar "v1 → v1": que el
+ * primer contenido no crea versión nueva, y que guardar sin cambios no cuesta nada.
  */
-function leyendaVersion(doc: IKbDocument): string {
+function leyendaVersion(doc: IKbDocument, contenido: string): string {
   if (isVirtualPresetId(doc.id)) return 'Aún sin contenido. Se guardará como v1.';
-  const destino = nextVersion(doc);
-  return destino === doc.version
+  const destino = nextVersion(doc, contenido);
+  if (destino !== doc.version) return `Versión v${doc.version}. Al guardar pasará a v${destino}.`;
+  return doc.contenido.trim().length === 0
     ? `Versión v${doc.version}. El primer contenido no crea una versión nueva.`
-    : `Versión v${doc.version}. Al guardar pasará a v${destino}.`;
+    : `Versión v${doc.version}. Sin cambios por guardar.`;
+}
+
+interface DocumentDialogBodyProps {
+  doc: IKbDocument | undefined;
+  documents: IKbDocument[];
+  onDone: () => void;
+}
+
+/**
+ * Encabezado + formulario. Es dueño del `contenido` porque lo necesitan los dos: la leyenda de
+ * versión del encabezado y el textarea del editor. Al montarse con `key` por documento, cada
+ * apertura del modal arranca limpia sin depender de un `useEffect` de reset.
+ */
+function DocumentDialogBody({
+  doc,
+  documents,
+  onDone,
+}: DocumentDialogBodyProps): React.ReactElement {
+  const [contenido, setContenido] = useState(doc?.contenido ?? '');
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="pr-6">{doc ? doc.titulo : 'Nuevo conocimiento'}</DialogTitle>
+        <DialogDescription>
+          {doc
+            ? leyendaVersion(doc, contenido)
+            : 'Dale un nombre y pega el texto que la IA usará al responder sobre este tema.'}
+        </DialogDescription>
+      </DialogHeader>
+
+      <KnowledgeUploadEditor
+        doc={doc}
+        documents={documents}
+        contenido={contenido}
+        onContenidoChange={setContenido}
+        onDone={onDone}
+      />
+    </>
+  );
 }
 
 interface KnowledgeDocumentDialogProps {
@@ -48,19 +92,10 @@ export function KnowledgeDocumentDialog({
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="pr-6">{doc ? doc.titulo : 'Nuevo conocimiento'}</DialogTitle>
-          <DialogDescription>
-            {doc
-              ? leyendaVersion(doc)
-              : 'Dale un nombre y pega el texto que la IA usará al responder sobre este tema.'}
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Montado solo con el modal abierto y recreado en cada apertura: el formulario nunca
-            arrastra el contenido del documento anterior. */}
+        {/* Montado solo con el modal abierto y recreado en cada apertura: ni el formulario ni la
+            leyenda arrastran el contenido del documento anterior. */}
         {target !== null && (
-          <KnowledgeUploadEditor
+          <DocumentDialogBody
             key={doc?.id ?? 'nuevo'}
             doc={doc}
             documents={documents}

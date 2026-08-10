@@ -1,5 +1,5 @@
 import { Building2, Package, Clock, Scale, HelpCircle, FileText, type LucideIcon } from 'lucide-react';
-import type { IKbDocument } from '../types/index.js';
+import type { EstadoIndexacion, IKbDocument } from '../types/index.js';
 
 export interface PresetMeta {
   titulo: string;
@@ -59,6 +59,44 @@ export function normalizeTitulo(titulo: string): string {
 }
 
 /**
+ * Normaliza el contenido para decidir si un guardado cambia algo: recorta los extremos y colapsa
+ * cualquier racha de whitespace a un solo espacio.
+ *
+ * **Espejo exacto de `normalizeContenido` en `apps/backend/src/features/kb/kb.service.ts`**, que es
+ * quien decide de verdad si re-versiona. Aquí solo sirve para anticipar esa decisión en la leyenda
+ * del modal. Los dos cambian en lockstep: si divergen, el modal prometería una versión que el
+ * backend no va a crear.
+ *
+ * A propósito NO baja a minúsculas: cambiar "Bogotá" por "bogotá" es un cambio de conocimiento.
+ */
+export function normalizeContenido(texto: string): string {
+  return texto.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Estado visual de la tarjeta. Amplía los 4 estados de indexación con los dos que describen a un
+ * documento **sin contenido**, donde "Pendiente" no diría nada útil: `falta` (obligatorio vacío) y
+ * `opcional` (categoría que aún nadie llenó).
+ */
+export type CardStatus = EstadoIndexacion | 'falta' | 'opcional';
+
+/** El estado de indexación manda; solo cuando no hay nada que indexar hablamos de falta/opcional. */
+export function cardStatus(doc: IKbDocument): CardStatus {
+  const estado = doc.estadoIndexacion;
+  if (estado === 'indexado' || estado === 'procesando' || estado === 'fallido') return estado;
+  if (hasContent(doc)) return 'pendiente';
+  return doc.obligatorio ? 'falta' : 'opcional';
+}
+
+/** Borde de la tarjeta por prioridad: falta un obligatorio > falló > ya indexado > neutro. */
+export function cardBorder(status: CardStatus): string {
+  if (status === 'falta') return 'border-amber-400/60 dark:border-amber-500/40';
+  if (status === 'fallido') return 'border-destructive/40';
+  if (status === 'indexado') return 'border-success/40';
+  return 'border-border';
+}
+
+/**
  * `true` si el título ya está ocupado por un documento real del tenant o **reservado** por
  * `PRESET_META` (aunque ese preset siga siendo virtual: al llenarlo nacerá con ese mismo título).
  *
@@ -87,21 +125,23 @@ export function isTitleTaken(titulo: string, documents: IKbDocument[]): boolean 
  */
 export function buildKbGrid(documents: IKbDocument[]): IKbDocument[] {
   const libres = documents
-    .filter((doc) => !PRESET_ORDER.includes(doc.titulo))
+    .filter((doc) => !PRESET_ORDER.includes(doc.titulo) && !doc.oculto)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   return [...mergePresetsWithDocuments(documents), ...libres];
 }
 
 /**
- * Versión con la que quedará el documento tras "Guardar e indexar". Réplica del `isFirstFill` de
- * `apps/backend/src/features/kb/kb.service.ts`:
+ * Versión con la que quedará el documento tras "Guardar e indexar", conocido el texto tecleado.
+ * Réplica de las reglas de `apps/backend/src/features/kb/kb.service.ts`:
  *  - preset virtual → lo crea un POST, que nace en `version: 1`.
- *  - documento real con contenido vacío → primer llenado: el PATCH **no** incrementa la versión.
- *  - documento real con contenido → edición normal: `version + 1`.
+ *  - contenido equivalente al guardado → el backend no escribe nada: la versión se queda igual.
+ *  - documento real con contenido previo vacío → primer llenado: el PATCH **no** incrementa.
+ *  - resto → edición normal: `version + 1`.
  */
-export function nextVersion(doc: IKbDocument): number {
+export function nextVersion(doc: IKbDocument, contenido: string): number {
   if (isVirtualPresetId(doc.id)) return 1;
+  if (normalizeContenido(contenido) === normalizeContenido(doc.contenido)) return doc.version;
   return hasContent(doc) ? doc.version + 1 : doc.version;
 }
 
@@ -112,15 +152,21 @@ export function nextVersion(doc: IKbDocument): number {
  *    identidad de preset** (`isPreset:true` + `obligatorio`/`proposito` de la meta). Es necesario
  *    porque un preset re-creado vía POST nace `isPreset:false`/`obligatorio:false`, y sin este
  *    sello caería fuera de los conteos por categoría (denominadores 5 y 2 se romperían).
- *  - si no existe (nunca se creó o fue eliminado) → devuelve un documento **virtual** vacío en estado
- *    `pendiente`, con `id` provisional (`__preset_<i>`) que el frontend distingue de un ObjectId real.
+ *  - si el documento real está **oculto** (el admin eliminó esa categoría; soft-delete del backend)
+ *    → la categoría desaparece de la lista y **no** se repone como virtual. Sin esto, eliminar un
+ *    preset sería un no-op visual: la tarjeta volvería vacía en el siguiente render.
+ *  - si no existe (nunca se creó) → devuelve un documento **virtual** vacío en estado `pendiente`,
+ *    con `id` provisional (`__preset_<i>`) que el frontend distingue de un ObjectId real.
  *
- * Garantiza que la barra y el progreso vean SIEMPRE las 5 categorías (2 obligatorias), sin importar
- * cómo se hayan creado los documentos reales.
+ * Por eso la lista devuelta tiene longitud **≤ 5**, no siempre 5: `computeKbProgress` deriva de aquí
+ * el denominador de "documentos indexados", y una categoría eliminada ya no es algo pendiente de
+ * llenar. Los obligatorios no se pueden eliminar (lo valida el backend), así que su denominador
+ * fijo de 2 no se mueve.
  */
 export function mergePresetsWithDocuments(documents: IKbDocument[]): IKbDocument[] {
-  return PRESET_META.map((meta, index) => {
+  return PRESET_META.flatMap((meta, index) => {
     const real = documents.find((doc) => doc.titulo === meta.titulo);
+    if (real?.oculto) return [];
     if (real) {
       return {
         ...real,
@@ -131,7 +177,7 @@ export function mergePresetsWithDocuments(documents: IKbDocument[]): IKbDocument
     }
 
     const now = new Date().toISOString();
-    return {
+    const virtual: IKbDocument = {
       id: `${VIRTUAL_PRESET_ID_PREFIX}${index}`,
       titulo: meta.titulo,
       contenido: '',
@@ -140,10 +186,12 @@ export function mergePresetsWithDocuments(documents: IKbDocument[]): IKbDocument
       chunkCount: 0,
       isPreset: true,
       obligatorio: meta.obligatorio,
+      oculto: false,
       proposito: meta.proposito,
       createdAt: now,
       updatedAt: now,
     };
+    return virtual;
   });
 }
 
@@ -194,4 +242,74 @@ export function computeKbProgress(documents: IKbDocument[]): KbProgress {
     totalDocumentos: documents.length,
     completedDocumentos: documents.filter(isCompleted).length,
   };
+}
+
+// ─── Filtro de la grilla ────────────────────────────────────────────────────
+
+/** Tipo de conocimiento, con las mismas etiquetas que llevan las tarjetas. */
+export type KbTagFilter = 'todos' | 'requerido' | 'predefinido' | 'custom';
+
+/** Estado, agrupando los 6 `CardStatus` en los 4 grupos que el admin distingue de un vistazo. */
+export type KbEstadoFilter = 'todos' | 'indexado' | 'proceso' | 'fallido' | 'sinLlenar';
+
+export interface KbFilterCriteria {
+  /** Texto ya "debounceado" por el llamador. */
+  texto: string;
+  tag: KbTagFilter;
+  estado: KbEstadoFilter;
+}
+
+export const EMPTY_FILTERS: KbFilterCriteria = { texto: '', tag: 'todos', estado: 'todos' };
+
+export function hasActiveFilters(criteria: KbFilterCriteria): boolean {
+  return criteria.texto.trim().length > 0 || criteria.tag !== 'todos' || criteria.estado !== 'todos';
+}
+
+function matchesTag(doc: IKbDocument, tag: KbTagFilter): boolean {
+  switch (tag) {
+    case 'requerido':
+      return doc.obligatorio;
+    case 'predefinido':
+      return doc.isPreset && !doc.obligatorio;
+    case 'custom':
+      return !doc.isPreset && !doc.obligatorio;
+    default:
+      return true;
+  }
+}
+
+function matchesEstado(doc: IKbDocument, estado: KbEstadoFilter): boolean {
+  const status = cardStatus(doc);
+  switch (estado) {
+    case 'indexado':
+      return status === 'indexado';
+    // "En proceso" agrupa `procesando` y `pendiente`. Coincide exactamente con el conjunto que
+    // mantiene vivo el refetch de la página: `cardStatus` solo devuelve `pendiente` cuando hay
+    // contenido, así que un documento vacío nunca aparece "en proceso" — no hay nada indexándose.
+    case 'proceso':
+      return status === 'procesando' || status === 'pendiente';
+    case 'fallido':
+      return status === 'fallido';
+    case 'sinLlenar':
+      return status === 'falta' || status === 'opcional';
+    default:
+      return true;
+  }
+}
+
+/**
+ * Filtra la lista **ya fusionada** por `buildKbGrid`. Los tres criterios se combinan en AND.
+ *
+ * El filtrado es en cliente a propósito: `getKbDocuments` trae hasta 50 documentos de una vez, el
+ * endpoint no expone búsqueda ni orden, y la KB de un tenant real es de decenas de entradas. Mover
+ * esto al servidor sería complejidad para un problema que todavía no existe.
+ */
+export function filterKbGrid(documents: IKbDocument[], criteria: KbFilterCriteria): IKbDocument[] {
+  const objetivo = normalizeTitulo(criteria.texto);
+  return documents.filter(
+    (doc) =>
+      (objetivo.length === 0 || normalizeTitulo(doc.titulo).includes(objetivo)) &&
+      matchesTag(doc, criteria.tag) &&
+      matchesEstado(doc, criteria.estado),
+  );
 }

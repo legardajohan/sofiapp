@@ -1,29 +1,8 @@
-import { hasContent, isVirtualPresetId, presetIcon } from '../lib/kb-presets.js';
-import type { EstadoIndexacion, IKbDocument } from '../types/index.js';
+// `cardStatus` y `cardBorder` viven en `lib/kb-presets.ts`: el filtro de la grilla necesita la misma
+// clasificación, y duplicarla garantizaría que tarjeta y filtro se desincronicen al primer cambio.
+import { cardBorder, cardStatus, hasContent, isVirtualPresetId, presetIcon } from '../lib/kb-presets.js';
+import type { IKbDocument } from '../types/index.js';
 import { IndexingStatusBadge } from './IndexingStatusBadge.js';
-
-/**
- * Estado visual de la tarjeta. Amplía los 4 estados de indexación con los dos que describen a un
- * documento **sin contenido**, donde "Pendiente" no diría nada útil: `falta` (obligatorio vacío) y
- * `opcional` (categoría que aún nadie llenó).
- */
-type CardStatus = EstadoIndexacion | 'falta' | 'opcional';
-
-/** El estado de indexación manda; solo cuando no hay nada que indexar hablamos de falta/opcional. */
-function cardStatus(doc: IKbDocument): CardStatus {
-  const estado = doc.estadoIndexacion;
-  if (estado === 'indexado' || estado === 'procesando' || estado === 'fallido') return estado;
-  if (hasContent(doc)) return 'pendiente';
-  return doc.obligatorio ? 'falta' : 'opcional';
-}
-
-/** Borde de la tarjeta por prioridad: falta un obligatorio > falló > ya indexado > neutro. */
-function cardBorder(status: CardStatus): string {
-  if (status === 'falta') return 'border-amber-400/60 dark:border-amber-500/40';
-  if (status === 'fallido') return 'border-destructive/40';
-  if (status === 'indexado') return 'border-success/40';
-  return 'border-border';
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('es-CO', {

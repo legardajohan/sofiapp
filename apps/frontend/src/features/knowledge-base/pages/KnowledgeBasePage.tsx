@@ -10,7 +10,16 @@ import {
 import { PresetProgress } from '../components/PresetProgress.js';
 import { RequiredPresetsBanner } from '../components/RequiredPresetsBanner.js';
 import { KnowledgeOnboardingDialog } from '../components/KnowledgeOnboardingDialog.js';
-import { buildKbGrid, computeKbProgress } from '../lib/kb-presets.js';
+import { KnowledgeToolbar } from '../components/KnowledgeToolbar.js';
+import {
+  buildKbGrid,
+  computeKbProgress,
+  filterKbGrid,
+  hasActiveFilters,
+  type KbEstadoFilter,
+  type KbTagFilter,
+} from '../lib/kb-presets.js';
+import { useDebouncedValue } from '../../../hooks/use-debounced-value.js';
 import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
 
 const ONBOARDING_KEY = 'kb_onboarding_dismissed';
@@ -27,6 +36,9 @@ export function KnowledgeBasePage(): React.ReactElement {
   const [onboardingOpen, setOnboardingOpen] = useState(
     () => localStorage.getItem(ONBOARDING_KEY) !== '1',
   );
+  const [texto, setTexto] = useState('');
+  const [tag, setTag] = useState<KbTagFilter>('todos');
+  const [estado, setEstado] = useState<KbEstadoFilter>('todos');
 
   const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
     queryKey: ['kb', 'documents'],
@@ -39,7 +51,21 @@ export function KnowledgeBasePage(): React.ReactElement {
   // grilla: las 5 categorías siempre presentes + los documentos propios del tenant.
   const documents = data?.data ?? [];
   const gridDocuments = buildKbGrid(documents);
+  // El progreso describe el inventario, no la vista: siempre sobre la lista SIN filtrar, para que
+  // buscar algo no dé la impresión de que la KB encogió.
   const progress = computeKbProgress(gridDocuments);
+
+  // El input se repinta en cada tecla; filtrar espera a que el admin deje de escribir.
+  const textoDebounced = useDebouncedValue(texto, 300);
+  const criteria = { texto: textoDebounced, tag, estado };
+  const visibleDocuments = filterKbGrid(gridDocuments, criteria);
+  const filtrando = hasActiveFilters(criteria);
+
+  function limpiarFiltros(): void {
+    setTexto('');
+    setTag('todos');
+    setEstado('todos');
+  }
 
   function handleOnboardingChange(open: boolean): void {
     setOnboardingOpen(open);
@@ -82,16 +108,32 @@ export function KnowledgeBasePage(): React.ReactElement {
           onFix={(doc) => setDialogTarget({ mode: 'edit', doc })}
         />
 
+        {/* En error el aviso reemplaza a la grilla, así que filtrar no tendría sobre qué operar. */}
+        {!isError && (
+          <KnowledgeToolbar
+            texto={texto}
+            tag={tag}
+            estado={estado}
+            resultCount={visibleDocuments.length}
+            hasFilters={filtrando}
+            onTextoChange={setTexto}
+            onTagChange={setTag}
+            onEstadoChange={setEstado}
+          />
+        )}
+
         {/* Una sola grilla: las 5 categorías predefinidas (las que no existen llegan como preset
             virtual `__preset_*`, que el editor detecta para crear en vez de editar) seguidas de los
             documentos propios del tenant. */}
         <KnowledgeGrid
-          documents={gridDocuments}
+          documents={visibleDocuments}
           isLoading={isLoading}
           isError={isError}
+          isFiltered={filtrando}
           onRetry={() => void refetch()}
           onOpen={(doc) => setDialogTarget({ mode: 'edit', doc })}
           onCreate={() => setDialogTarget({ mode: 'create' })}
+          onClearFilters={limpiarFiltros}
         />
 
         <KnowledgeDocumentDialog

@@ -53,6 +53,12 @@ interface KnowledgeUploadEditorProps {
   doc?: IKbDocument;
   /** Documentos reales del tenant: fuente de verdad para detectar títulos ya usados. */
   documents: IKbDocument[];
+  /**
+   * Contenido en edición. Vive en `KnowledgeDocumentDialog` porque el encabezado lo necesita para
+   * anticipar la versión de destino mientras se escribe; aquí llega controlado.
+   */
+  contenido: string;
+  onContenidoChange: (value: string) => void;
   /** Cierra el modal: guardado con éxito, borrado con éxito o cancelación. */
   onDone: () => void;
 }
@@ -66,6 +72,8 @@ interface KnowledgeUploadEditorProps {
 export function KnowledgeUploadEditor({
   doc,
   documents,
+  contenido,
+  onContenidoChange,
   onDone,
 }: KnowledgeUploadEditorProps): React.ReactElement {
   const queryClient = useQueryClient();
@@ -76,7 +84,6 @@ export function KnowledgeUploadEditor({
   const tituloEditable = doc === undefined;
 
   const [titulo, setTitulo] = useState('');
-  const [contenido, setContenido] = useState(doc?.contenido ?? '');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
 
@@ -178,7 +185,7 @@ export function KnowledgeUploadEditor({
           id="kb-contenido"
           className="mt-1.5 resize-y"
           value={contenido}
-          onChange={(e) => setContenido(e.target.value)}
+          onChange={(e) => onContenidoChange(e.target.value)}
           placeholder={placeholder}
           rows={10}
           maxLength={CONTENIDO_MAX}

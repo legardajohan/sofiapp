@@ -9,9 +9,12 @@ interface KnowledgeGridProps {
   documents: IKbDocument[];
   isLoading: boolean;
   isError: boolean;
+  /** Hay filtros activos: cambia el mensaje cuando la lista queda vacía. */
+  isFiltered: boolean;
   onRetry: () => void;
   onOpen: (doc: IKbDocument) => void;
   onCreate: () => void;
+  onClearFilters: () => void;
 }
 
 function CardSkeleton(): React.ReactElement {
@@ -39,9 +42,11 @@ export function KnowledgeGrid({
   documents,
   isLoading,
   isError,
+  isFiltered,
   onRetry,
   onOpen,
   onCreate,
+  onClearFilters,
 }: KnowledgeGridProps): React.ReactElement {
   if (isLoading) {
     return (
@@ -79,6 +84,23 @@ export function KnowledgeGrid({
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/*
+        Sin coincidencias no se vacía la grilla: la acción de crear sigue ahí, porque "no existe lo
+        que buscas" y "puedes crearlo" son la misma conversación. El aviso ocupa el ancho completo
+        para que se lea antes que la tarjeta.
+      */}
+      {documents.length === 0 && isFiltered && (
+        <div className="flex flex-col items-start gap-2 rounded-xl border border-dashed border-border bg-card p-4 sm:col-span-2">
+          <p className="text-sm font-medium text-foreground">Sin resultados</p>
+          <p className="text-sm text-secondary-foreground">
+            Ningún conocimiento coincide con lo que buscas. Ajusta el nombre o los filtros.
+          </p>
+          <Button variant="outline" size="sm" onClick={onClearFilters}>
+            Limpiar filtros
+          </Button>
+        </div>
+      )}
+
       {documents.map((doc) => (
         <KnowledgeCard key={doc.id} doc={doc} onOpen={onOpen} />
       ))}

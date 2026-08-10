@@ -4,7 +4,7 @@
  * `kb-presets.test.ts` no puede demostrar por sí sola.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { KnowledgeBasePage } from './KnowledgeBasePage.js';
@@ -38,6 +38,7 @@ function makeDoc(overrides: Partial<IKbDocument> & { titulo: string }): IKbDocum
     chunkCount: 4,
     isPreset: false,
     obligatorio: false,
+    oculto: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T10:30:00.000Z',
     ...overrides,
@@ -144,14 +145,38 @@ describe('KnowledgeBasePage — modal de edición', () => {
     expect(within(dialog).queryByLabelText('Título')).not.toBeInTheDocument();
   });
 
-  it('anuncia la versión de destino de una edición normal', async () => {
+  it('al abrir sin tocar el texto avisa que no hay cambios que guardar (HU-KB-06)', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE, version: 2 })]));
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: /Editar Convenios con empresas/ }));
 
+    expect(await screen.findByText('Versión v2. Sin cambios por guardar.')).toBeInTheDocument();
+  });
+
+  it('anuncia la versión de destino en cuanto el texto cambia de verdad (HU-KB-06)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE, version: 2 })]));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Editar Convenios con empresas/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Contenido/), ' Y algo más.');
+
     expect(await screen.findByText('Versión v2. Al guardar pasará a v3.')).toBeInTheDocument();
+  });
+
+  it('un cambio que es solo whitespace sigue contando como sin cambios (HU-KB-06)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE, version: 2 })]));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Editar Convenios con empresas/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText(/Contenido/), '   ');
+
+    expect(await screen.findByText('Versión v2. Sin cambios por guardar.')).toBeInTheDocument();
   });
 
   it('explica que el primer contenido no crea una versión nueva', async () => {
@@ -277,5 +302,76 @@ describe('KnowledgeBasePage — modal de creación', () => {
     await user.type(await screen.findByLabelText('Título'), OBLIGATORIO);
 
     expect(screen.getByRole('button', { name: 'Guardar e indexar' })).toBeDisabled();
+  });
+});
+
+describe('KnowledgeBasePage — buscador y filtros (HU-KB-06)', () => {
+  it('reduce la grilla al escribir, sin esconder la acción de crear', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE })]));
+    renderPage();
+    await screen.findByRole('button', { name: /Editar Convenios con empresas/ });
+
+    await user.type(screen.getByLabelText('Buscar conocimiento por nombre'), 'convenios');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Completar Horarios y ubicación/ })).toBeNull();
+    });
+    expect(screen.getByRole('button', { name: /Editar Convenios con empresas/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Agregar nuevo conocimiento/ })).toBeInTheDocument();
+  });
+
+  it('sin coincidencias ofrece limpiar los filtros y restaura la grilla completa', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: /Completar Horarios y ubicación/ });
+
+    await user.type(screen.getByLabelText('Buscar conocimiento por nombre'), 'zzzz');
+
+    expect(await screen.findByText('Sin resultados')).toBeInTheDocument();
+    // El aviso de error de carga es otra cosa y no debe aparecer aquí.
+    expect(screen.queryByText('No se pudo cargar tu conocimiento')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    expect(
+      await screen.findByRole('button', { name: /Completar Horarios y ubicación/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('filtrar no mueve los contadores: describen el inventario, no la vista', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(listado([makeDoc({ titulo: LIBRE })]));
+    renderPage();
+    // Esperar a la tarjeta: los contadores existen desde el primer render con la lista vacía.
+    await screen.findByRole('button', { name: /Editar Convenios con empresas/ });
+    expect(screen.getByText('0/2 obligatorios completados')).toBeInTheDocument();
+    expect(screen.getByText('1/6 documentos indexados')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Buscar conocimiento por nombre'), 'convenios');
+    await screen.findByRole('button', { name: /Editar Convenios con empresas/ });
+
+    expect(screen.getByText('0/2 obligatorios completados')).toBeInTheDocument();
+    expect(screen.getByText('1/6 documentos indexados')).toBeInTheDocument();
+  });
+
+  it('el buscador no se muestra cuando la carga falla (el aviso reemplaza a la grilla)', async () => {
+    mockGetKbDocuments.mockRejectedValue(new Error('sin red'));
+    renderPage();
+
+    expect(await screen.findByText('No se pudo cargar tu conocimiento')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Buscar conocimiento por nombre')).toBeNull();
+  });
+});
+
+describe('KnowledgeBasePage — presets eliminados (HU-KB-06)', () => {
+  it('un preset oculto no tiene tarjeta y no reaparece como virtual', async () => {
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: 'Horarios y ubicación', oculto: true })]),
+    );
+    renderPage();
+    await screen.findByRole('button', { name: /Completar Políticas y términos/ });
+
+    expect(screen.queryByRole('button', { name: /Horarios y ubicación/ })).toBeNull();
   });
 });

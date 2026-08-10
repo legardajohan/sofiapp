@@ -9,6 +9,8 @@ export interface IKbDocument {
   chunkCount: number;
   isPreset: boolean;
   obligatorio: boolean;
+  /** Preset eliminado (soft-delete del backend). El merge lo excluye de la grilla. */
+  oculto: boolean;
   proposito?: string;
   error?: string;
   createdAt: string;

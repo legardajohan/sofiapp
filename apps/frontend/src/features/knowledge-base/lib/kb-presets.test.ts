@@ -10,10 +10,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildKbGrid,
+  cardBorder,
+  cardStatus,
   computeKbProgress,
+  EMPTY_FILTERS,
+  filterKbGrid,
+  hasActiveFilters,
   isTitleTaken,
   mergePresetsWithDocuments,
   nextVersion,
+  normalizeContenido,
   normalizeTitulo,
   PRESET_META,
   PRESET_ORDER,
@@ -43,6 +49,7 @@ function makeDoc(overrides: Partial<IKbDocument> & { titulo: string }): IKbDocum
     chunkCount: 3,
     isPreset: false,
     obligatorio: false,
+    oculto: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -238,18 +245,158 @@ describe('isTitleTaken — colisión de títulos al crear', () => {
   });
 });
 
-describe('nextVersion — réplica del isFirstFill del backend', () => {
+describe('nextVersion — réplica de las reglas de versionado del backend', () => {
   it('un preset virtual se creará en v1', () => {
     const virtual = buildKbGrid([]).find((doc) => doc.titulo === OBLIGATORIO_A);
-    expect(nextVersion(virtual!)).toBe(1);
+    expect(nextVersion(virtual!, 'texto nuevo')).toBe(1);
   });
 
   it('el primer contenido de un documento vacío no incrementa la versión', () => {
-    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: '', version: 1 }))).toBe(1);
-    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: '   ', version: 2 }))).toBe(2);
+    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: '', version: 1 }), 'primer texto')).toBe(1);
+    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: '   ', version: 2 }), 'primer texto')).toBe(2);
   });
 
   it('editar un documento con contenido sí incrementa la versión', () => {
-    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: 'algo', version: 3 }))).toBe(4);
+    expect(nextVersion(makeDoc({ titulo: LIBRE, contenido: 'algo', version: 3 }), 'algo distinto')).toBe(4);
+  });
+
+  it('guardar el mismo contenido no incrementa la versión (HU-KB-06)', () => {
+    const doc = makeDoc({ titulo: LIBRE, contenido: 'texto estable', version: 3 });
+    expect(nextVersion(doc, 'texto estable')).toBe(3);
+  });
+
+  it('un cambio que es solo whitespace tampoco incrementa la versión (HU-KB-06)', () => {
+    const doc = makeDoc({ titulo: LIBRE, contenido: 'hola mundo', version: 3 });
+    expect(nextVersion(doc, '  hola\n\n   mundo  ')).toBe(3);
+  });
+
+  it('cambiar solo la capitalización SÍ incrementa: la normalización no baja a minúsculas', () => {
+    const doc = makeDoc({ titulo: LIBRE, contenido: 'Bogotá', version: 3 });
+    expect(nextVersion(doc, 'bogotá')).toBe(4);
+  });
+});
+
+describe('normalizeContenido', () => {
+  it('recorta los extremos y colapsa cualquier racha de whitespace', () => {
+    expect(normalizeContenido('  hola\n\n\tmundo   ')).toBe('hola mundo');
+  });
+
+  it('no baja a minúsculas ni toca los acentos', () => {
+    expect(normalizeContenido('Bogotá')).toBe('Bogotá');
+  });
+});
+
+describe('cardStatus / cardBorder', () => {
+  it('el estado de indexación manda cuando hay algo que indexar', () => {
+    expect(cardStatus(makeDoc({ titulo: LIBRE, estadoIndexacion: 'indexado' }))).toBe('indexado');
+    expect(cardStatus(makeDoc({ titulo: LIBRE, estadoIndexacion: 'procesando' }))).toBe('procesando');
+    expect(cardStatus(makeDoc({ titulo: LIBRE, estadoIndexacion: 'fallido' }))).toBe('fallido');
+  });
+
+  it('un documento con contenido en pendiente sigue siendo "pendiente"', () => {
+    const doc = makeDoc({ titulo: LIBRE, estadoIndexacion: 'pendiente', contenido: 'algo' });
+    expect(cardStatus(doc)).toBe('pendiente');
+  });
+
+  it('sin contenido distingue el obligatorio (falta) del opcional', () => {
+    const falta = makeDoc({
+      titulo: OBLIGATORIO_A,
+      estadoIndexacion: 'pendiente',
+      contenido: '',
+      obligatorio: true,
+    });
+    const opcional = makeDoc({ titulo: OPCIONAL, estadoIndexacion: 'pendiente', contenido: '' });
+    expect(cardStatus(falta)).toBe('falta');
+    expect(cardStatus(opcional)).toBe('opcional');
+  });
+
+  it('el borde prioriza el obligatorio sin llenar sobre el resto', () => {
+    expect(cardBorder('falta')).toContain('amber');
+    expect(cardBorder('fallido')).toContain('destructive');
+    expect(cardBorder('indexado')).toContain('success');
+    expect(cardBorder('opcional')).toBe('border-border');
+  });
+});
+
+describe('filterKbGrid', () => {
+  const grid = buildKbGrid([
+    makeDoc({ titulo: OBLIGATORIO_A, estadoIndexacion: 'indexado' }),
+    makeDoc({ titulo: OBLIGATORIO_B, estadoIndexacion: 'fallido' }),
+    makeDoc({ titulo: OPCIONAL, estadoIndexacion: 'procesando' }),
+    makeDoc({ titulo: LIBRE, estadoIndexacion: 'indexado' }),
+  ]);
+
+  function titulos(criteria: Parameters<typeof filterKbGrid>[1]): string[] {
+    return filterKbGrid(grid, criteria).map((doc) => doc.titulo);
+  }
+
+  it('sin criterios devuelve la lista completa', () => {
+    expect(filterKbGrid(grid, EMPTY_FILTERS)).toHaveLength(grid.length);
+    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
+  });
+
+  it('el texto compara normalizado: ignora mayúsculas y espacios sobrantes', () => {
+    expect(titulos({ ...EMPTY_FILTERS, texto: '  PRODUCTOS ' })).toEqual([OBLIGATORIO_B]);
+  });
+
+  it('el texto busca por subcadena, no solo por prefijo', () => {
+    expect(titulos({ ...EMPTY_FILTERS, texto: 'empresas' })).toEqual([LIBRE]);
+  });
+
+  it('filtra por tipo con las mismas etiquetas de las tarjetas', () => {
+    expect(titulos({ ...EMPTY_FILTERS, tag: 'requerido' })).toEqual([OBLIGATORIO_A, OBLIGATORIO_B]);
+    expect(titulos({ ...EMPTY_FILTERS, tag: 'predefinido' })).toContain(OPCIONAL);
+    expect(titulos({ ...EMPTY_FILTERS, tag: 'predefinido' })).not.toContain(LIBRE);
+    expect(titulos({ ...EMPTY_FILTERS, tag: 'custom' })).toEqual([LIBRE]);
+  });
+
+  it('filtra por estado agrupando procesando y pendiente en "en proceso"', () => {
+    expect(titulos({ ...EMPTY_FILTERS, estado: 'indexado' })).toEqual([OBLIGATORIO_A, LIBRE]);
+    expect(titulos({ ...EMPTY_FILTERS, estado: 'fallido' })).toEqual([OBLIGATORIO_B]);
+    expect(titulos({ ...EMPTY_FILTERS, estado: 'proceso' })).toEqual([OPCIONAL]);
+  });
+
+  it('"sin llenar" recoge los presets virtuales, que no tienen documento detrás', () => {
+    const sinLlenar = titulos({ ...EMPTY_FILTERS, estado: 'sinLlenar' });
+    expect(sinLlenar).toContain('Horarios y ubicación');
+    expect(sinLlenar).toContain('Políticas y términos');
+  });
+
+  it('los criterios se combinan en AND', () => {
+    expect(titulos({ texto: 'información', tag: 'requerido', estado: 'indexado' })).toEqual([
+      OBLIGATORIO_A,
+    ]);
+    expect(titulos({ texto: 'información', tag: 'custom', estado: 'indexado' })).toEqual([]);
+  });
+
+  it('hasActiveFilters detecta cualquiera de los tres criterios', () => {
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, texto: 'x' })).toBe(true);
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, tag: 'custom' })).toBe(true);
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, estado: 'fallido' })).toBe(true);
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, texto: '   ' })).toBe(false);
+  });
+});
+
+describe('presets ocultos (soft-delete, HU-KB-06)', () => {
+  it('un preset oculto desaparece de la grilla y NO vuelve como virtual', () => {
+    const grid = buildKbGrid([makeDoc({ titulo: OPCIONAL, oculto: true })]);
+    expect(grid.map((doc) => doc.titulo)).not.toContain(OPCIONAL);
+    expect(grid).toHaveLength(PRESET_META.length - 1);
+  });
+
+  it('baja el denominador de documentos indexados sin tocar el de obligatorios', () => {
+    const progress = progressFrom([makeDoc({ titulo: OPCIONAL, oculto: true })]);
+    expect(progress.totalDocumentos).toBe(PRESET_META.length - 1);
+    expect(progress.obligatorios).toHaveLength(2);
+  });
+
+  it('un documento libre oculto tampoco se pinta', () => {
+    const grid = buildKbGrid([makeDoc({ titulo: LIBRE, oculto: true })]);
+    expect(grid.map((doc) => doc.titulo)).not.toContain(LIBRE);
+  });
+
+  it('su título sigue ocupado: el índice único del backend no se liberó', () => {
+    const documents = [makeDoc({ titulo: LIBRE, oculto: true })];
+    expect(isTitleTaken(LIBRE, documents)).toBe(true);
   });
 });
