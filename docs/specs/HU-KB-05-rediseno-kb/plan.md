@@ -256,6 +256,11 @@ const progress  = computeKbProgress(gridDocs);
   hay que cerrar **los dos**: el `AlertDialog` primero y, en el `onSuccess` de la mutación, el
   `Dialog` vía `onDone()`. Verificar en la revisión manual que el foco vuelve a la grilla y no queda
   atrapado.
+- **Contrato del merge, actualizado en HU-KB-06.** Lo de abajo describe el merge tal como lo dejó
+  esta HU: siempre 5 categorías. Desde HU-KB-06 `mergePresetsWithDocuments` devuelve **≤ 5**, porque
+  excluye los presets con `oculto: true` (soft-delete) y **no** los repone como virtuales. El
+  denominador dinámico `Z` baja en consecuencia; el de obligatorios sigue fijo en 2 porque un
+  obligatorio no se puede eliminar.
 - **Por qué el banner de error reemplaza a la grilla.** Con la query en error `documents` es `[]`, y
   `buildKbGrid([])` devuelve 5 presets virtuales. Pintarlos daría a entender que el tenant no tiene
   conocimiento cargado, cuando lo que ocurre es que no se pudo leer. El banner **ocupa el lugar** de

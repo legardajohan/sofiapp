@@ -97,8 +97,13 @@ Sin tocar una sola línea de backend ni del cliente HTTP.
 10. El modal de edición tiene un botón **Eliminar** separado a la izquierda, con `AlertDialog` de
     confirmación (patrón vigente del proyecto). Está **ausente** cuando `doc.obligatorio === true`
     y cuando el documento es un preset virtual (no hay nada que borrar).
-11. Al eliminar un preset **no** obligatorio, su tarjeta reaparece en la grilla como virtual en
-    estado "falta"/"opcional" — el comportamiento actual de `mergePresetsWithDocuments`, conservado.
+11. ~~Al eliminar un preset **no** obligatorio, su tarjeta reaparece en la grilla como virtual en
+    estado "falta"/"opcional" — el comportamiento actual de `mergePresetsWithDocuments`, conservado.~~
+    > **Superado por HU-KB-06.** Conservar la reaparición resultó ser el defecto, no la
+    > característica: eliminar un preset era un no-op visual. Desde HU-KB-06 el borrado se persiste
+    > como *soft-delete* (`oculto: true` en `KbDocument`), `mergePresetsWithDocuments` excluye esos
+    > presets y la tarjeta **desaparece**; re-crear el título la resucita. Además, el backend ahora
+    > rechaza con 400 el borrado de un obligatorio. Ver `docs/specs/HU-KB-06-mejoras-kb/`.
 12. El contador superior queda **partido en dos**: `X/2 obligatorios completados` (denominador fijo)
     y `Y/Z documentos indexados`, con `Z = 5 presets + documentos libres`, recalculado dinámicamente
     por `computeKbProgress`.

@@ -325,6 +325,8 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
   chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
   isPreset: Boolean,              // V2: documento base sembrado al crear el tenant (default false)
+  obligatorio: Boolean,           // V2: preset mínimo para que la IA responda; NO se puede eliminar
+  oculto: Boolean,                // HU-KB-06: soft-delete de un preset eliminado (default false)
   proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
   createdAt, updatedAt
@@ -333,6 +335,17 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 //          { tenantId: 1, createdAt: -1 }
 // Contenido tope 3.000 caracteres (validación Zod). Editar (PATCH) re-versiona, limpia chunks y
 // re-indexa solo si el contenido no está vacío. Los 5 presets se siembran vacíos al crear el tenant.
+//
+// HU-KB-06 — semántica de escritura:
+//  · Guardar contenido equivalente al ya almacenado (comparación normalizada: trim + colapso de
+//    whitespace, SIN bajar a minúsculas) es un NO-OP total: no re-versiona, no borra chunks, no
+//    encola kb-index, no toca `updatedAt` ni `Tenant.kbVersion`.
+//  · DELETE de un `obligatorio: true` → 400. DELETE de una de las 5 categorías predefinidas
+//    (por título, no solo por `isPreset`) → soft-delete: borra sus chunks y marca `oculto: true`
+//    con `contenido: ""`, sin borrar el documento. Un documento libre sí se borra de verdad.
+//  · El listado SIGUE devolviendo los ocultos con su flag: el frontend los necesita para distinguir
+//    "el preset nunca se creó" de "el admin lo eliminó" y no reponer la tarjeta. Re-crear ese
+//    título es una re-alta sobre el mismo documento (`oculto: false`), nunca un duplicado.
 ```
 
 ## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)
