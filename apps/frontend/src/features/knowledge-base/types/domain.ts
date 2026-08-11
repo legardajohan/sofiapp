@@ -4,10 +4,25 @@ export type EstadoIndexacion = 'pendiente' | 'procesando' | 'indexado' | 'fallid
 
 export type KbTriEstado = 'si' | 'no' | 'na';
 
+/**
+ * Un tramo de atención. **Espejo exacto del backend** (`kb.types.ts`), que lo guarda sin
+ * interpretarlo.
+ *
+ * `descripcion` llegó en HU-KB-12 y es **siempre opcional**: las estructuras guardadas antes la
+ * traen `undefined` y se leen igual, así que el cambio no obligó a subir `schemaVersion` ni a migrar
+ * un solo documento.
+ */
+export interface KbScheduleInterval {
+  desde: string; // 'HH:mm'
+  hasta: string; // 'HH:mm'
+  /** Para qué es este tramo: «Solo recepción de pedidos». Va en el intervalo, no en el día. */
+  descripcion?: string;
+}
+
 export interface KbScheduleDay {
   dia: string;
   cerrado: boolean;
-  intervalos: Array<{ desde: string; hasta: string }>; // 'HH:mm'
+  intervalos: KbScheduleInterval[];
 }
 
 /**

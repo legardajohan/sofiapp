@@ -775,17 +775,99 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, /Completar Horarios y ubicación/);
     await irASeccion(user, dialog, /Cuándo atienden/);
-    // Hay un «Añadir horario» por día; el primero es el de lunes.
-    const anadirLunes = within(dialog).getAllByRole('button', { name: /Añadir horario/ })[0] as HTMLElement;
-    await user.click(anadirLunes);
+    await user.click(within(dialog).getByRole('button', { name: 'Añadir horario al lunes' }));
     expect(within(dialog).getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
 
-    const cerrado = within(dialog).getAllByRole('switch')[0] as HTMLElement;
+    const cerrado = within(within(dialog).getByRole('group', { name: 'lunes' })).getByRole('switch');
     await user.click(cerrado);
     expect(within(dialog).queryByLabelText('Abre el lunes, horario 1')).toBeNull();
 
     await user.click(cerrado);
     expect(within(dialog).getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
+  });
+
+  it('copiar el horario del lunes lo aplica a varios días sin pisar los cerrados (HU-KB-12)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    await irASeccion(user, dialog, /Cuándo atienden/);
+
+    // El domingo cerrado NO debe recibir la copia.
+    await user.click(
+      within(within(dialog).getByRole('group', { name: 'domingo' })).getByRole('switch'),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Añadir horario al lunes' }));
+    await user.type(
+      within(dialog).getByLabelText('Descripción del horario 1 del lunes'),
+      'Presencial',
+    );
+
+    await user.click(
+      within(within(dialog).getByRole('group', { name: 'lunes' })).getByRole('button', {
+        name: /Copiar a…/,
+      }),
+    );
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /martes/ }));
+    await user.click(screen.getByRole('button', { name: 'Copiar (1)' }));
+
+    expect(within(dialog).getByLabelText('Abre el martes, horario 1')).toHaveValue('08:00');
+    // La descripción viaja con la copia: era el motivo de copiar.
+    expect(within(dialog).getByLabelText('Descripción del horario 1 del martes')).toHaveValue(
+      'Presencial',
+    );
+    expect(within(dialog).queryByLabelText('Abre el domingo, horario 1')).toBeNull();
+  });
+
+  it('un tramo que cierra antes de abrir bloquea el guardado; uno a medio llenar no (HU-KB-12)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    // Un dato aparte del horario, para que lo que se mida sea la validación del tramo y no el piso
+    // de «no se puede guardar un formulario vacío»: sin esto, un tramo sin horas deja el texto
+    // serializado vacío y el botón se apagaría por otra razón.
+    await irASeccion(user, dialog, /Cómo contactarlos/);
+    await user.type(within(dialog).getByLabelText(/WhatsApp/), '3001234567');
+
+    await irASeccion(user, dialog, /Cuándo atienden/);
+    await user.click(within(dialog).getByRole('button', { name: 'Añadir horario al lunes' }));
+
+    const guardar = within(dialog).getByRole('button', { name: 'Guardar e indexar' });
+    expect(guardar).toBeEnabled();
+
+    // Cierra antes de abrir: el tramo no se serializaría y el admin lo daría por guardado.
+    await user.clear(within(dialog).getByLabelText('Cierra el lunes, horario 1'));
+    await user.type(within(dialog).getByLabelText('Cierra el lunes, horario 1'), '06:00');
+    expect(
+      within(dialog).getByText('La hora de cierre debe ser posterior a la de apertura.'),
+    ).toBeInTheDocument();
+    expect(guardar).toBeDisabled();
+
+    // A medio llenar es el estado natural mientras se teclea: avisa, pero NO bloquea.
+    await user.clear(within(dialog).getByLabelText('Cierra el lunes, horario 1'));
+    expect(within(dialog).getByText('Completa las dos horas.')).toBeInTheDocument();
+    expect(guardar).toBeEnabled();
+  });
+
+  it('la descripción de un tramo llega al contenido guardado (HU-KB-12)', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: 'Horarios y ubicación' }));
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    await irASeccion(user, dialog, /Cuándo atienden/);
+    await user.click(within(dialog).getByRole('button', { name: 'Añadir horario al lunes' }));
+    await user.type(
+      within(dialog).getByLabelText('Descripción del horario 1 del lunes'),
+      'Atención presencial',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate.mock.calls[0]?.[0]?.contenido).toBe(
+      '## Cuándo atienden\nHorario de atención:\n- lunes: 08:00–18:00 (Atención presencial)',
+    );
   });
 
   it('ningún campo es obligatorio: basta el WhatsApp para poder guardar (HU-KB-10)', async () => {

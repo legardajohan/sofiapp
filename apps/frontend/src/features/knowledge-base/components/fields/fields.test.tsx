@@ -8,13 +8,10 @@ import { ConditionalReveal } from './ConditionalReveal.js';
 import { KnowledgeField } from './KnowledgeField.js';
 import { PolicyTriState } from './PolicyTriState.js';
 import { RepeatableList } from './RepeatableList.js';
-import { ScheduleDayEditor } from './ScheduleDayEditor.js';
+import { ScheduleWeekEditor } from './ScheduleWeekEditor.js';
 
 /**
- * Tests de los primitivos del formulario guiado (HU-KB-07).
- *
- * `PolicyTriState` y `ScheduleDayEditor` no tienen consumidor hasta HU-KB-09/10: sin estas pruebas
- * se entregarían a ciegas y el primer defecto aparecería dentro de otra historia.
+ * Tests de los primitivos del formulario guiado (HU-KB-07, con el editor semanal de HU-KB-12).
  */
 
 describe('KnowledgeField', () => {
@@ -282,27 +279,36 @@ describe('PolicyTriState', () => {
   });
 });
 
-describe('ScheduleDayEditor', () => {
-  function DiaDePrueba({ inicial }: { inicial: KbScheduleDay }) {
-    const [dia, setDia] = useState(inicial);
-    return <ScheduleDayEditor id="lunes" dia={dia} onChange={setDia} />;
+describe('ScheduleWeekEditor', () => {
+  const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+
+  /** La semana completa, como la normaliza `leerHorario` antes de montar el editor. */
+  function semana(overrides: Record<string, Partial<KbScheduleDay>> = {}): KbScheduleDay[] {
+    return DIAS.map((dia) => ({ dia, cerrado: false, intervalos: [], ...overrides[dia] }));
   }
 
-  const abierto: KbScheduleDay = { dia: 'lunes', cerrado: false, intervalos: [] };
+  function SemanaDePrueba({ inicial }: { inicial: KbScheduleDay[] }) {
+    const [dias, setDias] = useState(inicial);
+    return <ScheduleWeekEditor dias={dias} onChange={setDias} />;
+  }
 
-  it('un día abierto sin tramos invita a añadir uno o a cerrarlo', () => {
-    render(<DiaDePrueba inicial={abierto} />);
+  const anadirAl = (dia: string) => screen.getByRole('button', { name: `Añadir horario al ${dia}` });
+  /** Cada fila es un `group` rotulado con su día: es lo que separa siete switches «Cerrado». */
+  const cerradoDe = (dia: string) =>
+    within(screen.getByRole('group', { name: dia })).getByRole('switch');
 
-    expect(
-      screen.getByText('Sin horario para lunes. Añade uno o marca el día como cerrado.'),
-    ).toBeInTheDocument();
+  it('pinta los siete días: nadie debería tener que «crear» el martes', () => {
+    render(<SemanaDePrueba inicial={semana()} />);
+
+    for (const dia of DIAS) expect(screen.getByText(dia)).toBeInTheDocument();
+    expect(screen.getAllByRole('switch')).toHaveLength(7);
   });
 
   it('añade un tramo con una jornada por defecto, no vacía', async () => {
     const user = userEvent.setup();
-    render(<DiaDePrueba inicial={abierto} />);
+    render(<SemanaDePrueba inicial={semana()} />);
 
-    await user.click(screen.getByRole('button', { name: 'Añadir horario' }));
+    await user.click(anadirAl('lunes'));
 
     expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
     expect(screen.getByLabelText('Cierra el lunes, horario 1')).toHaveValue('18:00');
@@ -311,49 +317,143 @@ describe('ScheduleDayEditor', () => {
   it('admite horario partido: varios tramos en el mismo día', async () => {
     const user = userEvent.setup();
     render(
-      <DiaDePrueba
-        inicial={{
-          dia: 'lunes',
-          cerrado: false,
-          intervalos: [
-            { desde: '08:00', hasta: '12:00' },
-            { desde: '14:00', hasta: '18:00' },
-          ],
-        }}
+      <SemanaDePrueba
+        inicial={semana({
+          lunes: {
+            intervalos: [
+              { desde: '08:00', hasta: '12:00' },
+              { desde: '14:00', hasta: '18:00' },
+            ],
+          },
+        })}
       />,
     );
 
     expect(screen.getByLabelText('Abre el lunes, horario 2')).toHaveValue('14:00');
-    await user.click(screen.getByRole('button', { name: 'Quitar horario 1' }));
+    await user.click(screen.getByRole('button', { name: 'Quitar horario 1 del lunes' }));
     expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveValue('14:00');
   });
 
   it('marcar «Cerrado» esconde los tramos pero no los borra', async () => {
     const user = userEvent.setup();
     render(
-      <DiaDePrueba
-        inicial={{ dia: 'lunes', cerrado: false, intervalos: [{ desde: '09:00', hasta: '17:00' }] }}
+      <SemanaDePrueba
+        inicial={semana({ lunes: { intervalos: [{ desde: '09:00', hasta: '17:00' }] } })}
       />,
     );
 
-    await user.click(screen.getByRole('switch', { name: /Cerrado/ }));
+    const cerrado = cerradoDe('lunes');
+    await user.click(cerrado);
     expect(screen.queryByLabelText('Abre el lunes, horario 1')).not.toBeInTheDocument();
 
     // Reabrir el día no debería costar volver a escribir el horario.
-    await user.click(screen.getByRole('switch', { name: /Cerrado/ }));
+    await user.click(cerrado);
     expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveValue('09:00');
   });
 
   it('cada día rotula sus controles con su propio nombre', () => {
+    // Con los siete días en el mismo árbol, este test deja de ser una formalidad: es lo que impide
+    // que dos días compartan `aria-label` y que un test toque el campo del día equivocado.
     render(
-      <ScheduleDayEditor
-        id="domingo"
-        dia={{ dia: 'domingo', cerrado: false, intervalos: [{ desde: '10:00', hasta: '14:00' }] }}
-        onChange={vi.fn()}
+      <SemanaDePrueba
+        inicial={semana({
+          lunes: { intervalos: [{ desde: '08:00', hasta: '12:00' }] },
+          domingo: { intervalos: [{ desde: '10:00', hasta: '14:00' }] },
+        })}
       />,
     );
 
-    const grupo = screen.getByText('domingo').parentElement?.parentElement as HTMLElement;
-    expect(within(grupo).getByLabelText('Abre el domingo, horario 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
+    expect(screen.getByLabelText('Abre el domingo, horario 1')).toHaveValue('10:00');
+  });
+
+  it('la descripción viaja con el intervalo, no con el día', async () => {
+    const user = userEvent.setup();
+    render(
+      <SemanaDePrueba
+        inicial={semana({
+          lunes: {
+            intervalos: [
+              { desde: '08:00', hasta: '12:00' },
+              { desde: '14:00', hasta: '18:00' },
+            ],
+          },
+        })}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText('Descripción del horario 2 del lunes'),
+      'Solo recepción de pedidos',
+    );
+
+    expect(screen.getByLabelText('Descripción del horario 2 del lunes')).toHaveValue(
+      'Solo recepción de pedidos',
+    );
+    // El primer tramo sigue sin descripción: no es un dato del día.
+    expect(screen.getByLabelText('Descripción del horario 1 del lunes')).toHaveValue('');
+  });
+
+  it('un tramo que cierra antes de abrir se marca como error', async () => {
+    const user = userEvent.setup();
+    render(
+      <SemanaDePrueba
+        inicial={semana({ lunes: { intervalos: [{ desde: '18:00', hasta: '09:00' }] } })}
+      />,
+    );
+
+    expect(
+      screen.getByText('La hora de cierre debe ser posterior a la de apertura.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveAttribute('aria-invalid', 'true');
+
+    await user.clear(screen.getByLabelText('Cierra el lunes, horario 1'));
+    await user.type(screen.getByLabelText('Cierra el lunes, horario 1'), '20:00');
+
+    expect(
+      screen.queryByText('La hora de cierre debe ser posterior a la de apertura.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('un tramo a medio llenar avisa, pero NO como error', () => {
+    render(<SemanaDePrueba inicial={semana({ lunes: { intervalos: [{ desde: '08:00', hasta: '' }] } })} />);
+
+    expect(screen.getByText('Completa las dos horas.')).toBeInTheDocument();
+    // Sin `aria-invalid`: es una tarea pendiente, no un error. Y no bloquea el guardado.
+    expect(screen.getByLabelText('Abre el lunes, horario 1')).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+  });
+
+  it('copia el horario de un día a varios, sin pisar los cerrados', async () => {
+    const user = userEvent.setup();
+    render(
+      <SemanaDePrueba
+        inicial={semana({
+          lunes: { intervalos: [{ desde: '08:00', hasta: '12:00', descripcion: 'Presencial' }] },
+          domingo: { cerrado: true },
+        })}
+      />,
+    );
+
+    await user.click(screen.getAllByRole('button', { name: /Copiar a…/ })[0] as HTMLElement);
+
+    // Un día cerrado se ofrece deshabilitado: enterarse DESPUÉS de que se ignoró sería peor.
+    expect(screen.getByRole('menuitemcheckbox', { name: /domingo/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /martes/ }));
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /miércoles/ }));
+    await user.click(screen.getByRole('button', { name: 'Copiar (2)' }));
+
+    // La descripción viaja con la copia: era el motivo de copiar.
+    expect(screen.getByLabelText('Abre el martes, horario 1')).toHaveValue('08:00');
+    expect(screen.getByLabelText('Descripción del horario 1 del martes')).toHaveValue('Presencial');
+    expect(screen.getByLabelText('Abre el miércoles, horario 1')).toHaveValue('08:00');
+    // El jueves no se eligió y sigue vacío.
+    expect(screen.queryByLabelText('Abre el jueves, horario 1')).not.toBeInTheDocument();
   });
 });

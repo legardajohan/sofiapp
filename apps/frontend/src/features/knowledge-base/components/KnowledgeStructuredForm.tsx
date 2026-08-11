@@ -20,7 +20,7 @@ import { FieldCounter, KnowledgeField } from './fields/KnowledgeField.js';
 import { KnowledgeSection } from './fields/KnowledgeSection.js';
 import { PolicyTriState } from './fields/PolicyTriState.js';
 import { RepeatableList } from './fields/RepeatableList.js';
-import { ScheduleDayEditor } from './fields/ScheduleDayEditor.js';
+import { ScheduleWeekEditor } from './fields/ScheduleWeekEditor.js';
 
 const ADICIONAL_MAX = LIMITE_POR_KIND['texto-largo'];
 const ERROR_OBLIGATORIO = 'Falta completarlo.';
@@ -157,23 +157,11 @@ function Campo({ campo, estructura, onCampoChange, mostrarErrores }: CampoProps)
     }
 
     case 'horario': {
-      const dias = leerHorario(valor);
       return marco(
-        <div className="space-y-2">
-          {dias.map((dia, index) => (
-            <ScheduleDayEditor
-              key={dia.dia}
-              id={`${id}-${dia.dia}`}
-              dia={dia}
-              onChange={(siguiente) =>
-                onCampoChange(campo.id, {
-                  tipo: 'horario',
-                  dias: dias.map((d, i) => (i === index ? siguiente : d)),
-                })
-              }
-            />
-          ))}
-        </div>,
+        <ScheduleWeekEditor
+          dias={leerHorario(valor)}
+          onChange={(dias) => onCampoChange(campo.id, { tipo: 'horario', dias })}
+        />,
       );
     }
 

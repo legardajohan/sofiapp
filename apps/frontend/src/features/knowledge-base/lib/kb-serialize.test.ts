@@ -150,6 +150,96 @@ describe('formato por tipo de valor', () => {
     expect(texto).toBe('## Operación\nHorarios:\n- lunes: 08:00–12:00, 14:00–18:00\n- domingo: cerrado');
   });
 
+  it('horario: un tramo con descripción la lleva entre paréntesis', () => {
+    const texto = serializeEstructura(
+      estructura({
+        horario: {
+          tipo: 'horario',
+          dias: [
+            {
+              dia: 'lunes',
+              cerrado: false,
+              intervalos: [
+                { desde: '08:00', hasta: '12:00', descripcion: 'Atención presencial' },
+                { desde: '14:00', hasta: '18:00', descripcion: 'Solo recepción de pedidos' },
+              ],
+            },
+          ],
+        },
+      }),
+      SCHEMA,
+    );
+
+    // Paréntesis y no un guion `—`: el guion ya significa otra cosa en el tri-estado.
+    expect(texto).toBe(
+      '## Operación\nHorarios:\n- lunes: 08:00–12:00 (Atención presencial), 14:00–18:00 (Solo recepción de pedidos)',
+    );
+  });
+
+  it('horario: una descripción vacía o en blanco serializa EXACTAMENTE igual que no tenerla', () => {
+    // Es el candado del determinismo (HU-KB-12): los documentos guardados antes de que existiera
+    // `descripcion` no pueden cambiar de texto, o abrirlos y guardarlos crearía una versión nueva
+    // sin que nadie tocara nada.
+    const dias = (descripcion?: string) => [
+      {
+        dia: 'lunes',
+        cerrado: false,
+        intervalos: [{ desde: '08:00', hasta: '12:00', ...(descripcion !== undefined ? { descripcion } : {}) }],
+      },
+    ];
+
+    const sinCampo = serializeEstructura(
+      estructura({ horario: { tipo: 'horario', dias: dias() } }),
+      SCHEMA,
+    );
+
+    expect(serializeEstructura(estructura({ horario: { tipo: 'horario', dias: dias('') } }), SCHEMA)).toBe(sinCampo);
+    expect(serializeEstructura(estructura({ horario: { tipo: 'horario', dias: dias('   ') } }), SCHEMA)).toBe(sinCampo);
+    expect(sinCampo).toBe('## Operación\nHorarios:\n- lunes: 08:00–12:00');
+  });
+
+  it('horario: los tramos incompletos o invertidos se omiten', () => {
+    const texto = serializeEstructura(
+      estructura({
+        horario: {
+          tipo: 'horario',
+          dias: [
+            {
+              dia: 'lunes',
+              cerrado: false,
+              intervalos: [
+                { desde: '08:00', hasta: '' }, // a medio llenar
+                { desde: '20:00', hasta: '19:00' }, // cierra antes de abrir
+                { desde: '14:00', hasta: '18:00' },
+              ],
+            },
+          ],
+        },
+      }),
+      SCHEMA,
+    );
+
+    // Antes de HU-KB-12, el primero emitía `08:00–` y metía una línea rota en lo que lee la IA.
+    expect(texto).toBe('## Operación\nHorarios:\n- lunes: 14:00–18:00');
+  });
+
+  it('horario: un día abierto cuyos tramos son todos inservibles se omite entero', () => {
+    const texto = serializeEstructura(
+      estructura({
+        horario: {
+          tipo: 'horario',
+          dias: [
+            { dia: 'lunes', cerrado: false, intervalos: [{ desde: '', hasta: '' }] },
+            { dia: 'domingo', cerrado: true, intervalos: [] },
+          ],
+        },
+      }),
+      SCHEMA,
+    );
+
+    expect(texto).toBe('## Operación\nHorarios:\n- domingo: cerrado');
+  });
+
   it('repetible: un ítem por línea con sus subcampos', () => {
     const texto = serializeEstructura(
       estructura({

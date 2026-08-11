@@ -23,6 +23,7 @@ import {
   deleteKbDocument,
   updateKbDocument,
 } from '../../../api/knowledge-base.js';
+import { estructuraConHorarioInvertido } from '../lib/kb-horario.js';
 import { esPresetProtegido, isTitleTaken, isVirtualPresetId } from '../lib/kb-presets.js';
 import { camposFaltantes, type KbEditorMode, type KbSchemaDef } from '../lib/kb-schemas.js';
 import type { IKbDocument, KbEstructura } from '../types/index.js';
@@ -152,8 +153,19 @@ export function KnowledgeUploadEditor({
   const contenidoListo = isEdit || contenido.trim().length > 0;
   const tituloListo = !tituloEditable || (tituloTrimmed.length > 0 && !tituloDuplicado);
   const dentroDelTope = contenido.length <= CONTENIDO_MAX;
+
+  // Un tramo que cierra antes de abrir NO se serializa, así que dejar guardar sería tirar en
+  // silencio algo que el admin acaba de escribir y da por guardado. Un tramo a medio llenar es otra
+  // cosa —el estado natural mientras se teclea— y no bloquea nada (HU-KB-12).
+  const horarioInvertido = estructurado && estructuraConHorarioInvertido(estructura);
+
   const puedeGuardar =
-    contenidoListo && tituloListo && dentroDelTope && faltantes.length === 0 && !ocupado;
+    contenidoListo &&
+    tituloListo &&
+    dentroDelTope &&
+    faltantes.length === 0 &&
+    !horarioInvertido &&
+    !ocupado;
 
   // Un preset virtual no tiene nada que borrar; un obligatorio no se puede quedar sin su categoría;
   // y dos presets opcionales están protegidos porque borrarlos no tiene vuelta atrás (HU-KB-12).

@@ -15,8 +15,11 @@ import { HORARIOS_SCHEMA } from './horarios.schema.js';
 /** Espejo de `CONTENIDO_MAX` en `apps/backend/src/features/kb/kb.validation.ts`. */
 const CONTENIDO_MAX = 10_000;
 
-/** Tope de tramos por día que impone `ScheduleDayEditor`. */
+/** Tope de tramos por día que impone `ScheduleDayRow`. */
 const MAX_INTERVALOS = 4;
+
+/** Tope de la descripción de un tramo (`ScheduleIntervalRow`, HU-KB-12). */
+const DESCRIPCION_MAX = 80;
 
 /**
  * Ids congelados. **Este test es el candado**: renombrar un campo deja huérfano el dato ya guardado
@@ -319,7 +322,14 @@ describe('presupuesto de caracteres', () => {
             dias: DIAS_SEMANA.map((d) =>
               dia(
                 d,
-                Array.from({ length: MAX_INTERVALOS }, () => ({ desde: '08:00', hasta: '12:00' })),
+                // Con la descripción AL TOPE: desde HU-KB-12 es el mayor crecimiento que ha tenido
+                // esta categoría (7 días × 4 tramos × 80 ≈ 2.240 caracteres) y el presupuesto tiene
+                // que medirse con ella puesta, no sin ella.
+                Array.from({ length: MAX_INTERVALOS }, () => ({
+                  desde: '08:00',
+                  hasta: '12:00',
+                  descripcion: 'x'.repeat(DESCRIPCION_MAX),
+                })),
               ),
             ),
           };
@@ -336,16 +346,20 @@ describe('presupuesto de caracteres', () => {
     expect(serializedLength(estructuraAlTope(), HORARIOS_SCHEMA)).toBeLessThanOrEqual(CONTENIDO_MAX);
   });
 
-  it('el peor caso incluye de verdad los 7 días con sus 4 tramos', () => {
+  it('el peor caso incluye de verdad los 7 días con sus 4 tramos y sus descripciones', () => {
     const texto = serializeEstructura(estructuraAlTope(), HORARIOS_SCHEMA);
+    const tramo = `08:00–12:00 (${'x'.repeat(DESCRIPCION_MAX)})`;
     for (const d of DIAS_SEMANA) {
-      expect(texto).toContain(`- ${d}: 08:00–12:00, 08:00–12:00, 08:00–12:00, 08:00–12:00`);
+      expect(texto).toContain(`- ${d}: ${tramo}, ${tramo}, ${tramo}, ${tramo}`);
     }
   });
 
-  it('`otras_sedes` cuesta MÁS que el horario completo: ahí está el peso real', () => {
-    // Contraintuitivo y conviene tenerlo fijado: si algún día hay que recortar, el candidato son
-    // las sedes, no los días ni los tramos.
+  it('desde HU-KB-12 el horario cuesta MÁS que `otras_sedes`: el peso se movió', () => {
+    // **Invierte lo que fijó HU-KB-10**, y a propósito. Entonces las sedes costaban más del triple
+    // que el horario completo (1.560 contra 468) y eran el candidato obvio a recortar. La
+    // descripción por tramo cambió el reparto: 7 días × 4 tramos × 80 caracteres pesan más que las
+    // 6 sedes. Si algún día hay que recortar esta categoría, el candidato es ahora `DESCRIPCION_MAX`
+    // o el número de tramos, no las sedes.
     const tope = estructuraAlTope();
     const sinSedes = serializedLength(
       { ...tope, campos: { ...tope.campos, otras_sedes: { tipo: 'repetible', items: [] } } },
@@ -357,6 +371,6 @@ describe('presupuesto de caracteres', () => {
     );
     const total = serializedLength(tope, HORARIOS_SCHEMA);
 
-    expect(total - sinSedes).toBeGreaterThan(total - sinHorario);
+    expect(total - sinHorario).toBeGreaterThan(total - sinSedes);
   });
 });

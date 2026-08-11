@@ -6,10 +6,24 @@ export type EstadoIndexacion = 'pendiente' | 'procesando' | 'indexado' | 'fallid
 
 export type KbTriEstado = 'si' | 'no' | 'na';
 
+/**
+ * Un tramo de atención. El servidor lo guarda **opaco**: no lo valida campo a campo ni deriva de él
+ * el `contenido` indexable — eso lo hace `kb-serialize.ts` en el frontend.
+ *
+ * `descripcion` llegó en HU-KB-12 y es **siempre opcional**, para que las estructuras ya guardadas
+ * sigan encajando sin migración.
+ */
+export interface KbScheduleInterval {
+  desde: string; // 'HH:mm'
+  hasta: string; // 'HH:mm'
+  /** Para qué es este tramo: «Solo recepción de pedidos». Va en el intervalo, no en el día. */
+  descripcion?: string;
+}
+
 export interface KbScheduleDay {
   dia: string; // 'lunes' … 'domingo'; el orden lo impone el schema del frontend
   cerrado: boolean;
-  intervalos: Array<{ desde: string; hasta: string }>; // 'HH:mm'
+  intervalos: KbScheduleInterval[];
 }
 
 /**

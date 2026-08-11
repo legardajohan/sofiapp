@@ -4,6 +4,7 @@ export type {
   KbEstructura,
   KbFieldValue,
   KbScheduleDay,
+  KbScheduleInterval,
   KbTriEstado,
 } from './domain.js';
 export type {

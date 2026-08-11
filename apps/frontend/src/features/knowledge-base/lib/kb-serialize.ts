@@ -1,4 +1,5 @@
 import type { KbEstructura, KbFieldValue, KbScheduleDay, KbTriEstado } from '../types/index.js';
+import { intervalosUtiles } from './kb-horario.js';
 import {
   KB_SCHEMAS,
   esVisible,
@@ -40,9 +41,32 @@ function bloque(lineas: Array<string | null>): string[] {
   return lineas.filter((linea): linea is string => linea !== null && linea.length > 0);
 }
 
-function serializarDia(dia: KbScheduleDay): string {
+/**
+ * Un día del horario, o `null` si no aporta nada.
+ *
+ * Solo salen los tramos **completos y bien ordenados** (`intervalosUtiles`). Es la red de seguridad
+ * para lo ya guardado: un intervalo con una hora en blanco emitía `- lunes: –`, una línea rota que
+ * la IA acababa leyendo. Ese es el **único** texto que cambia para documentos existentes, y cambia
+ * a mejor.
+ *
+ * La descripción va entre paréntesis y no tras un guion `—`: el guion ya significa otra cosa en el
+ * tri-estado (`Etiqueta: Sí — detalle`), y dos significados para el mismo signo dentro del mismo
+ * documento es justo lo que no se quiere darle a un modelo.
+ */
+function serializarDia(dia: KbScheduleDay): string | null {
   if (dia.cerrado) return `- ${dia.dia}: cerrado`;
-  const tramos = dia.intervalos.map((i) => `${i.desde}–${i.hasta}`).join(', ');
+
+  const utiles = intervalosUtiles(dia);
+  if (utiles.length === 0) return null;
+
+  const tramos = utiles
+    .map((i) => {
+      const descripcion = i.descripcion?.trim() ?? '';
+      const rango = `${i.desde}–${i.hasta}`;
+      return descripcion.length === 0 ? rango : `${rango} (${descripcion})`;
+    })
+    .join(', ');
+
   return `- ${dia.dia}: ${tramos}`;
 }
 
@@ -72,10 +96,12 @@ function serializarValor(etiqueta: string, valor: KbFieldValue): string | null {
     }
 
     case 'horario': {
-      // Un día "cerrado" sin intervalos SÍ es información; uno abierto sin intervalos no dice nada.
-      const dias = valor.dias.filter((dia) => dia.cerrado || dia.intervalos.length > 0);
+      // Un día "cerrado" SÍ es información; uno abierto sin tramos útiles no dice nada.
+      const dias = valor.dias
+        .map(serializarDia)
+        .filter((linea): linea is string => linea !== null);
       if (dias.length === 0) return null;
-      return [`${etiqueta}:`, ...dias.map(serializarDia)].join('\n');
+      return [`${etiqueta}:`, ...dias].join('\n');
     }
 
     case 'repetible': {
