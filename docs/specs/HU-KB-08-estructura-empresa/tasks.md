@@ -116,7 +116,7 @@
       servidor ni queries a Mongo. El aislamiento lo siguen garantizando los endpoints existentes de
       `features/kb`, que no se tocan.
 - [x] Actualizar `**Estado:**` del `spec.md` a `implementado`.
-- [ ] Commit en `feat/HU-KB-05` con Conventional Commits **en inglés**.
+- [x] Commit en `feat/HU-KB-05` con Conventional Commits **en inglés** (`8a62c2c`).
 
 ## Definición de "hecho"
 
