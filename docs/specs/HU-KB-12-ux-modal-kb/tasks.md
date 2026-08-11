@@ -16,190 +16,214 @@
 
 ## Rama
 
-- [ ] **NO crear `feat/HU-KB-12`** — instrucción explícita. Se trabaja y se commitea sobre
+- [x] **NO crear `feat/HU-KB-12`** — instrucción explícita. Se trabaja y se commitea sobre
       **`feat/HU-KB-05`**, igual que HU-KB-06…11. Verificar con `git status` que la rama está limpia.
 
 ## Skills obligatorias (regla §7 del `CLAUDE.md` raíz)
 
-- [ ] Invocar `emil-design-eng`, `impeccable:impeccable` y `frontend-design:frontend-design`
-      **antes** de escribir cada componente. **Aquí sí aplica**: a diferencia de HU-KB-08…11, esta HU
-      escribe JSX (4 componentes nuevos, 3 modificados). Si alguna sigue sin estar registrada en el
-      entorno, dejarlo escrito en esta casilla, como se hizo antes.
-- [ ] Aplicar `typescript-strict-mode` a todo `.ts`/`.tsx` nuevo o editado: cero `any`, tipos de
+- [x] Invocar `emil-design-eng`, `impeccable:impeccable` y `frontend-design:frontend-design`
+      **antes** de escribir cada componente.
+      **Parcial, y queda declarado:** `frontend-design:frontend-design` **sí** está registrada y se
+      invocó antes de escribir una línea; su dirección está en la «Nota de diseño» del `plan.md` y de
+      ahí salieron la rejilla semanal como único elemento con carácter, las tres formas del indicador
+      de pestaña y el criterio de retirar el `Badge` de *Abierto*. `emil-design-eng` e
+      `impeccable:impeccable` **siguen sin estar registradas en este entorno** (igual que en
+      HU-KB-08…11), así que sus criterios se aplicaron de memoria y quedan **pendientes de
+      verificación** cuando estén disponibles.
+- [x] Aplicar `typescript-strict-mode` a todo `.ts`/`.tsx` nuevo o editado: cero `any`, tipos de
       retorno explícitos en lo exportado, y `schema.secciones[0]?.id` en vez de `!`.
 
 ---
 
 ## Paso 1 — Feature B (presets protegidos)
 
-- [ ] `lib/kb-presets.ts`: `PRESETS_NO_ELIMINABLES` (los dos títulos) y `esPresetProtegido(titulo)`,
+- [x] `lib/kb-presets.ts`: `PRESETS_NO_ELIMINABLES` (los dos títulos) y `esPresetProtegido(titulo)`,
       junto a `PRESET_META`.
-  - [ ] Compara con `normalizeTitulo`, **no** con igualdad exacta.
-  - [ ] El comentario explica la diferencia con `obligatorio` y por qué «Información Complementaria»
+  - [x] Compara con `normalizeTitulo`, **no** con igualdad exacta.
+  - [x] El comentario explica la diferencia con `obligatorio` y por qué «Información Complementaria»
         **no** está en la lista.
-- [ ] `components/KnowledgeUploadEditor.tsx`: añadir `&& !esPresetProtegido(doc.titulo)` al gate
+- [x] `components/KnowledgeUploadEditor.tsx`: añadir `&& !esPresetProtegido(doc.titulo)` al gate
       `puedeEliminar` (línea 159), con el comentario actualizado.
-- [ ] `components/KnowledgeUploadEditor.tsx`: **corregir el copy del `AlertDialog`** (línea 277).
+- [x] `components/KnowledgeUploadEditor.tsx`: **corregir el copy del `AlertDialog`** (línea 277).
       Retirar «La categoría seguirá en la lista, vacía, por si la necesitas» —es falso: 
       `mergePresetsWithDocuments` descarta los `oculto`— y poner «La categoría también desaparecerá
       de tu base de conocimiento.»
-  - [ ] Sigue siendo el `AlertDialog` del kit. **Cero** `window.confirm`.
-- [ ] Tests de B:
-  - [ ] `lib/kb-presets.test.ts`: `esPresetProtegido` con los dos títulos (y variantes de
+  - [x] Sigue siendo el `AlertDialog` del kit. **Cero** `window.confirm`.
+- [x] Tests de B:
+  - [x] `lib/kb-presets.test.ts`: `esPresetProtegido` con los dos títulos (y variantes de
         mayúsculas/espacios), «Información Complementaria» → `false`, título libre → `false`.
-  - [ ] `pages/KnowledgeBasePage.test.tsx` (~781-806): **invertir** el test de HU-KB-10 → la
+  - [x] `pages/KnowledgeBasePage.test.tsx` (~781-806): **invertir** el test de HU-KB-10 → la
         categoría **no** ofrece Eliminar.
-  - [ ] `pages/KnowledgeBasePage.test.tsx` (~918-941): **invertir** el de HU-KB-11 → ídem.
-  - [ ] **NUEVO**: «Información Complementaria» SÍ conserva Eliminar. Blinda la excepción.
-  - [ ] Verificar que siguen pasando los de documento propio (~222), obligatorio (~240) y preset
+  - [x] `pages/KnowledgeBasePage.test.tsx` (~918-941): **invertir** el de HU-KB-11 → ídem.
+  - [x] **NUEVO**: «Información Complementaria» SÍ conserva Eliminar. Blinda la excepción.
+  - [x] Verificar que siguen pasando los de documento propio (~222), obligatorio (~240) y preset
         virtual (~251).
-- [ ] Anotar en `docs/specs/HU-KB-10-.../spec.md` y `HU-KB-11-.../spec.md` que sus criterios 16 y 17
+- [x] Anotar en `docs/specs/HU-KB-10-.../spec.md` y `HU-KB-11-.../spec.md` que sus criterios 16 y 17
       quedan **superseded por HU-KB-12** (una línea en cada uno; no reescribir el spec).
-- [ ] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de B.**
+- [x] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de B.**
 
 ## Paso 2 — Feature A (pestañas)
 
-- [ ] `components/fields/KnowledgeSection.tsx`: reducir a `{ descripcion?, children }`. Quitar `id`,
+- [x] `components/fields/KnowledgeSection.tsx`: reducir a `{ descripcion?, children }`. Quitar `id`,
       `llenos`, `total`, el import de `Check` y los tres de `accordion`. Actualizar el comentario de
       cabecera: ya no es un bloque colapsable, es el panel de una pestaña.
-- [ ] `components/KnowledgeStructuredForm.tsx`:
-  - [ ] Quitar el import de `Accordion` (línea 1) y el bloque 237-272.
-  - [ ] Añadir el tipo `ProgresoSeccion` y el helper `progresoDeSeccion(seccion, campos)`, usando
+- [x] `components/KnowledgeStructuredForm.tsx`:
+  - [x] Quitar el import de `Accordion` (línea 1) y el bloque 237-272.
+  - [x] Añadir el tipo `ProgresoSeccion` y el helper `progresoDeSeccion(seccion, campos)`, usando
         `esVisible`, `valorVacio` y `requisito` — **sin duplicar** la lógica de `kb-schemas.ts`.
-  - [ ] Añadir el componente local `IndicadorSeccion`, con los tres casos y sus tokens (tabla del
+  - [x] Añadir el componente local `IndicadorSeccion`, con los tres casos y sus tokens (tabla del
         `plan.md`). El número del badge va `aria-hidden`; la información, en el `title`.
-  - [ ] Montar `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent` con
+  - [x] Montar `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent` con
         `defaultValue={schema.secciones[0]?.id}` (con `?.`, **nunca** `!`).
-  - [ ] `TabsList` con `h-auto w-full justify-start gap-1 overflow-x-auto` — si el anillo de foco se
+  - [x] `TabsList` con `h-auto w-full justify-start gap-1 overflow-x-auto` — si el anillo de foco se
         recorta, subir el padding, **no** quitar el anillo.
-  - [ ] «Información adicional» y el contador siguen **fuera** del `Tabs`, sin moverse.
-  - [ ] Un schema sin secciones no pinta `TabsList`.
-- [ ] Revisar en light **y** dark: badge ámbar, `text-success`, pestaña activa y desborde horizontal.
-- [ ] Tests de A:
-  - [ ] `components/KnowledgeStructuredForm.test.tsx`: renombrar el `describe` del acordeón y aplicar
+  - [x] «Información adicional» y el contador siguen **fuera** del `Tabs`, sin moverse.
+  - [x] Un schema sin secciones no pinta `TabsList`.
+- [x] Revisar en light **y** dark: badge ámbar, `text-success`, pestaña activa y desborde horizontal.
+- [x] Tests de A:
+  - [x] `components/KnowledgeStructuredForm.test.tsx`: renombrar el `describe` del acordeón y aplicar
         los nueve cambios del mapa del `plan.md`. En especial:
-    - [ ] «un schema SIN secciones no pinta acordeón» → `queryAllByRole('tab')` vacío.
-    - [ ] «el resumen de la sección…» se **parte en dos**: `x de y` sin obligatorios, badge ámbar con
+    - [x] «un schema SIN secciones no pinta acordeón» → `queryAllByRole('tab')` vacío.
+    - [x] «el resumen de la sección…» se **parte en dos**: `x de y` sin obligatorios, badge ámbar con
           obligatorios verificado por su `title`.
-    - [ ] «los errores rojos…» ya **no** cuenta 2 errores simultáneos: solo la pestaña activa monta
+    - [x] «los errores rojos…» ya **no** cuenta 2 errores simultáneos: solo la pestaña activa monta
           sus campos.
-    - [ ] «queda FUERA del acordeón» → cambiar de pestaña no esconde «Información adicional».
-  - [ ] `pages/KnowledgeBasePage.test.tsx`: `getByRole('button', …)` → `getByRole('tab', …)` en las
+    - [x] «queda FUERA del acordeón» → cambiar de pestaña no esconde «Información adicional».
+  - [x] `pages/KnowledgeBasePage.test.tsx`: `getByRole('button', …)` → `getByRole('tab', …)` en las
         líneas 546-548, 627-629, 729-731 y 840-842.
-  - [ ] Añadir el helper local `irASeccion(user, dialog, nombre)` y usarlo en **todos** los tests que
+  - [x] Añadir el helper local `irASeccion(user, dialog, nombre)` y usarlo en **todos** los tests que
         tocan un campo fuera de la primera sección (tabla del `plan.md`).
-  - [ ] `components/fields/fields.test.tsx`: verificado que no referencia el acordeón; sin cambios
+  - [x] `components/fields/fields.test.tsx`: verificado que no referencia el acordeón; sin cambios
         por A.
-- [ ] `grep -rn "accordion" apps/frontend/src/features/knowledge-base` sin resultados.
-- [ ] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de A.**
+- [x] `grep -rn "accordion" apps/frontend/src/features/knowledge-base` sin resultados.
+- [x] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de A.**
 
 ## Paso 3 — Feature C (editor semanal)
 
 ### Tipos y espejo
 
-- [ ] `types/domain.ts`: extraer `KbScheduleInterval { desde; hasta; descripcion? }` y usarla en
+- [x] `types/domain.ts`: extraer `KbScheduleInterval { desde; hasta; descripcion? }` y usarla en
       `KbScheduleDay`.
-- [ ] `apps/backend/src/features/kb/kb.types.ts`: **el mismo** cambio, en lockstep, con su comentario
+- [x] `apps/backend/src/features/kb/kb.types.ts`: **el mismo** cambio, en lockstep, con su comentario
       de espejo. **Nada más** de backend.
-- [ ] Confirmar que **no** hace falta tocar `kb.service.ts`, `kb.model.ts`, `kb.validation.ts` ni el
+- [x] Confirmar que **no** hace falta tocar `kb.service.ts`, `kb.model.ts`, `kb.validation.ts` ni el
       worker: el backend guarda la `estructura` opaca. Si hiciera falta, **parar** y levantarlo.
 
 ### Lógica pura
 
-- [ ] `lib/kb-horario.ts` (nuevo): `EstadoIntervalo`, `estadoIntervalo`, `intervaloValido`,
+- [x] `lib/kb-horario.ts` (nuevo): `EstadoIntervalo`, `estadoIntervalo`, `intervaloValido`,
       `intervalosUtiles`, `hayIntervalosInvertidos`, `estructuraConHorarioInvertido`,
       `copiarHorario` — con las firmas del `plan.md`.
-  - [ ] Documentar que `'HH:mm'` se compara **lexicográficamente** y que no hace falta parsear.
-  - [ ] `desde === hasta` → `'invertido'`.
-  - [ ] **Solo `'invertido'` bloquea** (criterio 21). Un `'incompleto'` no cuenta nunca, ni aquí ni
+  - [x] Documentar que `'HH:mm'` se compara **lexicográficamente** y que no hace falta parsear.
+  - [x] `desde === hasta` → `'invertido'`.
+  - [x] **Solo `'invertido'` bloquea** (criterio 21). Un `'incompleto'` no cuenta nunca, ni aquí ni
         en el gate del editor. Los nombres dicen `Invertidos` y no `Invalidos` justo por eso.
-  - [ ] `copiarHorario` copia **por valor** (incluida `descripcion`) y **no** toca los días cerrados.
-- [ ] `lib/kb-serialize.ts`: `serializarDia` emite `08:00–12:00 (descripción)` solo con descripción
+  - [x] `copiarHorario` copia **por valor** (incluida `descripcion`) y **no** toca los días cerrados.
+- [x] `lib/kb-serialize.ts`: `serializarDia` emite `08:00–12:00 (descripción)` solo con descripción
       no vacía, y omite los intervalos inválidos; el filtro de días usa `intervalosUtiles`.
-  - [ ] **Determinismo:** sin descripción, el texto es **byte a byte** el de hoy.
-  - [ ] Paréntesis, no guion `—`: el guion ya significa otra cosa en el tri-estado.
+  - [x] **Determinismo:** sin descripción, el texto es **byte a byte** el de hoy.
+  - [x] Paréntesis, no guion `—`: el guion ya significa otra cosa en el tri-estado.
 
 ### Componentes
 
-- [ ] `components/fields/ScheduleIntervalRow.tsx` (nuevo): dos `Input type="time"` + `Input` de
+- [x] `components/fields/ScheduleIntervalRow.tsx` (nuevo): dos `Input type="time"` + `Input` de
       descripción (`maxLength={80}`) + botón quitar. **Conserva** los `aria-label` actuales
       (`Abre el ${dia}, horario ${n}`, `Cierra el …`) y añade `Descripción del horario ${n} del ${dia}`.
-  - [ ] `'invertido'` → `aria-invalid` en las dos horas + «La hora de cierre debe ser posterior a la
+  - [x] `'invertido'` → `aria-invalid` en las dos horas + «La hora de cierre debe ser posterior a la
         de apertura.» en `text-destructive`.
-  - [ ] `'incompleto'` → «Completa las dos horas.» en `text-muted-foreground`, **sin**
+  - [x] `'incompleto'` → «Completa las dos horas.» en `text-muted-foreground`, **sin**
         `aria-invalid` y **sin** bloquear. No es un error, es una tarea pendiente.
-- [ ] `components/fields/CopiarHorarioMenu.tsx` (nuevo): `DropdownMenu` con dos atajos
+- [x] `components/fields/CopiarHorarioMenu.tsx` (nuevo): `DropdownMenu` con dos atajos
       («Lunes a viernes», «Toda la semana»), separador, los seis días como
       `DropdownMenuCheckboxItem` y un botón «Copiar (n)» al pie.
-  - [ ] Los días **cerrados** salen `disabled` con la leyenda «cerrado»: se ve **antes** de aplicar.
-  - [ ] **Prohibido** `window.prompt` o cualquier ventana nativa.
-- [ ] `components/fields/ScheduleDayRow.tsx` (nuevo): fila `grid grid-cols-[7.5rem_1fr]`, `Switch` de
+  - [x] Los días **cerrados** salen `disabled` con la leyenda «cerrado»: se ve **antes** de aplicar.
+  - [x] **Prohibido** `window.prompt` o cualquier ventana nativa.
+- [x] `components/fields/ScheduleDayRow.tsx` (nuevo): fila `grid grid-cols-[7.5rem_1fr]`, `Switch` de
       Cerrado, `Badge` solo en cerrado, lista de intervalos con tope `MAX_INTERVALOS`, «+ Añadir otro
       horario» y «Copiar a…».
-  - [ ] Marcar «Cerrado» **conserva** los intervalos (comportamiento actual, no se pierde).
-- [ ] `components/fields/ScheduleWeekEditor.tsx` (nuevo): las 7 filas en un solo contenedor
+  - [x] Marcar «Cerrado» **conserva** los intervalos (comportamiento actual, no se pierde).
+- [x] `components/fields/ScheduleWeekEditor.tsx` (nuevo): las 7 filas en un solo contenedor
       `rounded-lg border divide-y`, dueño del array y del copiado.
-- [ ] `components/KnowledgeStructuredForm.tsx`: el `case 'horario'` (157-176) pasa de mapear 7
+- [x] `components/KnowledgeStructuredForm.tsx`: el `case 'horario'` (157-176) pasa de mapear 7
       `ScheduleDayEditor` a montar **un** `ScheduleWeekEditor`. `leerHorario` se mantiene igual.
-- [ ] **Retirar** `components/fields/ScheduleDayEditor.tsx`.
-- [ ] `components/KnowledgeUploadEditor.tsx`: sumar `!horarioInvertido` a `puedeGuardar`, con
+- [x] **Retirar** `components/fields/ScheduleDayEditor.tsx`.
+- [x] `components/KnowledgeUploadEditor.tsx`: sumar `!horarioInvertido` a `puedeGuardar`, con
       `estructuraConHorarioInvertido`. **Solo el invertido**: un intervalo a medio teclear no puede
       apagar el botón Guardar.
-- [ ] Revisar en light **y** dark: filas, alineación de la columna de día, menú de copiado abierto,
+- [x] Revisar en light **y** dark: filas, alineación de la columna de día, menú de copiado abierto,
       estado de error.
 
 ### Tests de C
 
-- [ ] `lib/kb-horario.test.ts` (nuevo): `estadoIntervalo` en sus tres salidas (`ok`; `incompleto` con
+- [x] `lib/kb-horario.test.ts` (nuevo): `estadoIntervalo` en sus tres salidas (`ok`; `incompleto` con
       una y con las dos horas vacías; `invertido` con `hasta < desde` y con `desde === hasta`);
       `hayIntervalosInvertidos` — un día **cerrado** con intervalo invertido **no** cuenta, y un
       `incompleto` **tampoco** cuenta nunca; `copiarHorario` (copia con descripción, no pisa
       cerrados, no reordena los días).
-- [ ] `lib/kb-serialize.test.ts`:
-  - [ ] El test de horario existente (~136) **no se toca**: es el candado del determinismo.
-  - [ ] **NUEVO**: intervalo con descripción → `08:00–12:00 (Atención presencial)`.
-  - [ ] **NUEVO**: descripción en blanco o solo espacios → texto **idéntico** al de sin descripción.
-  - [ ] **NUEVO**: intervalo con una hora vacía → se omite; día con todos inválidos → sin encabezado.
-- [ ] `lib/schemas/horarios.schema.test.ts`:
-  - [ ] «se identifica como `horarios` en su versión 1» (~56) **no se toca** (criterio 19).
-  - [ ] El test de presupuesto (~292-361) pasa a llenar **también** las descripciones al tope
+- [x] `lib/kb-serialize.test.ts`:
+  - [x] El test de horario existente (~136) **no se toca**: es el candado del determinismo.
+  - [x] **NUEVO**: intervalo con descripción → `08:00–12:00 (Atención presencial)`.
+  - [x] **NUEVO**: descripción en blanco o solo espacios → texto **idéntico** al de sin descripción.
+  - [x] **NUEVO**: intervalo con una hora vacía → se omite; día con todos inválidos → sin encabezado.
+- [x] `lib/schemas/horarios.schema.test.ts`:
+  - [x] «se identifica como `horarios` en su versión 1» (~56) **no se toca** (criterio 19).
+  - [x] El test de presupuesto (~292-361) pasa a llenar **también** las descripciones al tope
         (7 días × 4 tramos × 80). Volver a **medir** contra `CONTENIDO_MAX`.
-- [ ] `components/fields/fields.test.tsx`: reescribir `describe('ScheduleDayEditor')` como
+- [x] `components/fields/fields.test.tsx`: reescribir `describe('ScheduleDayEditor')` como
       `describe('ScheduleWeekEditor')`, conservando los cuatro casos y sus `aria-label`. Añadir:
       descripción por intervalo, error de intervalo inválido, y el menú de copiado.
-- [ ] `pages/KnowledgeBasePage.test.tsx`:
-  - [ ] Los tres tests de horarios (~719, ~750, ~808) activan primero la pestaña «Cuándo atienden».
-  - [ ] **NUEVO**: copiar el lunes a martes y miércoles; los tres coinciden y un día cerrado no se
+- [x] `pages/KnowledgeBasePage.test.tsx`:
+  - [x] Los tres tests de horarios (~719, ~750, ~808) activan primero la pestaña «Cuándo atienden».
+  - [x] **NUEVO**: copiar el lunes a martes y miércoles; los tres coinciden y un día cerrado no se
         sobrescribe.
-  - [ ] **NUEVO**: una descripción llega al `contenido` guardado.
-  - [ ] **NUEVO**: un intervalo con `hasta < desde` deshabilita «Guardar e indexar».
-  - [ ] **NUEVO**: un intervalo con una hora **vacía** avisa pero **NO** deshabilita el guardado. Es
+  - [x] **NUEVO**: una descripción llega al `contenido` guardado.
+  - [x] **NUEVO**: un intervalo con `hasta < desde` deshabilita «Guardar e indexar».
+  - [x] **NUEVO**: un intervalo con una hora **vacía** avisa pero **NO** deshabilita el guardado. Es
         el par del anterior y el que fija por test la asimetría del criterio 21.
-- [ ] `pnpm --filter @sofiapp/api typecheck && test` en verde.
-- [ ] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de C.**
+- [x] `pnpm --filter @sofiapp/api typecheck && test` en verde.
+- [x] `pnpm --filter @sofiapp/web build && lint && test` en verde. **Commit de C.**
 
 ---
 
 ## Verificación final
 
-- [ ] `pnpm --filter @sofiapp/api typecheck` y `test` en verde (la HU toca `kb.types.ts`).
-- [ ] `pnpm --filter @sofiapp/web build` sin errores (incluye `tsc --noEmit`).
-- [ ] `pnpm --filter @sofiapp/web lint` en verde (`--max-warnings 0`).
-- [ ] `pnpm --filter @sofiapp/web test` en verde, **salvo** `TagSelector.test.tsx` (9 fallos
+- [x] `pnpm --filter @sofiapp/api typecheck` y `test` en verde (la HU toca `kb.types.ts`).
+- [x] `pnpm --filter @sofiapp/web build` sin errores (incluye `tsc --noEmit`).
+- [x] `pnpm --filter @sofiapp/web lint` en verde (`--max-warnings 0`).
+- [x] `pnpm --filter @sofiapp/web test` en verde, **salvo** `TagSelector.test.tsx` (9 fallos
       preexistentes y ajenos). Confirmar que el conteo no cambió.
-- [ ] `git diff --stat -- apps/backend` → **solo** `kb.types.ts` (criterio 24).
-- [ ] `grep -rn "window\.\(alert\|confirm\|prompt\)" apps/frontend/src` sin resultados (criterio 23).
-- [ ] `grep -rn "accordion" apps/frontend/src/features/knowledge-base` sin resultados (criterio 1).
-- [ ] `grep -rn "bg-\[#" apps/frontend/src/features/knowledge-base` sin resultados (criterio 26).
-- [ ] `git status` sin `*.png`/`*.jpg` colados (capturas de verificación borradas).
-- [ ] Checklist de PR de `docs/multi-tenancy.md` §9: **no aplica** — esta HU no añade queries a Mongo
+- [x] `git diff --stat -- apps/backend` → **solo** `kb.types.ts` (criterio 24).
+- [x] `grep -rn "window\.\(alert\|confirm\|prompt\)" apps/frontend/src` sin resultados (criterio 23).
+- [x] `grep -rn "accordion" apps/frontend/src/features/knowledge-base` sin resultados (criterio 1).
+- [x] `grep -rn "bg-\[#" apps/frontend/src/features/knowledge-base` sin resultados (criterio 26).
+- [x] `git status` sin `*.png`/`*.jpg` colados (capturas de verificación borradas).
+- [x] Checklist de PR de `docs/multi-tenancy.md` §9: **no aplica** — esta HU no añade queries a Mongo
       ni código de servidor; el único archivo de backend es una interfaz de tipos.
-- [ ] Actualizar `**Estado:**` del `spec.md` a `implementado`.
-- [ ] Los tres commits en `feat/HU-KB-05`, Conventional Commits **en inglés**.
+- [x] Actualizar `**Estado:**` del `spec.md` a `implementado`.
+- [x] Los tres commits en `feat/HU-KB-05`, Conventional Commits **en inglés**.
+
+## Desvíos y hallazgos al implementar
+
+- [x] **El peso del presupuesto de `horarios` se invirtió.** HU-KB-10 dejó fijado por test que
+      `otras_sedes` costaba **más del triple** que el horario completo (1.560 contra 468) y que, si
+      algún día había que recortar, el candidato eran las sedes. La descripción por tramo cambia el
+      reparto: 7 días × 4 tramos × 80 caracteres pesan **más** que las 6 sedes. El test se invirtió
+      con su porqué escrito. **El presupuesto sigue cabiendo** en `CONTENIDO_MAX` —se volvió a medir,
+      no a estimar—, pero la palanca de recorte es ahora `DESCRIPCION_MAX`, no las sedes.
+- [x] **Dos tests dieron por buena una asimetría que no habían probado.** Al escribir el de
+      «un tramo a medio llenar no bloquea» apareció que, con el formulario por lo demás vacío, el
+      botón Guardar **sí** se apaga — pero por `contenidoListo` (no hay texto que guardar), no por la
+      validación. El test se corrigió para llenar otro campo primero y medir de verdad lo que dice
+      medir. La distinción importa: son dos gates distintos y confundirlos habría hecho pasar el test
+      por la razón equivocada.
+- [x] **`ScheduleDayRow` ganó `role="group"` con el nombre del día.** No estaba en el plan: apareció
+      al escribir los tests y es una mejora real de accesibilidad, no una comodidad de test. Con los
+      siete días en el mismo árbol, siete switches rotulados «Cerrado» son indistinguibles para quien
+      navega con lector de pantalla.
 
 ## Para la fase de release (`/sdd-release`)
 
-- [ ] **R-4 · comprobar el estado real en producción.** Verificar si algún tenant tiene «Horarios y
+- [x] **R-4 · comprobar el estado real en producción.** Verificar si algún tenant tiene «Horarios y
       ubicación» o «Políticas y términos» con `oculto: true`. Si existe alguno, su tarjeta **no
       vuelve** por sí sola: esta HU cierra la puerta hacia adelante pero no repone lo ya borrado. Ese
       caso se trata **por separado**, como candidato a una HU de «restaurar categoría» (necesitaría

@@ -5,7 +5,7 @@
 > de tipos** (`kb.types.ts`), y solo para añadir un campo opcional. Primera HU de la serie que
 > **modifica la infraestructura de HU-KB-07** en vez de solo consumirla.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Historia
 
