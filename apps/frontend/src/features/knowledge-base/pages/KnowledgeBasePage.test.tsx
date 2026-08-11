@@ -463,8 +463,8 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     const user = userEvent.setup();
     renderPage();
 
-    // «Horarios y ubicación» llega como preset virtual: vacío, pero sin schema hasta HU-KB-09.
-    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    // «Políticas y términos» llega como preset virtual: vacío, pero sin schema hasta HU-KB-11.
+    const dialog = await abrir(user, /Completar Políticas y términos/);
 
     expect(within(dialog).getByLabelText('Contenido')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Información adicional')).toBeNull();
@@ -711,6 +711,117 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
             items: [{ nombre: 'Harina', descripcion: 'Bulto de 25 kg' }],
           },
         },
+        adicional: '',
+      },
+    });
+  });
+
+  it('«Horarios y ubicación» vacía abre el formulario guiado con los 7 días (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+
+    expect(within(dialog).getByRole('button', { name: /Dónde están/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Cómo contactarlos/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Cuándo atienden/ })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/WhatsApp/)).toBeInTheDocument();
+    // Los siete días se pintan siempre: nadie debería tener que «crear» el martes.
+    for (const dia of ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']) {
+      expect(within(dialog).getByText(dia)).toBeInTheDocument();
+    }
+    expect(within(dialog).getAllByRole('switch')).toHaveLength(7);
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+  });
+
+  it('la misma categoría con texto libre sigue abriendo su textarea (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: 'Horarios y ubicación', contenido: 'Abrimos de 8 a 6.' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Horarios y ubicación/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Abrimos de 8 a 6.');
+    expect(within(dialog).queryByRole('button', { name: /Cuándo atienden/ })).toBeNull();
+  });
+
+  it('marcar un día como Cerrado esconde sus tramos sin borrarlos (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    // Hay un «Añadir horario» por día; el primero es el de lunes.
+    const anadirLunes = within(dialog).getAllByRole('button', { name: /Añadir horario/ })[0] as HTMLElement;
+    await user.click(anadirLunes);
+    expect(within(dialog).getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
+
+    const cerrado = within(dialog).getAllByRole('switch')[0] as HTMLElement;
+    await user.click(cerrado);
+    expect(within(dialog).queryByLabelText('Abre el lunes, horario 1')).toBeNull();
+
+    await user.click(cerrado);
+    expect(within(dialog).getByLabelText('Abre el lunes, horario 1')).toHaveValue('08:00');
+  });
+
+  it('ningún campo es obligatorio: basta el WhatsApp para poder guardar (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    const guardar = within(dialog).getByRole('button', { name: 'Guardar e indexar' });
+    // Deshabilitado con todo vacío, pero por texto vacío, no por un campo exigido.
+    expect(guardar).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText(/WhatsApp/), '3001234567');
+    expect(guardar).toBeEnabled();
+  });
+
+  it('el modal de esta categoría SÍ tiene botón Eliminar, por ser opcional (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({
+          titulo: 'Horarios y ubicación',
+          contenido: '## Cómo contactarlos\nWhatsApp: 3001234567',
+          estructura: {
+            schemaVersion: 1,
+            schemaId: 'horarios',
+            campos: { whatsapp: { tipo: 'texto', valor: '3001234567' } },
+            adicional: '',
+          },
+        }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Horarios y ubicación/);
+    // Primer modal estructurado con borrado: las dos categorías anteriores son obligatorias y
+    // ocultan este botón, así que este camino no se había podido ejercitar.
+    await user.click(within(dialog).getByRole('button', { name: /Eliminar/ }));
+
+    const confirmacion = await screen.findByRole('alertdialog');
+    expect(within(confirmacion).getByText(/¿Eliminar «Horarios y ubicación»\?/)).toBeInTheDocument();
+  });
+
+  it('guardar horarios envía contenido y estructura con schemaId horarios (HU-KB-10)', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: 'Horarios y ubicación' }));
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    await user.type(within(dialog).getByLabelText(/WhatsApp/), '3001234567');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate).toHaveBeenCalledWith({
+      titulo: 'Horarios y ubicación',
+      contenido: '## Cómo contactarlos\nWhatsApp: 3001234567',
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'horarios',
+        campos: { whatsapp: { tipo: 'texto', valor: '3001234567' } },
         adicional: '',
       },
     });

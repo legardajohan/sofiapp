@@ -120,8 +120,12 @@ describe('schemaParaTitulo', () => {
     expect(schemaParaTitulo('  productos y servicios  ')).toBe(KB_SCHEMAS.productos);
   });
 
-  it('las categorías de HU-KB-10 y 11 todavía no tienen schema (abren en modo legado)', () => {
-    expect(schemaParaTitulo('Horarios y ubicación')).toBeUndefined();
+  it('resuelve «Horarios y ubicación» al schema horarios (HU-KB-10)', () => {
+    expect(schemaParaTitulo('Horarios y ubicación')).toBe(KB_SCHEMAS.horarios);
+    expect(schemaParaTitulo('  HORARIOS Y UBICACIÓN  ')).toBe(KB_SCHEMAS.horarios);
+  });
+
+  it('«Políticas y términos» es la única categoría sin schema (llega en HU-KB-11)', () => {
     expect(schemaParaTitulo('Políticas y términos')).toBeUndefined();
   });
 
@@ -167,7 +171,14 @@ describe('modoEditor y schemaDeDocumento', () => {
   });
 
   it('sin estructura y sin texto, sin schema → legado', () => {
-    expect(modoEditor(doc({ titulo: 'Horarios y ubicación' }))).toBe('legado');
+    expect(modoEditor(doc({ titulo: 'Políticas y términos' }))).toBe('legado');
+  });
+
+  it('«Horarios y ubicación» vacía nace estructurada; con texto libre sigue legada', () => {
+    expect(modoEditor(doc({ titulo: 'Horarios y ubicación' }))).toBe('estructurado');
+    expect(
+      modoEditor(doc({ titulo: 'Horarios y ubicación', contenido: 'Abrimos de 8 a 6.' })),
+    ).toBe('legado');
   });
 
   it('«Información de la empresa» vacía nace estructurada; con texto libre sigue legada', () => {
