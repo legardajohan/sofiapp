@@ -459,12 +459,16 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     expect(within(dialog).getByText('Texto que leerá la IA')).toBeInTheDocument();
   });
 
-  it('una categoría SIN schema registrado sigue en legado aunque esté vacía', async () => {
+  it('un documento SIN schema registrado sigue en legado aunque esté vacío', async () => {
     const user = userEvent.setup();
+    // Desde HU-KB-11 ningún preset sirve de ejemplo: los cinco tienen schema. El caso sobrevive
+    // solo para los documentos de título libre, que es donde sigue teniendo sentido.
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: LIBRE, contenido: '', estadoIndexacion: 'pendiente' })]),
+    );
     renderPage();
 
-    // «Políticas y términos» llega como preset virtual: vacío, pero sin schema hasta HU-KB-11.
-    const dialog = await abrir(user, /Completar Políticas y términos/);
+    const dialog = await abrir(user, new RegExp(`Completar ${LIBRE}`));
 
     expect(within(dialog).getByLabelText('Contenido')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Información adicional')).toBeNull();
@@ -822,6 +826,141 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
         schemaVersion: 1,
         schemaId: 'horarios',
         campos: { whatsapp: { tipo: 'texto', valor: '3001234567' } },
+        adicional: '',
+      },
+    });
+  });
+
+  it('«Políticas y términos» vacía abre el formulario guiado con las seis preguntas (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Políticas y términos/);
+
+    expect(within(dialog).getByRole('button', { name: /Políticas frecuentes/ })).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: /Términos y condiciones/ }),
+    ).toBeInTheDocument();
+    // Seis preguntas × tres opciones excluyentes.
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(18);
+    expect(within(dialog).getAllByRole('radio', { name: 'No aplica' })).toHaveLength(6);
+    expect(within(dialog).getByText('¿Aceptan devoluciones?', { exact: false })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+  });
+
+  it('la misma categoría con texto libre sigue abriendo su textarea (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({ titulo: 'Políticas y términos', contenido: 'No aceptamos devoluciones.' }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Políticas y términos/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('No aceptamos devoluciones.');
+    expect(within(dialog).queryByRole('button', { name: /Políticas frecuentes/ })).toBeNull();
+  });
+
+  it('el detalle solo se pide al responder «Sí», y conserva lo escrito (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Políticas y términos/);
+    // El orden de los radios es el del schema: el primer «Sí» es el de `acepta_devoluciones`.
+    const si = within(dialog).getAllByRole('radio', { name: 'Sí' })[0] as HTMLElement;
+    const no = within(dialog).getAllByRole('radio', { name: 'No' })[0] as HTMLElement;
+
+    expect(within(dialog).queryByLabelText('Detalle')).toBeNull();
+
+    await user.click(si);
+    await user.type(within(dialog).getByLabelText('Detalle'), '30 días con factura');
+
+    // Al cambiar a «No» el detalle se repliega —`detalleEn=['si']`— pero no se pierde.
+    await user.click(no);
+    expect(within(dialog).queryByLabelText('Detalle')).toBeNull();
+
+    await user.click(si);
+    expect(within(dialog).getByLabelText('Detalle')).toHaveValue('30 días con factura');
+  });
+
+  it('basta UNA respuesta para poder guardar, y «No aplica» cuenta como respuesta (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Políticas y términos/);
+    const guardar = within(dialog).getByRole('button', { name: 'Guardar e indexar' });
+    const noAplica = within(dialog).getAllByRole('radio', {
+      name: 'No aplica',
+    })[0] as HTMLElement;
+
+    // Deshabilitado con todo sin responder, pero por texto vacío, no por un campo exigido.
+    expect(guardar).toBeDisabled();
+
+    // **Hallazgo H1, en su forma más aguda.** El radio nace con «No aplica» marcado, así que pulsarlo
+    // no cambia el valor y el `RadioGroup` no emite nada: el campo sigue sin entrar en `campos` y el
+    // formulario sigue sin texto que guardar. El admin que quiere responder «No aplica» —la
+    // respuesta más común de esta categoría— tiene que pasar por otra opción y volver.
+    await user.click(noAplica);
+    expect(noAplica).toBeChecked();
+    expect(guardar).toBeDisabled();
+
+    await user.click(within(dialog).getAllByRole('radio', { name: 'Sí' })[0] as HTMLElement);
+    expect(guardar).toBeEnabled();
+
+    // Y de vuelta en «No aplica» sigue habiendo respuesta: un tri-estado respondido nunca está vacío.
+    await user.click(noAplica);
+    expect(guardar).toBeEnabled();
+  });
+
+  it('el modal de esta categoría SÍ tiene botón Eliminar, por ser opcional (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({
+          titulo: 'Políticas y términos',
+          contenido: '## Políticas frecuentes\n¿Admiten mascotas?: No aplica',
+          estructura: {
+            schemaVersion: 1,
+            schemaId: 'politicas',
+            campos: { admite_mascotas: { tipo: 'triestado', valor: 'na' } },
+            adicional: '',
+          },
+        }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Políticas y términos/);
+    await user.click(within(dialog).getByRole('button', { name: /Eliminar/ }));
+
+    const confirmacion = await screen.findByRole('alertdialog');
+    expect(within(confirmacion).getByText(/¿Eliminar «Políticas y términos»\?/)).toBeInTheDocument();
+  });
+
+  it('guardar políticas envía contenido y estructura con schemaId politicas (HU-KB-11)', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: 'Políticas y términos' }));
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Políticas y términos/);
+    // «No aplica» va al texto tal cual: es lo que impide que la IA conteste «no aceptan
+    // devoluciones» a un negocio que simplemente no vende productos físicos.
+    // El rodeo por «Sí» es obligado, no un capricho del test: ver el hallazgo H1 arriba.
+    await user.click(within(dialog).getAllByRole('radio', { name: 'Sí' })[0] as HTMLElement);
+    await user.click(within(dialog).getAllByRole('radio', { name: 'No aplica' })[0] as HTMLElement);
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate).toHaveBeenCalledWith({
+      titulo: 'Políticas y términos',
+      contenido: '## Políticas frecuentes\n¿Aceptan devoluciones?: No aplica',
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'politicas',
+        campos: { acepta_devoluciones: { tipo: 'triestado', valor: 'na', detalle: '' } },
         adicional: '',
       },
     });

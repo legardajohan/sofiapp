@@ -13,8 +13,9 @@ import type { KbSchemaDef } from '../kb-schemas.js';
  * pantalla está `etiqueta`, que sí es libre.
  *
  * Lo que NO va aquí, por categoría: catálogo y precios (HU-KB-09); dirección, sedes, canales de
- * contacto y horarios (HU-KB-10); devoluciones, garantías y envíos (HU-KB-11); y el tono de voz de
- * la IA, que es configuración del prompt (`HT-AI-01`) y no conocimiento recuperable.
+ * contacto y horarios (HU-KB-10); devoluciones y garantías (HU-KB-11); envíos y entrega (HU-KB-09);
+ * y el tono de voz de la IA, que es configuración del prompt (`HT-AI-01`) y no conocimiento
+ * recuperable.
  *
  * `zonas_cobertura` sí vive aquí: describe el **alcance** del negocio —dónde vende y despacha—, no
  * su dirección física. HU-KB-10 lo declara fuera de su alcance para que no se duplique.

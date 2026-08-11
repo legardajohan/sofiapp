@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IKbDocument, KbEstructura, KbFieldValue } from '../types/index.js';
+import { PRESET_META } from './kb-presets.js';
 import {
   KB_SCHEMAS,
   LIMITE_POR_KIND,
@@ -125,11 +126,21 @@ describe('schemaParaTitulo', () => {
     expect(schemaParaTitulo('  HORARIOS Y UBICACIÓN  ')).toBe(KB_SCHEMAS.horarios);
   });
 
-  it('«Políticas y términos» es la única categoría sin schema (llega en HU-KB-11)', () => {
-    expect(schemaParaTitulo('Políticas y términos')).toBeUndefined();
+  it('resuelve «Políticas y términos» al schema politicas (HU-KB-11)', () => {
+    expect(schemaParaTitulo('Políticas y términos')).toBe(KB_SCHEMAS.politicas);
+    expect(schemaParaTitulo('  POLÍTICAS Y TÉRMINOS  ')).toBe(KB_SCHEMAS.politicas);
+  });
+
+  it('desde HU-KB-11, NINGÚN preset queda sin schema', () => {
+    // Cierra la serie 07–11 y protege el registry: si alguien añade un preset y olvida su schema,
+    // este test lo delata antes de que su tarjeta abra en modo legado sin querer.
+    for (const { titulo } of PRESET_META) {
+      expect(schemaParaTitulo(titulo)).toBeDefined();
+    }
   });
 
   it('un título libre cualquiera no tiene schema', () => {
+    // El único caso que sigue cayendo en legado por falta de schema.
     expect(schemaParaTitulo('Convenios con empresas')).toBeUndefined();
   });
 });
@@ -171,7 +182,9 @@ describe('modoEditor y schemaDeDocumento', () => {
   });
 
   it('sin estructura y sin texto, sin schema → legado', () => {
-    expect(modoEditor(doc({ titulo: 'Políticas y términos' }))).toBe('legado');
+    // Desde HU-KB-11 ningún preset sirve de ejemplo: todos tienen schema. El caso sobrevive solo
+    // para los documentos de título libre, que es donde sigue teniendo sentido.
+    expect(modoEditor(doc({ titulo: 'Convenios con empresas' }))).toBe('legado');
   });
 
   it('«Horarios y ubicación» vacía nace estructurada; con texto libre sigue legada', () => {
@@ -192,6 +205,13 @@ describe('modoEditor y schemaDeDocumento', () => {
     expect(modoEditor(doc({ titulo: 'Productos y servicios' }))).toBe('estructurado');
     expect(
       modoEditor(doc({ titulo: 'Productos y servicios', contenido: 'Vendemos harina.' })),
+    ).toBe('legado');
+  });
+
+  it('«Políticas y términos» vacía nace estructurada; con texto libre sigue legada', () => {
+    expect(modoEditor(doc({ titulo: 'Políticas y términos' }))).toBe('estructurado');
+    expect(
+      modoEditor(doc({ titulo: 'Políticas y términos', contenido: 'No aceptamos devoluciones.' })),
     ).toBe('legado');
   });
 

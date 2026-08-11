@@ -2,6 +2,7 @@ import type { IKbDocument, KbEstructura, KbFieldValue } from '../types/index.js'
 import { normalizeTitulo } from './kb-presets.js';
 import { EMPRESA_SCHEMA } from './schemas/empresa.schema.js';
 import { HORARIOS_SCHEMA } from './schemas/horarios.schema.js';
+import { POLITICAS_SCHEMA } from './schemas/politicas.schema.js';
 import { PRODUCTOS_SCHEMA } from './schemas/productos.schema.js';
 
 /**
@@ -19,7 +20,7 @@ import { PRODUCTOS_SCHEMA } from './schemas/productos.schema.js';
 // ─── Tipos del contrato ─────────────────────────────────────────────────────
 
 /** Ids de schema conocidos. Cada HU de categoría amplía esta unión con el suyo. */
-export type KbSchemaId = 'generico' | 'empresa' | 'productos' | 'horarios';
+export type KbSchemaId = 'generico' | 'empresa' | 'productos' | 'horarios' | 'politicas';
 
 /** Qué control pinta un campo y, con él, qué forma tiene su `KbFieldValue`. */
 export type KbFieldKind =
@@ -161,6 +162,7 @@ export const KB_SCHEMAS: Readonly<Record<KbSchemaId, KbSchemaDef>> = {
   empresa: EMPRESA_SCHEMA,
   productos: PRODUCTOS_SCHEMA,
   horarios: HORARIOS_SCHEMA,
+  politicas: POLITICAS_SCHEMA,
 };
 
 /**
@@ -175,6 +177,7 @@ const SCHEMA_POR_TITULO: Readonly<Record<string, KbSchemaId>> = {
   [normalizeTitulo('Información de la empresa')]: 'empresa',
   [normalizeTitulo('Productos y servicios')]: 'productos',
   [normalizeTitulo('Horarios y ubicación')]: 'horarios',
+  [normalizeTitulo('Políticas y términos')]: 'politicas',
 };
 
 export function schemaParaTitulo(titulo: string): KbSchemaDef | undefined {
