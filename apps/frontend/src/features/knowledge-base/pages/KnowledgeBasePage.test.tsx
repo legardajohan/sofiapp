@@ -614,6 +614,108 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     });
   });
 
+  it('«Productos y servicios» vacía abre el formulario guiado (HU-KB-09)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Productos y servicios/);
+
+    expect(within(dialog).getByRole('button', { name: /Qué ofrece/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Precios y condiciones/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Cómo se entrega/ })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+  });
+
+  it('la misma categoría con texto libre sigue abriendo su textarea (HU-KB-09)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({ titulo: 'Productos y servicios', obligatorio: true, contenido: 'Vendemos harina.' }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, /Editar Productos y servicios/);
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Vendemos harina.');
+    expect(within(dialog).queryByRole('button', { name: /Qué ofrece/ })).toBeNull();
+  });
+
+  it('el catálogo pide nombre y descripción, y NINGÚN precio (HU-KB-09)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Productos y servicios/);
+    await user.click(within(dialog).getByRole('button', { name: /Añadir a productos y servicios/i }));
+
+    expect(within(dialog).getByLabelText('Nombre 1')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Qué es o qué incluye 1')).toBeInTheDocument();
+    // Acotado a controles: `/precio/i` a secas también casaría con la sección «Precios y
+    // condiciones» del acordeón, que Radix etiqueta con `aria-labelledby`.
+    expect(within(dialog).queryByRole('textbox', { name: /precio/i })).toBeNull();
+  });
+
+  it('los obligatorios bloquean hasta tener resumen y una fila con nombre (HU-KB-09)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Productos y servicios/);
+    const guardar = within(dialog).getByRole('button', { name: 'Guardar e indexar' });
+    expect(guardar).toBeDisabled();
+
+    await user.type(
+      within(dialog).getByLabelText(/¿Qué vende o qué servicios presta\?/),
+      'Insumos de panadería.',
+    );
+    expect(guardar).toBeDisabled(); // falta el catálogo
+
+    await user.click(within(dialog).getByRole('button', { name: /Añadir a productos y servicios/i }));
+    expect(guardar).toBeDisabled(); // una fila en blanco no cuenta
+
+    await user.type(within(dialog).getByLabelText('Nombre 1'), 'Harina');
+    expect(guardar).toBeEnabled(); // sin descripción: basta con el nombre
+  });
+
+  it('guardar productos envía contenido y estructura con schemaId productos (HU-KB-09)', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: 'Productos y servicios' }));
+    renderPage();
+
+    const dialog = await abrir(user, /Completar Productos y servicios/);
+    await user.type(
+      within(dialog).getByLabelText(/¿Qué vende o qué servicios presta\?/),
+      'Insumos.',
+    );
+    await user.click(within(dialog).getByRole('button', { name: /Añadir a productos y servicios/i }));
+    await user.type(within(dialog).getByLabelText('Nombre 1'), 'Harina');
+    await user.type(within(dialog).getByLabelText('Qué es o qué incluye 1'), 'Bulto de 25 kg');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate).toHaveBeenCalledWith({
+      titulo: 'Productos y servicios',
+      contenido: [
+        '## Qué ofrece',
+        '¿Qué vende o qué servicios presta?: Insumos.',
+        'Productos y servicios:',
+        '- nombre: Harina · descripcion: Bulto de 25 kg',
+      ].join('\n'),
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'productos',
+        campos: {
+          resumen_oferta: { tipo: 'texto', valor: 'Insumos.' },
+          catalogo: {
+            tipo: 'repetible',
+            items: [{ nombre: 'Harina', descripcion: 'Bulto de 25 kg' }],
+          },
+        },
+        adicional: '',
+      },
+    });
+  });
+
   it('la leyenda avisa cuando solo cambió la estructura, sin prometer versión nueva', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(
