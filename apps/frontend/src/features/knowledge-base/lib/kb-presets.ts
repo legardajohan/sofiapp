@@ -24,6 +24,36 @@ export const PRESET_META: readonly PresetMeta[] = [
 export const PRESET_ORDER: readonly string[] = PRESET_META.map((p) => p.titulo);
 
 /**
+ * Categorías que la UI **no** deja eliminar, aunque no sean obligatorias (HU-KB-12).
+ *
+ * No es lo mismo que `obligatorio`: esas dos bloquean el guardado hasta llenarse. Estas se pueden
+ * dejar vacías —simplemente no indexan nada— pero **borrarlas es un camino sin retorno**:
+ * `mergePresetsWithDocuments` descarta los `oculto`, así que la tarjeta desaparece de la grilla y no
+ * hay forma de reponerla desde la UI. Perder para siempre una categoría del producto por un clic no
+ * compensa el poder borrarla.
+ *
+ * «Información Complementaria» **no** está aquí a propósito: es la vía de escape del admin, y si no
+ * la quiere en su grilla es decisión suya.
+ */
+export const PRESETS_NO_ELIMINABLES: readonly string[] = [
+  'Horarios y ubicación',
+  'Políticas y términos',
+];
+
+const TITULOS_PROTEGIDOS = new Set(PRESETS_NO_ELIMINABLES.map(normalizeTitulo));
+
+/**
+ * `true` si el título es una categoría protegida.
+ *
+ * Compara **normalizado**, como todo el módulo: una comparación cruda aquí sería el único punto
+ * sensible a un espacio de más o a una mayúscula, y el precio de fallar es ofrecer un borrado que no
+ * debería existir.
+ */
+export function esPresetProtegido(titulo: string): boolean {
+  return TITULOS_PROTEGIDOS.has(normalizeTitulo(titulo));
+}
+
+/**
  * Prefijo del `id` de un preset "virtual": una tarjeta de la barra sin documento real detrás (nunca
  * se creó o fue eliminado). No es un ObjectId de Mongo; el frontend lo usa para decidir crear (POST)
  * en vez de editar (PATCH) cuando el admin lo llena por primera vez.

@@ -163,7 +163,11 @@ conocimiento recuperable, y cualquier migración de texto libre a estructura
     comportamiento fijo de `PolicyTriState`): aparece al marcar «Sí» y se repliega al cambiar a «No»
     o «No aplica», **conservando** lo escrito por si el admin vuelve. Se acepta tal cual y se
     documenta su límite en **H2**.
-17. **El botón Eliminar sigue estando** en este modal —la categoría es opcional— y el borrado
+17. > ⚠️ **SUPERSEDED por HU-KB-12.** Este criterio se cumplió y se probó, pero la decisión de
+    > producto cambió: «Políticas y términos» pasó a ser una categoría **protegida** y su modal ya
+    > **no** ofrece Eliminar. El test correspondiente se invirtió.
+
+    **El botón Eliminar sigue estando** en este modal —la categoría es opcional— y el borrado
     funciona igual que antes del formulario guiado, como ya se comprobó en HU-KB-10.
 18. Con todos los campos vacíos no se puede guardar; basta responder **una** política —incluso con
     «No aplica»— para poder hacerlo, porque un `triestado` respondido nunca está vacío. **Matiz

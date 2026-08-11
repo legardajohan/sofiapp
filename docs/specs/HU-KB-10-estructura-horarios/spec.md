@@ -130,7 +130,11 @@ tono de voz de la IA, que es configuración del prompt (`HT-AI-01`) y no conocim
 15. El editor de días permite marcar un día como **Cerrado** —conservando sus tramos por si vuelve a
     abrirse— y añadir hasta **4 tramos** por día. Todo esto ya lo hace `ScheduleDayEditor`: el
     criterio verifica que el schema lo cablea bien, no que el primitivo funcione.
-16. **El botón Eliminar sigue estando** en este modal, porque la categoría es opcional, y el borrado
+16. > ⚠️ **SUPERSEDED por HU-KB-12.** Este criterio se cumplió y se probó, pero la decisión de
+    > producto cambió: «Horarios y ubicación» pasó a ser una categoría **protegida** y su modal ya
+    > **no** ofrece Eliminar (borrarla no tiene vuelta atrás). El test correspondiente se invirtió.
+
+    **El botón Eliminar sigue estando** en este modal, porque la categoría es opcional, y el borrado
     funciona igual que antes del formulario guiado. Es el primer modal estructurado con borrado y
     hay que comprobar que el modo estructurado no lo rompe.
 17. Con todos los campos vacíos no se puede guardar (el texto serializado sería vacío); basta llenar

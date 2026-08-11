@@ -23,7 +23,7 @@ import {
   deleteKbDocument,
   updateKbDocument,
 } from '../../../api/knowledge-base.js';
-import { isTitleTaken, isVirtualPresetId } from '../lib/kb-presets.js';
+import { esPresetProtegido, isTitleTaken, isVirtualPresetId } from '../lib/kb-presets.js';
 import { camposFaltantes, type KbEditorMode, type KbSchemaDef } from '../lib/kb-schemas.js';
 import type { IKbDocument, KbEstructura } from '../types/index.js';
 import { FieldCounter } from './fields/KnowledgeField.js';
@@ -155,8 +155,10 @@ export function KnowledgeUploadEditor({
   const puedeGuardar =
     contenidoListo && tituloListo && dentroDelTope && faltantes.length === 0 && !ocupado;
 
-  // Un preset virtual no tiene nada que borrar; un obligatorio no se puede quedar sin su categoría.
-  const puedeEliminar = doc !== undefined && !isVirtualPreset && !doc.obligatorio;
+  // Un preset virtual no tiene nada que borrar; un obligatorio no se puede quedar sin su categoría;
+  // y dos presets opcionales están protegidos porque borrarlos no tiene vuelta atrás (HU-KB-12).
+  const puedeEliminar =
+    doc !== undefined && !isVirtualPreset && !doc.obligatorio && !esPresetProtegido(doc.titulo);
 
   function handleEstructuraChange(siguiente: KbEstructura): void {
     setTocado(true);
@@ -274,7 +276,14 @@ export function KnowledgeUploadEditor({
                   <AlertDialogDescription>
                     La IA dejará de usar este contenido y se borrarán sus fragmentos indexados. No se
                     puede deshacer.
-                    {doc.isPreset && ' La categoría seguirá en la lista, vacía, por si la necesitas.'}
+                    {/*
+                      Decía «La categoría seguirá en la lista, vacía, por si la necesitas» y era
+                      falso: `mergePresetsWithDocuments` descarta los `oculto` y NO la repone como
+                      virtual, así que la tarjeta desaparece de la grilla sin vía de retorno. Un
+                      aviso de borrado que promete lo contrario de lo que hace el código es el peor
+                      sitio donde tener una mentira (HU-KB-12).
+                    */}
+                    {doc.isPreset && ' La categoría también desaparecerá de tu base de conocimiento.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

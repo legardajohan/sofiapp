@@ -782,7 +782,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     expect(guardar).toBeEnabled();
   });
 
-  it('el modal de esta categoría SÍ tiene botón Eliminar, por ser opcional (HU-KB-10)', async () => {
+  it('«Horarios y ubicación» NO ofrece Eliminar: es una categoría protegida (HU-KB-12)', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(
       listado([
@@ -801,12 +801,11 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     renderPage();
 
     const dialog = await abrir(user, /Editar Horarios y ubicación/);
-    // Primer modal estructurado con borrado: las dos categorías anteriores son obligatorias y
-    // ocultan este botón, así que este camino no se había podido ejercitar.
-    await user.click(within(dialog).getByRole('button', { name: /Eliminar/ }));
 
-    const confirmacion = await screen.findByRole('alertdialog');
-    expect(within(confirmacion).getByText(/¿Eliminar «Horarios y ubicación»\?/)).toBeInTheDocument();
+    // **Invierte** el criterio 16 de HU-KB-10, que exigía el botón. La categoría sigue siendo
+    // opcional —se puede dejar vacía y no indexa nada—, pero borrarla no tiene vuelta atrás:
+    // `mergePresetsWithDocuments` descarta los `oculto` y la tarjeta no vuelve.
+    expect(within(dialog).queryByRole('button', { name: /Eliminar/ })).not.toBeInTheDocument();
   });
 
   it('guardar horarios envía contenido y estructura con schemaId horarios (HU-KB-10)', async () => {
@@ -915,7 +914,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     expect(guardar).toBeEnabled();
   });
 
-  it('el modal de esta categoría SÍ tiene botón Eliminar, por ser opcional (HU-KB-11)', async () => {
+  it('«Políticas y términos» NO ofrece Eliminar: es una categoría protegida (HU-KB-12)', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(
       listado([
@@ -934,10 +933,41 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     renderPage();
 
     const dialog = await abrir(user, /Editar Políticas y términos/);
+
+    // **Invierte** el criterio 17 de HU-KB-11, por la misma razón que su gemelo de horarios.
+    expect(within(dialog).queryByRole('button', { name: /Eliminar/ })).not.toBeInTheDocument();
+  });
+
+  it('«Información Complementaria» SÍ conserva Eliminar: es la excepción deliberada (HU-KB-12)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([
+        makeDoc({
+          titulo: COMPLEMENTARIA,
+          contenido: '## Información adicional\nCerramos en enero.',
+          estructura: {
+            schemaVersion: 1,
+            schemaId: 'generico',
+            campos: {},
+            adicional: 'Cerramos en enero.',
+          },
+        }),
+      ]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Editar ${COMPLEMENTARIA}`));
+
+    // Blinda la excepción: es la vía de escape del admin y él decide si la quiere en su grilla. Este
+    // test existe para que nadie «uniformice» las tres opcionales en una limpieza futura.
     await user.click(within(dialog).getByRole('button', { name: /Eliminar/ }));
 
     const confirmacion = await screen.findByRole('alertdialog');
-    expect(within(confirmacion).getByText(/¿Eliminar «Políticas y términos»\?/)).toBeInTheDocument();
+    expect(within(confirmacion).getByText(`¿Eliminar «${COMPLEMENTARIA}»?`)).toBeInTheDocument();
+    // Y el aviso dice lo que de verdad pasa: la categoría desaparece de la grilla.
+    expect(
+      within(confirmacion).getByText(/La categoría también desaparecerá de tu base de conocimiento/),
+    ).toBeInTheDocument();
   });
 
   it('guardar políticas envía contenido y estructura con schemaId politicas (HU-KB-11)', async () => {

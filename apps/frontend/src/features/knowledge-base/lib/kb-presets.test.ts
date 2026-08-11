@@ -14,6 +14,7 @@ import {
   cardStatus,
   computeKbProgress,
   EMPTY_FILTERS,
+  esPresetProtegido,
   filterKbGrid,
   hasActiveFilters,
   isTitleTaken,
@@ -242,6 +243,33 @@ describe('isTitleTaken — colisión de títulos al crear', () => {
 
   it('normalizeTitulo recorta y baja a minúsculas', () => {
     expect(normalizeTitulo('  Políticas Y Términos ')).toBe('políticas y términos');
+  });
+});
+
+describe('esPresetProtegido — categorías que la UI no deja eliminar (HU-KB-12)', () => {
+  it('«Horarios y ubicación» y «Políticas y términos» están protegidas', () => {
+    expect(esPresetProtegido('Horarios y ubicación')).toBe(true);
+    expect(esPresetProtegido('Políticas y términos')).toBe(true);
+  });
+
+  it('compara normalizado: mayúsculas y espacios sobrantes no la burlan', () => {
+    // Es la razón de usar `normalizeTitulo`: el precio de fallar es ofrecer un borrado que no
+    // debería existir.
+    expect(esPresetProtegido('  HORARIOS Y UBICACIÓN  ')).toBe(true);
+    expect(esPresetProtegido('políticas y términos')).toBe(true);
+  });
+
+  it('«Información Complementaria» NO está protegida: es la excepción deliberada', () => {
+    expect(esPresetProtegido('Información Complementaria')).toBe(false);
+  });
+
+  it('los obligatorios no necesitan esta lista: ya los cubre `obligatorio`', () => {
+    expect(esPresetProtegido('Información de la empresa')).toBe(false);
+    expect(esPresetProtegido('Productos y servicios')).toBe(false);
+  });
+
+  it('un título libre del admin nunca está protegido', () => {
+    expect(esPresetProtegido('Convenios con empresas')).toBe(false);
   });
 });
 
