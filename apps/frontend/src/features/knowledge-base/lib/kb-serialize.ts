@@ -162,10 +162,10 @@ export function serializedLength(estructura: KbEstructura, schema?: KbSchemaDef)
  * «Información adicional». Sin pérdida, sin trocear y sin intentar adivinar a qué campo va cada
  * frase: adivinar mal sería peor que no migrar.
  *
- * **Sin consumidor de UI en HU-KB-07**, a propósito: con un solo schema registrado —y siendo ese
- * schema `generico`, que es un textarea con encabezado— ofrecer la migración sería cambiar de caja
- * para escribir lo mismo. La conecta HU-KB-08 detrás de un opt-in explícito, cuando ya haya campos
- * de verdad al otro lado.
+ * **Sigue sin consumidor de UI.** HU-KB-07 la dejó lista pensando en conectarla desde HU-KB-08, pero
+ * al planear esa HU se difirió: conectarla implica UI propia —un aviso «Completar con el formulario
+ * guiado», su confirmación y su deshacer— que afecta a las cuatro categorías por igual y no cabe
+ * dentro del alcance de una que solo declara un schema. Queda para una HU de migración propia.
  */
 export function migrarLegadoAEstructura(contenido: string, schemaId: KbSchemaId): KbEstructura {
   return {

@@ -110,8 +110,12 @@ describe('schemaParaTitulo', () => {
     expect(schemaParaTitulo('  información complementaria  ')).toBe(KB_SCHEMAS.generico);
   });
 
-  it('las categorías de HU-KB-08..11 todavía no tienen schema (abren en modo legado)', () => {
-    expect(schemaParaTitulo('Información de la empresa')).toBeUndefined();
+  it('resuelve «Información de la empresa» al schema empresa (HU-KB-08)', () => {
+    expect(schemaParaTitulo('Información de la empresa')).toBe(KB_SCHEMAS.empresa);
+    expect(schemaParaTitulo('  INFORMACIÓN DE LA EMPRESA  ')).toBe(KB_SCHEMAS.empresa);
+  });
+
+  it('las categorías de HU-KB-09..11 todavía no tienen schema (abren en modo legado)', () => {
     expect(schemaParaTitulo('Productos y servicios')).toBeUndefined();
     expect(schemaParaTitulo('Horarios y ubicación')).toBeUndefined();
     expect(schemaParaTitulo('Políticas y términos')).toBeUndefined();
@@ -160,6 +164,13 @@ describe('modoEditor y schemaDeDocumento', () => {
 
   it('sin estructura y sin texto, sin schema → legado', () => {
     expect(modoEditor(doc({ titulo: 'Horarios y ubicación' }))).toBe('legado');
+  });
+
+  it('«Información de la empresa» vacía nace estructurada; con texto libre sigue legada', () => {
+    expect(modoEditor(doc({ titulo: 'Información de la empresa' }))).toBe('estructurado');
+    expect(
+      modoEditor(doc({ titulo: 'Información de la empresa', contenido: 'Somos Acme.' })),
+    ).toBe('legado');
   });
 
   it('creación libre (sin documento) → legado', () => {

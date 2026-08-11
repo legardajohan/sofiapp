@@ -6,6 +6,8 @@ import { RepeatableList } from './RepeatableList.js';
 
 /** Intervalo por defecto de un día que se acaba de abrir: una jornada de oficina corriente. */
 const INTERVALO_INICIAL = { desde: '08:00', hasta: '18:00' };
+// Nota: su consumidor llega en HU-KB-10 («Horarios y ubicación»), no en HU-KB-09 como decía la
+// numeración provisional de HU-KB-07.
 
 const MAX_INTERVALOS = 4;
 

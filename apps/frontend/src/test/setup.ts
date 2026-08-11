@@ -18,6 +18,17 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = (): void => {};
 }
 
+// Radix mide con ResizeObserver (el acordeón para su altura animada, el radio para su indicador) y
+// jsdom no lo implementa. Sin este stub, cualquier test que renderice el formulario guiado de la KB
+// revienta con "ResizeObserver is not defined" por el entorno, no por el código.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // Limpia el DOM renderizado entre tests para evitar fugas de estado.
 afterEach(() => {
   cleanup();

@@ -1,5 +1,6 @@
 import type { IKbDocument, KbEstructura, KbFieldValue } from '../types/index.js';
 import { normalizeTitulo } from './kb-presets.js';
+import { EMPRESA_SCHEMA } from './schemas/empresa.schema.js';
 
 /**
  * Sistema de campos del modal guiado (HU-KB-07).
@@ -15,8 +16,8 @@ import { normalizeTitulo } from './kb-presets.js';
 
 // ─── Tipos del contrato ─────────────────────────────────────────────────────
 
-/** Ids de schema conocidos. HU-KB-08 y siguientes amplían esta unión con los suyos. */
-export type KbSchemaId = 'generico';
+/** Ids de schema conocidos. Cada HU de categoría amplía esta unión con el suyo. */
+export type KbSchemaId = 'generico' | 'empresa';
 
 /** Qué control pinta un campo y, con él, qué forma tiene su `KbFieldValue`. */
 export type KbFieldKind =
@@ -155,6 +156,7 @@ const GENERICO: KbSchemaDef = {
 
 export const KB_SCHEMAS: Readonly<Record<KbSchemaId, KbSchemaDef>> = {
   generico: GENERICO,
+  empresa: EMPRESA_SCHEMA,
 };
 
 /**
@@ -166,6 +168,7 @@ export const KB_SCHEMAS: Readonly<Record<KbSchemaId, KbSchemaDef>> = {
  */
 const SCHEMA_POR_TITULO: Readonly<Record<string, KbSchemaId>> = {
   [normalizeTitulo('Información Complementaria')]: 'generico',
+  [normalizeTitulo('Información de la empresa')]: 'empresa',
 };
 
 export function schemaParaTitulo(titulo: string): KbSchemaDef | undefined {

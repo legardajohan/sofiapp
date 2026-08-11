@@ -36,6 +36,10 @@ interface PolicyTriStateProps {
  *
  * Es un `RadioGroup` y no tres botones: la elección es excluyente y así la anuncian los lectores de
  * pantalla, con navegación por flechas incluida.
+ *
+ * Su consumidor principal llega en **HU-KB-11** («Políticas y términos»), no en HU-KB-10 como decía
+ * la numeración provisional de HU-KB-07. Desde HU-KB-08 ya lo usa `parte_de_grupo` en el schema de
+ * empresa.
  */
 export function PolicyTriState({
   id,

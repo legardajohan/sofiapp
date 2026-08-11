@@ -533,6 +533,87 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
   });
 
+  it('«Información de la empresa» vacía abre el formulario guiado (HU-KB-08)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
+
+    expect(within(dialog).getByRole('button', { name: /Identidad/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Propósito y valores/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Alcance y respaldo/ })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+  });
+
+  it('la misma categoría con texto libre sigue abriendo su textarea (HU-KB-08)', async () => {
+    const user = userEvent.setup();
+    mockGetKbDocuments.mockResolvedValue(
+      listado([makeDoc({ titulo: OBLIGATORIO, obligatorio: true, contenido: 'Somos Acme.' })]),
+    );
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Editar ${OBLIGATORIO}`));
+
+    expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Somos Acme.');
+    expect(within(dialog).queryByRole('button', { name: /Identidad/ })).toBeNull();
+  });
+
+  it('los dos obligatorios de empresa bloquean el guardado hasta completarse (HU-KB-08)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
+    const guardar = within(dialog).getByRole('button', { name: 'Guardar e indexar' });
+    expect(guardar).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText(/Nombre comercial/), 'Acme');
+    expect(guardar).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText(/¿A qué se dedica\?/), 'Insumos de panadería.');
+    expect(guardar).toBeEnabled(); // todos los opcionales siguen vacíos
+  });
+
+  it('«Nombre del grupo» aparece solo al responder que sí (HU-KB-08)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
+    expect(within(dialog).queryByLabelText(/Nombre del grupo/)).toBeNull();
+
+    await user.click(within(dialog).getByRole('radio', { name: 'Sí' }));
+    expect(within(dialog).getByLabelText(/Nombre del grupo/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('radio', { name: 'No aplica' }));
+    expect(within(dialog).queryByLabelText(/Nombre del grupo/)).toBeNull();
+  });
+
+  it('guardar empresa envía contenido y estructura con schemaId empresa (HU-KB-08)', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: OBLIGATORIO }));
+    renderPage();
+
+    const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
+    await user.type(within(dialog).getByLabelText(/Nombre comercial/), 'Acme');
+    await user.type(within(dialog).getByLabelText(/¿A qué se dedica\?/), 'Insumos.');
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate).toHaveBeenCalledWith({
+      titulo: OBLIGATORIO,
+      contenido: '## Identidad\nNombre comercial: Acme\n¿A qué se dedica?: Insumos.',
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'empresa',
+        campos: {
+          nombre_comercial: { tipo: 'texto', valor: 'Acme' },
+          descripcion: { tipo: 'texto', valor: 'Insumos.' },
+        },
+        adicional: '',
+      },
+    });
+  });
+
   it('la leyenda avisa cuando solo cambió la estructura, sin prometer versión nueva', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(
