@@ -175,8 +175,7 @@
 - [x] Checklist de PR de `docs/multi-tenancy.md` §9: **no aplica** — esta HU no añade código de
       servidor ni queries a Mongo.
 - [x] Actualizar `**Estado:**` del `spec.md` a `implementado`.
-- [ ] Commit en `feat/HU-KB-05` con Conventional Commits **en inglés**. *(Pendiente: a la espera de
-      luz verde, con todo lo demás en verde.)*
+- [x] Commit en `feat/HU-KB-05` con Conventional Commits **en inglés** (`a34f205`).
 
 ## Definición de "hecho"
 
