@@ -1,61 +1,29 @@
-import { Check } from 'lucide-react';
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-
 interface KnowledgeSectionProps {
-  /** Valor del `AccordionItem`; debe ser único dentro del formulario. */
-  id: string;
-  titulo: string;
   descripcion?: string;
-  /** Campos exigibles ya resueltos y total de ellos. Con `total: 0` no se muestra resumen. */
-  llenos: number;
-  total: number;
   children: React.ReactNode;
 }
 
 /**
- * Bloque colapsable del formulario guiado. Se monta dentro de un `<Accordion type="multiple">`,
- * que es quien decide qué secciones están abiertas.
+ * Panel de una sección del formulario guiado. Se monta dentro de un `TabsContent`, que es quien
+ * decide cuándo está visible.
  *
- * El resumen del encabezado (`3 de 5`) existe para que el admin sepa qué le falta **sin** tener que
- * desplegar la sección: con el bloque cerrado, ese contador es la única información disponible.
+ * **Ya no lleva contador** (HU-KB-12). Con el acordeón, el `3 de 5` del encabezado era la única
+ * información disponible con la sección plegada; con pestañas, ese resumen vive en el
+ * `TabsTrigger` —que es donde el admin lo necesita, porque desde una pestaña tiene que poder ver
+ * qué le falta **en las otras**—. Dejarlo también aquí sería repetir el mismo número a dos
+ * centímetros de sí mismo.
+ *
+ * Queda tan delgado a propósito: sigue existiendo para que el formulario no tenga que repetir el
+ * espaciado ni la tipografía de la descripción en cada rama.
  */
 export function KnowledgeSection({
-  id,
-  titulo,
   descripcion,
-  llenos,
-  total,
   children,
 }: KnowledgeSectionProps): React.ReactElement {
-  const completa = total > 0 && llenos === total;
-
   return (
-    <AccordionItem value={id} className="border-b last:border-b-0">
-      <AccordionTrigger className="hover:no-underline">
-        <span className="flex flex-1 items-center justify-between gap-3 pr-3">
-          <span className="text-left">
-            <span className="block">{titulo}</span>
-            {descripcion && (
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                {descripcion}
-              </span>
-            )}
-          </span>
-
-          {total > 0 && (
-            <span className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums text-muted-foreground">
-              {completa && <Check className="size-3.5 text-success" aria-hidden="true" />}
-              {llenos} de {total}
-            </span>
-          )}
-        </span>
-      </AccordionTrigger>
-
-      <AccordionContent className="space-y-4 pb-5">{children}</AccordionContent>
-    </AccordionItem>
+    <div className="space-y-4">
+      {descripcion && <p className="text-xs text-muted-foreground">{descripcion}</p>}
+      {children}
+    </div>
   );
 }

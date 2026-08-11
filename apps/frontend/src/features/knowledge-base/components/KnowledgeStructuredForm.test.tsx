@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { KbEstructura } from '../types/index.js';
 import { KB_SCHEMAS, camposFaltantes, type KbSchemaDef } from '../lib/kb-schemas.js';
@@ -82,42 +82,115 @@ function Formulario({
   );
 }
 
+/**
+ * Schema sin un solo campo exigible: es el único que ejercita el contador «x de y» de las pestañas,
+ * porque en cuanto una sección tiene un obligatorio su indicador pasa a ser el badge ámbar.
+ */
+const SCHEMA_SIN_OBLIGATORIOS: KbSchemaDef = {
+  id: 'generico',
+  version: 2,
+  secciones: [
+    {
+      id: 'contacto',
+      titulo: 'Contacto',
+      campos: [
+        { id: 'whatsapp', etiqueta: 'WhatsApp', kind: 'texto-corto', requisito: 'opcional' },
+        { id: 'correo', etiqueta: 'Correo', kind: 'texto-corto', requisito: 'opcional' },
+      ],
+    },
+  ],
+};
+
 const guardar = () => screen.getByRole('button', { name: 'Guardar e indexar' });
+const pestana = (nombre: RegExp) => screen.getByRole('tab', { name: nombre });
 
-describe('el acordeón refleja el schema', () => {
-  it('renderiza una sección por cada una declarada, con su descripción', () => {
+/** Con pestañas, los campos de una sección inactiva NO están montados: hay que ir a ella primero. */
+async function irA(user: ReturnType<typeof userEvent.setup>, nombre: RegExp): Promise<void> {
+  await user.click(pestana(nombre));
+}
+
+describe('las pestañas reflejan el schema', () => {
+  it('renderiza una pestaña por cada sección declarada', () => {
     render(<Formulario />);
 
-    expect(screen.getByRole('button', { name: /Identidad/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Políticas/ })).toBeInTheDocument();
-    expect(screen.getByText('Quiénes son')).toBeInTheDocument();
+    expect(pestana(/Identidad/)).toBeInTheDocument();
+    expect(pestana(/Políticas/)).toBeInTheDocument();
   });
 
-  it('renderiza los campos de cada sección con su marcador de exigencia', () => {
-    render(<Formulario />);
-
-    expect(screen.getByRole('textbox', { name: /Nombre/ })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /Lema/ })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'No aplica' })).toBeInTheDocument();
-    expect(screen.getByText(/Opcional/)).toBeInTheDocument();
-  });
-
-  it('un schema SIN secciones no pinta acordeón, pero sí «Información adicional»', () => {
-    render(<Formulario schema={KB_SCHEMAS.generico} inicial={estructura()} />);
-
-    expect(screen.queryByRole('button', { name: /Identidad/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Información adicional' })).toBeInTheDocument();
-  });
-
-  it('el resumen de la sección cuenta los campos visibles llenos', async () => {
+  it('solo la sección activa muestra su descripción y sus campos', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
 
-    expect(screen.getByRole('button', { name: /Identidad/ })).toHaveTextContent('0 de 2');
+    // La primera sección es la activa por defecto.
+    expect(screen.getByText('Quiénes son')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Nombre/ })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Lema/ })).toBeInTheDocument();
+    expect(screen.getByText(/Opcional/)).toBeInTheDocument();
+    // Lo de la otra pestaña NO está en el DOM: `TabsContent` desmonta lo inactivo.
+    expect(screen.queryByRole('radio', { name: 'No aplica' })).not.toBeInTheDocument();
+
+    await irA(user, /Políticas/);
+
+    expect(screen.getByRole('radio', { name: 'No aplica' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Nombre/ })).not.toBeInTheDocument();
+  });
+
+  it('un schema SIN secciones no pinta pestañas, pero sí «Información adicional»', () => {
+    render(<Formulario schema={KB_SCHEMAS.generico} inicial={estructura()} />);
+
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+    expect(screen.getByRole('textbox', { name: 'Información adicional' })).toBeInTheDocument();
+  });
+
+  it('una sección SIN obligatorios lleva el contador «x de y» de campos llenos', async () => {
+    const user = userEvent.setup();
+    render(<Formulario schema={SCHEMA_SIN_OBLIGATORIOS} />);
+
+    expect(pestana(/Contacto/)).toHaveTextContent('0 de 2');
+
+    await user.type(screen.getByRole('textbox', { name: /WhatsApp/ }), '3001234567');
+
+    // Se recalcula mientras se escribe: la pestaña es lo único que informa de las secciones que el
+    // admin no está mirando.
+    expect(pestana(/Contacto/)).toHaveTextContent('1 de 2');
+  });
+
+  it('una sección CON obligatorios lleva el badge de cuántos faltan, y su título queda intacto', async () => {
+    const user = userEvent.setup();
+    render(<Formulario />);
+
+    const identidad = pestana(/Identidad/);
+    expect(within(identidad).getByTitle('Falta 1 campo obligatorio')).toBeInTheDocument();
+    // El número va `aria-hidden`, así que el NOMBRE accesible del tab sigue siendo solo el título:
+    // sin esto, un lector de pantalla anunciaría «Identidad 1».
+    expect(identidad).toHaveAccessibleName('Identidad');
 
     await user.type(screen.getByRole('textbox', { name: /Nombre/ }), 'Acme');
 
-    expect(screen.getByRole('button', { name: /Identidad/ })).toHaveTextContent('1 de 2');
+    expect(within(pestana(/Identidad/)).queryByTitle(/Falta/)).not.toBeInTheDocument();
+    expect(within(pestana(/Identidad/)).getByText('Sección completa')).toBeInTheDocument();
+    // La otra sigue reclamando lo suyo, que es justo para lo que sirve el indicador.
+    expect(within(pestana(/Políticas/)).getByTitle('Falta 1 campo obligatorio')).toBeInTheDocument();
+  });
+
+  it('el badge pluraliza en español', () => {
+    const dosObligatorios: KbSchemaDef = {
+      id: 'generico',
+      version: 2,
+      secciones: [
+        {
+          id: 'identidad',
+          titulo: 'Identidad',
+          campos: [
+            { id: 'nombre', etiqueta: 'Nombre', kind: 'texto-corto', requisito: 'obligatorio' },
+            { id: 'nit', etiqueta: 'NIT', kind: 'texto-corto', requisito: 'obligatorio' },
+          ],
+        },
+      ],
+    };
+    render(<Formulario schema={dosObligatorios} />);
+
+    expect(screen.getByTitle('Faltan 2 campos obligatorios')).toBeInTheDocument();
   });
 });
 
@@ -132,15 +205,15 @@ describe('«Información adicional» está siempre', () => {
     expect(screen.getByRole('textbox', { name: 'Información adicional' })).toBeInTheDocument();
   });
 
-  it('queda FUERA del acordeón: no se puede plegar hasta esconderla', async () => {
+  it('queda FUERA de las pestañas: cambiar de sección no la esconde', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
 
-    // Pliega las dos secciones; la vía de texto libre debe seguir a la vista.
-    await user.click(screen.getByRole('button', { name: /Identidad/ }));
-    await user.click(screen.getByRole('button', { name: /Políticas/ }));
-
+    // Cambiar de pestaña sí desmonta los campos de la otra sección…
+    await irA(user, /Políticas/);
     expect(screen.queryByRole('textbox', { name: /Nombre/ })).not.toBeInTheDocument();
+
+    // …pero la vía de texto libre sigue a la vista, esté donde esté el admin.
     expect(screen.getByRole('textbox', { name: 'Información adicional' })).toBeInTheDocument();
   });
 
@@ -160,13 +233,14 @@ describe('campos obligatorios y el botón de guardar', () => {
     expect(guardar()).toBeDisabled();
   });
 
-  it('se habilita en cuanto se resuelven todos los obligatorios', async () => {
+  it('se habilita en cuanto se resuelven todos los obligatorios, estén en la pestaña que estén', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
 
     await user.type(screen.getByRole('textbox', { name: /Nombre/ }), 'Acme');
-    expect(guardar()).toBeDisabled(); // falta el tri-estado
+    expect(guardar()).toBeDisabled(); // falta el tri-estado, que vive en la otra pestaña
 
+    await irA(user, /Políticas/);
     await user.click(screen.getByRole('radio', { name: 'No' }));
     expect(guardar()).toBeEnabled();
   });
@@ -176,18 +250,29 @@ describe('campos obligatorios y el botón de guardar', () => {
     render(<Formulario />);
 
     await user.type(screen.getByRole('textbox', { name: /Nombre/ }), 'Acme');
+    await irA(user, /Políticas/);
     await user.click(screen.getByRole('radio', { name: 'No' }));
 
+    await irA(user, /Identidad/);
     expect(screen.getByRole('textbox', { name: /Lema/ })).toHaveValue('');
     expect(guardar()).toBeEnabled();
   });
 
-  it('los errores rojos solo salen tras intentar guardar, no al abrir', () => {
+  it('los errores rojos solo salen tras intentar guardar, no al abrir', async () => {
+    const user = userEvent.setup();
     const { rerender } = render(<Formulario />);
     expect(screen.queryByText('Falta completarlo.')).not.toBeInTheDocument();
 
     rerender(<Formulario mostrarErrores />);
-    expect(screen.getAllByText('Falta completarlo.').length).toBeGreaterThan(0);
+
+    // Con pestañas **solo se ve el error de la sección activa**: los campos de las demás ni siquiera
+    // están montados. Por eso el badge ámbar de la otra pestaña no es un adorno — es lo único que
+    // delata que ahí también falta algo.
+    expect(screen.getAllByText('Falta completarlo.')).toHaveLength(1);
+    expect(within(pestana(/Políticas/)).getByTitle('Falta 1 campo obligatorio')).toBeInTheDocument();
+
+    await irA(user, /Políticas/);
+    expect(screen.getAllByText('Falta completarlo.')).toHaveLength(1);
   });
 });
 
@@ -195,6 +280,7 @@ describe('campos condicionales', () => {
   it('el condicional aparece solo al cumplirse su predicado', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
+    await irA(user, /Políticas/);
 
     expect(screen.queryByRole('textbox', { name: /Plazo/ })).not.toBeInTheDocument();
 
@@ -207,6 +293,7 @@ describe('campos condicionales', () => {
     render(<Formulario />);
 
     await user.type(screen.getByRole('textbox', { name: /Nombre/ }), 'Acme');
+    await irA(user, /Políticas/);
     await user.click(screen.getByRole('radio', { name: 'Sí' }));
 
     expect(guardar()).toBeDisabled(); // «Plazo» quedó visible y vacío
@@ -220,6 +307,7 @@ describe('campos condicionales', () => {
     render(<Formulario />);
 
     await user.type(screen.getByRole('textbox', { name: /Nombre/ }), 'Acme');
+    await irA(user, /Políticas/);
     await user.click(screen.getByRole('radio', { name: 'Sí' }));
     await user.type(screen.getByRole('textbox', { name: /Plazo/ }), '30 días');
     expect(screen.getByTestId('serializado')).toHaveTextContent('30 días');
@@ -230,16 +318,23 @@ describe('campos condicionales', () => {
     expect(screen.getByTestId('serializado')).not.toHaveTextContent('30 días');
   });
 
-  it('el resumen de la sección no cuenta los campos ocultos', async () => {
+  it('el indicador de la pestaña no cuenta los campos ocultos', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
+    await irA(user, /Políticas/);
 
-    // Solo el tri-estado es visible mientras la respuesta no sea «Sí».
-    expect(screen.getByRole('button', { name: /Políticas/ })).toHaveTextContent('0 de 1');
+    // Mientras la respuesta no sea «Sí», «Plazo» no existe y el único exigible visible es el
+    // tri-estado: falta 1, no 2.
+    expect(within(pestana(/Políticas/)).getByTitle('Falta 1 campo obligatorio')).toBeInTheDocument();
 
     await user.click(screen.getByRole('radio', { name: 'Sí' }));
 
-    expect(screen.getByRole('button', { name: /Políticas/ })).toHaveTextContent('1 de 2');
+    // Ahora «Plazo» es visible y exigible: el tri-estado ya está resuelto, así que sigue faltando 1.
+    expect(within(pestana(/Políticas/)).getByTitle('Falta 1 campo obligatorio')).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: /Plazo/ }), '30 días');
+
+    expect(within(pestana(/Políticas/)).getByText('Sección completa')).toBeInTheDocument();
   });
 });
 

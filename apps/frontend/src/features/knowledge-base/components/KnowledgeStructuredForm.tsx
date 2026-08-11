@@ -1,6 +1,7 @@
-import { Accordion } from '@/components/ui/accordion';
+import { Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   DIAS_SEMANA,
@@ -11,6 +12,7 @@ import {
   valorVacio,
   type KbFieldDef,
   type KbSchemaDef,
+  type KbSectionDef,
 } from '../lib/kb-schemas.js';
 import type { KbEstructura, KbFieldValue, KbScheduleDay } from '../types/index.js';
 import { ConditionalReveal } from './fields/ConditionalReveal.js';
@@ -216,11 +218,89 @@ interface KnowledgeStructuredFormProps {
 }
 
 /**
+ * Qué tiene que decir la pestaña de una sección sobre su propio estado.
+ *
+ * Son tres formas distintas y no un número universal, a propósito: «te faltan 2 obligatorios» y
+ * «llevas 2 de 5 opcionales» son afirmaciones opuestas, y pintarlas con el mismo `2` convertiría el
+ * indicador en un adorno ambiguo. La regla de exigencia es la misma de `camposFaltantes`
+ * (`requisito !== 'opcional'` sobre los campos **visibles**), para que la pestaña y el botón Guardar
+ * nunca puedan discrepar.
+ */
+type ProgresoSeccion =
+  | { tipo: 'faltan'; cuantos: number }
+  | { tipo: 'completa' }
+  | { tipo: 'opcionales'; llenos: number; total: number };
+
+function progresoDeSeccion(
+  seccion: KbSectionDef,
+  campos: Record<string, KbFieldValue>,
+): ProgresoSeccion {
+  const visibles = seccion.campos.filter((campo) => esVisible(campo, campos));
+  const exigibles = visibles.filter((campo) => campo.requisito !== 'opcional');
+
+  if (exigibles.length === 0) {
+    return {
+      tipo: 'opcionales',
+      llenos: visibles.filter((campo) => !valorVacio(campos[campo.id])).length,
+      total: visibles.length,
+    };
+  }
+
+  const faltan = exigibles.filter((campo) => valorVacio(campos[campo.id])).length;
+  return faltan === 0 ? { tipo: 'completa' } : { tipo: 'faltan', cuantos: faltan };
+}
+
+/**
+ * El resumen que acompaña al título en la pestaña.
+ *
+ * El número del badge va `aria-hidden` y la información la da el `title`: sin eso, el **nombre
+ * accesible** del `tab` pasaría a ser «Identidad 2» y quien navegue por voz o con lector de pantalla
+ * tendría que adivinar de dónde sale ese número.
+ */
+function IndicadorSeccion({ progreso }: { progreso: ProgresoSeccion }): React.ReactElement | null {
+  if (progreso.tipo === 'completa') {
+    return (
+      <>
+        <Check className="size-3.5 shrink-0 text-success" aria-hidden="true" />
+        <span className="sr-only">Sección completa</span>
+      </>
+    );
+  }
+
+  if (progreso.tipo === 'faltan') {
+    const { cuantos } = progreso;
+    return (
+      <span
+        title={cuantos === 1 ? 'Falta 1 campo obligatorio' : `Faltan ${cuantos} campos obligatorios`}
+        aria-hidden="true"
+        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-semibold tabular-nums text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+      >
+        {cuantos}
+      </span>
+    );
+  }
+
+  // Una sección sin campos visibles no tiene nada que resumir; el `0 de 0` sería ruido.
+  if (progreso.total === 0) return null;
+
+  return (
+    <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
+      {progreso.llenos} de {progreso.total}
+    </span>
+  );
+}
+
+/**
  * Cuerpo del modo estructurado: recorre el schema y **siempre** cierra con «Información adicional».
  *
- * Ese bloque final se renderiza fuera del acordeón, a propósito. Es la vía de escape garantizada
- * —lo que el formulario no previó se escribe ahí— y esconderla tras una sección plegada la volvería
- * fácil de no encontrar justo cuando más falta hace.
+ * Las secciones se navegan por **pestañas** desde HU-KB-12. `TabsContent` desmonta lo inactivo, que
+ * es lo buscado —el admin ve una cosa a la vez—, y el precio de esa decisión lo paga el indicador de
+ * cada pestaña: es lo único que le dice qué le falta en las secciones que no está mirando. Por eso
+ * ninguna pestaña puede quedar muda, ni siquiera las que no exigen nada.
+ *
+ * «Información adicional» se renderiza fuera de las pestañas, a propósito. Es la vía de escape
+ * garantizada —lo que el formulario no previó se escribe ahí— y esconderla tras una pestaña la
+ * volvería fácil de no encontrar justo cuando más falta hace.
  */
 export function KnowledgeStructuredForm({
   schema,
@@ -235,25 +315,24 @@ export function KnowledgeStructuredForm({
   return (
     <div className="space-y-4">
       {schema.secciones.length > 0 && (
-        <Accordion
-          type="multiple"
-          // Todas abiertas de entrada: el acordeón está para poder plegar lo ya resuelto, no para
-          // esconder de arranque un formulario que el admin todavía no sabe qué contiene.
-          defaultValue={schema.secciones.map((seccion) => seccion.id)}
-          className="rounded-lg border border-border px-4"
-        >
-          {schema.secciones.map((seccion) => {
-            const visibles = seccion.campos.filter((campo) => esVisible(campo, estructura.campos));
-            const llenos = visibles.filter((campo) => !valorVacio(estructura.campos[campo.id])).length;
+        // `defaultValue` y no `value`: el estado de pestaña es interno y se pierde al cerrar el
+        // modal, que es lo que se quiere — cada vez que el admin abre una categoría, empieza por el
+        // principio. Con `?.` en vez de `!`: el bloque ya está bajo `length > 0`, pero el tipo no lo
+        // sabe y una aserción aquí solo serviría para callarlo.
+        <Tabs defaultValue={schema.secciones[0]?.id} className="w-full">
+          <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto p-1">
+            {schema.secciones.map((seccion) => (
+              <TabsTrigger key={seccion.id} value={seccion.id} className="shrink-0 gap-2">
+                {seccion.titulo}
+                <IndicadorSeccion progreso={progresoDeSeccion(seccion, estructura.campos)} />
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-            return (
+          {schema.secciones.map((seccion) => (
+            <TabsContent key={seccion.id} value={seccion.id} className="mt-4">
               <KnowledgeSection
-                key={seccion.id}
-                id={seccion.id}
-                titulo={seccion.titulo}
                 {...(seccion.descripcion !== undefined ? { descripcion: seccion.descripcion } : {})}
-                llenos={llenos}
-                total={visibles.length}
               >
                 {seccion.campos.map((campo) => (
                   <ConditionalReveal key={campo.id} visible={esVisible(campo, estructura.campos)}>
@@ -266,9 +345,9 @@ export function KnowledgeStructuredForm({
                   </ConditionalReveal>
                 ))}
               </KnowledgeSection>
-            );
-          })}
-        </Accordion>
+            </TabsContent>
+          ))}
+        </Tabs>
       )}
 
       <div className="space-y-1.5">

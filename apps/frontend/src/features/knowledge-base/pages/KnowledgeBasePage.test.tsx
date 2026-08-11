@@ -393,6 +393,18 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     return screen.findByRole('dialog');
   }
 
+  /**
+   * Desde HU-KB-12 las secciones son pestañas y `TabsContent` **desmonta** lo inactivo: para tocar un
+   * campo que no esté en la primera sección hay que ir a la suya primero.
+   */
+  async function irASeccion(
+    user: ReturnType<typeof userEvent.setup>,
+    dialog: HTMLElement,
+    nombre: RegExp,
+  ): Promise<void> {
+    await user.click(within(dialog).getByRole('tab', { name: nombre }));
+  }
+
   it('un documento con texto libre abre el textarea de siempre', async () => {
     const user = userEvent.setup();
     mockGetKbDocuments.mockResolvedValue(
@@ -543,9 +555,9 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
 
-    expect(within(dialog).getByRole('button', { name: /Identidad/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Propósito y valores/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Alcance y respaldo/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Identidad/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Propósito y valores/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Alcance y respaldo/ })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
   });
@@ -583,6 +595,8 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     renderPage();
 
     const dialog = await abrir(user, new RegExp(`Completar ${OBLIGATORIO}`));
+    // El tri-estado vive en la tercera sección, que ya no está montada al abrir.
+    await irASeccion(user, dialog, /Alcance y respaldo/);
     expect(within(dialog).queryByLabelText(/Nombre del grupo/)).toBeNull();
 
     await user.click(within(dialog).getByRole('radio', { name: 'Sí' }));
@@ -624,9 +638,9 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, /Completar Productos y servicios/);
 
-    expect(within(dialog).getByRole('button', { name: /Qué ofrece/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Precios y condiciones/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Cómo se entrega/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Qué ofrece/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Precios y condiciones/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Cómo se entrega/ })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Información adicional')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
   });
@@ -726,16 +740,20 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, /Completar Horarios y ubicación/);
 
-    expect(within(dialog).getByRole('button', { name: /Dónde están/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Cómo contactarlos/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Cuándo atienden/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Dónde están/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Cómo contactarlos/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Cuándo atienden/ })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
+
+    await irASeccion(user, dialog, /Cómo contactarlos/);
     expect(within(dialog).getByLabelText(/WhatsApp/)).toBeInTheDocument();
+
+    await irASeccion(user, dialog, /Cuándo atienden/);
     // Los siete días se pintan siempre: nadie debería tener que «crear» el martes.
     for (const dia of ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']) {
       expect(within(dialog).getByText(dia)).toBeInTheDocument();
     }
     expect(within(dialog).getAllByRole('switch')).toHaveLength(7);
-    expect(within(dialog).queryByLabelText('Contenido')).toBeNull();
   });
 
   it('la misma categoría con texto libre sigue abriendo su textarea (HU-KB-10)', async () => {
@@ -748,7 +766,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     const dialog = await abrir(user, /Editar Horarios y ubicación/);
 
     expect(within(dialog).getByLabelText('Contenido')).toHaveValue('Abrimos de 8 a 6.');
-    expect(within(dialog).queryByRole('button', { name: /Cuándo atienden/ })).toBeNull();
+    expect(within(dialog).queryByRole('tab', { name: /Cuándo atienden/ })).toBeNull();
   });
 
   it('marcar un día como Cerrado esconde sus tramos sin borrarlos (HU-KB-10)', async () => {
@@ -756,6 +774,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     renderPage();
 
     const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    await irASeccion(user, dialog, /Cuándo atienden/);
     // Hay un «Añadir horario» por día; el primero es el de lunes.
     const anadirLunes = within(dialog).getAllByRole('button', { name: /Añadir horario/ })[0] as HTMLElement;
     await user.click(anadirLunes);
@@ -778,6 +797,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     // Deshabilitado con todo vacío, pero por texto vacío, no por un campo exigido.
     expect(guardar).toBeDisabled();
 
+    await irASeccion(user, dialog, /Cómo contactarlos/);
     await user.type(within(dialog).getByLabelText(/WhatsApp/), '3001234567');
     expect(guardar).toBeEnabled();
   });
@@ -814,6 +834,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
     renderPage();
 
     const dialog = await abrir(user, /Completar Horarios y ubicación/);
+    await irASeccion(user, dialog, /Cómo contactarlos/);
     await user.type(within(dialog).getByLabelText(/WhatsApp/), '3001234567');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar e indexar' }));
 
@@ -836,9 +857,9 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, /Completar Políticas y términos/);
 
-    expect(within(dialog).getByRole('button', { name: /Políticas frecuentes/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('tab', { name: /Políticas frecuentes/ })).toBeInTheDocument();
     expect(
-      within(dialog).getByRole('button', { name: /Términos y condiciones/ }),
+      within(dialog).getByRole('tab', { name: /Términos y condiciones/ }),
     ).toBeInTheDocument();
     // Seis preguntas × tres opciones excluyentes.
     expect(within(dialog).getAllByRole('radio')).toHaveLength(18);
