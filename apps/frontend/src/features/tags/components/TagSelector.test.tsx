@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -105,7 +105,7 @@ describe('TagSelector — crear una etiqueta sin salir de la conversación', () 
   it('ofrece crear una etiqueta desde el menú', async () => {
     renderSelector([]);
     await abrirMenu();
-    expect(await screen.findByText(/Crear etiqueta/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Crear etiqueta' })).toBeInTheDocument();
   });
 
   it('sin etiquetas creadas invita a crear la primera desde aquí', async () => {
@@ -113,8 +113,8 @@ describe('TagSelector — crear una etiqueta sin salir de la conversación', () 
     renderSelector([]);
     await abrirMenu();
 
-    expect(await screen.findByText(/Crea la primera aquí abajo/i)).toBeInTheDocument();
-    expect(screen.getByText(/Crear etiqueta/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Crea la primera aquí arriba/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear etiqueta' })).toBeInTheDocument();
   });
 
   it('crear la etiqueta la aplica a la conversación en el mismo paso', async () => {
@@ -122,12 +122,13 @@ describe('TagSelector — crear una etiqueta sin salir de la conversación', () 
     const { onChange } = renderSelector([URGENTE]);
     await abrirMenu();
 
-    await userEvent.click(await screen.findByText(/Crear etiqueta/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Crear etiqueta' }));
 
     // El diálogo se abre con el formulario vacío.
     const nombre = await screen.findByLabelText(/Nombre/i);
     await userEvent.type(nombre, 'Recontactar');
-    await userEvent.click(screen.getByRole('button', { name: /Crear etiqueta/i }));
+    const dialogo = screen.getByRole('dialog');
+    await userEvent.click(within(dialogo).getByRole('button', { name: /Crear etiqueta/i }));
 
     await waitFor(() => expect(mockCreateTag).toHaveBeenCalledTimes(1));
     expect(mockCreateTag.mock.calls[0]?.[0]).toMatchObject({ nombre: 'Recontactar' });
@@ -140,7 +141,7 @@ describe('TagSelector — crear una etiqueta sin salir de la conversación', () 
     renderSelector([]);
     await abrirMenu();
 
-    await userEvent.click(await screen.findByText(/Crear etiqueta/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Crear etiqueta' }));
 
     // Se puede escribir el nombre de inmediato, sin ir al campo con el ratón. Ojo: en jsdom el
     // diálogo gana el foco aunque se quite el `onCloseAutoFocus` del menú, así que esto cubre el
