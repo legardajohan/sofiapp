@@ -13,8 +13,8 @@ tenant conecta su propio número, ese id es único por tenant.
 ### Flujo
 
 ```
-POST /api/webhooks/meta
-  1. Validar firma HMAC (X-Hub-Signature-256) con el APP_SECRET.   → si falla, 401
+POST /api/webhooks/whatsapp
+  1. Validar firma HMAC (X-Hub-Signature-256) con el APP_SECRET.   → si falla, 403
   2. Responder HTTP 200 INMEDIATAMENTE (SLA de Meta).
   3. Extraer phone_number_id del payload.
   4. tenant = MetaIntegration.findOne({ phoneNumberId })           → lookup GLOBAL (excepción documentada)
@@ -30,8 +30,17 @@ POST /api/webhooks/meta
 
 ### Verificación inicial (GET)
 
-`GET /api/webhooks/meta?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...` →
-comparar `verify_token` con `META_VERIFY_TOKEN` y devolver el `hub.challenge`.
+`GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...` →
+comparar `verify_token` con `META_VERIFY_TOKEN` y devolver el `hub.challenge`. Token incorrecto o
+ausente → 403 (no 401: es el código que ya usa `verifyChallenge`).
+
+### Montaje y orden de middlewares (importante)
+
+El router de este webhook (`features/webhook/webhook.routes.ts`) usa `express.raw({ type:
+'application/json' })` porque la firma HMAC se calcula sobre los **bytes exactos** del cuerpo. Por
+eso se monta en `app.ts` **antes** de `express.json()`: si el parser JSON global corriera primero,
+`req.body` llegaría como objeto y la firma nunca calzaría con la que envía Meta — ver
+`HT-WA-01-V2/spec.md` para el detalle del defecto que esto corrigió.
 
 ## 2. Embedded Signup (onboarding por empresa)
 
@@ -65,11 +74,13 @@ de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 
 ```
 META_APP_ID=
-META_APP_SECRET=            # validación HMAC del webhook
-META_VERIFY_TOKEN=          # verificación GET del webhook
-META_GRAPH_VERSION=v19.0    # valor de ejemplo: verifica la versión vigente al hacer scaffold
-TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM para cifrar accessToken por tenant
+META_APP_SECRET=            # validación HMAC del webhook — OBLIGATORIA fuera de NODE_ENV=test
+META_VERIFY_TOKEN=          # verificación GET del webhook — OBLIGATORIA fuera de NODE_ENV=test
+META_GRAPH_VERSION=v26.0    # confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
+TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM (64 hex) — OBLIGATORIA fuera de NODE_ENV=test
 ```
 
-> **Nota:** `v19.0` es un valor de referencia. Meta deprecia versiones antiguas de Graph API; al
-> implementar M01 confirma la versión vigente soportada y fíjala en `META_GRAPH_VERSION`.
+> **Nota:** Meta deprecia versiones antiguas de Graph API cada pocos meses; confirma la vigente
+> antes de fijar `META_GRAPH_VERSION`. Las otras tres variables **no** tienen fallback: el proceso
+> aborta al arrancar si faltan fuera de `test` (`HT-WA-01-V2`, tras un incidente donde arrancaba
+> sin ellas y todo webhook fallaba en silencio).

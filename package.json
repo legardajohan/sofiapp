@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "dev:web": "pnpm --filter @sofiapp/api dev:web",
     "dev:worker": "pnpm --filter @sofiapp/api dev:worker",
-    "dev:front": "pnpm --filter @sofiapp/web dev"
+    "dev:front": "pnpm --filter @sofiapp/web dev",
+    "tunnel": "cloudflared tunnel --url http://localhost:4000"
   },
   "devDependencies": {
     "turbo": "^2.5.4",

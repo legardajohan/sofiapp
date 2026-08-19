@@ -127,6 +127,10 @@
   // bandeja única (HU-OMNI-01)
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
+  // ventana de servicio de WhatsApp (HT-WA-01): se recalcula a `now + 24h` en cada inbound.
+  // Fuera de esta ventana `sendMessage` rechaza el envío de texto libre con 422 — solo se puede
+  // responder con plantilla HSM aprobada (HT-WA-02).
+  ventana24hExpiraEn: ISODate?,
   createdAt, updatedAt
 }
 // `asesorId` es el único campo persistido; `asignadoA` (HU-OMNI-02) es el alias público del
@@ -152,11 +156,16 @@
   tipo: "text" | "image" | "template" | "audio" | "document" | "other",
   texto: String?,
   attachmentUrl: String?,         // DO Spaces (media recibida/enviada)
-  metaMessageId: String?,         // idempotencia con Meta
+  metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
+  // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
+  status: "sent" | "delivered" | "read" | "failed",   // default "sent"
   createdAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1, createdAt: 1 }   (hilo de conversación)
-//          { metaMessageId: 1 }  (dedupe de webhooks)
+//          { tenantId: 1, metaMessageId: 1 } sparse      (dedupe de webhooks, POR TENANT — nunca
+//                                                          global: HT-WA-01-V2 cerró una fuga de
+//                                                          aislamiento donde el dedupe y el update
+//                                                          de `status` no llevaban `tenantId`)
 ```
 
 ## catalog_items  (catálogo genérico — antes "cursos")

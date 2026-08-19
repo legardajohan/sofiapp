@@ -34,6 +34,13 @@ import userRoutes from './features/users/user.routes.js';
 const app = express();
 
 app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
+
+// Meta firma el HMAC sobre los bytes exactos del cuerpo. Este router usa `express.raw` y por eso
+// se monta ANTES de `express.json()`: si el parser global corre primero, body-parser consume el
+// stream y `req.body` llega como objeto, la firma no se puede recalcular y TODO webhook real
+// falla (regresión cubierta por `webhook.routes.test.ts`).
+app.use('/api/webhooks/whatsapp', webhookRoutes);
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(csrfGuard);
@@ -55,7 +62,6 @@ app.use('/api/admin/cost-items', costCatalogRoutes);
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/webhooks/whatsapp', webhookRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);

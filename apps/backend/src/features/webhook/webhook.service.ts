@@ -33,9 +33,20 @@ export async function resolveWebhookTenant(
   return MetaIntegration.findOne({ phoneNumberId }).lean<IMetaIntegrationDocument>();
 }
 
+/**
+ * `processor` es idempotente (dedupe por `metaMessageId` scoped al tenant), así que reintentar
+ * ante un fallo transitorio de Mongo es seguro y evita perder el mensaje para siempre.
+ */
+const INBOUND_JOB_OPTS = {
+  attempts: 5,
+  backoff: { type: 'exponential' as const, delay: 1000 },
+  removeOnComplete: 1000,
+  removeOnFail: 5000,
+};
+
 export async function enqueueInboundJob(
   tenantId: string,
   payload: IWhatsAppWebhookPayload,
 ): Promise<void> {
-  await inboundQueue.add('process', { tenantId, payload });
+  await inboundQueue.add('process', { tenantId, payload }, INBOUND_JOB_OPTS);
 }

@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { createScoped } from '../../repositories/base.repository.js';
+import { createScoped, findOneScoped, findOneAndUpdateScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
@@ -14,7 +14,7 @@ export async function saveMessage(
   dto: ICreateMessageDto,
 ): Promise<IMessageDocument> {
   if (dto.metaMessageId) {
-    const existing = await Message.findOne({ metaMessageId: dto.metaMessageId }).lean();
+    const existing = await findOneScoped(Message, tenantId, { metaMessageId: dto.metaMessageId }).lean();
     if (existing) return existing as unknown as IMessageDocument;
   }
 
@@ -65,8 +65,9 @@ export async function sendMessage(
 }
 
 export async function updateDeliveryStatus(
+  tenantId: string | Types.ObjectId,
   metaMessageId: string,
   status: MessageStatus,
 ): Promise<void> {
-  await Message.findOneAndUpdate({ metaMessageId }, { status });
+  await findOneAndUpdateScoped(Message, tenantId, { metaMessageId }, { status });
 }
