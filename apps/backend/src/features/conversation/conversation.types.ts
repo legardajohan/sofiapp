@@ -27,6 +27,11 @@ export interface IConversationResponse {
   estadoComercial: string;
   /** Etiquetas ya hidratadas (HU-OMNI-04): la bandeja pinta los chips sin una segunda llamada. */
   tags: ITagResponse[];
+  /**
+   * Lead al que ya se convirtió esta conversación, o `null` (HU-CRM-01). Viaja resuelto para que la
+   * cabecera muestre el estado en vez de ofrecer una conversión que fallaría con 409.
+   */
+  leadId: string | null;
 }
 
 /** Un evento del historial de reasignaciones de una conversación (`audit_events`). */

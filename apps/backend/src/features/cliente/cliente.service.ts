@@ -26,6 +26,7 @@ import {
   toStoredValue,
 } from '../../utils/field-crypto.util.js';
 import { MASK_VALOR, maskCorreo, maskDocumento } from '../../utils/mask.util.js';
+import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type {
   CanalOrigen,
@@ -113,6 +114,7 @@ function toContactCard(
   c: IClienteLean,
   tagMap: Map<string, ITagResponse> = new Map(),
   puedeVerSensibles = false,
+  leadId: string | null = null,
 ): IContactCardResponse {
   // Se resuelve el valor legible primero y se enmascara después: enmascarar un valor heredado aún
   // cifrado no diría nada útil (ni siquiera el dominio del correo), que es justo lo que la máscara
@@ -136,6 +138,7 @@ function toContactCard(
     asesorId: c.asesorId ? String(c.asesorId) : null,
     ultimoMensajeAt: c.ultimoMensajeAt ? c.ultimoMensajeAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
+    leadId,
     correo: correo === null ? null : puedeVerSensibles ? correo : maskCorreo(correo),
     documento: documento === null ? null : puedeVerSensibles ? documento : maskDocumento(documento),
     atributos: (c.atributos ?? []).map((a) => toAtributoResponse(a, puedeVerSensibles)),
@@ -208,8 +211,12 @@ export async function getContactHistory(
     (cliente.tagIds ?? []).map((id) => String(id)),
   );
 
+  // La ficha necesita saber si ya hay lead para pintar su tarjeta en vez de invitar a convertir
+  // otra vez (HU-CRM-01).
+  const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
+
   return {
-    contacto: toContactCard(cliente, tagMap, puedeVerSensibles),
+    contacto: toContactCard(cliente, tagMap, puedeVerSensibles, leadId),
     resumen: toResumenResponse(cliente),
     datosExtraidos: toDatosExtraidosResponse(cliente.datosExtraidos, puedeVerSensibles),
     mensajes: { data: mensajes, page, limit, total },
@@ -359,7 +366,11 @@ export async function updateCliente(
     (actualizado.tagIds ?? []).map((id) => String(id)),
   );
 
-  return toContactCard(actualizado, tagMap, puedeVerSensibles);
+  // La ficha que devuelve la edición es la misma que pinta el panel, así que arrastra `leadId`
+  // (HU-CRM-01): sin esto, guardar un dato de contacto haría desaparecer la tarjeta del lead.
+  const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
+
+  return toContactCard(actualizado, tagMap, puedeVerSensibles, leadId);
 }
 
 // ─── Extracción de datos de contacto por IA (HU-OMNI-03) ────────────────────────

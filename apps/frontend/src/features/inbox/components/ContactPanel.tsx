@@ -9,6 +9,8 @@ import { ContactCard } from './ContactCard.js';
 import { ContactExtractCard } from './ContactExtractCard.js';
 import { ContactSummaryCard } from './ContactSummaryCard.js';
 import { ConversationThread } from './ConversationThread.js';
+import { LeadCard } from '@/features/leads/components/LeadCard';
+import { useLead } from '@/features/leads/hooks/useLead';
 import {
   useContactHistory,
   useExtractContactData,
@@ -48,6 +50,8 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
   const generate = useGenerateSummary(clienteId);
   const extract = useExtractContactData(clienteId);
   const [editando, setEditando] = useState(false);
+  // El `leadId` ya viene resuelto en la ficha, así que esto solo hidrata el detalle del lead.
+  const lead = useLead(history?.contacto.leadId ?? null);
 
   // Colapsada no deja rastro en el layout: el control para volver a abrirla es el avatar del
   // contacto en la cabecera de la conversación, no una franja propia.
@@ -98,6 +102,15 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
               <Pencil className="h-4 w-4" />
               Editar datos
             </Button>
+            {/* Solo si ya se convirtió (HU-CRM-01): la invitación a convertir vive en la cabecera
+                del hilo, no aquí, para no ofrecer la misma acción en dos sitios. */}
+            {history.contacto.leadId && (
+              <LeadCard lead={lead.data} isLoading={lead.isLoading} isError={lead.isError} />
+            )}
+            {/* Orden del panel tras el merge HU-CRM-01 + HU-CRM-02: identidad → la acción que la
+                edita → estado comercial → contenido escrito por el asesor → asistencias de IA. Las
+                dos últimas van al final a propósito: lo que el equipo registró a mano manda sobre
+                lo que el modelo infirió, y leerlo en ese orden evita confundir dato con sugerencia. */}
             <ContactNotesCard
               clienteId={history.contacto.id}
               puedeVerSensibles={history.contacto.puedeVerSensibles}

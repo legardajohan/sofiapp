@@ -15,6 +15,7 @@ import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
 import { backfillContactOptions } from './seed/seed-contact-options.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
+import leadRoutes from './features/lead/lead.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -66,6 +67,7 @@ app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/tags', tagRoutes);
+app.use('/api/leads', leadRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 

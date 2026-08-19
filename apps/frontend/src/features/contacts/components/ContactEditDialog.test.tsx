@@ -70,6 +70,7 @@ function contacto(over: Partial<ContactCardDTO> = {}): ContactCardDTO {
     asesorId: null,
     ultimoMensajeAt: '2026-07-27T12:00:00.000Z',
     createdAt: '2026-07-24T12:00:00.000Z',
+    leadId: null,
     correo: null,
     documento: null,
     atributos: [],

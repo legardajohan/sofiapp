@@ -42,6 +42,7 @@ export function toConversationResponse(
   now: Date = new Date(),
   asignado: IUserResponse | null = null,
   tagMap: Map<string, ITagResponse> = new Map(),
+  leadMap: Map<string, string> = new Map(),
 ): IConversationResponse {
   const asesorId = cliente.asesorId ? String(cliente.asesorId) : null;
   // Un id sin entrada en el mapa es una referencia colgada (borrado a medias): se omite en vez de
@@ -65,6 +66,7 @@ export function toConversationResponse(
     ventana24hAbierta: !!cliente.ventana24hExpiraEn && cliente.ventana24hExpiraEn > now,
     estadoComercial: cliente.estadoComercial,
     tags,
+    leadId: leadMap.get(String(cliente._id)) ?? null,
   };
 }
 

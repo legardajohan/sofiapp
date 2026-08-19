@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MessageSquare, UserRound } from 'lucide-react';
+import { MessageSquare, Target, UserPlus, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from '../components/ConversationList.js';
@@ -14,7 +14,11 @@ import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
 import { TagChip } from '@/features/tags/components/TagChip';
 import { TagSelector } from '@/features/tags/components/TagSelector';
+import { ConvertToLeadDialog } from '@/features/leads/components/ConvertToLeadDialog';
+import { useCreateLead } from '@/features/leads/hooks/useCreateLead';
+import { leadIdEnConflicto } from '@/features/leads/lib/errors';
 import { useConversations } from '../hooks/useConversations.js';
+import { useContactHistory } from '../hooks/useContactHistory.js';
 import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
@@ -22,6 +26,7 @@ import { useInboxStore } from '../useInboxStore.js';
 import { initials } from '../lib/format.js';
 import { errorMessage } from '../lib/errors.js';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
+import type { FuenteInicial } from '@/features/leads/components/ConvertToLeadDialog';
 
 const FILTROS: FiltroBandeja[] = ['todos', 'mios', 'sin_asignar', 'sofi'];
 const ESTADOS: EstadoComercial[] = ['nuevo', 'en_gestion', 'pago_pendiente', 'pagado', 'perdido'];
@@ -82,6 +87,39 @@ export function InboxPage(): React.ReactElement {
     () => conversations?.data.find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   );
+
+  // ─── Conversión en lead (HU-CRM-01) ───────────────────────────────────────────
+  const [leadDialogOpen, setLeadDialogOpen] = useState(false);
+  const [leadDuplicado, setLeadDuplicado] = useState<string | null>(null);
+
+  /** Ante un 409 el diálogo se cierra y la ficha se abre en el lead que ya existía. */
+  function verLeadExistente(): void {
+    setLeadDialogOpen(false);
+    setLeadDuplicado(null);
+    setContactPanelOpen(true);
+  }
+
+  const crearLead = useCreateLead(activeId, { onDuplicado: verLeadExistente });
+
+  // La ficha se consulta también con el diálogo abierto: de ahí salen los `datosExtraidos` con los
+  // que se pre-rellena el lead. Comparte `queryKey` con `ContactPanel`, así que si la ficha ya
+  // estaba abierta esto no dispara una segunda petición, y con ambos cerrados no consulta nada.
+  const ficha = useContactHistory(contactPanelOpen || leadDialogOpen ? activeId : null);
+  const extraidos = ficha.data?.datosExtraidos ?? null;
+
+  // Campo a campo: la extracción manda en lo que sí encontró y la conversación cubre el resto.
+  // Un `nombreCompleto` nulo no debe borrar el nombre que ya trae la conversación.
+  const leadInicial = {
+    nombre: extraidos?.nombreCompleto ?? active?.nombre ?? null,
+    telefono: extraidos?.telefono ?? active?.telefono ?? '',
+    correo: extraidos?.correo ?? null,
+  };
+  const leadFuente: FuenteInicial = ficha.isLoading ? 'cargando' : extraidos ? 'ia' : 'conversacion';
+
+  function abrirConversion(): void {
+    setLeadDuplicado(null);
+    setLeadDialogOpen(true);
+  }
 
   function handleSelect(id: string): void {
     setActiveId(id);
@@ -163,6 +201,24 @@ export function InboxPage(): React.ReactElement {
                   pending={setTags.isPending}
                   onChange={(tagIds) => setTags.mutate(tagIds)}
                 />
+                {/* Ya convertida: se muestra el estado en vez de repetir la acción. Ofrecerla
+                    invitaría a un 409 evitable, y el 409 es red de seguridad, no prevención. */}
+                {active.leadId ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setContactPanelOpen(true)}
+                  >
+                    <Target className="h-4 w-4" />
+                    Lead creado
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={abrirConversion}>
+                    <UserPlus className="h-4 w-4" />
+                    Convertir en lead
+                  </Button>
+                )}
                 <AssignMenu
                   conversationId={active.id}
                   asignadoA={active.asignadoA}
@@ -234,6 +290,43 @@ export function InboxPage(): React.ReactElement {
           clienteId={activeId}
           open={contactPanelOpen}
           onOpenChange={setContactPanelOpen}
+        />
+      )}
+
+      {/* Fuera de la cabecera y de cualquier menú: dentro se desmontaría al cerrarse el contenedor.
+          El `onSuccess` por llamada es lo que deja el diálogo abierto cuando el backend responde
+          409, para que el asesor pueda corregir el teléfono sin volver a empezar. */}
+      {active && (
+        <ConvertToLeadDialog
+          open={leadDialogOpen}
+          pending={crearLead.isPending}
+          inicial={leadInicial}
+          fuente={leadFuente}
+          duplicado={leadDuplicado}
+          onOpenChange={(open) => {
+            setLeadDialogOpen(open);
+            if (!open) setLeadDuplicado(null);
+          }}
+          onSubmit={(valores) => {
+            setLeadDuplicado(null);
+            crearLead.mutate(
+              { ...valores, clienteId: active.id },
+              {
+                onSuccess: () => {
+                  setLeadDialogOpen(false);
+                  setContactPanelOpen(true);
+                },
+                onError: (error) => {
+                  const yaExiste = leadIdEnConflicto(error);
+                  if (yaExiste) {
+                    setLeadDuplicado(
+                      'Ya existe un lead con ese teléfono. Corrígelo o abre el lead existente.',
+                    );
+                  }
+                },
+              },
+            );
+          }}
         />
       )}
     </div>

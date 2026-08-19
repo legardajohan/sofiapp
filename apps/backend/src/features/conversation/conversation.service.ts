@@ -18,6 +18,7 @@ import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js'
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import {
@@ -92,6 +93,15 @@ async function resolveAsignado(tenantId: string, asesorId: unknown): Promise<IUs
   return (await findUsersByIds(tenantId, [id])).get(id) ?? null;
 }
 
+/**
+ * Resuelve el `leadId` de UNA conversación (HU-CRM-01). Va en todas las mutaciones, no solo en el
+ * listado: sin esto, togglear Sofi o aplicar una etiqueta devolvería `leadId: null` y la cabecera
+ * volvería a ofrecer "Convertir en lead" en una conversación ya convertida.
+ */
+async function resolveLeadMap(tenantId: string, clienteId: string): Promise<Map<string, string>> {
+  return findLeadIdsByClientes(tenantId, [clienteId]);
+}
+
 export async function listConversations(
   tenantId: string,
   asesorId: string,
@@ -138,6 +148,13 @@ export async function listConversations(
   );
   const tagMap = await findTagsByIds(tenantId, tagIds);
 
+  // Y lo mismo con los leads: UNA consulta resuelve qué conversaciones de la página ya se
+  // convirtieron, apoyada en el índice { tenantId, clienteId } (HU-CRM-01).
+  const leadMap = await findLeadIdsByClientes(
+    tenantId,
+    ids.map((id) => String(id)),
+  );
+
   const now = new Date();
   const data = clientes.map((c) => {
     const source = c as unknown as IConversationSource;
@@ -148,6 +165,7 @@ export async function listConversations(
       now,
       asignado,
       tagMap,
+      leadMap,
     );
   });
 
@@ -272,7 +290,8 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
   const tagMap = await resolveTags(tenantId, source);
-  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
+  const leadMap = await resolveLeadMap(tenantId, clienteId);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
 }
@@ -294,7 +313,8 @@ export async function setIaHabilitada(
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
   const tagMap = await resolveTags(tenantId, source);
-  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
+  const leadMap = await resolveLeadMap(tenantId, clienteId);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
 }
@@ -330,7 +350,8 @@ export async function setConversationTags(
   const source = updated as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
   const tagMap = await findTagsByIds(tenantId, unicos);
-  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap);
+  const leadMap = await resolveLeadMap(tenantId, clienteId);
+  const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
 
   await publishRealtime({
     type: 'conversation:updated',
@@ -363,7 +384,14 @@ export async function assignConversation(
 
   if (antes === asignadoA) {
     // Idempotente: mismo valor, sin auditoría ni evento de tiempo real.
-    return toConversationResponse(source, null, new Date(), asignado, await resolveTags(tenantId, source));
+    return toConversationResponse(
+      source,
+      null,
+      new Date(),
+      asignado,
+      await resolveTags(tenantId, source),
+      await resolveLeadMap(tenantId, clienteId),
+    );
   }
 
   const updated = await findOneAndUpdateScoped(
@@ -391,6 +419,7 @@ export async function assignConversation(
     new Date(),
     asignado,
     await resolveTags(tenantId, updatedSource),
+    await resolveLeadMap(tenantId, clienteId),
   );
 
   const actorInfo = (await findUsersByIds(tenantId, [actorId])).get(actorId) ?? null;

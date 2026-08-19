@@ -28,6 +28,11 @@ export interface ConversationDTO {
   estadoComercial: string;
   /** Etiquetas ya hidratadas por el backend: los chips se pintan sin una segunda llamada. */
   tags: TagDTO[];
+  /**
+   * Lead al que ya se convirtió esta conversación, o `null` (HU-CRM-01). Viaja resuelto para que la
+   * cabecera muestre el estado en vez de ofrecer una conversión que fallaría con 409.
+   */
+  leadId: string | null;
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */
@@ -84,6 +89,8 @@ export interface ContactCardDTO {
   asesorId: string | null;
   ultimoMensajeAt: string | null;
   createdAt: string;
+  /** Lead al que ya se convirtió este contacto, o `null` (HU-CRM-01). */
+  leadId: string | null;
   // ─── Datos sensibles (HU-CRM-02) ─────────────────────────────────────────────
   /** En claro o enmascarado (`d••••@dominio.com`) según el subrol. Lo decide el backend. */
   correo: string | null;
