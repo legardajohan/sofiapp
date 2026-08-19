@@ -67,9 +67,16 @@ SelectScrollDownButton.displayName =
 
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+    /**
+     * Dónde montar el portal. Por defecto `document.body`, que es lo correcto salvo dentro de un
+     * `AlertDialog`: allí el contenido cae fuera de su trampa de foco y del `aria-hidden` que
+     * aplica al abrirse, y ambos se pelean por el foco. Pasar el nodo del diálogo lo mete dentro.
+     */
+    container?: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Portal>["container"]
+  }
+>(({ className, children, position = "popper", container, ...props }, ref) => (
+  <SelectPrimitive.Portal container={container}>
     <SelectPrimitive.Content
       ref={ref}
       className={cn(

@@ -44,6 +44,10 @@ export function DeleteLeadDialog({
   onConfirm,
 }: Props): React.ReactElement {
   const [motivo, setMotivo] = useState<MotivoEliminacion | ''>('');
+  // El desplegable se monta DENTRO del diálogo, no en `document.body`: fuera de aquí queda al
+  // margen de la trampa de foco del `AlertDialog` y del `aria-hidden` que aplica al abrirse, y
+  // los dos acaban disputándose el foco.
+  const [contenedor, setContenedor] = useState<HTMLDivElement | null>(null);
 
   // Cada apertura empieza sin motivo: heredar el de la vez anterior es justo el error que un
   // borrado irreversible no puede permitirse.
@@ -53,7 +57,7 @@ export function DeleteLeadDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogContent className="sm:max-w-md" ref={setContenedor}>
         <AlertDialogHeader>
           <AlertDialogTitle>¿Eliminar el lead de {nombre}?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -72,7 +76,7 @@ export function DeleteLeadDialog({
             <SelectTrigger id="lead-motivo" className="w-full">
               <SelectValue placeholder="Elige un motivo" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent container={contenedor}>
               {MOTIVOS_ELIMINACION.map((m) => (
                 <SelectItem key={m.valor} value={m.valor}>
                   {m.label}
