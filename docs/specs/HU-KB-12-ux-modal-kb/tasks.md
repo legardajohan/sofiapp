@@ -228,6 +228,10 @@
       vuelve** por sí sola: esta HU cierra la puerta hacia adelante pero no repone lo ya borrado. Ese
       caso se trata **por separado**, como candidato a una HU de «restaurar categoría» (necesitaría
       un `PATCH /:id { oculto: false }` y UI propia). **No** se implementa aquí.
+  - [x] **Verificado el 2026-08-11** contra la base real (`sofiapp_db`, Atlas, consulta read-only):
+        **0 tenientes** con los dos presets en `oculto: true`; solo existen los 2 documentos reales
+        del cliente y **0 documentos ocultos en toda la colección**. R-4 despejado: no se necesita
+        la HU de «restaurar categoría».
 
 ## Definición de "hecho"
 
