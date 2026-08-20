@@ -83,9 +83,21 @@ export function hasContent(doc: IKbDocument): boolean {
   return doc.contenido.trim().length > 0;
 }
 
-/** Normaliza un título para compararlo: sin espacios sobrantes y sin distinguir mayúsculas. */
+/**
+ * Normaliza un título para compararlo: sin espacios sobrantes, sin distinguir mayúsculas y **sin
+ * tildes**.
+ *
+ * Descomponer en NFD parte cada letra acentuada en su base más el diacrítico combinante, y borrar el
+ * rango de esos diacríticos deja «Políticas» y «Politicas» en la misma cadena. Resuelve de entrada la
+ * clase de duplicado más común del español —el título tecleado sin tilde— sin gastar en ella la
+ * distancia de edición de `findSimilarTitle` (HU-KB-13).
+ */
 export function normalizeTitulo(titulo: string): string {
-  return titulo.trim().toLocaleLowerCase('es');
+  return titulo
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es');
 }
 
 /**
@@ -132,8 +144,11 @@ export function cardBorder(status: CardStatus): string {
  *
  * Comparación normalizada, a propósito **más estricta que el backend**: allí `createDocument` busca
  * con `findOneScoped({ titulo })` —igualdad exacta— y, si encuentra, re-versiona en silencio el
- * documento existente en vez de rechazar. Bloquear aquí las variantes por mayúsculas o espacios
- * evita que el admin fabrique duplicados casi idénticos sin darse cuenta.
+ * documento existente en vez de rechazar. Bloquear aquí las variantes por mayúsculas, espacios o
+ * tildes evita que el admin fabrique duplicados casi idénticos sin darse cuenta.
+ *
+ * Lo que se le parece pero no es igual no se bloquea: eso lo avisa `findSimilarTitle`, sin impedir
+ * el guardado.
  */
 export function isTitleTaken(titulo: string, documents: IKbDocument[]): boolean {
   const objetivo = normalizeTitulo(titulo);
@@ -142,6 +157,99 @@ export function isTitleTaken(titulo: string, documents: IKbDocument[]): boolean 
     PRESET_META.some((meta) => normalizeTitulo(meta.titulo) === objetivo) ||
     documents.some((doc) => normalizeTitulo(doc.titulo) === objetivo)
   );
+}
+
+// ─── Títulos parecidos (HU-KB-13) ───────────────────────────────────────────
+
+/**
+ * Distancia de edición tolerada según la longitud del más corto de los dos títulos.
+ *
+ * Escala con la longitud porque un mismo número de caracteres distintos pesa muy diferente: tres
+ * ediciones sobre un título de 8 letras ya son otro concepto, mientras que sobre uno de 30 son un
+ * artículo de más y una tilde. Los dos tramos salen de los casos reales que motivaron la HU.
+ */
+function umbralSimilitud(longitudMinima: number): number {
+  return longitudMinima <= 20 ? 3 : 5;
+}
+
+/**
+ * Distancia de Levenshtein entre dos cadenas **ya normalizadas**.
+ *
+ * Implementación propia de dos filas rodantes: los títulos topan en 200 caracteres (`maxLength` del
+ * input y el `.max(200)` de `createDocumentSchema`) y un tenant tiene decenas de documentos, así que
+ * el coste es irrelevante y no justifica una dependencia nueva.
+ *
+ * Los `?? 0` son inalcanzables —los índices recorridos siempre existen— pero
+ * `noUncheckedIndexedAccess` los exige. Un `!` callaría también un fallo real si el bucle cambiara.
+ */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  let previa: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    const actual: number[] = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      actual[j] = Math.min(
+        (actual[j - 1] ?? 0) + 1, // insertar
+        (previa[j] ?? 0) + 1, // borrar
+        (previa[j - 1] ?? 0) + costo, // sustituir
+      );
+    }
+    previa = actual;
+  }
+
+  return previa[b.length] ?? 0;
+}
+
+/**
+ * Título ya existente **más parecido** a `titulo`, o `undefined` si ninguno lo es lo bastante.
+ *
+ * Complemento no bloqueante de `isTitleTaken`: aquella decide si el título está tomado —error rojo
+ * que impide guardar—, esta solo sugiere «¿quisiste decir…?». La diferencia es deliberada: un typo
+ * de tres caracteres puede ser un duplicado o puede ser una categoría hermana legítima («Políticas
+ * de envío» junto a «Políticas de pago»), y quien sabe cuál de las dos es el admin, no la UI.
+ *
+ * Devuelve `undefined` ante una coincidencia exacta porque ese caso ya lo cubre `isTitleTaken`:
+ * pintar el error y la sugerencia a la vez sería decir dos veces lo mismo con distinto color.
+ *
+ * Los documentos `oculto` quedan fuera a propósito, al revés que en `isTitleTaken`. Allí cuentan
+ * porque el índice único del backend no se libera al soft-delete y el guardado fallaría igual; aquí
+ * el copy invita a abrir su tarjeta, y un documento oculto no tiene tarjeta (`buildKbGrid` lo
+ * descarta). Señalar algo inalcanzable es peor que callarse, y callarse aquí no cuesta nada.
+ */
+export function findSimilarTitle(titulo: string, documents: IKbDocument[]): string | undefined {
+  const objetivo = normalizeTitulo(titulo);
+  if (objetivo.length === 0) return undefined;
+
+  // Se conserva el título original, no el normalizado: es el que se le muestra al admin.
+  const candidatos: string[] = [
+    ...PRESET_META.map((meta) => meta.titulo),
+    ...documents.filter((doc) => !doc.oculto).map((doc) => doc.titulo),
+  ];
+
+  let mejor: string | undefined;
+  let mejorDistancia = Number.POSITIVE_INFINITY;
+
+  for (const candidato of candidatos) {
+    const normalizado = normalizeTitulo(candidato);
+    if (normalizado === objetivo) return undefined;
+
+    const umbral = umbralSimilitud(Math.min(objetivo.length, normalizado.length));
+    // Poda barata: cada carácter de diferencia de longitud cuesta al menos una edición.
+    if (Math.abs(objetivo.length - normalizado.length) > umbral) continue;
+
+    const distancia = levenshtein(objetivo, normalizado);
+    if (distancia <= umbral && distancia < mejorDistancia) {
+      mejorDistancia = distancia;
+      mejor = candidato;
+    }
+  }
+
+  return mejor;
 }
 
 /**

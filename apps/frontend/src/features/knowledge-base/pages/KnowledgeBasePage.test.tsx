@@ -303,6 +303,87 @@ describe('KnowledgeBasePage — modal de creación', () => {
 
     expect(screen.getByRole('button', { name: 'Guardar e indexar' })).toBeDisabled();
   });
+
+  it('un título sin tildes tampoco pasa: se compara normalizado (HU-KB-13)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Agregar nuevo conocimiento/ }));
+    await user.type(await screen.findByLabelText('Título'), 'Politicas y terminos');
+
+    expect(
+      screen.getByText(/Este conocimiento ya existe .* Ábrelo desde su tarjeta para editarlo\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar e indexar' })).toBeDisabled();
+  });
+});
+
+describe('KnowledgeBasePage — sugerencia de título parecido (HU-KB-13)', () => {
+  /** Está a 3 ediciones del preset «Horarios y ubicación»: parecido, no idéntico. */
+  const CASI_PRESET = 'Horarios y la ubicación';
+
+  it('avisa al salir del campo y NO impide guardar: decide el admin', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockResolvedValue(makeDoc({ titulo: CASI_PRESET }));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Agregar nuevo conocimiento/ }));
+    await user.type(await screen.findByLabelText('Título'), CASI_PRESET);
+    await user.type(screen.getByLabelText('Contenido'), 'Atendemos de 8 a 5.');
+
+    const aviso = within(await screen.findByRole('dialog')).getByRole('status');
+    expect(aviso).toHaveTextContent(/¿Quisiste decir «Horarios y ubicación»\?/);
+
+    const guardar = screen.getByRole('button', { name: 'Guardar e indexar' });
+    expect(guardar).toBeEnabled();
+
+    await user.click(guardar);
+    expect(mockCreate).toHaveBeenCalledWith({
+      titulo: CASI_PRESET,
+      contenido: 'Atendemos de 8 a 5.',
+    });
+  });
+
+  it('no aparece mientras se teclea: un título a medio escribir no es un error', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Agregar nuevo conocimiento/ }));
+    await user.type(await screen.findByLabelText('Título'), CASI_PRESET);
+
+    // La región viva existe siempre —si no, el lector de pantalla no la observaría a tiempo—, así
+    // que «no hay sugerencia» se comprueba viéndola vacía, no ausente.
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('se retira al volver a escribir, hasta salir del campo otra vez', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Agregar nuevo conocimiento/ }));
+    const input = await screen.findByLabelText('Título');
+    await user.type(input, CASI_PRESET);
+    await user.tab();
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('status')).toBeInTheDocument();
+
+    await user.type(input, ' de las sedes');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('un título sin parecido no genera fricción alguna', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Agregar nuevo conocimiento/ }));
+    await user.type(await screen.findByLabelText('Título'), 'Testimonios de egresados');
+    await user.tab();
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+  });
 });
 
 describe('KnowledgeBasePage — buscador y filtros (HU-KB-06)', () => {

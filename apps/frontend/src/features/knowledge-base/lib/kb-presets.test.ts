@@ -16,6 +16,7 @@ import {
   EMPTY_FILTERS,
   esPresetProtegido,
   filterKbGrid,
+  findSimilarTitle,
   hasActiveFilters,
   isTitleTaken,
   mergePresetsWithDocuments,
@@ -241,8 +242,65 @@ describe('isTitleTaken — colisión de títulos al crear', () => {
     expect(isTitleTaken('   ', documents)).toBe(false);
   });
 
-  it('normalizeTitulo recorta y baja a minúsculas', () => {
-    expect(normalizeTitulo('  Políticas Y Términos ')).toBe('políticas y términos');
+  it('un título sin tildes ya no esquiva la reserva del preset (HU-KB-13)', () => {
+    // Antes de la normalización NFD, «Politicas y terminos» nacía como documento aparte y partía en
+    // dos lo que la IA lee sobre políticas.
+    expect(isTitleTaken('Politicas y terminos', [])).toBe(true);
+    expect(isTitleTaken('Informacion de la empresa', [])).toBe(true);
+  });
+
+  it('normalizeTitulo recorta, baja a minúsculas y quita tildes', () => {
+    expect(normalizeTitulo('  Políticas Y Términos ')).toBe('politicas y terminos');
+    expect(normalizeTitulo('Politicas')).toBe(normalizeTitulo('Políticas'));
+  });
+});
+
+describe('findSimilarTitle — títulos parecidos, sin bloquear (HU-KB-13)', () => {
+  const TESTIMONIOS = 'Testimonios';
+  const documents = [makeDoc({ titulo: LIBRE }), makeDoc({ titulo: TESTIMONIOS })];
+
+  it('detecta el caso que motivó la HU: un artículo de más', () => {
+    // «Horarios y la ubicación» está a 3 ediciones del preset y hoy nacía como categoría aparte.
+    expect(findSimilarTitle('Horarios y la ubicación', [])).toBe('Horarios y ubicación');
+  });
+
+  it('en títulos largos (>20) tolera hasta 5 ediciones', () => {
+    expect(findSimilarTitle('Convenios con empresas SENA', documents)).toBe(LIBRE);
+    expect(findSimilarTitle('Convenios con empresa', documents)).toBe(LIBRE);
+  });
+
+  it('en títulos cortos (≤20) aprieta a 3: cada carácter pesa más', () => {
+    expect(findSimilarTitle('Testimonos', documents)).toBe(TESTIMONIOS);
+    // 4 ediciones sobre 8 caracteres ya es otra cosa, y se deja pasar sin fricción.
+    expect(findSimilarTitle('Testigos', documents)).toBeUndefined();
+  });
+
+  it('elige el más parecido, no el primero de la lista', () => {
+    const varios = [makeDoc({ titulo: 'Testimonial' }), makeDoc({ titulo: TESTIMONIOS })];
+    expect(findSimilarTitle('Testimonies', varios)).toBe(TESTIMONIOS);
+  });
+
+  it('calla ante una coincidencia exacta: ese caso es de isTitleTaken', () => {
+    expect(findSimilarTitle(LIBRE, documents)).toBeUndefined();
+    expect(findSimilarTitle('  convenios CON empresas  ', documents)).toBeUndefined();
+    // Sin tildes también es exacta desde la normalización NFD.
+    expect(findSimilarTitle('Politicas y terminos', documents)).toBeUndefined();
+  });
+
+  it('un título vacío o sin parecido no sugiere nada', () => {
+    expect(findSimilarTitle('   ', documents)).toBeUndefined();
+    expect(findSimilarTitle('Testimonios de egresados', documents)).toBeUndefined();
+  });
+
+  it('devuelve el título original, con sus mayúsculas y tildes, para mostrarlo tal cual', () => {
+    expect(findSimilarTitle('horarios y la ubicacion', [])).toBe('Horarios y ubicación');
+  });
+
+  it('ignora los documentos ocultos: el copy manda abrir una tarjeta que ya no existe', () => {
+    // Al revés que `isTitleTaken`, donde sí cuentan porque el índice único no se liberó.
+    const ocultos = [makeDoc({ titulo: TESTIMONIOS, oculto: true })];
+    expect(findSimilarTitle('Testimonos', ocultos)).toBeUndefined();
+    expect(isTitleTaken(TESTIMONIOS, ocultos)).toBe(true);
   });
 });
 

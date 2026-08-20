@@ -24,7 +24,12 @@ import {
   updateKbDocument,
 } from '../../../api/knowledge-base.js';
 import { estructuraConHorarioInvertido } from '../lib/kb-horario.js';
-import { esPresetProtegido, isTitleTaken, isVirtualPresetId } from '../lib/kb-presets.js';
+import {
+  esPresetProtegido,
+  findSimilarTitle,
+  isTitleTaken,
+  isVirtualPresetId,
+} from '../lib/kb-presets.js';
 import { camposFaltantes, type KbEditorMode, type KbSchemaDef } from '../lib/kb-schemas.js';
 import type { IKbDocument, KbEstructura } from '../types/index.js';
 import { FieldCounter } from './fields/KnowledgeField.js';
@@ -103,6 +108,11 @@ export function KnowledgeUploadEditor({
   // Los errores rojos por campo esperan a que el admin empiece a llenar: señalarle lo que le falta
   // antes de que haya hecho nada es regañarlo por abrir el modal.
   const [tocado, setTocado] = useState(false);
+  // La sugerencia de título parecido espera a que el admin salga del campo. Mientras teclea, un
+  // título a medio escribir se parece a uno existente por pura casualidad («Informacion de la
+  // empres» está a dos ediciones del preset), y avisarle ahí sería corregirlo antes de que termine
+  // la frase. El error de duplicado exacto sí es inmediato: eso no es una opinión, es un hecho.
+  const [tituloVisitado, setTituloVisitado] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: (vars: { titulo: string; contenido: string }): Promise<IKbDocument> => {
@@ -146,6 +156,21 @@ export function KnowledgeUploadEditor({
   const tituloTrimmed = titulo.trim();
   // Solo aplica al crear: al editar, el título ya es de este documento y no se toca.
   const tituloDuplicado = tituloEditable && tituloTrimmed.length > 0 && isTitleTaken(tituloTrimmed, documents);
+  // Un título solo parecido a otro no es un error: puede ser el mismo conocimiento escrito con un
+  // typo o una categoría hermana legítima. Se avisa y decide el admin (HU-KB-13). Sin `useMemo`:
+  // solo corre tras el blur y contra unas decenas de candidatos.
+  const tituloSimilar =
+    tituloEditable && tituloVisitado && !tituloDuplicado
+      ? findSimilarTitle(tituloTrimmed, documents)
+      : undefined;
+
+  // Al lector de pantalla se le da una sola descripción: el error manda sobre la sugerencia, que
+  // por construcción no coexisten (`findSimilarTitle` calla ante una coincidencia exacta).
+  const tituloDescritoPor = tituloDuplicado
+    ? 'kb-titulo-error'
+    : tituloSimilar !== undefined
+      ? 'kb-titulo-sugerencia'
+      : undefined;
 
   const faltantes = estructurado ? camposFaltantes(schema, estructura) : [];
 
@@ -159,6 +184,8 @@ export function KnowledgeUploadEditor({
   // cosa —el estado natural mientras se teclea— y no bloquea nada (HU-KB-12).
   const horarioInvertido = estructurado && estructuraConHorarioInvertido(estructura);
 
+  // `tituloSimilar` NO entra aquí a propósito: es el punto entero de HU-KB-13. La UI señala el
+  // parecido y se aparta; quien sabe si son el mismo conocimiento es el admin, no esta condición.
   const puedeGuardar =
     contenidoListo &&
     tituloListo &&
@@ -199,14 +226,39 @@ export function KnowledgeUploadEditor({
             id="kb-titulo"
             className="mt-1.5"
             value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
+            onChange={(e) => {
+              setTitulo(e.target.value);
+              // Volver a escribir retira la sugerencia hasta que el admin salga del campo otra vez:
+              // un aviso que se queda mientras se corrige lo que señala es un aviso que estorba.
+              setTituloVisitado(false);
+            }}
+            onBlur={() => setTituloVisitado(true)}
             placeholder="Ej. Convenios con empresas"
             maxLength={200}
             required
             autoFocus
             aria-invalid={tituloDuplicado}
-            aria-describedby={tituloDuplicado ? 'kb-titulo-error' : undefined}
+            aria-describedby={tituloDescritoPor}
           />
+          {/*
+            La región viva se monta siempre, aunque esté vacía: un `role="status"` que aparece a la
+            vez que su contenido no se anuncia de forma fiable, porque el lector de pantalla no lo
+            estaba observando todavía. Hace falta aquí y no en el error rojo porque la sugerencia
+            sale justo cuando el foco ya se fue del input, y entonces su `aria-describedby` no lo
+            está leyendo nadie.
+          */}
+          <div role="status">
+            {/* Ámbar y texto apagado, no rojo: comparte la caja con el error pero no su peso. */}
+            {tituloSimilar !== undefined && (
+              <p
+                id="kb-titulo-sugerencia"
+                className="mt-1.5 rounded-lg border border-amber-200/60 bg-amber-50 px-3 py-2 text-sm text-muted-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200 dark:border-amber-900/60 dark:bg-amber-950/30"
+              >
+                ¿Quisiste decir «{tituloSimilar}»? Ya existe un conocimiento con un título muy
+                parecido. Si es el mismo, ábrelo desde su tarjeta para editarlo.
+              </p>
+            )}
+          </div>
           {tituloDuplicado && (
             <p
               id="kb-titulo-error"
