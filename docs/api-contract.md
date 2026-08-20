@@ -86,7 +86,11 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | PATCH | `/api/clientes/:id` | admin | Editar datos / asignar / cambiar estado. |
 | PATCH | `/api/clientes/:id/estado` | admin | Transición de `estadoComercial`. |
 | GET | `/api/clientes/:id/messages` | admin | Hilo de conversación. |
-| POST | `/api/messages/send` | admin | Envío outbound por canal. |
+| POST | `/api/messages/send` | admin | Envío outbound por canal; delega en `sendOutbound` (texto libre, 422 si la ventana de 24 h está cerrada). |
+| POST | `/api/messages/template` | admin | Envía una plantilla HSM aprobada (`{ clienteId, templateId, parametros[] }`); permitido dentro y fuera de la ventana de 24 h (HT-WA-02). |
+| GET | `/api/templates` | admin | Catálogo de plantillas HSM del tenant, paginado (`?page&limit&status&category`) (HT-WA-02). |
+| POST | `/api/templates` | admin | Crea una plantilla en Meta y la persiste localmente en `PENDING` (HT-WA-02). |
+| POST | `/api/templates/sync` | admin | Sincroniza el catálogo local con el estado real en Meta (HT-WA-02). |
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |
 | GET/POST | `/api/campaigns` | admin | Campañas de remarketing. |
 | GET | `/api/clientes/filter` | admin | Conteo/listado para segmentar campañas. |

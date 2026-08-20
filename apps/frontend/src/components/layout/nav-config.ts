@@ -2,6 +2,7 @@ import {
   BookText,
   Building2,
   CreditCard,
+  FileStack,
   Inbox,
   LineChart,
   MessageCircleQuestion,
@@ -91,6 +92,12 @@ export const navGroups: NavGroup[] = [
         label: 'WhatsApp',
         to: '/settings/channels/whatsapp',
         icon: MessageSquareText,
+        roles: ['admin'],
+      },
+      {
+        label: 'Plantillas',
+        to: '/settings/templates',
+        icon: FileStack,
         roles: ['admin'],
       },
       {

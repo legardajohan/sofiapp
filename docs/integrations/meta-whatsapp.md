@@ -57,20 +57,52 @@ eso se monta en `app.ts` **antes** de `express.json()`: si el parser JSON global
 - **Ventana de 24h:** fuera de la ventana de servicio solo se puede enviar **plantillas HSM**
   aprobadas. Dentro de la ventana, texto libre.
 
-## 4. Plantillas HSM y campañas
+## 4. Plantillas HSM (HT-WA-02)
 
-- Las difusiones masivas usan plantillas HSM aprobadas por Meta.
+El catálogo local (`whatsapp_templates`, ver `data-model.md`) es un **espejo** del estado real en
+Meta, nunca una fuente de verdad paralela: su cuerpo lo dicta Meta y cambiarlo exige re-aprobación.
+
+```
+GET  /api/templates        → catálogo local paginado, filtrable por status/category.
+POST /api/templates/sync   → GET /{wabaId}/message_templates (metaTemplateClient.list, pagina por
+                              paging.next hasta agotarla); upsert por {tenantId, name, language}:
+                              crea las nuevas, actualiza status/components de las existentes, marca
+                              obsoleta:true las que Meta ya no devuelve (nunca se borran).
+POST /api/templates        → POST /{wabaId}/message_templates (crea en Meta); solo si Meta acepta
+                              se persiste localmente en PENDING. Si Meta rechaza, no queda
+                              documento local huérfano.
+```
+
+**`sendOutbound(tenantId, clienteId, contenido)`** (`message.service.ts`) es el **único** punto del
+sistema que decide entre texto libre y plantilla HSM según `Cliente.ventana24hExpiraEn`:
+
+- Ventana abierta → texto libre (`sendMessage`, la bandeja).
+- Ventana cerrada → exige una plantilla `APPROVED`; sin ella, `AppError` 422 (mismo mensaje que
+  usaba `sendMessage` antes de esta spec — no rompe el `WindowClosedBanner` del frontend).
+- Enviar una plantilla es válido dentro **y** fuera de la ventana (Meta lo acepta siempre).
+
+`HU-FLOW-02` (recordatorios antes de las 24 h) y la futura épica de Remarketing consumen
+`sendOutbound`; ninguna reimplementa la regla de la ventana.
+
+`buildTemplatePayload` (`whatsapp-template.service.ts`) valida, **antes** de llamar a la Graph API:
+plantilla `APPROVED` (si no, 422) y número de parámetros exacto (`parametrosBody`, derivado al
+persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 con
+`{ esperados, recibidos }`).
+
+## 5. Campañas (fuera de alcance de HT-WA-02)
+
+- Las difusiones masivas reutilizarán las mismas plantillas HSM aprobadas.
 - **Rate limiting:** worker BullMQ con concurrencia controlada para respetar el límite de Meta
   (~80 msg/s). Backoff ante error 429. Registro de estado por destinatario (`campaign_recipients`).
 - **Riesgo operativo:** una infracción de políticas puede suspender la WABA del tenant. Probar
   con números sandbox antes de producción.
 
-## 5. Normalización de canales
+## 6. Normalización de canales
 
 Payloads de Instagram Direct y Facebook Messenger se normalizan a un **modelo canónico interno**
 de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 
-## 6. Variables de entorno relevantes
+## 7. Variables de entorno relevantes
 
 ```
 META_APP_ID=

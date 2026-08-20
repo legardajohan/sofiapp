@@ -168,6 +168,35 @@
 //                                                          de `status` no llevaban `tenantId`)
 ```
 
+## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  metaTemplateId: String,         // id devuelto por Meta al crear/sincronizar
+  name: String,                   // nombre aprobado por Meta (snake_case)
+  language: String,               // 'es', 'es_CO', 'en_US'
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION",
+  status: "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED",
+  components: [{                  // tal y como los devuelve/espera la Graph API, íntegros
+    type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS",
+    format: "TEXT" | "IMAGE" | "DOCUMENT" | "VIDEO",
+    text: String?,
+    buttons: [Mixed]?,
+    example: { body_text: [[String]] }?,   // sets de ejemplo, para la vista previa
+  }],
+  parametrosBody: Number,         // nº de placeholders {{n}} del componente BODY, derivado al persistir
+  syncedAt: ISODate,              // último sync (manual, POST /api/templates/sync) o alta
+  obsoleta: Boolean,              // Meta dejó de devolverla en el último sync; NO se borra
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
+//          { tenantId: 1, status: 1 }
+```
+> **Por qué no es único global `metaTemplateId`:** dos tenants distintos conectan WABAs distintas
+> y pueden tener plantillas homónimas; a diferencia de `MetaIntegration.phoneNumberId`, aquí el
+> identificador de Meta no es único por construcción entre tenants.
+
 ## catalog_items  (catálogo genérico — antes "cursos")
 ```js
 {

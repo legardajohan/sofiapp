@@ -27,6 +27,7 @@ import webhookRoutes from './features/webhook/webhook.routes.js';
 import clienteRoutes from './features/cliente/cliente.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import kbFaqRoutes from './features/kb-faq/kb-faq.routes.js';
+import whatsappTemplateRoutes from './features/whatsapp-template/whatsapp-template.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
@@ -62,6 +63,7 @@ app.use('/api/admin/cost-items', costCatalogRoutes);
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/templates', whatsappTemplateRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);
