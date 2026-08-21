@@ -351,14 +351,47 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   estadoIndexacion: "pendiente" | "procesando" | "indexado" | "fallido",  // default "pendiente"
   chunkCount: Number,             // nº de fragmentos indexados (0 hasta indexar)
   isPreset: Boolean,              // V2: documento base sembrado al crear el tenant (default false)
+  obligatorio: Boolean,           // V2: preset mínimo para que la IA responda; NO se puede eliminar
+  oculto: Boolean,                // HU-KB-06: soft-delete de un preset eliminado (default false)
   proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
+  estructura: Mixed?,             // HU-KB-07: conocimiento capturado campo a campo (JSON opaco)
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
 //          { tenantId: 1, createdAt: -1 }
-// Contenido tope 3.000 caracteres (validación Zod). Editar (PATCH) re-versiona, limpia chunks y
-// re-indexa solo si el contenido no está vacío. Los 5 presets se siembran vacíos al crear el tenant.
+// Contenido tope 10.000 caracteres (validación Zod; eran 3.000 hasta HU-KB-07). Editar (PATCH)
+// re-versiona, limpia chunks y re-indexa solo si el contenido no está vacío. Los 5 presets se
+// siembran vacíos al crear el tenant.
+//
+// HU-KB-06 — semántica de escritura:
+//  · Guardar contenido equivalente al ya almacenado (comparación normalizada: trim + colapso de
+//    whitespace, SIN bajar a minúsculas) es un NO-OP total: no re-versiona, no borra chunks, no
+//    encola kb-index, no toca `updatedAt` ni `Tenant.kbVersion`.
+//  · DELETE de un `obligatorio: true` → 400. DELETE de una de las 5 categorías predefinidas
+//    (por título, no solo por `isPreset`) → soft-delete: borra sus chunks y marca `oculto: true`
+//    con `contenido: ""`, sin borrar el documento. Un documento libre sí se borra de verdad.
+//  · El listado SIGUE devolviendo los ocultos con su flag: el frontend los necesita para distinguir
+//    "el preset nunca se creó" de "el admin lo eliminó" y no reponer la tarjeta. Re-crear ese
+//    título es una re-alta sobre el mismo documento (`oculto: false`), nunca un duplicado.
+//
+// HU-KB-07 — campo `estructura` y su semántica de escritura:
+//  · Forma: { schemaVersion: Number, schemaId: String, campos: { <id>: <valor> }, adicional: String }.
+//    Cada valor lleva su propio discriminante `tipo` ("texto" | "lista" | "triestado" | "horario" |
+//    "repetible"), de modo que se puede leer sin conocer el schema con que se guardó. `adicional` es
+//    «Información adicional» y SIEMPRE está presente (puede ser "").
+//  · El backend NO la interpreta ni deriva `contenido` a partir de ella: el frontend serializa y
+//    envía ambos en el mismo POST/PATCH. Zod valida solo el sobre (las 4 claves) y un tope de 40.000
+//    caracteres del JSON. Añadir campos nuevos NO requiere tocar el backend.
+//  · `contenido` sigue siendo la fuente de verdad de indexación, chunkCount, versionado, isFirstFill
+//    y retrieval. `estructura` lo es solo de la edición guiada del modal.
+//  · Ausente en el DTO significa NO TOCAR, nunca borrar: guardar desde el modo legado no destruye la
+//    estructura de un documento que ya la tenía. No hay camino de borrado.
+//  · Contenido igual + estructura DISTINTA → se persiste solo `estructura`: sin $inc de version, sin
+//    borrar chunks, sin encolar kb-index y sin bumpKbVersion (el texto que ve la IA no cambió).
+//    `updatedAt` sí avanza, porque hubo escritura. Contenido igual + estructura igual sigue siendo el
+//    NO-OP total de HU-KB-06.
+//  · Retrocompatible: un documento sin `estructura` se comporta exactamente como antes de HU-KB-07.
 ```
 
 ## kb_chunks  (fragmentos + embeddings — Atlas Vector Search)
@@ -479,6 +512,55 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
 > pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
 
+## ai_usage_logs  (métricas de cada llamada a AIService — HT-AI-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  method: "chat" | "extract" | "classify" | "summary",
+  llmModel: String,               // p.ej. "gemini-1.5-flash" (env.GEMINI_MODEL)
+  promptTokens: Number,
+  completionTokens: Number,
+  totalTokens: Number,
+  cacheHit: Boolean,
+  fromFaq: Boolean,                // respondida por cortocircuito de FAQ, sin generación (HU-KB-02)
+  durationMs: Number,
+  createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
+}
+// Índices: { tenantId: 1 }, { tenantId: 1, createdAt: -1 }
+// TTL: { createdAt: 1 }, expireAfterSeconds: 7776000 (90 días) — ciclo de vida de MÉTRICAS
+// operativas. La auditoría persistente vive aparte, en ai_response_contexts (sin TTL).
+```
+> Es la entidad "respuesta de IA" que expone `GET /api/ai/responses` y el `:id` de
+> `GET /api/ai/responses/:id/context` (HU-KB-04): se crea una fila por cada llamada a
+> `AIService.chat/extract/classify/summarize`, exista o no trace de auditoría asociado.
+
+## ai_response_contexts  (trazabilidad de fuentes/contexto — HU-KB-04)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  usageLogId: ObjectId,            // ref AiUsageLog — 1:1, la llamada que este trace documenta
+  promptSnapshot: {
+    method: "chat" | "extract" | "classify" | "summary",
+    version: String,               // versión del PromptTemplate VIGENTE en el momento de generar
+    systemPrompt: String,          // texto completo del prompt de sistema usado
+  },
+  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // [] hasta Fase 3
+  kbVersion: Number | null,        // Tenant.kbVersion en el momento de la llamada
+  createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
+}
+// Índices: { tenantId: 1, usageLogId: 1 } unique
+// SIN índice TTL: retención indefinida (auditoría). Política de expiración/compliance pendiente
+// de una HU futura — ver docs/specs/HU-KB-04-contexto-ia/spec.md → Fuera de alcance.
+```
+> Se escribe fire-and-forget desde `AIService.chat()` (los tres caminos: hit de caché exacta, hit
+> de FAQ y generación real), sin bloquear la respuesta al llamador. `retrievedChunks` se persiste
+> vacío hasta que una HU de Fase 3 conecte `searchKnowledge()` (RAG) dentro de `chat()`; el modelo
+> y el endpoint ya están listos para recibirlos sin cambios de esquema. `extract()`, `classify()`
+> y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas" auditables
+> en el sentido de esta HU.
+
 ---
 
 ## Relaciones (resumen)
@@ -493,6 +575,7 @@ Tenant 1──┬──N User
           ├──N Campaign ──N CampaignRecipient ──1 Cliente
           ├──N KbDocument ──N KbChunk   (RAG: embeddings + Atlas Vector Search)
           ├──N AuditEvent ──1 User (actorId)   (auditoría genérica — HU-OMNI-02)
+          ├──N AiUsageLog ──1 AiResponseContext (usageLogId, 1:1, sin TTL — HU-KB-04)
           └──N Flow ──N FlowState ──1 Cliente
 Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
 Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)

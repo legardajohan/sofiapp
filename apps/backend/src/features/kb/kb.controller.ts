@@ -12,8 +12,8 @@ export const createDocumentController: RequestHandler = async (req, res) => {
 export const updateDocumentController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const { id } = req.params as { id: string };
-  const { contenido } = req.body as UpdateKbDocumentDTO;
-  const result = await updateDocument(tenantId, id, contenido);
+  const dto = req.body as UpdateKbDocumentDTO;
+  const result = await updateDocument(tenantId, id, dto);
   res.status(200).json(result);
 };
 

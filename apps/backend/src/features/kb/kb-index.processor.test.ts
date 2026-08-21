@@ -20,6 +20,19 @@ function makeProvider(): ILlmProvider {
   };
 }
 
+/**
+ * Provider cuyo `embedTexts` ejecuta `sideEffect` antes de resolver: simula que el documento cambia
+ * mientras el worker espera a Gemini, que es exactamente la ventana de carrera de HU-KB-06.
+ */
+function makeProviderQue(sideEffect: () => Promise<void>): ILlmProvider {
+  const provider = makeProvider();
+  vi.mocked(provider.embedTexts).mockImplementation(async ({ texts }: { texts: string[] }) => {
+    await sideEffect();
+    return { result: texts.map(() => [0.1, 0.2, 0.3]), usage: ZERO_USAGE };
+  });
+  return provider;
+}
+
 async function seedDoc(tenantId: Types.ObjectId, contenido: string, version = 1): Promise<Types.ObjectId> {
   const doc = await createScoped(KbDocument, tenantId, {
     titulo: 'Doc',
@@ -100,6 +113,63 @@ describe('processKbIndexJob', () => {
     const doc = await KbDocument.findById(documentId).lean<IKbDocument>();
     expect(doc?.estadoIndexacion).toBe('fallido');
     expect(doc?.error).toBe('Ocurrió un error al procesar el contenido. Intenta de nuevo más tarde.');
+  });
+
+  it('documento eliminado durante el embedding → no crea chunks huérfanos (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const documentId = await seedDoc(tenantId, 'Contenido que se borra a mitad.');
+    // El borrado ocurre DENTRO de embedTexts: reproduce la ventana real entre la llamada lenta a
+    // Gemini y la escritura de los chunks.
+    const provider = makeProviderQue(async () => {
+      await KbDocument.deleteOne({ _id: documentId });
+    });
+
+    await processKbIndexJob(
+      { tenantId: tenantId.toString(), documentId: documentId.toString(), version: 1 },
+      provider,
+    );
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId }).exec();
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('documento ocultado durante el embedding → no crea chunks (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const documentId = await seedDoc(tenantId, 'Contenido de un preset que se elimina.');
+    const provider = makeProviderQue(async () => {
+      await KbDocument.updateOne({ _id: documentId }, { $set: { oculto: true } });
+    });
+
+    await processKbIndexJob(
+      { tenantId: tenantId.toString(), documentId: documentId.toString(), version: 1 },
+      provider,
+    );
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId }).exec();
+    expect(chunks).toHaveLength(0);
+
+    const doc = await KbDocument.findById(documentId).lean<IKbDocument>();
+    expect(doc?.estadoIndexacion).not.toBe('indexado');
+  });
+
+  it('documento re-versionado durante el embedding → descarta el job sin pisar el estado (HU-KB-06)', async () => {
+    const tenantId = new Types.ObjectId();
+    const documentId = await seedDoc(tenantId, 'Contenido que se edita a mitad.');
+    const provider = makeProviderQue(async () => {
+      await KbDocument.updateOne({ _id: documentId }, { $inc: { version: 1 } });
+    });
+
+    await processKbIndexJob(
+      { tenantId: tenantId.toString(), documentId: documentId.toString(), version: 1 },
+      provider,
+    );
+
+    const chunks = await findScoped(KbChunk, tenantId, { documentId }).exec();
+    expect(chunks).toHaveLength(0);
+
+    // El job de la versión 2 es el dueño legítimo del estado: este no lo marca como indexado.
+    const doc = await KbDocument.findById(documentId).lean<IKbDocument>();
+    expect(doc?.estadoIndexacion).not.toBe('indexado');
   });
 
   it('chunks de tenantA no son visibles para tenantB', async () => {

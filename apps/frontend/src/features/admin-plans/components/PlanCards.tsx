@@ -1,4 +1,15 @@
 import { Check, Coins, Crown, DollarSign, Pencil, Rocket, Trash2, Zap, type LucideIcon } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { formatCurrency, formatNumber } from '../../../lib/currency.js';
 import { precioEnCop } from '../pricing.js';
 import { PERIODICIDAD_LABELS, type IPlan } from '../types/index.js';
@@ -115,15 +126,28 @@ export function PlanCards({ plans, copRate, onEdit, onDelete }: Props): React.Re
               >
                 <Pencil className="size-4" />
               </button>
-              <button
-                type="button"
-                aria-label="Eliminar"
-                title="Eliminar"
-                onClick={() => onDelete(plan)}
-                className="rounded-md p-1.5 text-destructive transition-transform duration-150 ease-out hover:bg-destructive/10 active:scale-[0.95]"
-              >
-                <Trash2 className="size-4" />
-              </button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Eliminar"
+                    title="Eliminar"
+                    className="rounded-md p-1.5 text-destructive transition-transform duration-150 ease-out hover:bg-destructive/10 active:scale-[0.95]"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Eliminar el plan "{plan.nombre}"?</AlertDialogTitle>
+                    <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(plan)}>Eliminar</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </article>
         );

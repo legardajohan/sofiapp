@@ -21,6 +21,10 @@ const KnowledgeFaqsPage = lazy(() =>
   import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeFaqsPage })),
 );
 
+const AiContextPage = lazy(() =>
+  import('./features/ai-context/index.js').then((m) => ({ default: m.AiContextPage })),
+);
+
 const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
 );
@@ -83,6 +87,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <KnowledgeFaqsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/knowledge/context',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <AiContextPage />
                 </Suspense>
               </RequireRole>
             ),

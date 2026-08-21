@@ -56,9 +56,9 @@ export function AdminPlansPage(): React.ReactElement {
     }
   };
 
+  // La confirmación vive en el AlertDialog que envuelve el botón de borrar (PlanTable/PlanCards).
   const handleDelete = (plan: IPlan): void => {
-    const ok = window.confirm(`¿Eliminar el plan "${plan.nombre}"? Esta acción no se puede deshacer.`);
-    if (ok) deleteMutation.mutate(plan._id);
+    deleteMutation.mutate(plan._id);
   };
 
   return (

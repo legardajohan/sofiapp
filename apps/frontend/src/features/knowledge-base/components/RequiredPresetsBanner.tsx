@@ -4,7 +4,7 @@ import type { IKbDocument } from '../types/index.js';
 interface RequiredPresetsBannerProps {
   /** Presets obligatorios que aún no tienen contenido. */
   missing: IKbDocument[];
-  /** Abre el primer obligatorio faltante en el editor. */
+  /** Abre el primer obligatorio faltante en el modal de edición. */
   onFix: (doc: IKbDocument) => void;
 }
 

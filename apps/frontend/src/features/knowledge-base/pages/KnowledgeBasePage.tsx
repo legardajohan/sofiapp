@@ -1,14 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { HelpCircle } from 'lucide-react';
 import { getKbDocuments } from '../../../api/knowledge-base.js';
-import { KnowledgeUploadEditor } from '../components/KnowledgeUploadEditor.js';
-import { KnowledgeDocumentTable } from '../components/KnowledgeDocumentTable.js';
-import { PresetKnowledgeBar } from '../components/PresetKnowledgeBar.js';
+import { KnowledgeGrid } from '../components/KnowledgeGrid.js';
+import {
+  KnowledgeDocumentDialog,
+  type KbDialogTarget,
+} from '../components/KnowledgeDocumentDialog.js';
 import { PresetProgress } from '../components/PresetProgress.js';
 import { RequiredPresetsBanner } from '../components/RequiredPresetsBanner.js';
 import { KnowledgeOnboardingDialog } from '../components/KnowledgeOnboardingDialog.js';
-import { computeKbProgress, hasContent, mergePresetsWithDocuments } from '../lib/kb-presets.js';
+import { KnowledgeToolbar } from '../components/KnowledgeToolbar.js';
+import {
+  buildKbGrid,
+  computeKbProgress,
+  filterKbGrid,
+  hasActiveFilters,
+  type KbEstadoFilter,
+  type KbTagFilter,
+} from '../lib/kb-presets.js';
+import { useDebouncedValue } from '../../../hooks/use-debounced-value.js';
 import type { IKbDocument, KbDocumentsListResponse } from '../types/index.js';
 
 const ONBOARDING_KEY = 'kb_onboarding_dismissed';
@@ -20,22 +31,15 @@ function isIndexingActive(doc: IKbDocument): boolean {
   return doc.estadoIndexacion === 'pendiente' && doc.contenido.trim().length > 0;
 }
 
-// La tabla solo muestra conocimiento "real": con contenido, o en un estado accionable
-// (procesando/fallido para reintentar). Los presets vacíos viven solo en la barra superior.
-// Se alimenta de la lista cruda del API, así que los presets virtuales (que solo existen dentro de
-// PresetKnowledgeBar) nunca llegan aquí.
-function belongsInTable(doc: IKbDocument): boolean {
-  return hasContent(doc) || doc.estadoIndexacion === 'procesando' || doc.estadoIndexacion === 'fallido';
-}
-
 export function KnowledgeBasePage(): React.ReactElement {
-  const [editingDocument, setEditingDocument] = useState<IKbDocument | null>(null);
+  const [dialogTarget, setDialogTarget] = useState<KbDialogTarget | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(
     () => localStorage.getItem(ONBOARDING_KEY) !== '1',
   );
-  const formRef = useRef<HTMLDivElement>(null);
+  const [texto, setTexto] = useState('');
+  const [tag, setTag] = useState<KbTagFilter>('todos');
+  const [estado, setEstado] = useState<KbEstadoFilter>('todos');
 
-  // Query única compartida por la barra de presets y la tabla (evita doble fetch).
   const { data, isLoading, isError, refetch } = useQuery<KbDocumentsListResponse>({
     queryKey: ['kb', 'documents'],
     queryFn: () => getKbDocuments({ page: 1, limit: 50 }),
@@ -43,21 +47,25 @@ export function KnowledgeBasePage(): React.ReactElement {
     refetchInterval: (query) => (query.state.data?.data.some(isIndexingActive) ? 3000 : false),
   });
 
+  // Documentos crudos del API (fuente de verdad para detectar títulos ya usados) y la lista de la
+  // grilla: las 5 categorías siempre presentes + los documentos propios del tenant.
   const documents = data?.data ?? [];
-  // El progreso se calcula sobre la lista FUSIONADA (las 5 categorías siempre presentes): así el
-  // contador de obligatorios queda fijo en "X/2" y la barra no desaparece al eliminar todo.
-  const progress = computeKbProgress(mergePresetsWithDocuments(documents));
-  const tableDocuments = documents.filter(belongsInTable);
+  const gridDocuments = buildKbGrid(documents);
+  // El progreso describe el inventario, no la vista: siempre sobre la lista SIN filtrar, para que
+  // buscar algo no dé la impresión de que la KB encogió.
+  const progress = computeKbProgress(gridDocuments);
 
-  // Al iniciar una edición, lleva el formulario a la vista para que el admin no lo pierda de vista.
-  useEffect(() => {
-    if (!editingDocument) return;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    formRef.current?.scrollIntoView({
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      block: 'start',
-    });
-  }, [editingDocument]);
+  // El input se repinta en cada tecla; filtrar espera a que el admin deje de escribir.
+  const textoDebounced = useDebouncedValue(texto, 300);
+  const criteria = { texto: textoDebounced, tag, estado };
+  const visibleDocuments = filterKbGrid(gridDocuments, criteria);
+  const filtrando = hasActiveFilters(criteria);
+
+  function limpiarFiltros(): void {
+    setTexto('');
+    setTag('todos');
+    setEstado('todos');
+  }
 
   function handleOnboardingChange(open: boolean): void {
     setOnboardingOpen(open);
@@ -68,19 +76,17 @@ export function KnowledgeBasePage(): React.ReactElement {
     <div className="min-h-screen bg-background p-8">
       <KnowledgeOnboardingDialog open={onboardingOpen} onOpenChange={handleOnboardingChange} />
 
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <svg className="w-5 h-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary">
+            <svg className="h-5 w-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-semibold text-foreground tracking-tight">
-              Entrenar la IA
-            </h1>
-            <p className="text-sm text-secondary-foreground mt-0.5">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Entrenar la IA</h1>
+            <p className="mt-0.5 text-sm text-secondary-foreground">
               Carga la información pertinente que la IA usará como contexto al responder.
             </p>
           </div>
@@ -89,9 +95,9 @@ export function KnowledgeBasePage(): React.ReactElement {
             onClick={() => setOnboardingOpen(true)}
             aria-label="Ver la guía de la base de conocimiento"
             title="¿Cómo funciona?"
-            className="flex-shrink-0 p-1.5 rounded-md text-secondary-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
+            className="flex-shrink-0 rounded-md p-1.5 text-secondary-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
           >
-            <HelpCircle className="w-5 h-5" />
+            <HelpCircle className="h-5 w-5" />
           </button>
         </div>
 
@@ -99,30 +105,43 @@ export function KnowledgeBasePage(): React.ReactElement {
 
         <RequiredPresetsBanner
           missing={progress.missingObligatorios}
-          onFix={(doc) => setEditingDocument(doc)}
+          onFix={(doc) => setDialogTarget({ mode: 'edit', doc })}
         />
 
-        {/* La barra muestra siempre las 5 categorías; un preset sin documento real llega aquí como
-            documento virtual y el editor lo detecta (id `__preset_*`) para crear en vez de editar. */}
-        <PresetKnowledgeBar
-          documents={documents}
-          editingDocumentId={editingDocument?.id}
-          onEdit={(doc) => setEditingDocument(doc)}
-          onCreateNew={() => setEditingDocument(null)}
-        />
-
-        <div ref={formRef}>
-          <KnowledgeUploadEditor
-            document={editingDocument ?? undefined}
-            onDone={() => setEditingDocument(null)}
+        {/* En error el aviso reemplaza a la grilla, así que filtrar no tendría sobre qué operar. */}
+        {!isError && (
+          <KnowledgeToolbar
+            texto={texto}
+            tag={tag}
+            estado={estado}
+            resultCount={visibleDocuments.length}
+            hasFilters={filtrando}
+            onTextoChange={setTexto}
+            onTagChange={setTag}
+            onEstadoChange={setEstado}
           />
-        </div>
-        <KnowledgeDocumentTable
-          documents={tableDocuments}
+        )}
+
+        {/* Una sola grilla: las 5 categorías predefinidas (las que no existen llegan como preset
+            virtual `__preset_*`, que el editor detecta para crear en vez de editar) seguidas de los
+            documentos propios del tenant. */}
+        <KnowledgeGrid
+          documents={visibleDocuments}
           isLoading={isLoading}
           isError={isError}
+          isFiltered={filtrando}
           onRetry={() => void refetch()}
-          onEdit={(doc) => setEditingDocument(doc)}
+          onOpen={(doc) => setDialogTarget({ mode: 'edit', doc })}
+          onCreate={() => setDialogTarget({ mode: 'create' })}
+          onClearFilters={limpiarFiltros}
+        />
+
+        <KnowledgeDocumentDialog
+          target={dialogTarget}
+          documents={documents}
+          onOpenChange={(open) => {
+            if (!open) setDialogTarget(null);
+          }}
         />
       </div>
     </div>

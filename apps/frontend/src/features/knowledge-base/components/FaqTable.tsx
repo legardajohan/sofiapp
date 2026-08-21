@@ -2,6 +2,17 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageCircleQuestion, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -66,7 +77,6 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
   }
 
   function handleDelete(faq: IKbFaq): void {
-    if (!window.confirm(`¿Eliminar "${faq.pregunta}"? Esta acción no se puede deshacer.`)) return;
     setEnCurso(faq.id);
     deleteMutation.mutate(faq.id);
   }
@@ -170,17 +180,34 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
                         >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Eliminar la pregunta ${faq.pregunta}`}
-                          title="Eliminar"
-                          className="text-destructive hover:text-destructive"
-                          disabled={ocupada}
-                          onClick={() => handleDelete(faq)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Eliminar la pregunta ${faq.pregunta}`}
+                              title="Eliminar"
+                              className="text-destructive hover:text-destructive"
+                              disabled={ocupada}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar "{faq.pregunta}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acción no se puede deshacer.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(faq)}>
+                                Eliminar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
