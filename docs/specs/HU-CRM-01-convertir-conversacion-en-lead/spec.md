@@ -59,9 +59,9 @@ Incluye:
 
 Fuera de alcance (otros features / fases):
 
-- Listado y filtros de leads, página `/leads` → `HU-CRM-02`.
-- Edición del lead y transición de su `estado` → `HU-CRM-03`.
-- Métricas y reportes de conversión → `CRM-04`.
+- Listado y filtros de leads, página `/leads` → `HU-CRM-03`.
+- Edición del lead y transición de su `estado` → `HU-CRM-04`.
+- Métricas y reportes de conversión → `CRM-05`.
 - Conversión desde formulario web o importación masiva (aquí solo nace desde una conversación).
 - Valor estimado y moneda del lead (arrastraría ADR 0005, `Decimal128` y TRM).
 - Cuota de plan sobre la colección `leads`.
@@ -140,7 +140,7 @@ Dos acotaciones para que la decisión no se desborde:
   existente (`nuevo | en_gestion | pago_pendiente | pagado | perdido`). Kanban y drag&drop siguen
   fuera de alcance por `docs/product.md` §5.
 - `Cliente.estadoComercial` **no** se deja de usar ni se sincroniza automáticamente con
-  `Lead.estado` en este feature. Cualquier acoplamiento entre ambos es materia de `HU-CRM-03`.
+  `Lead.estado` en este feature. Cualquier acoplamiento entre ambos es materia de `HU-CRM-04`.
 
 ## Dependencias
 

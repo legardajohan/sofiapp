@@ -11,6 +11,7 @@ import {
   ScanSearch,
   Sparkles,
   Tags,
+  Target,
   UserCheck,
   Users,
   UserX,
@@ -68,6 +69,7 @@ export const navGroups: NavGroup[] = [
           { label: 'Sofi activa', to: '/inbox?filtro=sofi', icon: Sparkles },
         ],
       },
+      { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
       { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
       {
         label: 'Clientes',

@@ -252,6 +252,14 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   dos empresas pueden tener el mismo número.
 - `{ tenantId: 1, clienteId: 1 }` — responde "¿esta conversación ya se convirtió?" en lote, para la
   bandeja y la ficha del contacto (`leadId`).
+- `{ tenantId: 1, createdAt: -1 }` — orden por defecto del listado (HU-CRM-03).
+- `{ tenantId: 1, estado: 1, createdAt: -1 }` — `GET /api/leads?estado=`.
+- `{ tenantId: 1, responsableId: 1, createdAt: -1 }` — `GET /api/leads?asesor=`.
+
+> **Los tres índices del listado cierran con `createdAt: -1`**, que es como ordena la tabla, para
+> que Mongo resuelva filtro y orden con el mismo índice en vez de ordenar en memoria. El filtro
+> `?semaforo=` no lleva índice propio: no es un campo del lead, sino una etiqueta de la
+> conversación, y resuelve por `clienteId` — ya cubierto por el índice de arriba.
 
 > **Borrado duro, no archivado.** `DELETE /api/leads/:id?motivo=…` elimina el documento; no hay
 > `deletedAt` ni bandera de baja. La razón es el índice único de arriba: un lead marcado como
@@ -581,3 +589,27 @@ Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
 Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)
 User(superadmin) tenantId=null  (global)
 ```
+
+## `estados`
+
+Catálogo por tenant de las **etapas del pipeline de leads** (HU-CRM-03). Antes eran el enum fijo
+`ESTADOS_COMERCIALES`, igual para todas las empresas — el mismo supuesto de vertical que ya se sacó
+del modelo en `contact_options`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenantId` | ObjectId | Requerido e indexado. |
+| `key` | string (≤40) | Slug estable derivado del `label`. **Es lo que se graba en `Lead.estado`**, así que no cambia al renombrar. |
+| `label` | string (≤60) | Nombre visible, editable. |
+| `color` | string | `#RRGGBB` elegido por la empresa. La UI lo pasa por el helper de contraste, nunca lo pinta crudo. |
+| `orden` | number | Posición en el pipeline. El orden cuenta una historia; alfabético la rompe. |
+| `activo` | boolean | `false` = archivado: no se ofrece para filtrar, pero sigue resolviendo su etiqueta. |
+| `esDefecto` | boolean | Sembrado al crear el tenant. Informativo. |
+
+Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que los
+leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.
+
+> Las cinco claves sembradas (`nuevo`, `en_gestion`, `pago_pendiente`, `pagado`, `perdido`) son
+> **exactamente** los valores del enum anterior, así que el paso de enum a catálogo no necesita
+> migrar un solo documento. `Lead.estado` deja de tener `enum` en el schema: lo valida el service
+> contra el catálogo del tenant.

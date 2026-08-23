@@ -5,6 +5,7 @@ export type AuditAccion =
   | 'cliente.update'
   | 'contact-note.create'
   | 'lead.create'
+  | 'lead.update'
   | 'lead.delete';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
 

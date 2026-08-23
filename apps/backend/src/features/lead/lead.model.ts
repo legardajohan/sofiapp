@@ -21,7 +21,10 @@ const LeadSchema = new Schema<ILeadDocument>(
     clienteId: { type: Schema.Types.ObjectId, ref: 'Cliente', required: true },
     origen: { type: OrigenSchema, required: true },
     responsableId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    estado: { type: String, enum: ESTADOS_COMERCIALES, default: 'nuevo' },
+    // Sin `enum`: las etapas son un catálogo por tenant (`estados`, HU-CRM-03), no estructura.
+    // Aquí se graba el `key` del estado; quién valida que exista es el service, contra el catálogo
+    // del tenant. Los leads sembrados con los 5 valores de fábrica siguen siendo válidos tal cual.
+    estado: { type: String, required: true, default: 'nuevo', trim: true },
   },
   { timestamps: true },
 );
@@ -33,6 +36,13 @@ const LeadSchema = new Schema<ILeadDocument>(
 LeadSchema.index({ tenantId: 1, telefono: 1 }, { unique: true });
 
 // Responde "¿esta conversación ya se convirtió?" para la bandeja y la ficha, en lote.
+// El filtro por semáforo de HU-CRM-03 también cae aquí: resuelve por `clienteId`.
 LeadSchema.index({ tenantId: 1, clienteId: 1 });
+
+// Índices del listado (HU-CRM-03). Los tres cierran con `createdAt: -1` —el orden por defecto de
+// la tabla— para que Mongo resuelva filtro y orden con el mismo índice, sin ordenar en memoria.
+LeadSchema.index({ tenantId: 1, createdAt: -1 });
+LeadSchema.index({ tenantId: 1, estado: 1, createdAt: -1 });
+LeadSchema.index({ tenantId: 1, responsableId: 1, createdAt: -1 });
 
 export const Lead = model<ILeadDocument>('Lead', LeadSchema);

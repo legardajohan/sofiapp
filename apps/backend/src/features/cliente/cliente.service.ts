@@ -12,6 +12,7 @@ import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { Cliente } from './cliente.model.js';
+import { toResumenResponse } from './cliente.mapper.js';
 import { Message } from '../message/message.model.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
@@ -146,16 +147,12 @@ function toContactCard(
   };
 }
 
-/** El resumen queda desactualizado si llegaron mensajes después de generarlo. */
-export function toResumenResponse(c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>): IResumenResponse | null {
-  if (!c.resumenIA) return null;
-  const desactualizado = !!c.ultimoMensajeAt && c.ultimoMensajeAt > c.resumenIA.mensajesHasta;
-  return {
-    texto: c.resumenIA.texto,
-    generadoAt: c.resumenIA.generadoAt.toISOString(),
-    desactualizado,
-  };
-}
+/**
+ * Se re-exporta desde `cliente.mapper` para no romper a quien ya lo importaba de aquí. Vive allí
+ * porque el listado de leads (HU-CRM-03) también lo necesita y este módulo importa de
+ * `lead.service`: tenerlo aquí cerraría un ciclo de imports.
+ */
+export { toResumenResponse };
 
 /**
  * El `correo` extraído por IA se enmascara con la misma regla que el correo manual: es el mismo dato

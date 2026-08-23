@@ -1,4 +1,5 @@
-import type { EstadoComercial } from '../inbox/types.js';
+import type { EstadoComercial, ResumenDTO } from '../inbox/types.js';
+import type { SemaforoSlug, TagDTO } from '../tags/types.js';
 
 /** Referencia ya resuelta por el backend: la tarjeta pinta nombres, nunca ids. */
 export interface RefDTO {
@@ -31,12 +32,7 @@ export interface CreateLeadPayload {
 }
 
 /** Enum cerrado, igual que en el backend (`lead.types.ts`). El motivo es obligatorio al borrar. */
-export type MotivoEliminacion =
-  | 'duplicado'
-  | 'spam'
-  | 'prueba'
-  | 'sin_respuesta'
-  | 'no_interesado';
+export type MotivoEliminacion = 'duplicado' | 'spam' | 'prueba' | 'sin_respuesta' | 'no_interesado';
 
 /**
  * El orden es el de la lista: primero lo que es basura evidente (duplicado, spam, prueba) y luego
@@ -50,3 +46,37 @@ export const MOTIVOS_ELIMINACION: { valor: MotivoEliminacion; label: string }[] 
   { valor: 'sin_respuesta', label: 'El cliente no respondió' },
   { valor: 'no_interesado', label: 'No está interesado' },
 ];
+
+// ─── Listado (HU-CRM-03) ────────────────────────────────────────────────────────
+
+/**
+ * Fila del listado. No es `LeadDTO`: la tabla necesita el semáforo, el resumen y el último
+ * mensaje —que el detalle de HU-CRM-01 no trae— y no necesita el `origen` completo.
+ */
+export interface LeadListItemDTO {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string | null;
+  estado: EstadoComercial;
+  responsable: RefDTO | null;
+  /** Con esto se abre la conversación en la bandeja. */
+  conversacionId: string;
+  /** Todas las de semáforo de la conversación, en orden canónico. Vacío si no tiene ninguna. */
+  semaforos: TagDTO[];
+  resumen: ResumenDTO | null;
+  ultimoMensajeAt: string | null;
+  createdAt: string;
+}
+
+/** Estado de los filtros. Vive en la URL, no en el store: la vista se comparte por enlace. */
+export interface LeadsFiltros {
+  page: number;
+  /** `key` de un estado del catálogo del tenant (HU-CRM-03), no una unión cerrada. */
+  estado?: string;
+  asesor?: string;
+  semaforo?: SemaforoSlug;
+  /** `YYYY-MM-DD`, tal cual lo produce un `<input type="date">`. */
+  desde?: string;
+  hasta?: string;
+}

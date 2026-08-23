@@ -7,6 +7,7 @@ import { assertWithinQuota } from '../usage/usage.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
 import { seedSemaforoTags } from '../../seed/seed-semaforo-tags.js';
 import { seedContactOptions } from '../../seed/seed-contact-options.js';
+import { seedEstados } from '../../seed/seed-estados.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { seedPresetDocuments } from '../kb/kb.service.js';
@@ -139,6 +140,10 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   // Catálogos de interés / objeción / rol de la ficha del contacto (HU-CRM-02). Mismo criterio:
   // fuera de la transacción, y `backfillContactOptions()` del arranque lo corrige si falla.
   await seedContactOptions(tenant._id.toString());
+
+  // Pipeline de leads (HU-CRM-03). Mismo criterio: fuera de la transacción, y `backfillEstados()`
+  // del arranque lo corrige si falla.
+  await seedEstados(tenant._id.toString());
 
   return mapTenantToResponse(tenant);
 }
