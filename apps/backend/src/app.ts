@@ -34,6 +34,7 @@ import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
 import aiRoutes from './features/ai/ai.routes.js';
+import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
 
 const app = express();
 
@@ -72,6 +73,8 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai/responses', aiRoutes);
+// Va DESPUÉS de `/api/ai/responses`: el prefijo más específico tiene que resolverse primero.
+app.use('/api/ai', aiAssistantRoutes);
 
 app.use(errorHandler);
 

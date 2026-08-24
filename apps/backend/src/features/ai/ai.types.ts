@@ -44,3 +44,32 @@ export interface ListAiResponsesQuery {
   limit: number;
   method?: AiUsageMethod;
 }
+
+// ─── Chatbot con RAG (HU-IA-01) ─────────────────────────────────────────────
+
+export interface AiAnswerRequestDTO {
+  mensaje: string;
+}
+
+export interface AiAnswerResponseDTO {
+  respuesta: string;
+  /** `true` si salió de una FAQ literal, sin generación ni RAG. */
+  fromFaq: boolean;
+  cacheHit: boolean;
+  /** Cuántos fragmentos de la KB sustentaron la respuesta. `0` con caché, FAQ o KB sin material. */
+  chunksUsados: number;
+}
+
+/** Configuración efectiva del asistente de un tenant: la suya, o la global como fallback. */
+export interface AssistantConfigDTO {
+  tono: string;
+  systemPrompt: string;
+  /** `true` si el tenant aún no tiene plantilla propia y está viendo la global. */
+  heredado: boolean;
+  version: string;
+}
+
+export interface UpdateAssistantDTO {
+  tono: string;
+  systemPrompt: string;
+}
