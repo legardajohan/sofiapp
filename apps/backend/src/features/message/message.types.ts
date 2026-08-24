@@ -37,4 +37,10 @@ export interface ICreateMessageDto {
 export interface ISendMessageDto {
   clienteId: string;
   texto: string;
+  /**
+   * Quién escribe el mensaje saliente. Default `'agent'` (asesor humano), que es el
+   * comportamiento previo a HU-IA-01. La respuesta automática de Sofi usa `'bot'` para que la
+   * bandeja, la auditoría y el transcript que alimenta el resumen por IA puedan distinguirla.
+   */
+  sender?: Extract<Sender, 'agent' | 'bot'>;
 }

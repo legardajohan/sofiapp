@@ -199,13 +199,20 @@ export async function getThread(
   return { data, page, limit, total };
 }
 
-export async function replyMessage(
+/**
+ * Envía un mensaje saliente y deja la bandeja consistente: refresca `ultimoMensajeAt` (que la
+ * reordena) y publica `message:new` para los demás asesores. Lo comparten la respuesta manual del
+ * asesor y la automática de Sofi; lo único que cambia entre ambas es el `sender`.
+ */
+async function enviarYNotificar(
   tenantId: string,
   clienteId: string,
   texto: string,
+  sender: 'agent' | 'bot',
 ): Promise<IMessageResponse> {
-  // sendMessage (HT-WA-01) valida pertenencia al tenant y la ventana de 24 h (AppError 422).
-  const msg = await sendMessage(tenantId, { clienteId, texto });
+  // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
+  // cuota mensual de mensajes.
+  const msg = await sendMessage(tenantId, { clienteId, texto, sender });
   const message = toMessageResponse(msg as unknown as IMessageSource);
 
   // La respuesta saliente reordena la bandeja y se notifica en vivo a los demás asesores.
@@ -231,6 +238,28 @@ export async function replyMessage(
   }
 
   return message;
+}
+
+/** Respuesta manual de un asesor desde la bandeja. */
+export async function replyMessage(
+  tenantId: string,
+  clienteId: string,
+  texto: string,
+): Promise<IMessageResponse> {
+  return enviarYNotificar(tenantId, clienteId, texto, 'agent');
+}
+
+/**
+ * Respuesta automática de Sofi (HU-IA-01). Idéntica a `replyMessage` salvo el `sender`: pasa por
+ * aquí, y no por `sendMessage` directo, para que la respuesta de la IA también aparezca en vivo en
+ * la bandeja y reordene la conversación.
+ */
+export async function replyFromIa(
+  tenantId: string,
+  clienteId: string,
+  texto: string,
+): Promise<IMessageResponse> {
+  return enviarYNotificar(tenantId, clienteId, texto, 'bot');
 }
 
 /**

@@ -2,9 +2,10 @@ import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { KB_INDEX_QUEUE_NAME } from './config/queues.js';
+import { AI_REPLY_QUEUE_NAME, KB_INDEX_QUEUE_NAME } from './config/queues.js';
 import { inboundMessageProcessor } from './workers/inbound-message.processor.js';
 import { processKbIndexJob } from './workers/kb-index.processor.js';
+import { processAiReplyJob, type AiReplyJobData } from './workers/ai-reply.processor.js';
 import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
 
@@ -56,7 +57,16 @@ const kbIndexWorker = new Worker<KbIndexJobData>(
   { connection: redisConnection },
 );
 
-for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker]) {
+// Chatbot IA — auto-reply con RAG sobre la KB (HU-IA-01)
+const aiReplyWorker = new Worker<AiReplyJobData>(
+  AI_REPLY_QUEUE_NAME,
+  async (job) => {
+    await processAiReplyJob(job.data);
+  },
+  { connection: redisConnection },
+);
+
+for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker, aiReplyWorker]) {
   w.on('failed', (job, err) => {
     logger.error(`Worker ${w.name} job falló`, { jobId: job?.id, error: String(err) });
   });

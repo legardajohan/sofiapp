@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
 import { Types } from 'mongoose';
-import { INBOUND_QUEUE_NAME } from '../config/queues.js';
+import { AI_REPLY_JOB_NAME, INBOUND_QUEUE_NAME, aiReplyQueue } from '../config/queues.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { resolveWebhookTenant } from '../features/webhook/webhook.service.js';
@@ -68,7 +68,18 @@ export const inboundMessageProcessor = new Worker<InboundJobData>(
           // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
           await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
 
-          // TODO(Fase 3): si cliente.iaHabilitada, encolar auto-reply de Sofi (generateReply de Gemini).
+          // Auto-reply de Sofi (HU-IA-01). En cola aparte: generar y enviar es lento y puede
+          // fallar, y no debe arrastrar consigo la ingesta del mensaje, que ya está hecha.
+          // Solo texto: de una imagen o un audio no hay pregunta que responder por RAG.
+          if (cliente.iaHabilitada && msg.type === 'text' && msg.text?.body) {
+            await aiReplyQueue.add(
+              AI_REPLY_JOB_NAME,
+              { tenantId, clienteId: clienteId.toString() },
+              // Sin reintentos: cada intento vuelve a pagar embedding + generación, y los fallos
+              // esperables (fuera de ventana, cuota) no se arreglan repitiendo.
+              { attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+            );
+          }
         }
 
         const statuses = parseDeliveryStatuses(value);

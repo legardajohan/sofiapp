@@ -51,7 +51,7 @@ export async function sendMessage(
     clienteId: new Types.ObjectId(dto.clienteId),
     canal: 'whatsapp',
     direccion: 'outbound',
-    sender: 'agent',
+    sender: dto.sender ?? 'agent',
     tipo: 'text',
     texto: dto.texto,
     metaMessageId: messageId,
