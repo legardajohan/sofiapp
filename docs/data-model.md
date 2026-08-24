@@ -512,6 +512,33 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
 > pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
 
+## prompt_templates  (system prompt por método y empresa — HT-AI-01 · HU-IA-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId | null,       // null = plantilla GLOBAL de fábrica (fallback del producto)
+  method: "chat" | "extract" | "classify" | "summary",
+  version: String,                 // sube en cada guardado del admin; entra en la clave de caché
+  systemPrompt: String,            // qué debe y qué no debe hacer el asistente
+  tono: String | undefined,        // HU-IA-01 — opcional; undefined = tono por defecto del código
+  isActive: Boolean,
+  createdAt, updatedAt
+}
+// Índice: { tenantId: 1, method: 1, isActive: 1 }
+```
+> **`tenantId: null` es una excepción documentada** al aislamiento, análoga al login: es la
+> plantilla de fábrica del producto, no el dato de ninguna empresa. `AIService.resolveTemplate`
+> busca primero la del tenant (vía repositorio scoped) y solo cae a la global si no existe.
+>
+> **`tono` va separado de `systemPrompt` por una razón mecánica**, no estética: `generateReply`
+> compone `Tono: ${tono}. ${instrucciones}`, así que meter el tono dentro del prompt lo enviaría
+> dos veces y cobraría sus tokens dos veces.
+>
+> **Subir `version` en cada guardado es lo que invalida la caché** (la clave de IA es
+> `template.version:kbVersion`): sin ese bump, cambiar el prompt seguiría sirviendo respuestas
+> generadas con el anterior. Las globales `chat`, `summary` y `extract` las siembra
+> `seed-prompt-templates.ts` de forma idempotente; sin la de `chat`, el chatbot lanza `AppError(500)`.
+
 ## ai_usage_logs  (métricas de cada llamada a AIService — HT-AI-01)
 ```js
 {
@@ -546,7 +573,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
     version: String,               // versión del PromptTemplate VIGENTE en el momento de generar
     systemPrompt: String,          // texto completo del prompt de sistema usado
   },
-  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // [] hasta Fase 3
+  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // poblado desde HU-IA-01
   kbVersion: Number | null,        // Tenant.kbVersion en el momento de la llamada
   createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
 }
@@ -555,11 +582,12 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 // de una HU futura — ver docs/specs/HU-KB-04-contexto-ia/spec.md → Fuera de alcance.
 ```
 > Se escribe fire-and-forget desde `AIService.chat()` (los tres caminos: hit de caché exacta, hit
-> de FAQ y generación real), sin bloquear la respuesta al llamador. `retrievedChunks` se persiste
-> vacío hasta que una HU de Fase 3 conecte `searchKnowledge()` (RAG) dentro de `chat()`; el modelo
-> y el endpoint ya están listos para recibirlos sin cambios de esquema. `extract()`, `classify()`
-> y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas" auditables
-> en el sentido de esta HU.
+> de FAQ y generación real), sin bloquear la respuesta al llamador. Desde **HU-IA-01**,
+> `retrievedChunks` llega poblado en la rama de **generación real**: es el contexto que
+> `searchKnowledge()` (RAG) recuperó y que sustentó la respuesta. En los hits de caché y de FAQ
+> sigue persistiéndose vacío **a propósito**: ahí no hubo recuperación que auditar. `extract()`,
+> `classify()` y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas"
+> auditables en el sentido de esta HU.
 
 ---
 

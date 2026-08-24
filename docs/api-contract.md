@@ -93,6 +93,11 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |
 | GET/POST | `/api/campaigns` | admin | Campañas de remarketing. |
 | GET | `/api/clientes/filter` | admin | Conteo/listado para segmentar campañas. |
+| POST | `/api/ai/answer` | admin | Pregunta suelta al chatbot con RAG sobre la KB del tenant (`{ mensaje }`, 1–2000) → `{ respuesta, fromFaq, cacheHit, chunksUsados }` (HU-IA-01). Es la puerta de **prueba y depuración**: el auto-reply real de WhatsApp llama a `AIService.chat()` dentro del worker `ai-reply`, sin salto HTTP. |
+| GET | `/api/ai/assistant` | admin | Configuración vigente del asistente → `{ tono, systemPrompt, heredado, version }`. `heredado: true` mientras la empresa siga usando la plantilla global de fábrica (HU-IA-01). |
+| PUT | `/api/ai/assistant` | admin | Guarda tono e instrucciones de la empresa (`{ tono }` 1–200, `{ systemPrompt }` 1–8000). Crea la plantilla `chat` del tenant si no existía y **sube su `version`**, lo que deja inalcanzables las respuestas cacheadas con el prompt anterior. Nunca modifica la global (HU-IA-01). |
+| GET | `/api/ai/responses` | admin | Auditoría paginada de llamadas a la IA; `?method` (HU-KB-04). |
+| GET | `/api/ai/responses/:id/context` | admin | Prompt, `kbVersion` y fragmentos de KB que sustentaron una respuesta. `contextAvailable: false` si la llamada no dejó trace (HU-KB-04). |
 | GET/POST | `/api/webhooks/meta` | público | Verificación + recepción de eventos de Meta. |
 
 ## 7. Tiempo real (Socket.IO)
