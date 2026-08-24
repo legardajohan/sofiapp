@@ -8,6 +8,32 @@ import { PromptTemplateModel, type IPromptTemplate } from '../services/ai/prompt
  */
 const GLOBAL_TEMPLATES: IPromptTemplate[] = [
   {
+    // Sin esta plantilla, `resolveTemplate(tenantId, 'chat')` lanza AppError(500) y el chatbot
+    // queda inutilizable en TODOS los tenants (HU-IA-01). El tenant que quiera afinarla crea la
+    // suya desde /settings/assistant; esta es solo el fallback.
+    tenantId: null,
+    method: 'chat',
+    version: '1.0.0',
+    tono: 'profesional, claro y cercano',
+    systemPrompt: [
+      'Eres el asistente virtual de la empresa y atiendes a clientes por WhatsApp.',
+      '',
+      'Responde ÚNICAMENTE con la información del bloque CONTEXTO que acompaña a cada consulta.',
+      'No uses conocimiento general, no supongas y no completes datos que no aparezcan ahí:',
+      'precios, horarios, plazos, direcciones, promociones y condiciones solo pueden salir del',
+      'CONTEXTO. Si el CONTEXTO se contradice con lo que el cliente afirma, gana el CONTEXTO.',
+      '',
+      'Si el CONTEXTO está vacío o no alcanza para responder lo que preguntan, responde exactamente:',
+      '"No tengo información suficiente para responder esa pregunta. Por favor, contacta a un asesor."',
+      'y no añadas nada más. Es preferible admitir que no sabes a arriesgar un dato inventado.',
+      '',
+      'Escribe en español, en mensajes breves de WhatsApp (2 a 4 frases), sin markdown, sin viñetas',
+      'y sin encabezados. No menciones el CONTEXTO, los fragmentos ni que eres una IA: habla como',
+      'la empresa. No cites números de fragmento.',
+    ].join('\n'),
+    isActive: true,
+  },
+  {
     tenantId: null,
     method: 'summary',
     version: '1.0.0',
@@ -50,5 +76,5 @@ export async function seedPromptTemplates(): Promise<void> {
       { upsert: true },
     );
   }
-  logger.info('Seed de plantillas de prompt verificado (globales: summary, extract).');
+  logger.info('Seed de plantillas de prompt verificado (globales: chat, summary, extract).');
 }

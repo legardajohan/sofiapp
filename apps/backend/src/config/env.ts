@@ -55,6 +55,12 @@ const EnvSchema = z.object({
   KB_CHUNK_OVERLAP: z.coerce.number().nonnegative().default(150),
   KB_VECTOR_INDEX: z.string().default('kb_chunks_vector'),
   KB_RETRIEVAL_K: z.coerce.number().positive().default(5),
+  // Umbral de relevancia del RAG (HU-IA-01). MISMA ESCALA que FAQ_MATCH_THRESHOLD: Atlas normaliza
+  // el coseno a (1 + cos) / 2, así que 0.75 ≈ coseno 0.50. A propósito más laxo que el 0.85 de FAQ:
+  // allí un match dispara una respuesta literal (caro equivocarse), aquí un chunk solo entra en el
+  // contexto y el system prompt ya obliga a decir "no tengo información" si no alcanza.
+  // Calibrar con src/scripts/kb-smoke-retrieval.ts, nunca a ojo.
+  KB_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.75),
 
   // FAQ semántica (HU-KB-02) — cortocircuito del LLM por coincidencia de preguntas frecuentes.
   // OJO con la escala: Atlas normaliza el coseno a (1 + cos) / 2, así que 0.85 ≈ coseno 0.70.

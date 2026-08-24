@@ -6,6 +6,13 @@ export interface IPromptTemplate {
   method: 'chat' | 'extract' | 'classify' | 'summary';
   version: string;
   systemPrompt: string;
+  /**
+   * Tono de voz del asistente (HU-IA-01). Va SEPARADO de `systemPrompt` porque
+   * `generateReply` compone `Tono: ${tono}. ${instrucciones}`: mezclarlos duplicaría el texto
+   * dentro del system prompt y cobraría sus tokens dos veces (ver `ai.service.ts`, `summarize`).
+   * Opcional y retrocompatible: `undefined` significa "usa el tono por defecto del código".
+   */
+  tono?: string;
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -19,6 +26,7 @@ const PromptTemplateSchema = new Schema<IPromptTemplateDocument>(
     method: { type: String, enum: ['chat', 'extract', 'classify', 'summary'], required: true },
     version: { type: String, required: true },
     systemPrompt: { type: String, required: true },
+    tono: { type: String },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true },
