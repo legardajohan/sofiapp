@@ -1,5 +1,6 @@
 import {
   BookText,
+  Bot,
   Building2,
   CreditCard,
   Inbox,
@@ -112,6 +113,12 @@ export const navGroups: NavGroup[] = [
             icon: ScanSearch,
           },
         ],
+      },
+      {
+        label: 'Asistente IA',
+        to: '/settings/assistant',
+        icon: Bot,
+        roles: ['admin'],
       },
       { label: 'Usuarios', to: '/usuarios', icon: Users, roles: ['admin'], disabled: true },
       { label: 'Catálogo', to: '/catalogo', icon: Package, roles: ['admin'], disabled: true },
