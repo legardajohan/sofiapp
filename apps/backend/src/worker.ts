@@ -10,19 +10,6 @@ import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
 
 const redisConnection = { url: env.REDIS_URL };
-
-// TEMP DEBUG — eliminar después de verificar
-{
-  const k = env.GEMINI_API_KEY;
-  const masked = k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)} (len=${k.length})` : `"${k}" (len=${k.length})`;
-  logger.info('TEMP DEBUG GEMINI_API_KEY', {
-    masked,
-    isPlaceholder: k === 'invalid-key-123',
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
-  });
-}
-
 // Placeholder workers — se implementan en M04, M01-02 y M07
 const llmWorker = new Worker(
   'llm-process',
