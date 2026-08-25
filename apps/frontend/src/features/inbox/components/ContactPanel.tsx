@@ -8,7 +8,6 @@ import { ContactNotesCard } from '@/features/contacts/components/ContactNotesCar
 import { ContactCard } from './ContactCard.js';
 import { ContactExtractCard } from './ContactExtractCard.js';
 import { ContactSummaryCard } from './ContactSummaryCard.js';
-import { ConversationThread } from './ConversationThread.js';
 import { LeadCard } from '@/features/leads/components/LeadCard';
 import { useLead } from '@/features/leads/hooks/useLead';
 import {
@@ -127,11 +126,15 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
             />
             <ContactSummaryCard
               resumen={history.resumen}
+              puedeVer={history.contacto.puedeVerSensibles}
               pending={generate.isPending}
               onGenerate={() => generate.mutate()}
             />
           </div>
-          <ConversationThread messages={history.mensajes.data} isLoading={false} />
+          {/* El hilo NO se repinta aquí (HU-IA-04): la columna central ya lo muestra, y con la
+              ficha desplegada la misma conversación aparecía dos veces en pantalla.
+              `history.mensajes` se sigue pidiendo —lo usa el contador del historial— pero no se
+              vuelve a dibujar. */}
 
           {/* Fuera del contenedor con scroll: Radix lo lleva a un portal, así que anidarlo dentro
               de un `overflow-y-auto` solo confunde al leer el árbol. */}

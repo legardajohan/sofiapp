@@ -17,6 +17,7 @@ import { sendMessage } from '../message/message.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findTagsByIds } from '../tag/tag.service.js';
+import { toResumenResponse } from '../cliente/cliente.service.js';
 import { primerAdminActivo } from '../ai/ai-handoff.service.js';
 import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
 import { logger } from '../../utils/logger.js';
@@ -35,6 +36,7 @@ import type {
   EstadoComercial,
   FiltroBandeja,
   IAssignmentResponse,
+  IConversationOverviewResponse,
   IConversationResponse,
   IMessageResponse,
   IPaginated,
@@ -326,6 +328,49 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
   const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
   await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
   return conversation;
+}
+
+/**
+ * Lectura única de la vista de conversación (HU-IA-04): cabecera, etiquetas, resumen y los permisos
+ * del usuario que pregunta.
+ *
+ * **No devuelve el hilo.** Los mensajes paginan por `getThread` y se refrescan solos con
+ * `message:new`; traerlos también aquí obligaría a reconciliar dos copias en cada entrante y a
+ * paginar dos veces la misma colección.
+ *
+ * `puedeVerSensibles` llega resuelto desde el controller y no se calcula aquí: el service no
+ * conoce `req`. Con `false` el resumen sale `null`, y `permisos.verResumen` es lo que le permite a
+ * la UI distinguir "no hay resumen" de "no puedes verlo".
+ */
+export async function getConversationOverview(
+  tenantId: string,
+  clienteId: string,
+  puedeVerSensibles: boolean,
+): Promise<IConversationOverviewResponse> {
+  // Misma guarda que `markRead` y `setIaHabilitada`: un cliente de otro tenant sencillamente no se
+  // encuentra, y de ahí sale el aislamiento sin una comprobación aparte.
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  const source = cliente as unknown as IConversationSource;
+  const conversation = toConversationResponse(
+    source,
+    null,
+    new Date(),
+    await resolveAsignado(tenantId, source.asesorId),
+    await resolveTags(tenantId, source),
+    await resolveLeadMap(tenantId, clienteId),
+  );
+
+  return {
+    conversation,
+    resumen: toResumenResponse(cliente, puedeVerSensibles),
+    permisos: {
+      verResumen: puedeVerSensibles,
+      generarResumen: puedeVerSensibles,
+      verSensibles: puedeVerSensibles,
+    },
+  };
 }
 
 export async function setIaHabilitada(

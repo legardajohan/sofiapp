@@ -41,6 +41,16 @@ export const readSchema = z.object({
   query: empty,
 });
 
+/**
+ * Vista unificada de la conversación (HU-IA-04). La única entrada es el `id`: el `tenantId` y el
+ * subrol que decide qué se devuelve salen del token, nunca del cliente.
+ */
+export const overviewSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 export const iaSchema = z.object({
   body: z.object({ habilitada: z.boolean() }),
   params: z.object({ id: objectId }),

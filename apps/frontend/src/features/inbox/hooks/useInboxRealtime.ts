@@ -23,11 +23,15 @@ export function useInboxRealtime(): void {
       void qc.invalidateQueries({ queryKey: ['thread', evt.conversationId] });
       // Refresca la ficha para que el resumen se marque "desactualizado" al llegar mensajes nuevos.
       void qc.invalidateQueries({ queryKey: ['contact-history', evt.conversationId] });
+      // Y la tira sobre el hilo, que muestra ese mismo estado (HU-IA-04).
+      void qc.invalidateQueries({ queryKey: ['conversation-overview', evt.conversationId] });
     };
     const onConversation = (evt: RealtimeConversationEvent): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['thread', evt.conversationId] });
       void qc.invalidateQueries({ queryKey: ['contact-history', evt.conversationId] });
+      // Una etiqueta aplicada desde otra sesión tiene que llegar a la tira igual que a la lista.
+      void qc.invalidateQueries({ queryKey: ['conversation-overview', evt.conversationId] });
     };
     const onAssigned = (evt: RealtimeAssignedEvent): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });

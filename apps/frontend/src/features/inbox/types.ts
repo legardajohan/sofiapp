@@ -134,6 +134,24 @@ export interface DatosExtraidosDTO {
   extraidoAt: string;
 }
 
+/**
+ * Qué puede hacer el usuario que pregunta, resuelto en el servidor (HU-IA-04). La UI **oculta** lo
+ * que el backend **decide**: se lee de aquí y no de una comprobación de rol hecha en el navegador.
+ */
+export interface PermisosConversacionDTO {
+  verResumen: boolean;
+  generarResumen: boolean;
+  verSensibles: boolean;
+}
+
+/** Vista unificada de la conversación: cabecera, etiquetas, resumen y permisos. Sin el hilo. */
+export interface ConversationOverviewDTO {
+  conversation: ConversationDTO;
+  /** `null` si no se ha generado nunca **o** si no se puede ver (mira `permisos.verResumen`). */
+  resumen: ResumenDTO | null;
+  permisos: PermisosConversacionDTO;
+}
+
 export interface ContactHistoryDTO {
   contacto: ContactCardDTO;
   resumen: ResumenDTO | null;

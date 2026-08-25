@@ -2,6 +2,7 @@ import { apiClient } from '../../api/apiClient.js';
 import type {
   ContactHistoryDTO,
   ConversationDTO,
+  ConversationOverviewDTO,
   DatosExtraidosDTO,
   InboxFiltros,
   MessageDTO,
@@ -38,6 +39,19 @@ export async function assignConversation(
   const { data } = await apiClient.patch<ConversationDTO>(
     `/conversations/${conversationId}/assign`,
     { asignadoA },
+  );
+  return data;
+}
+
+/**
+ * Vista unificada de la conversación (HU-IA-04): cabecera, etiquetas, resumen y permisos.
+ * NO trae el hilo: los mensajes paginan por `fetchThread` y llegan en vivo por Socket.IO.
+ */
+export async function fetchConversationOverview(
+  conversationId: string,
+): Promise<ConversationOverviewDTO> {
+  const { data } = await apiClient.get<ConversationOverviewDTO>(
+    `/conversations/${conversationId}/overview`,
   );
   return data;
 }

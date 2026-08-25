@@ -11,6 +11,13 @@ interface InboxState {
   contactPanelOpen: boolean;
   setContactPanelOpen: (open: boolean) => void;
   toggleContactPanel: () => void;
+  /**
+   * Qué resúmenes están desplegados, por conversación (HU-IA-04). Se recuerda por hilo y no de
+   * forma global: quien despliega uno suele querer leer varios seguidos, y volver a colapsarlo en
+   * cada cambio de conversación sería pelearse con el usuario.
+   */
+  resumenExpandido: Record<string, boolean>;
+  toggleResumen: (conversationId: string) => void;
 }
 
 export const useInboxStore = create<InboxState>((set) => ({
@@ -19,4 +26,12 @@ export const useInboxStore = create<InboxState>((set) => ({
   contactPanelOpen: false,
   setContactPanelOpen: (contactPanelOpen) => set({ contactPanelOpen }),
   toggleContactPanel: () => set((s) => ({ contactPanelOpen: !s.contactPanelOpen })),
+  resumenExpandido: {},
+  toggleResumen: (conversationId) =>
+    set((s) => ({
+      resumenExpandido: {
+        ...s.resumenExpandido,
+        [conversationId]: !s.resumenExpandido[conversationId],
+      },
+    })),
 }));

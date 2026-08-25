@@ -19,11 +19,16 @@ import { ConvertToLeadDialog } from '@/features/leads/components/ConvertToLeadDi
 import { useCreateLead } from '@/features/leads/hooks/useCreateLead';
 import { leadIdEnConflicto } from '@/features/leads/lib/errors';
 import { useConversations } from '../hooks/useConversations.js';
-import { useContactHistory } from '../hooks/useContactHistory.js';
+import { useContactHistory, useGenerateSummary } from '../hooks/useContactHistory.js';
 import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
+import { useConversationOverview } from '../hooks/useConversationOverview.js';
+import {
+  ConversationSummaryStrip,
+  ConversationSummaryStripSkeleton,
+} from '../components/ConversationSummaryStrip.js';
 import { initials } from '../lib/format.js';
 import { errorMessage } from '../lib/errors.js';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
@@ -62,6 +67,8 @@ export function InboxPage(): React.ReactElement {
   const contactPanelOpen = useInboxStore((s) => s.contactPanelOpen);
   const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
   const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
+  const resumenExpandido = useInboxStore((s) => s.resumenExpandido);
+  const toggleResumen = useInboxStore((s) => s.toggleResumen);
 
   // Filtros combinables (OMNI-02) + etiqueta (OMNI-04) + estados de error (OMNI-03).
   const {
@@ -106,6 +113,10 @@ export function InboxPage(): React.ReactElement {
   // que se pre-rellena el lead. Comparte `queryKey` con `ContactPanel`, así que si la ficha ya
   // estaba abierta esto no dispara una segunda petición, y con ambos cerrados no consulta nada.
   const ficha = useContactHistory(contactPanelOpen || leadDialogOpen ? activeId : null);
+  // Vista unificada (HU-IA-04): resumen y permisos de la conversación activa. Va aparte del hilo
+  // porque solo cambia cuando cambia la conversación, no con cada mensaje entrante.
+  const overview = useConversationOverview(activeId);
+  const generarResumen = useGenerateSummary(activeId);
   const extraidos = ficha.data?.datosExtraidos ?? null;
 
   // Campo a campo: la extracción manda en lo que sí encontró y la conversación cubre el resto.
@@ -262,6 +273,22 @@ export function InboxPage(): React.ReactElement {
                 ))}
               </div>
             )}
+
+            {/* Resumen sobre el hilo (HU-IA-04). Se pinta aunque no haya etiquetas: es una de las
+                tres piezas que la vista tiene que mostrar, no un accesorio de las etiquetas. */}
+            {overview.isPending ? (
+              <ConversationSummaryStripSkeleton />
+            ) : overview.data ? (
+              <ConversationSummaryStrip
+                resumen={overview.data.resumen}
+                puedeVer={overview.data.permisos.verResumen}
+                puedeGenerar={overview.data.permisos.generarResumen}
+                expandido={!!resumenExpandido[active.id]}
+                onToggle={() => toggleResumen(active.id)}
+                pending={generarResumen.isPending}
+                onGenerate={() => generarResumen.mutate()}
+              />
+            ) : null}
 
             {threadIsError ? (
               <InboxError

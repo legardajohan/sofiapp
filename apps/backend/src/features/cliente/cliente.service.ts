@@ -146,9 +146,23 @@ function toContactCard(
   };
 }
 
-/** El resumen queda desactualizado si llegaron mensajes después de generarlo. */
-export function toResumenResponse(c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>): IResumenResponse | null {
-  if (!c.resumenIA) return null;
+/**
+ * El resumen queda desactualizado si llegaron mensajes después de generarlo.
+ *
+ * Desde HU-IA-04 es un **dato sensible** (ADR-0006, enmienda): lo escribe el modelo sobre el
+ * transcript completo, así que puede citar en claro el correo o el documento que `toContactCard`
+ * enmascara. Y al ser prosa no se puede enmascarar por partes —el mismo argumento con el que
+ * ADR-0006 cerró las notas—, así que se omite entero en vez de recortarlo.
+ *
+ * El default es `false` igual que en `toContactCard` y `toDatosExtraidosResponse`: si mañana
+ * aparece un tercer sitio que proyecte el resumen y su autor olvide pasar el permiso, el fallo es
+ * ocultar de más, nunca filtrar.
+ */
+export function toResumenResponse(
+  c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>,
+  puedeVerSensibles = false,
+): IResumenResponse | null {
+  if (!c.resumenIA || !puedeVerSensibles) return null;
   const desactualizado = !!c.ultimoMensajeAt && c.ultimoMensajeAt > c.resumenIA.mensajesHasta;
   return {
     texto: c.resumenIA.texto,
@@ -217,7 +231,7 @@ export async function getContactHistory(
 
   return {
     contacto: toContactCard(cliente, tagMap, puedeVerSensibles, leadId),
-    resumen: toResumenResponse(cliente),
+    resumen: toResumenResponse(cliente, puedeVerSensibles),
     datosExtraidos: toDatosExtraidosResponse(cliente.datosExtraidos, puedeVerSensibles),
     mensajes: { data: mensajes, page, limit, total },
   };
