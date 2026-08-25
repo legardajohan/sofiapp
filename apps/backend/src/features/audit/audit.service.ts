@@ -14,7 +14,7 @@ type TenantId = string | Types.ObjectId;
 function toAuditEventResponse(doc: IAuditEventDocument): IAuditEventResponse {
   return {
     id: doc._id.toString(),
-    actorId: doc.actorId.toString(),
+    actorId: doc.actorId?.toString() ?? null,
     accion: doc.accion,
     entidad: doc.entidad,
     entidadId: doc.entidadId.toString(),

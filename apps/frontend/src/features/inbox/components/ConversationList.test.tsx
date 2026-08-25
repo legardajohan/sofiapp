@@ -29,6 +29,8 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
     tags: [],
     // Sin convertir a lead (HU-CRM-01).
     leadId: null,
+    // Sin transferir por Sofi (HU-IA-03).
+    handoff: null,
     ...overrides,
   };
 }
@@ -145,5 +147,44 @@ describe('errorMessage — el motivo real llega a la UI', () => {
 
   it('usa el fallback ante un error que no es de axios', () => {
     expect(errorMessage(new Error('boom'), 'fallback')).toBe('fallback');
+  });
+});
+
+describe('ConversationList — conversación transferida por Sofi (HU-IA-03)', () => {
+  it('muestra el indicador de transferida', () => {
+    render(
+      <ConversationList
+        conversations={[
+          makeConversation({
+            iaHabilitada: false,
+            handoff: { at: '2026-07-26T18:05:00.000Z', motivo: 'explicit_request' },
+          }),
+        ]}
+        activeId={null}
+        onSelect={noop}
+        isLoading={false}
+        error={null}
+        onRetry={noop}
+      />,
+    );
+
+    expect(screen.getByLabelText('Transferida por Sofi')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sofi activa')).not.toBeInTheDocument();
+  });
+
+  it('sin handoff y con Sofi encendida muestra el indicador de Sofi activa', () => {
+    render(
+      <ConversationList
+        conversations={[makeConversation({ iaHabilitada: true, handoff: null })]}
+        activeId={null}
+        onSelect={noop}
+        isLoading={false}
+        error={null}
+        onRetry={noop}
+      />,
+    );
+
+    expect(screen.getByLabelText('Sofi activa')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Transferida por Sofi')).not.toBeInTheDocument();
   });
 });

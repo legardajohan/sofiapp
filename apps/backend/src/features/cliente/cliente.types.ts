@@ -1,6 +1,7 @@
 import { Document, Types } from 'mongoose';
 import type { IMessageResponse, IPaginated } from '../conversation/conversation.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
 
 export type CanalOrigen = 'whatsapp' | 'instagram' | 'messenger' | 'formulario' | 'web';
 
@@ -88,6 +89,13 @@ export interface ICliente {
   noLeidos: number;
   iaHabilitada: boolean;
   asesorId?: Types.ObjectId;
+  /**
+   * Cuándo y por qué Sofi transfirió la conversación a una persona (HU-IA-03). `null` mientras no
+   * haya pasado; vuelven a `null` cuando un asesor reactiva a Sofi en el hilo, porque entonces la
+   * bandeja no puede seguir diciendo que está transferida.
+   */
+  handoffAt: Date | null;
+  handoffMotivo: HandoffMotivo | null;
   customFields: Record<string, unknown>;
   /** Etiquetas de empresa aplicadas a la conversación (HU-OMNI-04). */
   tagIds: Types.ObjectId[];

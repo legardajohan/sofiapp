@@ -1,6 +1,7 @@
 import type { AdminSubrol } from '../users/user.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
 
 /** Segmentos de la bandeja (submenú del sidebar). */
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
@@ -32,12 +33,19 @@ export interface IConversationResponse {
    * cabecera muestre el estado en vez de ofrecer una conversión que fallaría con 409.
    */
   leadId: string | null;
+  /**
+   * Marca de que Sofi transfirió esta conversación a una persona (HU-IA-03). `null` mientras no
+   * haya pasado, y vuelve a `null` cuando un asesor reactiva a Sofi en el hilo. Viaja resuelto para
+   * que la bandeja lo pinte sin consultar `audit_events` fila a fila.
+   */
+  handoff: { at: string; motivo: HandoffMotivo } | null;
 }
 
 /** Un evento del historial de reasignaciones de una conversación (`audit_events`). */
 export interface IAssignmentResponse {
   id: string;
-  actorId: string;
+  /** `null` cuando la reasignación la hizo el sistema (handoff automático, HU-IA-03). */
+  actorId: string | null;
   actorNombre: string | null;
   de: { id: string; nombre: string | null } | null;
   a: { id: string; nombre: string | null } | null;

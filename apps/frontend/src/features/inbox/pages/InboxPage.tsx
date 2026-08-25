@@ -9,6 +9,7 @@ import { InboxError } from '../components/InboxError.js';
 import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
+import { HandoffBanner } from '../components/HandoffBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
 import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
@@ -271,6 +272,9 @@ export function InboxPage(): React.ReactElement {
               <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
             )}
 
+            {active.handoff && (
+              <HandoffBanner motivo={active.handoff.motivo} at={active.handoff.at} />
+            )}
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer
               disabled={!active.ventana24hAbierta}

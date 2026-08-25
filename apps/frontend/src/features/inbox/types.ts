@@ -1,3 +1,4 @@
+import type { HandoffMotivo } from '../handoff/types.js';
 import type { AdminSubrol } from '@/stores/authStore';
 import type { TagDTO } from '@/features/tags/types';
 
@@ -33,6 +34,11 @@ export interface ConversationDTO {
    * cabecera muestre el estado en vez de ofrecer una conversión que fallaría con 409.
    */
   leadId: string | null;
+  /**
+   * Sofi transfirió esta conversación a una persona (HU-IA-03). `null` mientras no haya pasado, y
+   * vuelve a `null` cuando alguien reactiva a Sofi en el hilo.
+   */
+  handoff: { at: string; motivo: HandoffMotivo } | null;
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */
@@ -154,5 +160,6 @@ export interface RealtimeAssignedEvent {
   conversationId: string;
   conversation: ConversationDTO;
   targetUserId: string | null;
-  actor: { id: string; nombre: string | null };
+  /** `id: null` es Sofi: el handoff automático no lo dispara ninguna persona (HU-IA-03). */
+  actor: { id: string | null; nombre: string | null };
 }

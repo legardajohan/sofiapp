@@ -2,14 +2,24 @@ import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { AI_REPLY_QUEUE_NAME, KB_INDEX_QUEUE_NAME } from './config/queues.js';
-import { inboundMessageProcessor } from './workers/inbound-message.processor.js';
+import { AI_REPLY_QUEUE_NAME, INBOUND_QUEUE_NAME, KB_INDEX_QUEUE_NAME } from './config/queues.js';
+import { processInboundJob, type InboundJobData } from './workers/inbound-message.processor.js';
 import { processKbIndexJob } from './workers/kb-index.processor.js';
 import { processAiReplyJob, type AiReplyJobData } from './workers/ai-reply.processor.js';
 import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
 
 const redisConnection = { url: env.REDIS_URL };
+
+// Ingesta de entrantes de WhatsApp (HT-WA-01) y decisión de auto-responder (HU-IA-02)
+const inboundWorker = new Worker<InboundJobData>(
+  INBOUND_QUEUE_NAME,
+  async (job) => {
+    await processInboundJob(job.data);
+  },
+  { connection: redisConnection },
+);
+
 // Placeholder workers — se implementan en M04, M01-02 y M07
 const llmWorker = new Worker(
   'llm-process',
@@ -53,7 +63,7 @@ const aiReplyWorker = new Worker<AiReplyJobData>(
   { connection: redisConnection },
 );
 
-for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker, aiReplyWorker]) {
+for (const w of [inboundWorker, llmWorker, outboundWorker, campaignWorker, kbIndexWorker, aiReplyWorker]) {
   w.on('failed', (job, err) => {
     logger.error(`Worker ${w.name} job falló`, { jobId: job?.id, error: String(err) });
   });
@@ -63,15 +73,6 @@ mongoose
   .connect(env.MONGODB_URI)
   .then(() => {
     logger.info('Worker conectado a MongoDB');
-
-    inboundMessageProcessor.on('completed', (job) => {
-      logger.info('Job completado', { jobId: job.id, queue: job.queueName });
-    });
-
-    inboundMessageProcessor.on('failed', (job, err) => {
-      logger.error('Job fallido', { jobId: job?.id, queue: job?.queueName, error: String(err) });
-    });
-
     logger.info('Proceso WORKER iniciado y escuchando colas BullMQ');
   })
   .catch((err: unknown) => {

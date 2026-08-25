@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import { ArrowRightLeft, Sparkles } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -85,8 +85,17 @@ export function ConversationList({
                   >
                     {c.nombre ?? c.telefono}
                   </span>
-                  {c.iaHabilitada && (
-                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Sofi activa" />
+                  {/* Excluyentes por construcción: el handoff apaga `iaHabilitada`, así que
+                      nunca compiten por este hueco. */}
+                  {c.handoff ? (
+                    <ArrowRightLeft
+                      className="h-3.5 w-3.5 shrink-0 text-secondary-foreground"
+                      aria-label="Transferida por Sofi"
+                    />
+                  ) : (
+                    c.iaHabilitada && (
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Sofi activa" />
+                    )
                   )}
                   <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
                     {shortTime(c.ultimoMensajeAt)}

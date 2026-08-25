@@ -34,6 +34,12 @@ const ClienteSchema = new Schema<IClienteDocument>(
     noLeidos: { type: Number, default: 0 },
     iaHabilitada: { type: Boolean, default: true },
     asesorId: { type: Schema.Types.ObjectId, ref: 'User' },
+    // Handoff automático (HU-IA-03): cuándo y por qué Sofi transfirió la conversación a una
+    // persona. Se persiste porque la bandeja tiene que distinguirlo de un vistazo, y resolverlo
+    // por `audit_events` en cada fila del listado no es viable. Deliberadamente SIN índice: se
+    // lee al proyectar la conversación, nadie filtra la bandeja por esto todavía.
+    handoffAt: { type: Date, default: null },
+    handoffMotivo: { type: String, default: null },
     customFields: { type: Schema.Types.Mixed, default: {} },
     // Etiquetas de empresa (HU-OMNI-04). Sustituyen al antiguo `tags: [String]` de texto libre;
     // la migración vive en `scripts/migrate-cliente-tags.ts`.
