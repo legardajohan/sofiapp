@@ -6,6 +6,7 @@ import { LeadsFilters } from './LeadsFilters.js';
 import { fetchTags } from '@/features/tags/api';
 import { fetchTenantUsers } from '@/features/users/api';
 import { fetchEstados } from '@/features/estados/api';
+import { fetchSemaforos } from '@/features/semaforos/api';
 import type { LeadsFiltros } from '../types.js';
 
 vi.mock('@/features/tags/api', () => ({
@@ -24,9 +25,16 @@ vi.mock('@/features/estados/api', () => ({
   createEstado: vi.fn(),
 }));
 
+vi.mock('@/features/semaforos/api', () => ({
+  fetchSemaforos: vi.fn(),
+  createSemaforo: vi.fn(),
+  updateSemaforo: vi.fn(),
+}));
+
 const mockFetchTags = vi.mocked(fetchTags);
 const mockFetchUsers = vi.mocked(fetchTenantUsers);
 const mockFetchEstados = vi.mocked(fetchEstados);
+const mockFetchSemaforos = vi.mocked(fetchSemaforos);
 
 function renderFilters(filtros: Partial<LeadsFiltros> = {}) {
   const onChange = vi.fn();
@@ -49,6 +57,12 @@ beforeEach(() => {
     { id: 'e2', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true },
     // Archivado: sigue existiendo pero no debe ofrecerse para filtrar.
     { id: 'e3', key: 'antiguo', label: 'Antiguo', color: '#475569', orden: 9, activo: false, esDefecto: false },
+  ]);
+  mockFetchSemaforos.mockResolvedValue([
+    { id: 's1', key: 'verde', label: 'Venta concretada', color: '#16A34A', orden: 2, activo: true, esDefecto: true },
+    { id: 's2', key: 'rojo', label: 'Descartado', color: '#DC2626', orden: 3, activo: true, esDefecto: true },
+    // Archivado: sigue existiendo pero no debe ofrecerse para filtrar.
+    { id: 's3', key: 'tibio', label: 'Tibio', color: '#CA8A04', orden: 4, activo: false, esDefecto: false },
   ]);
   mockFetchTags.mockResolvedValue([
     { id: 't1', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' },
@@ -97,14 +111,23 @@ describe('LeadsFilters', () => {
     expect(onChange).toHaveBeenCalledWith({ estado: undefined });
   });
 
-  it('el semáforo se ofrece con el nombre que el tenant le puso, no con el slug', async () => {
+  it('el semáforo se ofrece con el nombre que el tenant le puso, no con la clave', async () => {
     const { onChange } = renderFilters();
 
     await userEvent.click(screen.getByRole('combobox', { name: 'Semáforo' }));
-    // "Avanza" es el nombre sembrado y editable; el valor que viaja es el slug estable.
-    await userEvent.click(await screen.findByRole('option', { name: /Avanza/ }));
+    // El nombre es editable por la empresa; lo que viaja es la `key` estable.
+    await userEvent.click(await screen.findByRole('option', { name: /Venta concretada/ }));
 
     expect(onChange).toHaveBeenCalledWith({ semaforo: 'verde' });
+  });
+
+  it('no ofrece para filtrar un semáforo archivado', async () => {
+    renderFilters();
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Semáforo' }));
+    await screen.findByRole('option', { name: /Venta concretada/ });
+
+    expect(screen.queryByRole('option', { name: /Tibio/ })).not.toBeInTheDocument();
   });
 
   it('el responsable se elige por su id', async () => {

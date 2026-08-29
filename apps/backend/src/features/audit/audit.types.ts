@@ -6,7 +6,8 @@ export type AuditAccion =
   | 'contact-note.create'
   | 'lead.create'
   | 'lead.update'
-  | 'lead.delete';
+  | 'lead.delete'
+  | 'lead.semaforo';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.

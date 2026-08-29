@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
-import type { SemaforoSlug } from '../tag/tag.types.js';
 import { MOTIVOS_ELIMINACION_LEAD } from './lead.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
@@ -62,13 +61,6 @@ export const deleteLeadSchema = z.object({
 // ─── Listado (HU-CRM-03) ────────────────────────────────────────────────────────
 
 /**
- * Tupla local porque `z.enum` de Zod 3 exige `[string, ...string[]]` y `SEMAFORO_SLUGS` está
- * declarado como `readonly SemaforoSlug[]`. El `satisfies` es lo que impide que se cuele aquí un
- * slug que no exista en la unión del dominio.
- */
-const SEMAFOROS = ['azul', 'rojo', 'naranja', 'verde'] as const satisfies readonly SemaforoSlug[];
-
-/**
  * Filtros del listado. Todos opcionales y combinables; ninguno lleva `tenantId`, que nace del
  * token (`docs/multi-tenancy.md` §4).
  *
@@ -104,7 +96,9 @@ export const listLeadsSchema = z.object({
       estado: z.string().trim().min(1).max(40).optional(),
       // Es un userId (`Lead.responsableId`). No hay rol "Asesor": ver AUTH-02.
       asesor: objectId.optional(),
-      semaforo: z.enum(SEMAFOROS).optional(),
+      // Ya no es un enum cerrado: los semaforos son un catalogo por tenant (HU-CRM-04). Zod solo
+      // comprueba la forma; que la clave exista en ESTE tenant lo valida el service.
+      semaforo: z.string().trim().min(1).max(40).optional(),
       desde: z.coerce.date({ invalid_type_error: 'Fecha «desde» inválida.' }).optional(),
       hasta: z.coerce.date({ invalid_type_error: 'Fecha «hasta» inválida.' }).optional(),
     })
@@ -113,6 +107,33 @@ export const listLeadsSchema = z.object({
       path: ['desde'],
     }),
 });
+
+/**
+ * Cambio de semaforo (HU-CRM-04). Ruta propia (`/status`) y no el `PATCH /:id` de la etapa: son dos
+ * ejes distintos, y la etapa ya funciona y esta testeada.
+ *
+ * `null` es un valor legitimo: retira la clasificacion. `.strict()` porque el body tiene UNA llave
+ * — colar `estado` aqui debe ser un 400 explicito, no un cambio por la puerta de atras.
+ */
+export const updateLeadSemaforoSchema = z.object({
+  params: z.object({ id: objectId }),
+  body: z
+    .object({ semaforo: z.string().trim().min(1).max(40).nullable() })
+    .strict(),
+});
+
+/** Historial de cambios de semaforo del lead. Misma paginacion que el resto del contrato. */
+export const historialSemaforoSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+  }),
+});
+
+export type UpdateLeadSemaforoBody = z.infer<typeof updateLeadSemaforoSchema>['body'];
+export type HistorialSemaforoQuery = z.infer<typeof historialSemaforoSchema>['query'];
 
 export type CreateLeadBody = z.infer<typeof createLeadSchema>['body'];
 export type DeleteLeadQuery = z.infer<typeof deleteLeadSchema>['query'];

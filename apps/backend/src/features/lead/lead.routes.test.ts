@@ -18,7 +18,9 @@ import { Cliente } from '../cliente/cliente.model.js';
 import { User } from '../users/user.model.js';
 import { Lead } from './lead.model.js';
 import { Estado } from '../estado/estado.model.js';
+import { Semaforo } from '../semaforo/semaforo.model.js';
 import { seedEstados } from '../../seed/seed-estados.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -49,6 +51,15 @@ function del(token: string, id: string, motivo?: string): request.Test {
     .delete(url)
     .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
     .set('X-CSRF-Token', CSRF);
+}
+
+/** PATCH tambien pasa por el guard CSRF. La URL completa porque hay varias rutas PATCH. */
+function patch(token: string, url: string, body: Record<string, unknown>): request.Test {
+  return request(app)
+    .patch(url)
+    .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+    .set('X-CSRF-Token', CSRF)
+    .send(body);
 }
 
 async function crearCliente(tenantId: Types.ObjectId): Promise<string> {
@@ -310,6 +321,10 @@ describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
     await Estado.deleteMany({});
     await seedEstados(tenantId);
 
+    // La semaforización también es un catálogo por tenant (HU-CRM-04).
+    await Semaforo.deleteMany({});
+    await seedSemaforos(tenantId);
+
     const clienteId = await crearCliente(tenantId);
     await createScoped(User, tenantId, {
       _id: new Types.ObjectId(ACTOR),
@@ -337,7 +352,8 @@ describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
       telefono: '573001112233',
       estado: 'nuevo',
       responsable: { id: ACTOR, nombre: 'Carolina' },
-      semaforos: [],
+      // Un lead recién convertido nace sin clasificar.
+      semaforo: null,
       resumen: null,
     });
     expect(res.body.data[0].conversacionId).toEqual(expect.any(String));
@@ -368,8 +384,71 @@ describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
     expect(res.body).toMatchObject({ data: [], total: 0 });
   });
 
-  it('rechaza un `semaforo` que no existe con 400', async () => {
-    await list('?semaforo=morado').expect(400);
+  it('un `semaforo` que no está en el catálogo devuelve página vacía, no 400', async () => {
+    // Mismo criterio que `?estado=`: desde HU-CRM-04 los semáforos son un catálogo del tenant,
+    // así que Zod ya no puede saber cuáles existen. Devolver el listado sin filtrar sería lo
+    // peor posible — el usuario pidió acotar y recibiría todo.
+    const res = await list('?semaforo=morado').expect(200);
+
+    expect(res.body).toMatchObject({ data: [], total: 0 });
+  });
+
+  it('PATCH /:id/status cambia el semáforo y lo devuelve resuelto', async () => {
+    const { body: creado } = await list().expect(200);
+    const leadId = creado.data[0].id as string;
+
+    const res = await patch(token, `/api/leads/${leadId}/status`, { semaforo: 'verde' }).expect(
+      200,
+    );
+
+    expect(res.body.semaforo).toMatchObject({ key: 'verde', label: 'Venta concretada' });
+  });
+
+  it('PATCH /:id/status rechaza un semáforo fuera del catálogo con 400', async () => {
+    const { body: creado } = await list().expect(200);
+    const leadId = creado.data[0].id as string;
+
+    await patch(token, `/api/leads/${leadId}/status`, { semaforo: 'morado' }).expect(400);
+  });
+
+  it('PATCH /:id/status rechaza llaves que no son suyas con 400', async () => {
+    // El body tiene UNA llave: colar `estado` aquí es la puerta de atrás del endpoint de etapa.
+    const { body: creado } = await list().expect(200);
+    const leadId = creado.data[0].id as string;
+
+    await patch(token, `/api/leads/${leadId}/status`, {
+      semaforo: 'verde',
+      estado: 'pagado',
+    }).expect(400);
+  });
+
+  it('PATCH /:id/status de un lead inexistente es 404', async () => {
+    const ajeno = new Types.ObjectId().toString();
+
+    await patch(token, `/api/leads/${ajeno}/status`, { semaforo: 'verde' }).expect(404);
+  });
+
+  it('GET /:id/historial responde la forma paginada canónica', async () => {
+    const { body: creado } = await list().expect(200);
+    const leadId = creado.data[0].id as string;
+    await patch(token, `/api/leads/${leadId}/status`, { semaforo: 'rojo' }).expect(200);
+
+    const res = await request(app)
+      .get(`/api/leads/${leadId}/historial`)
+      .set('Cookie', [`token=${token}`])
+      .expect(200);
+
+    expect(res.body).toMatchObject({ page: 1, limit: 20, total: 1 });
+    expect(res.body.data[0]).toMatchObject({ de: null, a: 'rojo' });
+  });
+
+  it('GET /:id/historial de un lead inexistente es 404', async () => {
+    const ajeno = new Types.ObjectId().toString();
+
+    await request(app)
+      .get(`/api/leads/${ajeno}/historial`)
+      .set('Cookie', [`token=${token}`])
+      .expect(404);
   });
 
   it('rechaza un rango de fechas invertido con 400', async () => {

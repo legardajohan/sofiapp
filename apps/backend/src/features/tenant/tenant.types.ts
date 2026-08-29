@@ -41,6 +41,8 @@ export interface ITenant {
   opcionesContactoSeeded?: boolean;
   /** Pipeline de leads sembrado (HU-CRM-03). */
   estadosSeeded?: boolean;
+  /** Catalogo de semaforizacion comercial sembrado (HU-CRM-04). */
+  semaforosSeeded?: boolean;
   /** Contador de cambios de contenido en la KB; invalida la caché exacta de respuestas de IA (HU-KB-03). */
   kbVersion?: number;
 }

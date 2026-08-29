@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { tagColors } from '@/features/tags/lib/tag-color';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -78,58 +77,24 @@ function Punto({ color }: { color: string }): React.ReactElement {
 }
 
 /**
- * Semáforo de la conversación. Se pinta la etiqueta aplicada más recientemente (la API la manda
- * primera) y, si hay más, un `+N` que las abre en un popover.
+ * Semáforo comercial del lead (HU-CRM-04).
  *
- * Se muestra una y no todas para que la columna no crezca ni la fila cambie de alto según cuántas
- * tenga: la tabla se escanea de arriba abajo y un dato que salta de tamaño rompe esa lectura.
+ * Uno solo, y por construcción: desde que es un campo del lead ya no puede haber varios, así
+ * que el `+N` que existía cuando salía de las etiquetas de la conversación sobra. Un lead sin
+ * clasificar muestra un guion antes que un hueco: la columna se escanea de arriba abajo y una
+ * celda vacía se lee como un fallo de carga.
  */
 function SemaforoCell({
-  semaforos,
+  semaforo,
 }: {
-  semaforos: LeadListItemDTO['semaforos'];
+  semaforo: LeadListItemDTO['semaforo'];
 }): React.ReactElement {
-  const [principal, ...resto] = semaforos;
-
-  if (!principal) return <span className="text-muted-foreground">—</span>;
+  if (!semaforo) return <span className="text-muted-foreground">—</span>;
 
   return (
     <span className="flex items-center gap-2">
-      <Punto color={principal.color} />
-      <span className="whitespace-nowrap text-secondary-foreground">{principal.nombre}</span>
-
-      {resto.length > 0 && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              // La fila entera es un botón que abre el detalle. Sin frenar la propagación, tocar
-              // el `+N` abriría además el panel del lead, que no es lo que se pidió.
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              aria-label={`Ver las otras ${resto.length} etiquetas de semáforo`}
-              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              +{resto.length}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            className="w-auto min-w-40 p-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="px-1 pb-1.5 text-xs text-muted-foreground">Otras etiquetas</p>
-            <ul className="space-y-1">
-              {resto.map((tag) => (
-                <li key={tag.id} className="flex items-center gap-2 px-1 text-sm text-foreground">
-                  <Punto color={tag.color} />
-                  <span className="whitespace-nowrap">{tag.nombre}</span>
-                </li>
-              ))}
-            </ul>
-          </PopoverContent>
-        </Popover>
-      )}
+      <Punto color={semaforo.color} />
+      <span className="whitespace-nowrap text-secondary-foreground">{semaforo.label}</span>
     </span>
   );
 }
@@ -169,7 +134,7 @@ function Fila({
         <EstadoBadge estado={lead.estado} estados={estados} />
       </TableCell>
       <TableCell>
-        <SemaforoCell semaforos={lead.semaforos} />
+        <SemaforoCell semaforo={lead.semaforo} />
       </TableCell>
       <TableCell className="text-secondary-foreground">
         {lead.responsable?.nombre ?? 'Sin responsable'}

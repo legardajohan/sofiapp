@@ -1,6 +1,6 @@
 import type { Document, Types } from 'mongoose';
 import type { EstadoComercial, IResumenResponse } from '../cliente/cliente.types.js';
-import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
+import type { ISemaforoResponse } from '../semaforo/semaforo.types.js';
 
 /**
  * De dónde nació el lead. Hoy solo se convierte desde una conversación, pero el discriminador
@@ -37,6 +37,15 @@ export interface ILead {
    * (`docs/product.md` §5 descarta Kanban). Ver la nota de producto en la spec de HU-CRM-01.
    */
   estado: EstadoComercial;
+  /**
+   * Semaforizacion comercial del lead (HU-CRM-04). Guarda la `key` de un semaforo del catalogo del
+   * tenant (`semaforos`), no un enum: desde que el catalogo es CRUD, cada empresa define los suyos.
+   * `null` = sin clasificar, que es como nace el lead — clasificarlo es una decision, no un default.
+   *
+   * Es la fuente de verdad del semaforo DEL LEAD. La etiqueta de semaforo de la conversacion
+   * (HU-OMNI-04) se sincroniza desde aqui, nunca al reves.
+   */
+  semaforo: string | null;
 }
 
 export interface ILeadDocument extends ILead, Document {}
@@ -88,6 +97,8 @@ export interface ILeadResponse {
   estado: EstadoComercial;
   contacto: { id: string; nombre: string | null; telefono: string };
   responsable: IRefResponse | null;
+  /** Semaforo ya resuelto a lo que la UI pinta. `null` = sin clasificar. */
+  semaforo: ISemaforoResponse | null;
   origen: {
     conversacionId: string;
     convertidoPor: IRefResponse | null;
@@ -101,11 +112,12 @@ export interface ILeadResponse {
 /**
  * Filtros del listado, ya validados y coercidos por Zod. Todos son opcionales y combinables.
  *
- * Ojo con dos de ellos, que NO son campos del lead:
- * - `asesor` es un userId que filtra `responsableId`. No existe el rol "Asesor" (AUTH-02): todo
- *   usuario de un tenant es `admin` y "asesor" es la función, no el rol.
- * - `semaforo` es el slug de una etiqueta de sistema aplicada a la CONVERSACIÓN (`Cliente.tagIds`),
- *   no algo que el lead guarde. Se resuelve pasando por el cliente; ver `listLeads`.
+ * Ojo con `asesor`, que NO es un campo del lead: es un userId que filtra `responsableId`. No
+ * existe el rol "Asesor" (AUTH-02): todo usuario de un tenant es `admin` y "asesor" es la funcion,
+ * no el rol.
+ *
+ * `semaforo` SI es un campo del lead desde HU-CRM-04 (antes era una etiqueta de la conversacion).
+ * Lo que no es, es un enum: es la `key` de un semaforo del catalogo del tenant.
  */
 export interface ListLeadsQuery {
   page: number;
@@ -113,7 +125,7 @@ export interface ListLeadsQuery {
   /** `key` de un estado del catálogo del tenant (HU-CRM-03). Ya no es un enum cerrado. */
   estado?: string;
   asesor?: string;
-  semaforo?: SemaforoSlug;
+  semaforo?: string;
   desde?: Date;
   hasta?: Date;
 }
@@ -136,15 +148,28 @@ export interface ILeadListItemResponse {
   /** `origen.conversacionId`: con esto la UI abre la conversación en la bandeja. */
   conversacionId: string;
   /**
-   * Etiquetas de semáforo de la conversación, con su color. Vacío si no tiene ninguna.
+   * Semaforo del lead, ya resuelto a etiqueta y color desde el catalogo del tenant. `null` = sin
+   * clasificar.
    *
-   * **La primera es la aplicada más recientemente**: es la que la tabla muestra como principal y
-   * el resto queda detrás de un `+N`. Es un array y no una sola etiqueta porque nada impide
-   * aplicar varias a la misma conversación, y quedarse con una escondía el resto.
+   * Es UNO, no un array: desde HU-CRM-04 el semaforo es un campo del lead y por construccion solo
+   * puede haber uno. Antes eran las etiquetas de la conversacion, que si podian ser varias.
    */
-  semaforos: ITagResponse[];
+  semaforo: ISemaforoResponse | null;
   /** Resumen IA de la conversación (HU-OMNI-03). `null` si nunca se generó. */
   resumen: IResumenResponse | null;
   ultimoMensajeAt: string | null;
   createdAt: string;
+}
+
+/**
+ * Una entrada del historial de semaforo (HU-CRM-04). Sale de `audit_events`, no de una coleccion
+ * propia: es exactamente el uso para el que esa bitacora se creo.
+ */
+export interface IHistorialSemaforoResponse {
+  id: string;
+  /** `key` del semaforo anterior. `null` = el lead no estaba clasificado. */
+  de: string | null;
+  a: string | null;
+  actor: IRefResponse | null;
+  at: string;
 }

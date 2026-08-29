@@ -7,7 +7,12 @@ import { LeadDetailSheet } from './LeadDetailSheet.js';
 import { deleteLead, updateLeadEstado } from '../api.js';
 import type { LeadListItemDTO } from '../types.js';
 
-vi.mock('../api.js', () => ({ updateLeadEstado: vi.fn(), deleteLead: vi.fn() }));
+vi.mock('../api.js', () => ({
+  updateLeadEstado: vi.fn(),
+  deleteLead: vi.fn(),
+  updateLeadSemaforo: vi.fn(),
+  fetchHistorialSemaforo: vi.fn(),
+}));
 
 const mockUpdate = vi.mocked(updateLeadEstado);
 const mockDelete = vi.mocked(deleteLead);
@@ -23,13 +28,18 @@ function lead(over: Partial<LeadListItemDTO> = {}): LeadListItemDTO {
     estado: 'en_gestion',
     responsable: { id: 'u1', nombre: 'Carolina' },
     conversacionId: 'c1',
-    semaforos: [],
+    semaforo: null,
     resumen: null,
     ultimoMensajeAt: null,
     createdAt: '2026-08-01T10:00:00.000Z',
     ...over,
   };
 }
+
+const SEMAFOROS_CAT = [
+  { id: 's1', key: 'verde', label: 'Venta concretada', color: '#16A34A', orden: 2, activo: true, esDefecto: true },
+  { id: 's2', key: 'rojo', label: 'Descartado', color: '#DC2626', orden: 3, activo: true, esDefecto: true },
+];
 
 const ESTADOS_CAT = [
   { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true },
@@ -44,7 +54,12 @@ function renderSheet(l: LeadListItemDTO | null) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <LeadDetailSheet lead={l} onClose={vi.fn()} estados={ESTADOS_CAT} />
+        <LeadDetailSheet
+          lead={l}
+          onClose={vi.fn()}
+          estados={ESTADOS_CAT}
+          semaforos={SEMAFOROS_CAT}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -120,12 +135,29 @@ describe('LeadDetailSheet', () => {
     expect(volverA).toContain('lead=l1');
   });
 
-  it('usa el color del semáforo que devuelve la API, no uno fijo', () => {
+  it('muestra la etiqueta del semáforo que devuelve la API, no su clave', () => {
     renderSheet(
-      lead({ semaforos: [{ id: 't1', nombre: 'En riesgo', color: '#DC2626', semaforo: 'rojo' }] }),
+      lead({
+        semaforo: {
+          id: 's2',
+          key: 'rojo',
+          label: 'Descartado',
+          color: '#DC2626',
+          orden: 3,
+          activo: true,
+          esDefecto: true,
+        },
+      }),
     );
 
-    expect(screen.getByText('En riesgo')).toBeInTheDocument();
+    expect(screen.getByText('Descartado')).toBeInTheDocument();
+    expect(screen.queryByText('rojo')).not.toBeInTheDocument();
+  });
+
+  it('un lead sin clasificar lo dice, en vez de dejar el control mudo', () => {
+    renderSheet(lead({ semaforo: null }));
+
+    expect(screen.getByText('Sin clasificar')).toBeInTheDocument();
   });
 
   it('asignar un estado lo manda por su clave de dominio, no por su etiqueta', async () => {

@@ -1,5 +1,5 @@
 import type { EstadoComercial, ResumenDTO } from '../inbox/types.js';
-import type { SemaforoSlug, TagDTO } from '../tags/types.js';
+import type { SemaforoDTO } from '../semaforos/types.js';
 
 /** Referencia ya resuelta por el backend: la tarjeta pinta nombres, nunca ids. */
 export interface RefDTO {
@@ -13,6 +13,8 @@ export interface LeadDTO {
   telefono: string;
   correo: string | null;
   estado: EstadoComercial;
+  /** Semáforo comercial ya resuelto a etiqueta y color. `null` = sin clasificar. */
+  semaforo: SemaforoDTO | null;
   contacto: { id: string; nombre: string | null; telefono: string };
   responsable: RefDTO | null;
   /** De dónde nació el lead: la trazabilidad que pide la Definición de Hecho de HU-CRM-01. */
@@ -62,8 +64,13 @@ export interface LeadListItemDTO {
   responsable: RefDTO | null;
   /** Con esto se abre la conversación en la bandeja. */
   conversacionId: string;
-  /** Todas las de semáforo de la conversación, en orden canónico. Vacío si no tiene ninguna. */
-  semaforos: TagDTO[];
+  /**
+   * Semáforo del lead, resuelto desde el catálogo del tenant. `null` = sin clasificar.
+   *
+   * Es UNO, no un array: desde HU-CRM-04 es un campo del lead. Antes eran las etiquetas de
+   * la conversación, que sí podían ser varias.
+   */
+  semaforo: SemaforoDTO | null;
   resumen: ResumenDTO | null;
   ultimoMensajeAt: string | null;
   createdAt: string;
@@ -75,8 +82,20 @@ export interface LeadsFiltros {
   /** `key` de un estado del catálogo del tenant (HU-CRM-03), no una unión cerrada. */
   estado?: string;
   asesor?: string;
-  semaforo?: SemaforoSlug;
+  /** `key` de un semáforo del catálogo del tenant, ya no un slug cerrado. */
+  semaforo?: string;
   /** `YYYY-MM-DD`, tal cual lo produce un `<input type="date">`. */
   desde?: string;
   hasta?: string;
+}
+
+/** Una entrada del historial de semáforo del lead (HU-CRM-04). */
+export interface HistorialSemaforoDTO {
+  id: string;
+  /** `key` del semáforo anterior. `null` = el lead no estaba clasificado. */
+  de: string | null;
+  a: string | null;
+  actor: RefDTO | null;
+  /** ISO. */
+  at: string;
 }

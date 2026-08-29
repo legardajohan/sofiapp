@@ -36,6 +36,7 @@ const TenantSchema = new Schema<ITenantDocument>(
     semaforoTagsSeeded: { type: Boolean, default: false },
     opcionesContactoSeeded: { type: Boolean, default: false },
     estadosSeeded: { type: Boolean, default: false },
+    semaforosSeeded: { type: Boolean, default: false },
     kbVersion: { type: Number, default: 1 },
   },
   { timestamps: true }

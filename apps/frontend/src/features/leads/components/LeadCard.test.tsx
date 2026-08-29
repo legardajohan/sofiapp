@@ -23,6 +23,7 @@ const LEAD: LeadDTO = {
   telefono: '573001112233',
   correo: null,
   estado: 'nuevo',
+  semaforo: null,
   contacto: { id: 'cliente-1', nombre: 'Ana', telefono: '573001112233' },
   responsable: { id: 'u-1', nombre: 'Carolina' },
   origen: {

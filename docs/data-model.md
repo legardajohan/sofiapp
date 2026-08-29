@@ -242,6 +242,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   },
   responsableId: ObjectId,        // ref User; por defecto, quien convirtió
   estado: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",   // default "nuevo"
+  semaforo: String | null,        // `key` del catálogo `semaforos`; default null (HU-CRM-04)
   createdAt, updatedAt
 }
 ```
@@ -255,11 +256,16 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 - `{ tenantId: 1, createdAt: -1 }` — orden por defecto del listado (HU-CRM-03).
 - `{ tenantId: 1, estado: 1, createdAt: -1 }` — `GET /api/leads?estado=`.
 - `{ tenantId: 1, responsableId: 1, createdAt: -1 }` — `GET /api/leads?asesor=`.
+- `{ tenantId: 1, semaforo: 1, createdAt: -1 }` — `GET /api/leads?semaforo=` (HU-CRM-04).
 
-> **Los tres índices del listado cierran con `createdAt: -1`**, que es como ordena la tabla, para
-> que Mongo resuelva filtro y orden con el mismo índice en vez de ordenar en memoria. El filtro
-> `?semaforo=` no lleva índice propio: no es un campo del lead, sino una etiqueta de la
-> conversación, y resuelve por `clienteId` — ya cubierto por el índice de arriba.
+> **Los cuatro índices del listado cierran con `createdAt: -1`**, que es como ordena la tabla,
+> para que Mongo resuelva filtro y orden con el mismo índice en vez de ordenar en memoria.
+
+> **`semaforo` SÍ es un campo del lead desde HU-CRM-04.** Antes el filtro `?semaforo=` pasaba
+> por las etiquetas de la conversación y costaba dos consultas encadenadas sin índice propio;
+> ahora es un match directo. `semaforo` guarda la `key` de un documento de `semaforos`, no un
+> enum: el schema no lleva `enum`, igual que `estado`, y lo valida el service contra el
+> catálogo del tenant. `null` = sin clasificar, que es como nace todo lead.
 
 > **Borrado duro, no archivado.** `DELETE /api/leads/:id?motivo=…` elimina el documento; no hay
 > `deletedAt` ni bandera de baja. La razón es el índice único de arriba: un lead marcado como
@@ -457,6 +463,33 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > atributos sensibles se guardan como la cadena `"[oculto]"` — queda constancia de **qué** cambió,
 > nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
 > texto.
+
+## semaforos  (semaforización comercial de leads — HU-CRM-04)
+
+Catálogo por tenant de cómo cada empresa clasifica sus oportunidades. Mismo patrón que
+`estados`: nació como un enum de cuatro valores y se abrió a CRUD porque el vocabulario
+comercial es de cada empresa, no del producto.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenantId` | ObjectId | Requerido e indexado. |
+| `key` | string (≤40) | Slug estable derivado del `label`. **Es lo que se graba en `Lead.semaforo`**, así que no cambia al renombrar. |
+| `label` | string (≤60) | Nombre visible, editable. |
+| `color` | string | `#RRGGBB` elegido por la empresa. La UI lo pasa por el helper de contraste, nunca lo pinta crudo. |
+| `orden` | number | Posición en la lista. Los cuatro de fábrica cuentan un recorrido: frío → potencial → cerrado, con el descarte al final. |
+| `activo` | boolean | `false` = archivado: no se ofrece para clasificar, pero sigue resolviendo su etiqueta. |
+| `esDefecto` | boolean | Uno de los cuatro sembrados. **No es informativo como en `estados`**: protege del archivado. |
+
+Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que
+los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.
+
+> Las cuatro claves sembradas (`azul`, `naranja`, `verde`, `rojo`) son **exactamente** los slugs
+> de `Tag.semaforo`. Ver `docs/domain.md` §5 para los dos ejes de la semaforización y por qué
+> estos cuatro no se archivan. La marca `Tenant.semaforosSeeded` registra que la siembra ya
+> ocurrió, igual que `estadosSeeded`.
+
+> **No hay borrado, ni siquiera para los que cree la empresa.** Los leads llevan la `key`
+> grabada y borrarla dejaría filas mostrando una clave cruda. Se archiva con `activo: false`.
 
 ## contact_notes  (notas de seguimiento del contacto — HU-CRM-02)
 ```js

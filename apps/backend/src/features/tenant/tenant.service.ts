@@ -8,6 +8,7 @@ import { construirFotografiaFinanciera } from '../../services/pricing/plan-costi
 import { seedSemaforoTags } from '../../seed/seed-semaforo-tags.js';
 import { seedContactOptions } from '../../seed/seed-contact-options.js';
 import { seedEstados } from '../../seed/seed-estados.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { seedPresetDocuments } from '../kb/kb.service.js';
@@ -144,6 +145,10 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
   // Pipeline de leads (HU-CRM-03). Mismo criterio: fuera de la transacción, y `backfillEstados()`
   // del arranque lo corrige si falla.
   await seedEstados(tenant._id.toString());
+
+  // Semaforizacion comercial de los leads (HU-CRM-04). Mismo criterio: fuera de la transaccion,
+  // y `backfillSemaforos()` del arranque lo corrige si falla.
+  await seedSemaforos(tenant._id.toString());
 
   return mapTenantToResponse(tenant);
 }

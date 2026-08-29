@@ -94,6 +94,42 @@ Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo
 comportamiento es el mismo; la única diferencia es que las de semáforo llevan un slug estable y
 piden confirmación al borrarse.
 
+### Dos ejes, dos almacenamientos (HU-CRM-04)
+
+La semaforización se aplica sobre **dos cosas distintas**, y conviene no confundirlas:
+
+| | Conversación (HU-OMNI-04) | Lead (HU-CRM-04) |
+|---|---|---|
+| Qué mide | Salud del hilo | Resultado comercial de la oportunidad |
+| Dónde vive | `Cliente.tagIds` → `Tag.semaforo` | `Lead.semaforo` (campo propio) |
+| Vocabulario | Las 4 etiquetas de sistema | Catálogo `semaforos` **por tenant** |
+| Se puede ampliar | No | **Sí**: la empresa crea los suyos |
+
+Los `label` por defecto difieren porque el eje difiere:
+
+| `key` | Conversación | Lead |
+|---|---|---|
+| `azul` | Informativo | **Frío** |
+| `naranja` | Requiere atención | **Potencial** |
+| `verde` | Avanza | **Venta concretada** |
+| `rojo` | En riesgo | **Descartado** |
+
+Reglas del catálogo de leads:
+
+- Las **cuatro claves de fábrica** (`azul`, `naranja`, `verde`, `rojo`) coinciden a propósito
+  con los slugs de `Tag.semaforo`: es lo que permite sincronizar el semáforo del lead con la
+  etiqueta de su conversación, y lo que IA-05 y MARK-01 resolverán.
+- Por eso se **renombran y recolorean, pero no se archivan** (`409`). Las que cree la empresa
+  sí se archivan. **Nada se borra**: los leads llevan la `key` grabada.
+- La **sincronización va en un solo sentido**: el lead manda, la bandeja refleja. Etiquetar la
+  conversación desde la bandeja no cambia el semáforo del lead. Es *best-effort*: si la
+  etiqueta fue borrada, o si el lead lleva un semáforo propio del tenant (que no tiene
+  etiqueta equivalente), la conversación se queda sin chip y **no** es un error.
+
+`verde` se solapa con la etapa `pagado` del pipeline. Es redundancia aceptada: la etapa es un
+catálogo que cada empresa amplía a su gusto, y el semáforo es el vocabulario con el que los
+módulos transversales hablan entre sí.
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

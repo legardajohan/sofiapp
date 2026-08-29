@@ -3,11 +3,19 @@ import {
   createLeadFromConversation,
   deleteLead,
   getLeadById,
+  listHistorialSemaforo,
   listLeads,
   updateLeadEstado,
+  updateLeadSemaforo,
 } from './lead.service.js';
 import type { ListLeadsQuery } from './lead.types.js';
-import type { CreateLeadBody, DeleteLeadQuery, UpdateLeadBody } from './lead.validation.js';
+import type {
+  CreateLeadBody,
+  DeleteLeadQuery,
+  HistorialSemaforoQuery,
+  UpdateLeadBody,
+  UpdateLeadSemaforoBody,
+} from './lead.validation.js';
 
 export const createLeadController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
@@ -47,4 +55,21 @@ export const updateLeadController: RequestHandler = async (req, res) => {
   const id = req.params['id'] as string;
   const { estado } = req.body as UpdateLeadBody;
   res.status(200).json(await updateLeadEstado(tenantId, actorId, id, estado));
+};
+
+export const updateLeadSemaforoController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const actorId = req.user!.sub;
+  const id = req.params['id'] as string;
+  const { semaforo } = req.body as UpdateLeadSemaforoBody;
+  res.status(200).json(await updateLeadSemaforo(tenantId, actorId, id, semaforo));
+};
+
+export const historialSemaforoController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  // `validatedQuery`, no `req.query`: en Express 5 el getter re-parsea el query string crudo y
+  // perderia los defaults y las coerciones de Zod (ver `validate.middleware.ts`).
+  const { page, limit } = req.validatedQuery as unknown as HistorialSemaforoQuery;
+  res.status(200).json(await listHistorialSemaforo(tenantId, id, page, limit));
 };

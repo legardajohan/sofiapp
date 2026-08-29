@@ -3,6 +3,7 @@ import { createScoped, countScoped, findScoped } from '../../repositories/base.r
 import { logger } from '../../utils/logger.js';
 import { AuditEvent } from './audit.model.js';
 import type {
+  AuditAccion,
   AuditEntidad,
   IAuditEventDocument,
   IAuditEventResponse,
@@ -47,12 +48,30 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
   }
 }
 
+/**
+ * `accion` es opcional y acota la bitacora a un solo tipo de evento. Lo necesita el historial de
+ * semaforo del lead (HU-CRM-04): la entidad `lead` acumula tambien `lead.create`, `lead.update` y
+ * `lead.delete`, y filtrarlos DESPUES de paginar daria un `total` que no corresponde con las filas
+ * devueltas y paginas de tamano irregular. Por eso el filtro va en la consulta.
+ */
 export function listAuditEventsQuery(
   tenantId: TenantId,
   entidad: AuditEntidad,
   entidadId: string,
+  accion?: AuditAccion,
 ): Query<IAuditEventDocument[], IAuditEventDocument> {
-  return findScoped(AuditEvent, tenantId, { entidad, entidadId }).sort({ createdAt: -1 });
+  return findScoped(AuditEvent, tenantId, buildAuditFilter(entidad, entidadId, accion)).sort({
+    createdAt: -1,
+  });
+}
+
+/** El filtro que comparten la pagina y el conteo: si divergen, el `total` miente. */
+function buildAuditFilter(
+  entidad: AuditEntidad,
+  entidadId: string,
+  accion?: AuditAccion,
+): Record<string, unknown> {
+  return accion ? { entidad, entidadId, accion } : { entidad, entidadId };
 }
 
 export async function listAuditEvents(
@@ -61,10 +80,11 @@ export async function listAuditEvents(
   entidadId: string,
   page: number,
   limit: number,
+  accion?: AuditAccion,
 ): Promise<{ data: IAuditEventResponse[]; page: number; limit: number; total: number }> {
-  const filter = { entidad, entidadId };
+  const filter = buildAuditFilter(entidad, entidadId, accion);
   const [docs, total] = await Promise.all([
-    listAuditEventsQuery(tenantId, entidad, entidadId)
+    listAuditEventsQuery(tenantId, entidad, entidadId, accion)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean<IAuditEventDocument[]>(),

@@ -8,15 +8,19 @@ import {
   createLeadSchema,
   deleteLeadSchema,
   getLeadSchema,
+  historialSemaforoSchema,
   listLeadsSchema,
   updateLeadSchema,
+  updateLeadSemaforoSchema,
 } from './lead.validation.js';
 import {
   createLeadController,
   deleteLeadController,
   getLeadController,
+  historialSemaforoController,
   listLeadsController,
   updateLeadController,
+  updateLeadSemaforoController,
 } from './lead.controller.js';
 
 const router = Router();
@@ -41,6 +45,26 @@ router.post(
   leadRoles,
   validate(createLeadSchema),
   asyncHandler(createLeadController),
+);
+
+// Semaforizacion (HU-CRM-04). Van ANTES de las rutas `/:id` genericas por la misma higiene de
+// orden que el listado: la ruta mas concreta primero.
+router.patch(
+  '/:id/status',
+  authenticateJWT,
+  requireTenant,
+  leadRoles,
+  validate(updateLeadSemaforoSchema),
+  asyncHandler(updateLeadSemaforoController),
+);
+
+router.get(
+  '/:id/historial',
+  authenticateJWT,
+  requireTenant,
+  leadRoles,
+  validate(historialSemaforoSchema),
+  asyncHandler(historialSemaforoController),
 );
 
 router.get(

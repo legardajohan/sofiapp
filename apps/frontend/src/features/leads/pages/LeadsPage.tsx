@@ -6,6 +6,7 @@ import { LeadsFilters } from '../components/LeadsFilters.js';
 import { LeadsTable } from '../components/LeadsTable.js';
 import { useLeads } from '../hooks/useLeads.js';
 import { useEstados } from '../../estados/hooks/useEstados.js';
+import { useSemaforos } from '../../semaforos/hooks/useSemaforos.js';
 import { useLeadsStore } from '../useLeadsStore.js';
 import type { LeadsFiltros } from '../types.js';
 
@@ -40,6 +41,7 @@ export function LeadsPage(): React.ReactElement {
 
   const { data, isLoading, isError, refetch } = useLeads(filtros);
   const estados = useEstados();
+  const semaforos = useSemaforos();
   const selectedId = useLeadsStore((s) => s.selectedId);
   const select = useLeadsStore((s) => s.select);
 
@@ -119,6 +121,7 @@ export function LeadsPage(): React.ReactElement {
         lead={seleccionado}
         onClose={() => select(null)}
         estados={estados.data ?? []}
+        semaforos={semaforos.data ?? []}
       />
     </div>
   );

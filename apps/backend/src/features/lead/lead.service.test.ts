@@ -5,7 +5,9 @@ import { Cliente } from '../cliente/cliente.model.js';
 import type { EstadoComercial } from '../cliente/cliente.types.js';
 import { Tag } from '../tag/tag.model.js';
 import { Estado } from '../estado/estado.model.js';
+import { Semaforo } from '../semaforo/semaforo.model.js';
 import { seedEstados } from '../../seed/seed-estados.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 import { createEstado } from '../estado/estado.service.js';
 import type { SemaforoSlug } from '../tag/tag.types.js';
 import { User } from '../users/user.model.js';
@@ -17,8 +19,10 @@ import {
   deleteLead,
   findLeadIdsByClientes,
   getLeadById,
+  listHistorialSemaforo,
   listLeads,
   updateLeadEstado,
+  updateLeadSemaforo,
 } from './lead.service.js';
 import type { ILeadLean } from './lead.types.js';
 
@@ -267,6 +271,7 @@ describe('HU-CRM-03 — listado de leads', () => {
     metaUserId: string;
     responsableId: string;
     estado?: EstadoComercial;
+    semaforo?: string;
     createdAt?: Date;
     tagIds?: Types.ObjectId[];
     resumen?: { texto: string; generadoAt: Date; mensajesHasta: Date };
@@ -290,6 +295,7 @@ describe('HU-CRM-03 — listado de leads', () => {
       telefono: opciones.telefono,
       clienteId: cliente._id,
       estado: opciones.estado ?? 'nuevo',
+      semaforo: opciones.semaforo ?? null,
       responsableId: new Types.ObjectId(opciones.responsableId),
       origen: {
         tipo: 'conversacion',
@@ -325,11 +331,16 @@ describe('HU-CRM-03 — listado de leads', () => {
     await User.deleteMany({});
     await Tag.deleteMany({});
     await Estado.deleteMany({});
+    await Semaforo.deleteMany({});
     await Lead.syncIndexes();
 
     // El pipeline es un catálogo por tenant (HU-CRM-03): sin sembrarlo, `?estado=` no encuentra la
     // clave y devuelve página vacía, que es justo el comportamiento nuevo.
     await seedEstados(tenant);
+
+    // La semaforizacion tambien es un catalogo por tenant (HU-CRM-04): sin sembrarlo,
+    // `?semaforo=` no encuentra la clave y devuelve pagina vacia, que es lo correcto.
+    await seedSemaforos(tenant);
 
     carolina = await crearAsesor('Carolina');
     diego = await crearAsesor('Diego');
@@ -380,42 +391,56 @@ describe('HU-CRM-03 — listado de leads', () => {
   });
 
   it('resuelve responsable y semáforo, no ids sueltos', async () => {
-    const verde = await crearTagSemaforo('verde', 'Avanza');
     await sembrarLead({
       nombre: 'Con todo',
       telefono: '573000000020',
       metaUserId: 'wa_full',
       responsableId: diego,
-      tagIds: [verde],
+      semaforo: 'verde',
     });
 
     const [lead] = (await listLeads(tenantStr, listQuery)).data;
 
     expect(lead?.responsable).toEqual({ id: diego, nombre: 'Diego' });
-    expect(lead?.semaforos).toHaveLength(1);
-    expect(lead?.semaforos[0]).toMatchObject({ nombre: 'Avanza', semaforo: 'verde', color: '#16A34A' });
+    // Etiqueta y color salen del catálogo del tenant, no de un enum del código.
+    expect(lead?.semaforo).toMatchObject({
+      key: 'verde',
+      label: 'Venta concretada',
+      color: '#16A34A',
+    });
     expect(lead?.conversacionId).toEqual(expect.any(String));
   });
 
-  it('devuelve TODAS las etiquetas de semáforo de la conversación, no solo la primera', async () => {
-    // Nada en el modelo impide aplicar varias: antes se devolvía la primera y las demás
-    // desaparecían del listado sin dejar rastro.
+  it('un lead sin clasificar devuelve `semaforo: null`, no algo que rompa la fila', async () => {
+    await sembrarLead({
+      nombre: 'Sin clasificar',
+      telefono: '573000000021',
+      metaUserId: 'wa_sin',
+      responsableId: diego,
+    });
+
+    const [lead] = (await listLeads(tenantStr, listQuery)).data;
+
+    expect(lead?.semaforo).toBeNull();
+  });
+
+  it('el semáforo del lead ignora las etiquetas de la conversación', async () => {
+    // Antes el semáforo del listado salía de `Cliente.tagIds` y podían ser varias. Desde
+    // HU-CRM-04 es un campo del lead: las etiquetas de la conversación ya no lo deciden.
     const verde = await crearTagSemaforo('verde', 'Avanza');
     const rojo = await crearTagSemaforo('rojo', 'En riesgo');
     await sembrarLead({
-      nombre: 'Dos semáforos',
+      nombre: 'Etiquetas que no mandan',
       telefono: '573009998877',
       metaUserId: 'wa_dos_semaforos',
       responsableId: diego,
+      semaforo: 'azul',
       tagIds: [rojo, verde],
     });
 
     const [lead] = (await listLeads(tenantStr, listQuery)).data;
 
-    expect(lead?.semaforos).toHaveLength(2);
-    // La aplicada más recientemente va primero: `tagIds` es [rojo, verde], así que manda `verde`.
-    // Es la que la tabla pinta como principal.
-    expect(lead?.semaforos.map((t) => t.semaforo)).toEqual(['verde', 'rojo']);
+    expect(lead?.semaforo?.key).toBe('azul');
   });
 
   it('asignar un estado del catálogo lo guarda y lo devuelve resuelto', async () => {
@@ -539,14 +564,13 @@ describe('HU-CRM-03 — listado de leads', () => {
   });
 
   it('combina filtros: solo pasa el lead que cumple todos', async () => {
-    const verde = await crearTagSemaforo('verde', 'Avanza');
     await sembrarLead({
       nombre: 'El elegido',
       telefono: '573000000070',
       metaUserId: 'wa_c1',
       responsableId: diego,
       estado: 'en_gestion',
-      tagIds: [verde],
+      semaforo: 'verde',
       createdAt: new Date('2026-08-05T10:00:00Z'),
     });
     // Igual en todo salvo el responsable.
@@ -556,7 +580,7 @@ describe('HU-CRM-03 — listado de leads', () => {
       metaUserId: 'wa_c2',
       responsableId: carolina,
       estado: 'en_gestion',
-      tagIds: [verde],
+      semaforo: 'verde',
       createdAt: new Date('2026-08-05T10:00:00Z'),
     });
 
@@ -573,19 +597,16 @@ describe('HU-CRM-03 — listado de leads', () => {
     expect(res.total).toBe(1);
   });
 
-  it('filtra por semáforo a través de la conversación', async () => {
-    const verde = await crearTagSemaforo('verde', 'Avanza');
-    await crearTagSemaforo('rojo', 'En riesgo');
-
+  it('filtra por el semáforo del propio lead', async () => {
     await sembrarLead({
-      nombre: 'Avanza',
+      nombre: 'Cerrado',
       telefono: '573000000080',
       metaUserId: 'wa_s1',
       responsableId: carolina,
-      tagIds: [verde],
+      semaforo: 'verde',
     });
     await sembrarLead({
-      nombre: 'Sin etiqueta',
+      nombre: 'Sin clasificar',
       telefono: '573000000081',
       metaUserId: 'wa_s2',
       responsableId: carolina,
@@ -593,11 +614,11 @@ describe('HU-CRM-03 — listado de leads', () => {
 
     const res = await listLeads(tenantStr, { ...listQuery, semaforo: 'verde' });
 
-    expect(res.data.map((l) => l.nombre)).toEqual(['Avanza']);
+    expect(res.data.map((l) => l.nombre)).toEqual(['Cerrado']);
     expect(res.total).toBe(1);
   });
 
-  it('semáforo cuya etiqueta el administrador borró da página vacía, no el listado sin filtrar', async () => {
+  it('semáforo que no está en el catálogo da página vacía, no el listado sin filtrar', async () => {
     await sembrarLead({
       nombre: 'Existe',
       telefono: '573000000090',
@@ -605,9 +626,9 @@ describe('HU-CRM-03 — listado de leads', () => {
       responsableId: carolina,
     });
 
-    // No se siembra ninguna etiqueta: el slug no existe en el tenant. Devolver el listado entero
-    // aquí sería lo peor posible — el usuario pidió acotar y recibiría todo.
-    const res = await listLeads(tenantStr, { ...listQuery, semaforo: 'rojo' });
+    // Devolver el listado entero aquí sería lo peor posible: el usuario pidió acotar y
+    // recibiría todo. Cubre además el caso de colar la clave de otra empresa.
+    const res = await listLeads(tenantStr, { ...listQuery, semaforo: 'inventado' });
 
     expect(res.data).toHaveLength(0);
     expect(res.total).toBe(0);
