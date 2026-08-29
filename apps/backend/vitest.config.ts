@@ -21,6 +21,10 @@ export default defineConfig({
       META_VERIFY_TOKEN: 'test-verify-token',
       META_GRAPH_VERSION: 'v19.0',
       TENANT_TOKEN_ENC_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      // `DATA_ENC_KEY` se deja SIN definir a propósito: es el escenario real de un despliegue que no
+      // la configura, y con el cifrado en reposo desactivado (HU-CRM-02) guardar correo, documento,
+      // atributos sensibles y notas debe funcionar igual. Si alguien reintroduce una dependencia de
+      // esa clave, estos tests lo cazan.
       LLM_PROVIDER: 'gemini',
       GEMINI_API_KEY: 'test-fake-gemini-api-key-for-unit-tests',
       GEMINI_MODEL: 'gemini-2.5-flash',

@@ -88,6 +88,25 @@ export async function processKbIndexJob(
         taskType: 'RETRIEVAL_DOCUMENT',
       });
 
+      // `embedTexts` es una llamada de red que tarda segundos: el documento pudo eliminarse,
+      // ocultarse o re-versionarse mientras tanto. Sin esta re-validación los chunks de abajo
+      // quedarían huérfanos, y $vectorSearch SÍ los recupera: la IA respondería con conocimiento
+      // que el admin cree borrado.
+      const vigente = await findByIdScoped(KbDocument, tenantId, documentId)
+        .lean<IKbDocument | null>()
+        .exec();
+      if (!vigente || vigente.version !== version || vigente.oculto === true) {
+        logger.info('kb-index: el documento cambió durante el embedding, se descartan los chunks', {
+          tenantId,
+          documentId,
+          jobVersion: version,
+          motivo: !vigente ? 'eliminado' : vigente.oculto === true ? 'oculto' : 'version-obsoleta',
+        });
+        // Sin escribir estado: el documento puede ya no existir y, si se re-versionó, hay otro job
+        // en vuelo que es el dueño legítimo de su `estadoIndexacion`.
+        return;
+      }
+
       for (let i = 0; i < chunks.length; i++) {
         await createScoped(KbChunk, tenantId, {
           documentId,
@@ -96,6 +115,22 @@ export async function processKbIndexJob(
           texto: chunks[i],
           embedding: embeddings[i] ?? [],
         });
+      }
+
+      // Limpieza defensiva: `deleteDocument` no es transaccional (borra los chunks y después toca el
+      // documento), así que un borrado que caiga entre la comprobación de arriba y este punto aún
+      // dejaría residuos. La ventana pasa de segundos a milisegundos, pero no se cierra del todo:
+      // riesgo residual aceptado en HU-KB-06 — cerrarlo exige una sesión transaccional de Mongo.
+      const sigueVivo = await findByIdScoped(KbDocument, tenantId, documentId)
+        .lean<IKbDocument | null>()
+        .exec();
+      if (!sigueVivo || sigueVivo.oculto === true) {
+        await deleteManyScoped(KbChunk, tenantId, { documentId }).exec();
+        logger.warn('kb-index: documento eliminado durante el guardado, chunks descartados', {
+          tenantId,
+          documentId,
+        });
+        return;
       }
     }
 

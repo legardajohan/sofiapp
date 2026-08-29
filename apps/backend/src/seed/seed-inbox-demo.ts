@@ -515,6 +515,7 @@ function construirDocs(
       noLeidos: conv.noLeidos,
       iaHabilitada: conv.iaHabilitada,
       customFields: {},
+      atributos: [],
       tagIds: conv.tags
         .map((nombre) => tagIds.get(nombre))
         .filter((id): id is Types.ObjectId => id !== undefined),

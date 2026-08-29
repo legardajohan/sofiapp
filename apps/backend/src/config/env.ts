@@ -25,6 +25,15 @@ const EnvSchema = z.object({
   TENANT_TOKEN_ENC_KEY: requiredInRuntime(
     z.string().regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)'),
   ),
+  // Cifrado en reposo de los datos personales del contacto (HU-CRM-02). **Ya no se usa para
+  // escribir**: el cifrado está desactivado y los campos se guardan en claro (ver
+  // `utils/field-crypto.util`). Sigue aquí para poder LEER lo que quedó cifrado en bases donde sí
+  // llegó a escribirse; sin ella, esos valores heredados se devuelven ilegibles pero nada falla.
+  // Clave SEPARADA de la de los tokens de Meta: rotar una no obliga a rotar la otra.
+  DATA_ENC_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)')
+    .optional(),
 
   // LLM / Gemini — sin fallback: el proceso aborta si GEMINI_API_KEY falta
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),

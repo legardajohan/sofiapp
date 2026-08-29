@@ -14,6 +14,21 @@ vi.mock('../api.js', () => ({
   extractContactData: vi.fn(),
 }));
 
+// La ficha monta `ContactNotesCard` y `ContactEditDialog`, que llaman a la API de contactos. Sin
+// este mock el test dispararía peticiones reales.
+vi.mock('@/features/contacts/api', () => ({
+  fetchNotas: vi.fn(),
+  createNota: vi.fn(),
+  updateContact: vi.fn(),
+  // Catálogos de interés / objeción / rol: los consultan `ContactCard` (para resolver la etiqueta)
+  // y `ContactEditDialog` (para poblar los desplegables).
+  fetchContactOptions: vi.fn(),
+  createContactOption: vi.fn(),
+  updateContactOption: vi.fn(),
+  deleteContactOption: vi.fn(),
+}));
+
+
 const mockFetch = vi.mocked(fetchContactHistory);
 
 const HISTORY: ContactHistoryDTO = {
@@ -32,6 +47,10 @@ const HISTORY: ContactHistoryDTO = {
     createdAt: '2026-07-24T12:00:00.000Z',
     // Sin convertir a lead (HU-CRM-01): la ficha no monta la tarjeta.
     leadId: null,
+    correo: null,
+    documento: null,
+    atributos: [],
+    puedeVerSensibles: true,
   },
   resumen: null,
   datosExtraidos: null,

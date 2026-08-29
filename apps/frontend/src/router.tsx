@@ -25,8 +25,16 @@ const TemplatesPage = lazy(() =>
   import('./features/whatsapp-templates/index.js').then((m) => ({ default: m.TemplatesPage })),
 );
 
+const AiContextPage = lazy(() =>
+  import('./features/ai-context/index.js').then((m) => ({ default: m.AiContextPage })),
+);
+
 const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
+);
+
+const LeadsPage = lazy(() =>
+  import('./features/leads/index.js').then((m) => ({ default: m.LeadsPage })),
 );
 
 const TagsPage = lazy(() =>
@@ -102,11 +110,31 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/settings/knowledge/context',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <AiContextPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
             path: '/inbox',
             element: (
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <InboxPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/leads',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <LeadsPage />
                 </Suspense>
               </RequireRole>
             ),

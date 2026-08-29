@@ -91,6 +91,26 @@ export interface ContactCardDTO {
   createdAt: string;
   /** Lead al que ya se convirtió este contacto, o `null` (HU-CRM-01). */
   leadId: string | null;
+  // ─── Datos sensibles (HU-CRM-02) ─────────────────────────────────────────────
+  /** En claro o enmascarado (`d••••@dominio.com`) según el subrol. Lo decide el backend. */
+  correo: string | null;
+  /** En claro o enmascarado (`••••1234`). */
+  documento: string | null;
+  atributos: AtributoDTO[];
+  /**
+   * Si el usuario ve los sensibles en claro. Viene del backend porque la UI no puede deducirlo del
+   * formato: un correo enmascarado y uno real son ambos cadenas.
+   */
+  puedeVerSensibles: boolean;
+}
+
+/** Atributo personalizado del contacto. `oculto` marca los que llegaron enmascarados. */
+export interface AtributoDTO {
+  key: string;
+  label: string;
+  valor: string;
+  sensible: boolean;
+  oculto: boolean;
 }
 
 /** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */

@@ -12,9 +12,12 @@ import { createSocketGateway } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
+import { backfillContactOptions } from './seed/seed-contact-options.js';
+import { backfillEstados } from './seed/seed-estados.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
+import estadoRoutes from './features/estado/estado.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -25,12 +28,15 @@ import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
 import clienteRoutes from './features/cliente/cliente.routes.js';
+import contactNoteRoutes from './features/contact-note/contact-note.routes.js';
+import contactOptionRoutes from './features/contact-option/contact-option.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import kbFaqRoutes from './features/kb-faq/kb-faq.routes.js';
 import whatsappTemplateRoutes from './features/whatsapp-template/whatsapp-template.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
+import aiRoutes from './features/ai/ai.routes.js';
 
 const app = express();
 
@@ -64,14 +70,19 @@ app.use('/api/admin/cost-items', costCatalogRoutes);
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/templates', whatsappTemplateRoutes);
+// La ruta más específica primero, igual que `/api/kb/faqs` antes de `/api/kb`.
+app.use('/api/clientes/:clienteId/notas', contactNoteRoutes);
 app.use('/api/clientes', clienteRoutes);
+app.use('/api/opciones-contacto', contactOptionRoutes);
 app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/estados', estadoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/ai/responses', aiRoutes);
 
 app.use(errorHandler);
 
@@ -90,6 +101,8 @@ if (env.NODE_ENV !== 'test') {
       await seedPlans();
       await seedPromptTemplates();
       await backfillSemaforoTags();
+      await backfillContactOptions();
+      await backfillEstados();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

@@ -1,248 +1,391 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createKbDocument, updateKbDocument } from '../../../api/knowledge-base.js';
-import { isVirtualPresetId } from '../lib/kb-presets.js';
-import type { IKbDocument } from '../types/index.js';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
+import {
+  createKbDocument,
+  deleteKbDocument,
+  updateKbDocument,
+} from '../../../api/knowledge-base.js';
+import { estructuraConHorarioInvertido } from '../lib/kb-horario.js';
+import {
+  esPresetProtegido,
+  findSimilarTitle,
+  isTitleTaken,
+  isVirtualPresetId,
+} from '../lib/kb-presets.js';
+import { camposFaltantes, type KbEditorMode, type KbSchemaDef } from '../lib/kb-schemas.js';
+import type { IKbDocument, KbEstructura } from '../types/index.js';
+import { FieldCounter } from './fields/KnowledgeField.js';
+import { KnowledgeStructuredForm } from './KnowledgeStructuredForm.js';
 
-const CONTENIDO_MAX = 3000;
-const CONTENIDO_WARN = 2700; // 90% del tope: el contador vira a ámbar
+/**
+ * HU-KB-07: 3.000 → 10.000. El contenido dejó de ser un texto libre para pasar a ser la suma de los
+ * campos de un formulario. Debe seguir en lockstep con `CONTENIDO_MAX` de `kb.validation.ts`.
+ */
+const CONTENIDO_MAX = 10_000;
 const PLACEHOLDER_GENERICO = 'Escribe o pega aquí la información pertinente…';
 
-/** Color del contador según cercanía al límite: neutro → ámbar (≥90%) → rojo (tope). */
-function counterColor(length: number): string {
-  if (length >= CONTENIDO_MAX) return 'text-destructive font-medium';
-  if (length >= CONTENIDO_WARN) return 'text-amber-600';
-  return 'text-muted-foreground';
-}
-
-function Spinner(): React.ReactElement {
-  return (
-    <svg
-      className="animate-spin h-4 w-4 text-primary-foreground"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
-    </svg>
-  );
+/** Mensaje del servidor si vino, o el de reserva. */
+function errorMessage(err: unknown, fallback: string): string {
+  const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return serverMsg ?? fallback;
 }
 
 interface KnowledgeUploadEditorProps {
   /**
-   * Si viene, el editor precarga su título/contenido. Un documento real → modo edición (PATCH). Un
-   * preset **virtual** (id `__preset_*`, sin documento en la DB) → modo creación (POST) con el título
-   * fijado y el propósito como placeholder. Sin documento → creación libre.
+   * Documento a editar. Uno real → `PATCH`. Un preset **virtual** (id `__preset_*`, sin documento en
+   * la base) → `POST` con el título ya fijado. Ausente → creación libre, con título editable.
+   *
+   * Se llama `doc` y no `document` para no ensombrecer el `document` global dentro del componente.
    */
-  document?: IKbDocument;
-  /** Se llama al guardar una edición con éxito o al cancelarla, para volver a modo creación. */
-  onDone?: () => void;
+  doc?: IKbDocument;
+  /** Documentos reales del tenant: fuente de verdad para detectar títulos ya usados. */
+  documents: IKbDocument[];
+  /** Con qué formulario abre. Lo resuelve `modoEditor` en el diálogo (ver `kb-schemas.ts`). */
+  modo: KbEditorMode;
+  /** Solo en modo estructurado: el schema que gobierna el formulario. */
+  schema?: KbSchemaDef;
+  /**
+   * Texto que se guardará. En modo legado es lo que el admin teclea; en modo estructurado es el
+   * **derivado** de la estructura, y por eso aquí llega ya calculado y no se edita a mano.
+   */
+  contenido: string;
+  onContenidoChange: (value: string) => void;
+  /** Solo en modo estructurado. */
+  estructura?: KbEstructura;
+  onEstructuraChange?: (estructura: KbEstructura) => void;
+  /** Cierra el modal: guardado con éxito, borrado con éxito o cancelación. */
+  onDone: () => void;
 }
 
+/**
+ * Cuerpo del modal de conocimiento: campos, guardado e (cuando procede) borrado.
+ *
+ * Dos formularios detrás de un mismo pie de página. La rama **legada** es la de siempre —un
+ * textarea— y se conserva intacta salvo por el tope nuevo; la **estructurada** delega en
+ * `KnowledgeStructuredForm`. Comparten mutación, toasts, borrado y botones a propósito: lo que
+ * cambia es cómo se captura el conocimiento, no qué significa guardarlo.
+ */
 export function KnowledgeUploadEditor({
-  document,
+  doc,
+  documents,
+  modo,
+  schema,
+  contenido,
+  onContenidoChange,
+  estructura,
+  onEstructuraChange,
   onDone,
 }: KnowledgeUploadEditorProps): React.ReactElement {
   const queryClient = useQueryClient();
-  // Un preset virtual (aún sin documento real) se llena por primera vez → creación, no edición.
-  const isVirtualPreset = document !== undefined && isVirtualPresetId(document.id);
-  const isEdit = document !== undefined && !isVirtualPreset;
+
+  // Un preset virtual todavía no existe en la base: llenarlo por primera vez es crear, no editar.
+  const isVirtualPreset = doc !== undefined && isVirtualPresetId(doc.id);
+  const isEdit = doc !== undefined && !isVirtualPreset;
+  const tituloEditable = doc === undefined;
+  const estructurado = modo === 'estructurado' && estructura !== undefined && schema !== undefined;
 
   const [titulo, setTitulo] = useState('');
-  const [contenido, setContenido] = useState('');
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  // Los errores rojos por campo esperan a que el admin empiece a llenar: señalarle lo que le falta
+  // antes de que haya hecho nada es regañarlo por abrir el modal.
+  const [tocado, setTocado] = useState(false);
+  // La sugerencia de título parecido espera a que el admin salga del campo. Mientras teclea, un
+  // título a medio escribir se parece a uno existente por pura casualidad («Informacion de la
+  // empres» está a dos ediciones del preset), y avisarle ahí sería corregirlo antes de que termine
+  // la frase. El error de duplicado exacto sí es inmediato: eso no es una opinión, es un hecho.
+  const [tituloVisitado, setTituloVisitado] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: (vars: { titulo: string; contenido: string }) =>
-      isEdit && document
-        ? updateKbDocument(document.id, { contenido: vars.contenido })
-        : createKbDocument({ titulo: vars.titulo, contenido: vars.contenido }),
-    onSuccess: (doc) => {
+  const saveMutation = useMutation({
+    mutationFn: (vars: { titulo: string; contenido: string }): Promise<IKbDocument> => {
+      const payload = {
+        contenido: vars.contenido,
+        ...(estructurado ? { estructura } : {}),
+      };
+      return isEdit && doc
+        ? updateKbDocument(doc.id, payload)
+        : createKbDocument({ titulo: vars.titulo, ...payload });
+    },
+    onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
-      if (isEdit) {
-        // Al terminar una edición volvemos a modo creación; el feedback va por toast porque el
-        // formulario deja de mostrar este documento.
-        toast.success(
-          doc.contenido.trim().length === 0
-            ? `"${doc.titulo}" guardado. Queda pendiente hasta que agregues contenido.`
-            : `"${doc.titulo}" actualizado. Reindexando su contenido…`,
-        );
-        onDone?.();
-      } else if (isVirtualPreset) {
-        // Llenar por primera vez un preset lo crea (POST); luego volvemos a modo creación.
-        toast.success(`"${doc.titulo}" recibido. Indexando su contenido…`);
-        onDone?.();
-      } else {
-        setSuccessMsg(`"${doc.titulo}" recibido. Indexando su contenido…`);
-        setErrorMsg(null);
-        setTitulo('');
-        setContenido('');
-      }
+      toast.success(
+        saved.contenido.trim().length === 0
+          ? 'Guardado, sin contenido que indexar'
+          : 'Guardado. Indexando su contenido…',
+        { description: saved.titulo },
+      );
+      onDone();
     },
     onError: (err: Error) => {
-      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data
-        ?.message;
-      setErrorMsg(serverMsg ?? 'No se pudo guardar el contenido. Intenta de nuevo.');
-      setSuccessMsg(null);
+      setErrorMsg(errorMessage(err, 'No se pudo guardar el contenido. Intenta de nuevo.'));
     },
   });
 
-  // Al cambiar de documento (o volver a creación) se resetea todo: contenido, mensajes y el estado
-  // de la mutación. Así no se filtra nada de una operación a la siguiente. En edición, foco al texto.
-  useEffect(() => {
-    setTitulo(document?.titulo ?? '');
-    setContenido(document?.contenido ?? '');
-    setSuccessMsg(null);
-    setErrorMsg(null);
-    mutation.reset();
-    if (document) textareaRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [document?.id]);
+  const deleteMutation = useMutation({
+    mutationFn: deleteKbDocument,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['kb', 'documents'] });
+      toast.success('Conocimiento eliminado', { description: doc?.titulo });
+      onDone();
+    },
+    onError: (err: Error) => {
+      setConfirmarBorrado(false);
+      toast.error(errorMessage(err, 'No se pudo eliminar. Intenta de nuevo.'));
+    },
+  });
+
+  const ocupado = saveMutation.isPending || deleteMutation.isPending;
+  const tituloTrimmed = titulo.trim();
+  // Solo aplica al crear: al editar, el título ya es de este documento y no se toca.
+  const tituloDuplicado = tituloEditable && tituloTrimmed.length > 0 && isTitleTaken(tituloTrimmed, documents);
+  // Un título solo parecido a otro no es un error: puede ser el mismo conocimiento escrito con un
+  // typo o una categoría hermana legítima. Se avisa y decide el admin (HU-KB-13). Sin `useMemo`:
+  // solo corre tras el blur y contra unas decenas de candidatos.
+  const tituloSimilar =
+    tituloEditable && tituloVisitado && !tituloDuplicado
+      ? findSimilarTitle(tituloTrimmed, documents)
+      : undefined;
+
+  // Al lector de pantalla se le da una sola descripción: el error manda sobre la sugerencia, que
+  // por construcción no coexisten (`findSimilarTitle` calla ante una coincidencia exacta).
+  const tituloDescritoPor = tituloDuplicado
+    ? 'kb-titulo-error'
+    : tituloSimilar !== undefined
+      ? 'kb-titulo-sugerencia'
+      : undefined;
+
+  const faltantes = estructurado ? camposFaltantes(schema, estructura) : [];
+
+  // Al crear, el backend exige contenido; al editar, vaciar un documento es válido (queda pendiente).
+  const contenidoListo = isEdit || contenido.trim().length > 0;
+  const tituloListo = !tituloEditable || (tituloTrimmed.length > 0 && !tituloDuplicado);
+  const dentroDelTope = contenido.length <= CONTENIDO_MAX;
+
+  // Un tramo que cierra antes de abrir NO se serializa, así que dejar guardar sería tirar en
+  // silencio algo que el admin acaba de escribir y da por guardado. Un tramo a medio llenar es otra
+  // cosa —el estado natural mientras se teclea— y no bloquea nada (HU-KB-12).
+  const horarioInvertido = estructurado && estructuraConHorarioInvertido(estructura);
+
+  // `tituloSimilar` NO entra aquí a propósito: es el punto entero de HU-KB-13. La UI señala el
+  // parecido y se aparta; quien sabe si son el mismo conocimiento es el admin, no esta condición.
+  const puedeGuardar =
+    contenidoListo &&
+    tituloListo &&
+    dentroDelTope &&
+    faltantes.length === 0 &&
+    !horarioInvertido &&
+    !ocupado;
+
+  // Un preset virtual no tiene nada que borrar; un obligatorio no se puede quedar sin su categoría;
+  // y dos presets opcionales están protegidos porque borrarlos no tiene vuelta atrás (HU-KB-12).
+  const puedeEliminar =
+    doc !== undefined && !isVirtualPreset && !doc.obligatorio && !esPresetProtegido(doc.titulo);
+
+  function handleEstructuraChange(siguiente: KbEstructura): void {
+    setTocado(true);
+    onEstructuraChange?.(siguiente);
+  }
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
-    setSuccessMsg(null);
+    if (!puedeGuardar) return;
     setErrorMsg(null);
-    mutation.mutate({ titulo: titulo.trim(), contenido: contenido.trim() });
+    saveMutation.mutate({
+      titulo: doc?.titulo ?? tituloTrimmed,
+      contenido: contenido.trim(),
+    });
   }
 
-  // En creación exigimos título y contenido; en edición el contenido puede quedar vacío (vaciar un
-  // documento es válido: queda pendiente sin reindexar) y el título no se edita.
-  const disabled =
-    mutation.isPending || (!isEdit && (titulo.trim().length === 0 || contenido.trim().length === 0));
-
   const placeholder =
-    (isEdit || isVirtualPreset) && document?.proposito && contenido.length === 0
-      ? document.proposito
-      : PLACEHOLDER_GENERICO;
-
-  // El título va bloqueado tanto al editar como al llenar un preset (su título ya está definido).
-  const tituloLocked = isEdit || isVirtualPreset;
+    doc?.proposito && contenido.length === 0 ? doc.proposito : PLACEHOLDER_GENERICO;
 
   return (
-    <div
-      className={`bg-card border rounded-xl shadow-card transition-shadow ${
-        isEdit ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border'
-      }`}
-    >
-      <div className="px-6 py-5 border-b border-border">
-        {isEdit ? (
-          <>
-            <p className="text-xs font-medium uppercase tracking-wide text-primary">Editando</p>
-            <h2 className="text-base font-semibold text-foreground mt-0.5">{document?.titulo}</h2>
-            <p className="text-sm text-secondary-foreground mt-0.5">
-              Corrige el contenido y guarda. La IA se reindexará con el nuevo texto.
-            </p>
-          </>
-        ) : (
-          <>
-            <h2 className="text-base font-semibold text-foreground">Cargar conocimiento</h2>
-            <p className="text-sm text-secondary-foreground mt-0.5">
-              Pega o escribe el texto con el que la IA responderá a tus prospectos.
-            </p>
-          </>
-        )}
-      </div>
-      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-foreground" htmlFor="kb-titulo">
-            Título
-          </label>
-          <input
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {tituloEditable && (
+        <div>
+          <Label htmlFor="kb-titulo">Título</Label>
+          <Input
             id="kb-titulo"
-            type="text"
+            className="mt-1.5"
             value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Ej. Preguntas frecuentes sobre precios"
+            onChange={(e) => {
+              setTitulo(e.target.value);
+              // Volver a escribir retira la sugerencia hasta que el admin salga del campo otra vez:
+              // un aviso que se queda mientras se corrige lo que señala es un aviso que estorba.
+              setTituloVisitado(false);
+            }}
+            onBlur={() => setTituloVisitado(true)}
+            placeholder="Ej. Convenios con empresas"
             maxLength={200}
-            required={!tituloLocked}
-            disabled={tituloLocked}
-            className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            required
+            autoFocus
+            aria-invalid={tituloDuplicado}
+            aria-describedby={tituloDescritoPor}
           />
-          <p className="text-xs text-muted-foreground">
-            {isEdit
-              ? 'El título no se puede cambiar al editar; solo su contenido.'
-              : isVirtualPreset
-                ? 'Conocimiento predefinido: su título ya está fijado; solo agrega el contenido.'
-                : 'Reutilizar un título existente crea una nueva versión del documento.'}
-          </p>
+          {/*
+            La región viva se monta siempre, aunque esté vacía: un `role="status"` que aparece a la
+            vez que su contenido no se anuncia de forma fiable, porque el lector de pantalla no lo
+            estaba observando todavía. Hace falta aquí y no en el error rojo porque la sugerencia
+            sale justo cuando el foco ya se fue del input, y entonces su `aria-describedby` no lo
+            está leyendo nadie.
+          */}
+          <div role="status">
+            {/* Ámbar y texto apagado, no rojo: comparte la caja con el error pero no su peso. */}
+            {tituloSimilar !== undefined && (
+              <p
+                id="kb-titulo-sugerencia"
+                className="mt-1.5 rounded-lg border border-amber-200/60 bg-amber-50 px-3 py-2 text-sm text-muted-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200 dark:border-amber-900/60 dark:bg-amber-950/30"
+              >
+                ¿Quisiste decir «{tituloSimilar}»? Ya existe un conocimiento con un título muy
+                parecido. Si es el mismo, ábrelo desde su tarjeta para editarlo.
+              </p>
+            )}
+          </div>
+          {tituloDuplicado && (
+            <p
+              id="kb-titulo-error"
+              className="mt-1.5 rounded-lg border border-destructive/30 bg-destructive-subtle px-3 py-2 text-sm text-destructive"
+            >
+              Este conocimiento ya existe («{tituloTrimmed}»). Ábrelo desde su tarjeta para editarlo.
+            </p>
+          )}
         </div>
+      )}
 
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-foreground" htmlFor="kb-contenido">
-            Contenido
-          </label>
-          <textarea
+      {estructurado ? (
+        <>
+          <KnowledgeStructuredForm
+            schema={schema}
+            estructura={estructura}
+            onEstructuraChange={handleEstructuraChange}
+            mostrarErrores={tocado}
+          />
+
+          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
+            <span className="text-xs text-muted-foreground">Texto que leerá la IA</span>
+            <FieldCounter length={contenido.length} max={CONTENIDO_MAX} />
+          </div>
+
+          {tocado && faltantes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Falta completar{' '}
+              {faltantes.length === 1
+                ? `«${faltantes[0]?.etiqueta}»`
+                : `${faltantes.length} campos obligatorios`}
+              .
+            </p>
+          )}
+        </>
+      ) : (
+        <div>
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="kb-contenido">Contenido</Label>
+            <FieldCounter length={contenido.length} max={CONTENIDO_MAX} />
+          </div>
+          <Textarea
             id="kb-contenido"
-            ref={textareaRef}
+            className="mt-1.5 resize-y"
             value={contenido}
-            onChange={(e) => setContenido(e.target.value)}
+            onChange={(e) => onContenidoChange(e.target.value)}
             placeholder={placeholder}
             rows={10}
             maxLength={CONTENIDO_MAX}
             required={!isEdit}
-            className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors resize-y"
+            autoFocus={!tituloEditable}
           />
-          <p className={`text-xs text-right ${counterColor(contenido.length)}`} aria-live="polite">
-            {contenido.length.toLocaleString()} / {CONTENIDO_MAX.toLocaleString()} caracteres
-          </p>
         </div>
+      )}
 
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={disabled}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
-          >
-            {mutation.isPending ? (
-              <>
-                <Spinner />
-                {isEdit ? 'Guardando…' : 'Cargando…'}
-              </>
-            ) : isEdit ? (
-              'Guardar cambios'
-            ) : (
-              'Cargar e indexar'
-            )}
-          </button>
-          {isEdit && (
-            <button
-              type="button"
-              onClick={() => onDone?.()}
-              disabled={mutation.isPending}
-              className="px-4 py-2.5 border border-input text-sm font-medium text-foreground rounded-lg hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40"
-            >
-              Cancelar
-            </button>
+      {errorMsg && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive-subtle px-3 py-2 text-sm text-destructive">
+          {errorMsg}
+        </p>
+      )}
+
+      <DialogFooter className="gap-2 sm:justify-between sm:space-x-0">
+        <div>
+          {puedeEliminar && doc && (
+            <AlertDialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={ocupado}
+                onClick={() => setConfirmarBorrado(true)}
+                className="text-destructive hover:bg-destructive-subtle hover:text-destructive"
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Eliminar
+              </Button>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar «{doc.titulo}»?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    La IA dejará de usar este contenido y se borrarán sus fragmentos indexados. No se
+                    puede deshacer.
+                    {/*
+                      Decía «La categoría seguirá en la lista, vacía, por si la necesitas» y era
+                      falso: `mergePresetsWithDocuments` descarta los `oculto` y NO la repone como
+                      virtual, así que la tarjeta desaparece de la grilla sin vía de retorno. Un
+                      aviso de borrado que promete lo contrario de lo que hace el código es el peor
+                      sitio donde tener una mentira (HU-KB-12).
+                    */}
+                    {doc.isPreset && ' La categoría también desaparecerá de tu base de conocimiento.'}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deleteMutation.isPending}
+                    onClick={(e) => {
+                      // Sin `preventDefault` el diálogo se cerraría antes de saber si el borrado
+                      // funcionó, y el error aparecería sobre una confirmación ya desmontada.
+                      e.preventDefault();
+                      deleteMutation.mutate(doc.id);
+                    }}
+                    className={cn(
+                      buttonVariants({ variant: 'destructive' }),
+                      'transition-transform duration-150 ease-out motion-safe:active:scale-[0.97]',
+                    )}
+                  >
+                    {deleteMutation.isPending ? 'Eliminando…' : 'Eliminar'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
 
-        {successMsg && (
-          <div className="flex items-center gap-3 p-4 bg-success-subtle border border-success/30 rounded-xl text-sm text-success">
-            <svg className="w-5 h-5 flex-shrink-0 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {successMsg}
-          </div>
-        )}
-
-        {errorMsg && (
-          <div className="flex items-center gap-3 p-4 bg-destructive-subtle border border-destructive/30 rounded-xl text-sm text-destructive">
-            <svg className="w-5 h-5 flex-shrink-0 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            {errorMsg}
-          </div>
-        )}
-      </form>
-    </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <Button type="button" variant="outline" onClick={onDone} disabled={ocupado}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={!puedeGuardar} className="min-w-40">
+            {saveMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              'Guardar e indexar'
+            )}
+          </Button>
+        </div>
+      </DialogFooter>
+    </form>
   );
 }

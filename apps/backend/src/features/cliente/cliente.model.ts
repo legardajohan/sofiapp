@@ -1,5 +1,16 @@
 import { Schema, model } from 'mongoose';
-import type { IClienteDocument } from './cliente.types.js';
+import type { IAtributoPersonalizado, IClienteDocument } from './cliente.types.js';
+
+/** Atributo personalizado del contacto (HU-CRM-02). `valor` va cifrado cuando `sensible`. */
+const AtributoSchema = new Schema<IAtributoPersonalizado>(
+  {
+    key: { type: String, required: true },
+    label: { type: String, required: true },
+    valor: { type: String, required: true },
+    sensible: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
 
 const ClienteSchema = new Schema<IClienteDocument>(
   {
@@ -27,10 +38,22 @@ const ClienteSchema = new Schema<IClienteDocument>(
     // Etiquetas de empresa (HU-OMNI-04). Sustituyen al antiguo `tags: [String]` de texto libre;
     // la migración vive en `scripts/migrate-cliente-tags.ts`.
     tagIds: [{ type: Schema.Types.ObjectId, ref: 'Tag' }],
-    nivelInteres: { type: String, enum: ['frio', 'tibio', 'caliente'] },
-    objecionPrincipal: { type: String, enum: ['precio', 'tiempo', 'confianza', 'otra'] },
-    rolContacto: { type: String, enum: ['decisor', 'usuario', 'desconocido'] },
+    // Claves del catálogo `contact_options` del tenant (HU-CRM-02). **Sin `enum`**: las tres listas
+    // dejaron de ser estructura y pasaron a ser datos que cada empresa administra (CRUD desde la
+    // ficha del contacto). Lo que antes garantizaba el enum lo garantiza ahora
+    // `assertOpcionesValidas`, que comprueba contra las opciones ACTIVAS del tenant antes de
+    // escribir. Se guarda la `key`, no un ObjectId: así renombrar la opción no toca los contactos y
+    // archivarla no deja una referencia colgada.
+    nivelInteres: { type: String },
+    objecionPrincipal: { type: String },
+    rolContacto: { type: String },
     interesItemId: { type: Schema.Types.ObjectId, ref: 'CatalogItem' },
+    // Datos sensibles del contacto (HU-CRM-02). El cifrado en reposo está desactivado (ver
+    // `utils/field-crypto.util`); el sufijo `Enc` se conserva para no migrar los documentos.
+    // Deliberadamente SIN índice: no son buscables por diseño.
+    correoEnc: { type: String },
+    documentoEnc: { type: String },
+    atributos: { type: [AtributoSchema], default: [] },
     // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
     resumenIA: {
       type: new Schema(

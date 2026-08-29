@@ -97,11 +97,9 @@ export function AdminTenantsPage(): React.ReactElement {
     }
   };
 
+  // La confirmación vive en el AlertDialog que envuelve el botón de borrar (TenantTable).
   const handleDelete = (tenant: ITenant): void => {
-    const ok = window.confirm(
-      `¿Eliminar la empresa "${tenant.nombre}"? Se borrarán también sus usuarios, clientes y datos asociados. Esta acción no se puede deshacer.`,
-    );
-    if (ok) deleteMutation.mutate(tenant._id);
+    deleteMutation.mutate(tenant._id);
   };
 
   return (

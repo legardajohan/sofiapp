@@ -1,16 +1,19 @@
 /**
  * Test de lógica pura para la barra de progreso de la KB (HU-KB-01-V3.1 — fix del contador).
  *
- * Sin runner nuevo: `node:assert` corrido vía `tsx` (ya presente en el repo). Vive FUERA de `src/`
- * para no entrar en `tsc --noEmit` (build) ni en `eslint src` (lint), y para no agregar un script
- * `test` que `turbo run test` ejecutaría.
+ * Lo corre vitest como cualquier otra suite. Las aserciones siguen siendo `node:assert`: es lógica
+ * pura, no necesita matchers de DOM. Vive FUERA de `src/` para no entrar en `tsc --noEmit` (build)
+ * ni en `eslint src` (lint).
  *
- * Ejecutar (desde la raíz del repo; `tsx` vive en @sofiapp/api):
- *   pnpm --filter @sofiapp/api exec tsx ../../apps/frontend/tests/kb-progress.test.ts
+ * Antes declaraba su propio `test()` con `console.log` y estaba pensado para lanzarse a mano con
+ * `tsx`. Vitest lo recogía igual por el nombre `*.test.ts` y lo reportaba como suite fallida («No
+ * test suite found»), así que en la práctica sus aserciones nunca corrían: se quedó apuntando al
+ * título viejo de un preset renombrado sin que nadie se enterara.
  *
  * Cubre que el progreso se calcule sobre la lista FUSIONADA (`mergePresetsWithDocuments`), no la
  * cruda del API: así el denominador de obligatorios queda fijo en 2 y la barra no desaparece.
  */
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   computeKbProgress,
@@ -21,7 +24,7 @@ import type { EstadoIndexacion, IKbDocument } from '../src/features/knowledge-ba
 
 const OBLIGATORIO_A = 'Información de la empresa';
 const OBLIGATORIO_B = 'Productos y servicios';
-const OPCIONAL = 'Preguntas frecuentes';
+const OPCIONAL = 'Información Complementaria';
 
 /**
  * Modela un documento tal cual lo devuelve el API. Por defecto simula un preset **creado vía POST**
@@ -48,15 +51,6 @@ function makeDoc(overrides: Partial<IKbDocument> & { titulo: string }): IKbDocum
 function progressFrom(documents: IKbDocument[]): ReturnType<typeof computeKbProgress> {
   return computeKbProgress(mergePresetsWithDocuments(documents));
 }
-
-let passed = 0;
-function test(name: string, fn: () => void): void {
-  fn();
-  passed += 1;
-  console.log(`  ✓ ${name}`);
-}
-
-console.log('kb-progress (barra de progreso sobre lista fusionada)');
 
 test('al eliminar TODOS los documentos, el contador se mantiene en 0/2 y la barra no desaparece', () => {
   const progress = progressFrom([]);
@@ -172,5 +166,3 @@ test('completar los CINCO presets → 5/5 y 2/2', () => {
   assert.equal(progress.completedObligatorios, 2);
   assert.equal(progress.missingObligatorios.length, 0);
 });
-
-console.log(`\n${passed} tests OK`);

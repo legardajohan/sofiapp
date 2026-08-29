@@ -34,6 +34,13 @@ export interface ITenant {
    * y sin esta marca el `upsert` las resucitaría en el siguiente despliegue.
    */
   semaforoTagsSeeded?: boolean;
+  /**
+   * Lo mismo para los catálogos de interés / objeción / rol de la ficha del contacto (HU-CRM-02):
+   * distingue "este tenant nunca los tuvo" de "el administrador borró esa opción a propósito".
+   */
+  opcionesContactoSeeded?: boolean;
+  /** Pipeline de leads sembrado (HU-CRM-03). */
+  estadosSeeded?: boolean;
   /** Contador de cambios de contenido en la KB; invalida la caché exacta de respuestas de IA (HU-KB-03). */
   kbVersion?: number;
 }

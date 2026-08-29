@@ -1,7 +1,13 @@
 import type { Document, Types } from 'mongoose';
 
-export type AuditAccion = 'conversation.assign' | 'lead.create' | 'lead.delete';
-export type AuditEntidad = 'cliente' | 'lead';
+export type AuditAccion =
+  | 'conversation.assign'
+  | 'cliente.update'
+  | 'contact-note.create'
+  | 'lead.create'
+  | 'lead.update'
+  | 'lead.delete';
+export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.
 export interface IAuditEvent {

@@ -17,11 +17,14 @@
 | **Campaña** | Difusión masiva segmentada a prospectos (remarketing). |
 | **Flujo** | Grafo de conversación automatizada (constructor visual, Fase 3). |
 | **HSM** | Plantilla de mensaje aprobada por Meta para envíos proactivos. |
+| **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los subroles autorizados. |
+| **Dato sensible** | Dato personal del contacto que se cifra en reposo y solo se muestra en claro a los subroles autorizados: correo, documento, notas y los atributos personalizados marcados `sensible` (HU-CRM-02, ADR 0006). Al resto le llega enmascarado. |
+| **Atributo personalizado** | Par etiqueta/valor libre sobre un contacto (`Cliente.atributos`), con una marca `sensible` por campo. Sustituye a `customFields`. |
 
 ## 2. Entidades del dominio
 
-`Tenant`, `Plan`, `User`, `MetaIntegration`, `Cliente`, `Message`, `Tag`, `Lead`, `CatalogItem`,
-`Campaign`, `AuditEvent`, `Flow` (Fase 3). Esquemas en `data-model.md`.
+`Tenant`, `Plan`, `User`, `MetaIntegration`, `Cliente`, `Message`, `Tag`, `Lead`, `ContactNote`,
+`CatalogItem`, `Campaign`, `AuditEvent`, `Flow` (Fase 3). Esquemas en `data-model.md`.
 
 ## 3. Estados del prospecto (`estadoComercial`)
 
@@ -106,3 +109,11 @@ piden confirmación al borrarse.
    globalmente: dos empresas pueden trabajar el mismo número sin verse. Borrarlo (`deleteLead`) es
    definitivo y exige un motivo del enum cerrado; libera el teléfono y deja rastro en `AuditEvent`.
    Un lead que se pierde no se borra: pasa a `estado: 'perdido'`.
+8. Una `ContactNote` pertenece a exactamente un `Tenant` y su `clienteId` es del mismo tenant
+   (validado antes de escribir en `createNota`). Solo la leen los subroles autorizados. No se edita
+   ni se borra: es un asiento del historial (HU-CRM-02).
+9. Un dato sensible del contacto (`correoEnc`, `documentoEnc`, `atributos[].valor` con
+   `sensible: true`) **nunca** sale hacia quien no puede verlo, ni por la API ni por
+   `audit_events`, donde se guarda como `"[oculto]"`. Editarlo exige subrol autorizado; leerlo sin
+   él devuelve el valor enmascarado, nunca vacío (HU-CRM-02, ADR 0006). El cifrado en reposo está
+   desactivado: en la base el valor está en claro (ver `docs/data-model.md`).

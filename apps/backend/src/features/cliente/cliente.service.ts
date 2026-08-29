@@ -12,16 +12,27 @@ import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { Cliente } from './cliente.model.js';
+import { toResumenResponse } from './cliente.mapper.js';
 import { Message } from '../message/message.model.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
+import { assertOpcionesValidas } from '../contact-option/contact-option.service.js';
+import { recordAuditEvent } from '../audit/audit.service.js';
+import {
+  fromStoredOptional,
+  fromStoredValue,
+  toStoredValue,
+} from '../../utils/field-crypto.util.js';
+import { MASK_VALOR, maskCorreo, maskDocumento } from '../../utils/mask.util.js';
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type {
   CanalOrigen,
+  IAtributoPersonalizado,
+  IAtributoResponse,
   ICliente,
   IClienteDocument,
   IContactCardResponse,
@@ -30,6 +41,7 @@ import type {
   IDatosExtraidosResponse,
   IResumenResponse,
   TelefonoOrigen,
+  UpdateClienteDTO,
 } from './cliente.types.js';
 import type { HistoryQuery } from './cliente.validation.js';
 
@@ -87,11 +99,30 @@ interface IClienteLean extends ICliente {
   createdAt: Date;
 }
 
+/** El valor de un atributo sensible solo sale para quien puede verlo; al resto le llega la máscara. */
+function toAtributoResponse(a: IAtributoPersonalizado, puedeVer: boolean): IAtributoResponse {
+  const oculto = a.sensible && !puedeVer;
+  return {
+    key: a.key,
+    label: a.label,
+    valor: oculto ? MASK_VALOR : a.sensible ? fromStoredValue(a.valor) : a.valor,
+    sensible: a.sensible,
+    oculto,
+  };
+}
+
 function toContactCard(
   c: IClienteLean,
   tagMap: Map<string, ITagResponse> = new Map(),
+  puedeVerSensibles = false,
   leadId: string | null = null,
 ): IContactCardResponse {
+  // Se resuelve el valor legible primero y se enmascara después: enmascarar un valor heredado aún
+  // cifrado no diría nada útil (ni siquiera el dominio del correo), que es justo lo que la máscara
+  // pretende conservar.
+  const correo = fromStoredOptional(c.correoEnc);
+  const documento = fromStoredOptional(c.documentoEnc);
+
   return {
     id: String(c._id),
     nombre: c.nombre ?? null,
@@ -109,27 +140,35 @@ function toContactCard(
     ultimoMensajeAt: c.ultimoMensajeAt ? c.ultimoMensajeAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
     leadId,
+    correo: correo === null ? null : puedeVerSensibles ? correo : maskCorreo(correo),
+    documento: documento === null ? null : puedeVerSensibles ? documento : maskDocumento(documento),
+    atributos: (c.atributos ?? []).map((a) => toAtributoResponse(a, puedeVerSensibles)),
+    puedeVerSensibles,
   };
 }
 
-/** El resumen queda desactualizado si llegaron mensajes después de generarlo. */
-export function toResumenResponse(c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>): IResumenResponse | null {
-  if (!c.resumenIA) return null;
-  const desactualizado = !!c.ultimoMensajeAt && c.ultimoMensajeAt > c.resumenIA.mensajesHasta;
-  return {
-    texto: c.resumenIA.texto,
-    generadoAt: c.resumenIA.generadoAt.toISOString(),
-    desactualizado,
-  };
-}
+/**
+ * Se re-exporta desde `cliente.mapper` para no romper a quien ya lo importaba de aquí. Vive allí
+ * porque el listado de leads (HU-CRM-03) también lo necesita y este módulo importa de
+ * `lead.service`: tenerlo aquí cerraría un ciclo de imports.
+ */
+export { toResumenResponse };
 
+/**
+ * El `correo` extraído por IA se enmascara con la misma regla que el correo manual: es el mismo dato
+ * personal y no puede quedar a la vista solo por venir del modelo. `fromStoredOptional` resuelve
+ * tanto el valor en claro como una extracción heredada que quedó cifrada, así que no hace falta
+ * migrar nada.
+ */
 export function toDatosExtraidosResponse(
   datos: IDatosExtraidos | undefined,
+  puedeVerSensibles = false,
 ): IDatosExtraidosResponse | null {
   if (!datos) return null;
+  const correo = fromStoredOptional(datos.correo);
   return {
     nombreCompleto: datos.nombreCompleto,
-    correo: datos.correo,
+    correo: correo === null ? null : puedeVerSensibles ? correo : maskCorreo(correo),
     telefono: datos.telefono,
     // Las extracciones anteriores a este campo solo guardaban lo dictado en la conversación.
     telefonoOrigen: datos.telefonoOrigen ?? 'conversacion',
@@ -146,6 +185,7 @@ export async function getContactHistory(
   tenantId: string,
   clienteId: string,
   query: HistoryQuery,
+  puedeVerSensibles = false,
 ): Promise<IContactHistoryResponse> {
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
   if (!cliente) throw new AppError('Contacto no encontrado.', 404);
@@ -173,11 +213,161 @@ export async function getContactHistory(
   const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
 
   return {
-    contacto: toContactCard(cliente, tagMap, leadId),
+    contacto: toContactCard(cliente, tagMap, puedeVerSensibles, leadId),
     resumen: toResumenResponse(cliente),
-    datosExtraidos: toDatosExtraidosResponse(cliente.datosExtraidos),
+    datosExtraidos: toDatosExtraidosResponse(cliente.datosExtraidos, puedeVerSensibles),
     mensajes: { data: mensajes, page, limit, total },
   };
+}
+
+// ─── Edición de la ficha del contacto (HU-CRM-02) ───────────────────────────────
+
+/** Lo que el `AuditEvent` guarda en lugar del valor real de un campo sensible. */
+const SENSIBLE_MARKER = '[oculto]';
+
+/** Campos simples, no sensibles: van al documento tal cual y a la auditoría con su valor real. */
+const CAMPOS_SIMPLES = [
+  'nombre',
+  'telefono',
+  'nivelInteres',
+  'objecionPrincipal',
+  'rolContacto',
+] as const;
+
+/** Campos sensibles y la columna (sufijo `Enc`, hoy en claro) donde se persisten. */
+const CAMPOS_SENSIBLES = [
+  ['correo', 'correoEnc'],
+  ['documento', 'documentoEnc'],
+] as const;
+
+/** Proyección de los atributos para la bitácora: los sensibles nunca sueltan su valor. */
+function resumirAtributos(atributos: IAtributoPersonalizado[]): Record<string, unknown>[] {
+  return atributos.map((a) => ({
+    key: a.key,
+    label: a.label,
+    valor: a.sensible ? SENSIBLE_MARKER : a.valor,
+    sensible: a.sensible,
+  }));
+}
+
+/**
+ * ¿El parche toca algo sensible? Además de `correo`/`documento` y de los atributos sensibles que
+ * **entran**, cuenta reemplazar la lista de atributos cuando la actual **ya tiene** alguno sensible:
+ * `atributos` viaja completo, así que sustituirla es también una forma de borrar un dato protegido.
+ */
+function tocaDatosSensibles(dto: UpdateClienteDTO, actuales: IAtributoPersonalizado[]): boolean {
+  if (dto.correo !== undefined || dto.documento !== undefined) return true;
+  if (dto.atributos === undefined) return false;
+  return dto.atributos.some((a) => a.sensible) || actuales.some((a) => a.sensible);
+}
+
+/**
+ * Parche de la ficha del contacto. Es el **primer** camino por el que un humano escribe sobre un
+ * `Cliente`: hasta HU-CRM-02 solo lo hacían el webhook de WhatsApp y la extracción por IA.
+ *
+ * Valida todo antes de escribir y el rechazo por permiso es **todo-o-nada**: si el body mezcla
+ * campos sensibles y no sensibles y el usuario no puede con los primeros, no se guarda ninguno. Un
+ * guardado parcial dejaría al asesor creyendo que sí se aplicó lo que ve en pantalla.
+ */
+export async function updateCliente(
+  tenantId: string | Types.ObjectId,
+  actorId: string,
+  clienteId: string,
+  dto: UpdateClienteDTO,
+  puedeVerSensibles: boolean,
+): Promise<IContactCardResponse> {
+  // Un id de otro tenant y uno inexistente son indistinguibles a propósito: un 403 confirmaría la
+  // existencia del recurso ajeno (`docs/multi-tenancy.md`).
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
+  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
+
+  const atributosActuales = cliente.atributos ?? [];
+  if (tocaDatosSensibles(dto, atributosActuales) && !puedeVerSensibles) {
+    throw new AppError('No tienes permiso para editar los datos sensibles del contacto.', 403);
+  }
+
+  // Interés, objeción y rol dejaron de tener `enum` en el schema (HU-CRM-02: son catálogos que cada
+  // empresa administra), así que esta es la comprobación que impide escribir una clave inventada o
+  // una de otro tenant. Va ANTES del `$set`, con el resto de validaciones: el parche es
+  // todo-o-nada, y una opción inválida no puede dejar guardado medio formulario.
+  await assertOpcionesValidas(tenantId, {
+    interes: dto.nivelInteres,
+    objecion: dto.objecionPrincipal,
+    rol: dto.rolContacto,
+  });
+
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, unknown> = {};
+  const antes: Record<string, unknown> = {};
+  const despues: Record<string, unknown> = {};
+
+  for (const campo of CAMPOS_SIMPLES) {
+    const valor = dto[campo];
+    if (valor === undefined) continue;
+    antes[campo] = cliente[campo] ?? null;
+    despues[campo] = valor;
+    if (valor === null) $unset[campo] = '';
+    else $set[campo] = valor;
+  }
+
+  for (const [campo, columna] of CAMPOS_SENSIBLES) {
+    const valor = dto[campo];
+    if (valor === undefined) continue;
+    // La bitácora registra QUE cambió, nunca a qué: `audit_events` no tiene gate por subrol, así
+    // que volcar ahí el antes/después reabriría por detrás el agujero que este feature viene a
+    // cerrar.
+    antes[campo] = cliente[columna] ? SENSIBLE_MARKER : null;
+    despues[campo] = valor === null ? null : SENSIBLE_MARKER;
+    if (valor === null) $unset[columna] = '';
+    else $set[columna] = toStoredValue(valor);
+  }
+
+  if (dto.atributos !== undefined) {
+    $set['atributos'] = dto.atributos.map((a) => ({
+      key: a.key,
+      label: a.label,
+      sensible: a.sensible,
+      valor: a.sensible ? toStoredValue(a.valor) : a.valor,
+    }));
+    antes['atributos'] = resumirAtributos(atributosActuales);
+    despues['atributos'] = resumirAtributos(dto.atributos);
+  }
+
+  const update: Record<string, unknown> = {};
+  if (Object.keys($set).length > 0) update['$set'] = $set;
+  if (Object.keys($unset).length > 0) update['$unset'] = $unset;
+
+  const actualizado = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    update,
+    { new: true },
+  ).lean<IClienteLean>();
+
+  // Solo si otra petición lo borró entre la lectura y la escritura; el 404 sigue siendo correcto.
+  if (!actualizado) throw new AppError('Contacto no encontrado.', 404);
+
+  // La auditoría no bloquea la edición: `recordAuditEvent` traga sus propios errores y los loguea.
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'cliente.update',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes,
+    despues,
+  });
+
+  const tagMap = await findTagsByIds(
+    tenantId,
+    (actualizado.tagIds ?? []).map((id) => String(id)),
+  );
+
+  // La ficha que devuelve la edición es la misma que pinta el panel, así que arrastra `leadId`
+  // (HU-CRM-01): sin esto, guardar un dato de contacto haría desaparecer la tarjeta del lead.
+  const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
+
+  return toContactCard(actualizado, tagMap, puedeVerSensibles, leadId);
 }
 
 // ─── Extracción de datos de contacto por IA (HU-OMNI-03) ────────────────────────
@@ -250,6 +440,7 @@ type DatosExtraidosLlm = z.infer<typeof datosExtraidosSchema>;
 export async function extractContactData(
   tenantId: string,
   clienteId: string,
+  puedeVerSensibles = false,
 ): Promise<IDatosExtraidosResponse> {
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
   if (!cliente) throw new AppError('Contacto no encontrado.', 404);
@@ -280,9 +471,11 @@ export async function extractContactData(
   // está viendo un dato que el cliente dio (p. ej. un fijo alterno) o su propio WhatsApp.
   const telefonoDictado = data.telefono;
   const telefonoOrigen: TelefonoOrigen = telefonoDictado === null ? 'whatsapp' : 'conversacion';
+  // El correo pasa por el mismo camino de persistencia que el correo manual (HU-CRM-02): es el mismo
+  // dato personal y queda bajo el mismo gate por subrol al leerlo.
   const datosExtraidos: IDatosExtraidos = {
     nombreCompleto: data.nombreCompleto,
-    correo: data.correo,
+    correo: data.correo === null ? null : toStoredValue(data.correo),
     telefono: telefonoDictado ?? cliente.telefono,
     telefonoOrigen,
     extraidoAt: new Date(),
@@ -297,11 +490,7 @@ export async function extractContactData(
     { new: true },
   );
 
-  return {
-    nombreCompleto: datosExtraidos.nombreCompleto,
-    correo: datosExtraidos.correo,
-    telefono: datosExtraidos.telefono,
-    telefonoOrigen,
-    extraidoAt: datosExtraidos.extraidoAt.toISOString(),
-  };
+  // El mapper descifra y enmascara según el permiso: quien no puede ver el correo tampoco lo ve
+  // recién extraído.
+  return toDatosExtraidosResponse(datosExtraidos, puedeVerSensibles) as IDatosExtraidosResponse;
 }
