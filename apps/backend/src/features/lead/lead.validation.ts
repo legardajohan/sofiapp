@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
+import type { SemaforoSlug } from '../tag/tag.types.js';
 import { MOTIVOS_ELIMINACION_LEAD } from './lead.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
@@ -57,5 +59,61 @@ export const deleteLeadSchema = z.object({
   }),
 });
 
+// ─── Listado (HU-CRM-03) ────────────────────────────────────────────────────────
+
+/**
+ * Tupla local porque `z.enum` de Zod 3 exige `[string, ...string[]]` y `SEMAFORO_SLUGS` está
+ * declarado como `readonly SemaforoSlug[]`. El `satisfies` es lo que impide que se cuele aquí un
+ * slug que no exista en la unión del dominio.
+ */
+const SEMAFOROS = ['azul', 'rojo', 'naranja', 'verde'] as const satisfies readonly SemaforoSlug[];
+
+/**
+ * Filtros del listado. Todos opcionales y combinables; ninguno lleva `tenantId`, que nace del
+ * token (`docs/multi-tenancy.md` §4).
+ *
+ * `desde`/`hasta` llegan como `YYYY-MM-DD` y quedan en medianoche UTC. Estirar `hasta` al final
+ * del día es cosa del service: aquí se valida la entrada, no la semántica de la consulta.
+ */
+/**
+ * Cambio de etapa de un lead (HU-CRM-03). Solo se admite `estado`: el resto de la ficha tiene dueño
+ * en otro sitio (el nombre y el teléfono vienen del contacto, el origen es inmutable por diseño).
+ *
+ * Zod solo comprueba la forma; que la clave exista en el catálogo de ESTE tenant lo valida el
+ * service, que es quien puede consultarlo.
+ */
+export const updateLeadSchema = z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({
+    estado: z.string().trim().min(1).max(40),
+  }),
+});
+
+export type UpdateLeadBody = z.infer<typeof updateLeadSchema>['body'];
+
+export const listLeadsSchema = z.object({
+  body: empty,
+  params: empty,
+  query: z
+    .object({
+      page: z.coerce.number().int().positive().default(1),
+      limit: z.coerce.number().int().positive().max(100).default(20),
+      // Ya no es un enum cerrado: las etapas son un catálogo por tenant (HU-CRM-03), así que Zod
+      // solo comprueba la forma. Que la clave exista en ESTE tenant lo valida el service, que es
+      // quien puede consultarlo — el validador no tiene tenantId ni debe pegarle a Mongo.
+      estado: z.string().trim().min(1).max(40).optional(),
+      // Es un userId (`Lead.responsableId`). No hay rol "Asesor": ver AUTH-02.
+      asesor: objectId.optional(),
+      semaforo: z.enum(SEMAFOROS).optional(),
+      desde: z.coerce.date({ invalid_type_error: 'Fecha «desde» inválida.' }).optional(),
+      hasta: z.coerce.date({ invalid_type_error: 'Fecha «hasta» inválida.' }).optional(),
+    })
+    .refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
+      message: 'El rango está invertido: «desde» no puede ser posterior a «hasta».',
+      path: ['desde'],
+    }),
+});
+
 export type CreateLeadBody = z.infer<typeof createLeadSchema>['body'];
 export type DeleteLeadQuery = z.infer<typeof deleteLeadSchema>['query'];
+export type ListLeadsQueryInput = z.infer<typeof listLeadsSchema>['query'];

@@ -39,6 +39,8 @@ export interface ITenant {
    * distingue "este tenant nunca los tuvo" de "el administrador borró esa opción a propósito".
    */
   opcionesContactoSeeded?: boolean;
+  /** Pipeline de leads sembrado (HU-CRM-03). */
+  estadosSeeded?: boolean;
   /** Contador de cambios de contenido en la KB; invalida la caché exacta de respuestas de IA (HU-KB-03). */
   kbVersion?: number;
 }

@@ -13,9 +13,11 @@ import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
 import { backfillContactOptions } from './seed/seed-contact-options.js';
+import { backfillEstados } from './seed/seed-estados.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
+import estadoRoutes from './features/estado/estado.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -69,6 +71,7 @@ app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/estados', estadoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai/responses', aiRoutes);
@@ -91,6 +94,7 @@ if (env.NODE_ENV !== 'test') {
       await seedPromptTemplates();
       await backfillSemaforoTags();
       await backfillContactOptions();
+      await backfillEstados();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

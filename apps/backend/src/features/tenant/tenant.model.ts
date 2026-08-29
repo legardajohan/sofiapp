@@ -35,6 +35,7 @@ const TenantSchema = new Schema<ITenantDocument>(
     fechaContratacion: { type: Date },
     semaforoTagsSeeded: { type: Boolean, default: false },
     opcionesContactoSeeded: { type: Boolean, default: false },
+    estadosSeeded: { type: Boolean, default: false },
     kbVersion: { type: Number, default: 1 },
   },
   { timestamps: true }

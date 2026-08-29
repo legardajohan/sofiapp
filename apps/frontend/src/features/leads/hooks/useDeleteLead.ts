@@ -20,6 +20,8 @@ export function useDeleteLead(leadId: string, clienteId: string | null) {
       // recibir un 404 y pintar el estado de error de la tarjeta antes de que desaparezca.
       qc.removeQueries({ queryKey: ['lead', leadId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      // El listado de leads (HU-CRM-03) tiene que perder la fila y bajar el `total`.
+      void qc.invalidateQueries({ queryKey: ['leads'] });
       if (clienteId) void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] });
       toast.success('Lead eliminado', {
         description: 'La conversación vuelve a estar disponible para convertirla.',
