@@ -21,6 +21,10 @@ const KnowledgeFaqsPage = lazy(() =>
   import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeFaqsPage })),
 );
 
+const TemplatesPage = lazy(() =>
+  import('./features/whatsapp-templates/index.js').then((m) => ({ default: m.TemplatesPage })),
+);
+
 const AiContextPage = lazy(() =>
   import('./features/ai-context/index.js').then((m) => ({ default: m.AiContextPage })),
 );
@@ -91,6 +95,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <KnowledgeFaqsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/templates',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <TemplatesPage />
                 </Suspense>
               </RequireRole>
             ),

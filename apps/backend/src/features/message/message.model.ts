@@ -26,6 +26,6 @@ const MessageSchema = new Schema<IMessageDocument>(
 );
 
 MessageSchema.index({ tenantId: 1, clienteId: 1, createdAt: 1 });
-MessageSchema.index({ metaMessageId: 1 }, { sparse: true });
+MessageSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
 
 export const Message = model<IMessageDocument>('Message', MessageSchema);

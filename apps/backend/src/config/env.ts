@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Meta exige App Secret, Verify Token y clave de cifrado del token por tenant para operar el
+// canal de WhatsApp de verdad; sin ellos el webhook falla en runtime (403 en todo o arranque
+// silenciosamente roto). Solo se relajan a opcionales en `test`, donde `vitest.config.ts` ya las
+// define con valores fijos.
+const isTest = process.env['NODE_ENV'] === 'test';
+const requiredInRuntime = <T extends z.ZodTypeAny>(schema: T): T | z.ZodOptional<T> =>
+  isTest ? schema.optional() : schema;
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4000),
@@ -9,13 +17,14 @@ const EnvSchema = z.object({
   CSRF_SECRET: z.string().min(32),
   MONGODB_URI: z.string().min(1),
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
-  META_APP_SECRET: z.string().optional(),
-  META_VERIFY_TOKEN: z.string().optional(),
-  META_GRAPH_VERSION: z.string().default('v19.0'),
-  TENANT_TOKEN_ENC_KEY: z
-    .string()
-    .regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)')
-    .optional(),
+  META_APP_SECRET: requiredInRuntime(z.string().min(1)),
+  META_VERIFY_TOKEN: requiredInRuntime(z.string().min(1)),
+  // v19.0 quedó fuera de soporte; confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
+  // antes de subirla de nuevo (verificado v26.0, vigente al 2026-08, fecha de este cambio).
+  META_GRAPH_VERSION: z.string().default('v26.0'),
+  TENANT_TOKEN_ENC_KEY: requiredInRuntime(
+    z.string().regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hex characters (32 bytes)'),
+  ),
   // Cifrado en reposo de los datos personales del contacto (HU-CRM-02). **Ya no se usa para
   // escribir**: el cifrado está desactivado y los campos se guardan en claro (ver
   // `utils/field-crypto.util`). Sigue aquí para poder LEER lo que quedó cifrado en bases donde sí

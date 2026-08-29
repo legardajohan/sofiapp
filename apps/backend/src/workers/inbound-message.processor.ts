@@ -73,7 +73,7 @@ export const inboundMessageProcessor = new Worker<InboundJobData>(
 
         const statuses = parseDeliveryStatuses(value);
         for (const { metaMessageId, status } of statuses) {
-          await updateDeliveryStatus(metaMessageId, status);
+          await updateDeliveryStatus(tenantId, metaMessageId, status);
         }
       }
     }

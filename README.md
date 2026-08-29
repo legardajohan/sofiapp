@@ -27,6 +27,33 @@
 
 ---
 
+## 📱 Conectar WhatsApp en desarrollo
+
+Para que Meta pueda entregarle webhooks a tu máquina local necesitas los tres procesos arriba
+(Redis, web **y worker** — sin el worker el webhook encola y nadie procesa) más un túnel HTTPS
+público, porque Meta no acepta `http://localhost`.
+
+1. **Levanta los tres procesos:** `docker start sofiapp-redis`, `pnpm dev:web`, `pnpm dev:worker`.
+2. **Abre el túnel:** `pnpm tunnel` (usa [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/);
+   instálalo una vez con tu gestor de paquetes). Alternativa: `ngrok http 4000`.
+   Copia la URL HTTPS que te da (`https://algo.trycloudflare.com` o `https://algo.ngrok-free.app`).
+3. **En Meta App Dashboard → WhatsApp → Configuration:**
+   - Callback URL: `<tu-túnel>/api/webhooks/whatsapp` — con `whatsapp`, **no** `meta`.
+   - Verify Token: el mismo valor que pusiste en `META_VERIFY_TOKEN` (`apps/backend/.env`).
+   - Al verificar, Meta hace un `GET` con `hub.challenge`; si responde 200 quedó bien.
+   - Suscribe el campo **`messages`** de la WABA — sin esto Meta no manda nada.
+4. **En SofiApp**, entra como `admin` a `/settings/channels/whatsapp` y pega `WABA ID`,
+   `Phone Number ID` y `Access Token` de tu app de prueba de Meta for Developers.
+5. **Prueba real:** escríbele al número de prueba desde un celular. El mensaje debe aparecer en la
+   bandeja bajo el tenant correcto; una respuesta desde la bandeja debe llegarte al celular.
+
+Variables que necesitas en `apps/backend/.env` (ver [`.env.example`](apps/backend/.env.example)):
+`META_APP_SECRET`, `META_VERIFY_TOKEN` (el que inventes en el paso 3) y `TENANT_TOKEN_ENC_KEY`
+(64 caracteres hex — genera uno con `openssl rand -hex 32`). Las tres son obligatorias fuera de
+`NODE_ENV=test`: el servidor no arranca sin ellas.
+
+---
+
 ## ✨ Características
 
 - **Bandeja omnicanal** — WhatsApp, Instagram Direct y Facebook Messenger unificados (Meta Cloud API).
@@ -47,7 +74,7 @@ Monolito modular funcional con **Screaming Architecture** (organización por fea
 
 ```
 Meta Cloud API ─▶ apps/backend (WEB, Express)
-                    • /api/webhooks/meta  → valida HMAC, resuelve tenant por
+                    • /api/webhooks/whatsapp  → valida HMAC, resuelve tenant por
                       phone_number_id, responde 200 y encola (no procesa inline)
                     • /api/*  rutas tenant-aware (pipeline de middlewares)
                     • WebSocket gateway (bandeja en vivo)
