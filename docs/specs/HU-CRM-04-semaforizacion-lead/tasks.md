@@ -103,10 +103,26 @@
       del token, modelo nuevo con `tenantId` requerido e indexado, rutas tras
       `authenticateJWT → requireTenant`, tests de aislamiento añadidos.
 - [x] `git status` sin capturas `*.png` / `*.jpg` coladas.
-- [ ] **Pendiente: arranque manual de `app.ts` / `worker.ts`.** El comando quedó denegado por
-      permisos en la sesión. El montaje de las rutas sí está ejercitado por `lead.routes.test.ts`,
-      que importa `app.ts` con `supertest`; lo que **no** se ha ejecutado en vivo es
-      `backfillSemaforos()` del arranque (sí cubierto por `seedSemaforos` en los tests).
+- [x] **Arranque manual de `app.ts` / `worker.ts` contra la base de desarrollo.** Los dos procesos
+      levantan (`Servidor escuchando en el puerto 4000`, `Proceso WORKER iniciado y escuchando colas
+      BullMQ` con Redis del `docker-compose`). Para ejercitar de verdad `backfillSemaforos()` —los
+      tres tenants ya tenían `semaforosSeeded: true`— se le puso el flag en `false` a un tenant tras
+      **renombrarle y recolorearle** un semáforo base: el arranque siguiente registró
+      `backfillSemaforos: sembrados 1 tenants`, el flag volvió a `true` y el renombrado **quedó
+      intacto**, que es el criterio 9 comprobado en vivo y no solo en memoria.
+- [x] **Criterios 1–11 y 14 ejercidos por HTTP** contra la API real (`curl` con cookie de sesión y
+      CSRF): `PATCH /status` con los cuatro colores, con uno propio, `null` e idempotencia sin
+      entrada de historial; clave inexistente → `400`; llave de más → `400`; sin CSRF → `403`;
+      historial paginado, descendente, con actor resuelto y **sin** `lead.create` colado;
+      `?semaforo=` desconocido → página vacía; catálogo con `key` derivada, gris por defecto,
+      duplicado por tildes/mayúsculas → `409`, `key` en el `PATCH` → `400`, archivar uno de fábrica
+      → `409`; sincronización que dejó **una sola** etiqueta de semáforo conservando la libre, y que
+      con un semáforo propio deja la conversación sin chip sin fallar. Aislamiento: el tenant B
+      recibió `404` en `/status`, `/historial` y en el `PATCH` del catálogo ajeno, y el lead quedó
+      intacto al releerlo desde el tenant A.
+- [x] **Migración de leads existentes (criterio 11)** corrida en vivo: `--dry-run` reportó
+      `leadsSinClasificar: 3, migrados: 1, porSemaforo: { rojo: 1 }`; la corrida real lo confirmó y
+      una segunda corrida seguida dio `migrados: 0` — idempotencia demostrada, no supuesta.
 - [ ] **Pendiente: cierre manual (DoD).** Mover un lead por los cuatro colores, comprobar tabla,
       `Sheet`, historial y el chip de su conversación en la bandeja; crear un semáforo propio y
       clasificar con él; filtrar por color. Repetir en claro y en oscuro.
