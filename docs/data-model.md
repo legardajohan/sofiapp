@@ -136,6 +136,10 @@
   // bandeja única (HU-OMNI-01)
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
+  // ventana de servicio de WhatsApp (HT-WA-01): se recalcula a `now + 24h` en cada inbound.
+  // Fuera de esta ventana `sendMessage` rechaza el envío de texto libre con 422 — solo se puede
+  // responder con plantilla HSM aprobada (HT-WA-02).
+  ventana24hExpiraEn: ISODate?,
   createdAt, updatedAt
 }
 // `asesorId` es el único campo persistido; `asignadoA` (HU-OMNI-02) es el alias público del
@@ -178,12 +182,46 @@
   tipo: "text" | "image" | "template" | "audio" | "document" | "other",
   texto: String?,
   attachmentUrl: String?,         // DO Spaces (media recibida/enviada)
-  metaMessageId: String?,         // idempotencia con Meta
+  metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
+  // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
+  status: "sent" | "delivered" | "read" | "failed",   // default "sent"
   createdAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1, createdAt: 1 }   (hilo de conversación)
-//          { metaMessageId: 1 }  (dedupe de webhooks)
+//          { tenantId: 1, metaMessageId: 1 } sparse      (dedupe de webhooks, POR TENANT — nunca
+//                                                          global: HT-WA-01-V2 cerró una fuga de
+//                                                          aislamiento donde el dedupe y el update
+//                                                          de `status` no llevaban `tenantId`)
 ```
+
+## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  metaTemplateId: String,         // id devuelto por Meta al crear/sincronizar
+  name: String,                   // nombre aprobado por Meta (snake_case)
+  language: String,               // 'es', 'es_CO', 'en_US'
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION",
+  status: "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED",
+  components: [{                  // tal y como los devuelve/espera la Graph API, íntegros
+    type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS",
+    format: "TEXT" | "IMAGE" | "DOCUMENT" | "VIDEO",
+    text: String?,
+    buttons: [Mixed]?,
+    example: { body_text: [[String]] }?,   // sets de ejemplo, para la vista previa
+  }],
+  parametrosBody: Number,         // nº de placeholders {{n}} del componente BODY, derivado al persistir
+  syncedAt: ISODate,              // último sync (manual, POST /api/templates/sync) o alta
+  obsoleta: Boolean,              // Meta dejó de devolverla en el último sync; NO se borra
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
+//          { tenantId: 1, status: 1 }
+```
+> **Por qué no es único global `metaTemplateId`:** dos tenants distintos conectan WABAs distintas
+> y pueden tener plantillas homónimas; a diferencia de `MetaIntegration.phoneNumberId`, aquí el
+> identificador de Meta no es único por construcción entre tenants.
 
 ## catalog_items  (catálogo genérico — antes "cursos")
 ```js

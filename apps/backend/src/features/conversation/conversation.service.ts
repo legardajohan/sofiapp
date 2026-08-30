@@ -74,6 +74,10 @@ function buildFiltro(
   // Cubierto por el índice { tenantId, tagIds }.
   if (etiqueta) f.tagIds = new Types.ObjectId(etiqueta);
 
+  // Los clientes sembrados por el seed de desarrollo (seed-inbox-demo.ts) usan metaUserId con
+  // prefijo 'demo-'. Nunca deben aparecer en la bandeja real: exclusión incondicional.
+  f.metaUserId = { $not: /^demo-/ };
+
   return f;
 }
 
