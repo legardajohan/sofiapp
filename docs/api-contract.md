@@ -79,6 +79,11 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<estadoComercial>`, `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
+| GET | `/api/conversations/:id/overview` | admin | Cabecera + etiquetas + resumen + `semaforoIA` + permisos, en una lectura. Sin el hilo (HU-IA-04, HU-IA-05). |
+| POST | `/api/conversations/:id/summary` | admin + subrol | Genera/regenera el resumen por IA. Solo `director`/`manager` (o `admin` sin subrol); el resto `403` (HU-IA-04). |
+| POST | `/api/conversations/:id/semaforo` | admin | Aplica la sugerencia de semáforo que dejó la IA. **Sin cuerpo**: el destino es el que ya guardó (HU-IA-05). `409` si no hay propuesta pendiente, si la etiqueta se borró o si ya está aplicada. |
+| GET | `/api/conversations/:id/classifications` | admin | Bitácora paginada de clasificaciones de intención de compra, con `de`, `a`, `confianza` y `motivo` (HU-IA-05). |
+| GET\|PUT | `/api/ai/handoff-rules` | admin | Configuración de transferencia a un asesor del tenant (HU-IA-03). |
 | POST | `/api/leads` | admin | Convierte una conversación en lead (`{ nombre, telefono, correo?, clienteId }`) → `201`. Duplicado por teléfono en el tenant → `409` con el `leadId` existente (HU-CRM-01). |
 | GET | `/api/leads/:id` | admin | Detalle del lead con contacto, responsable y autor de la conversión ya resueltos (HU-CRM-01). |
 | DELETE | `/api/leads/:id?motivo=<motivo>` | admin | Borra el lead **definitivamente** → `204`. `motivo` es obligatorio y va en la query (un cuerpo en `DELETE` lo pierden proxies y clientes); enum: `duplicado`, `spam`, `prueba`, `sin_respuesta`, `no_interesado`. Otro valor o ausencia → `400`. Queda `AuditEvent` `lead.delete` con el lead completo en `antes` y el motivo en `despues`. El teléfono se libera: la conversación puede volver a convertirse (HU-CRM-01). |

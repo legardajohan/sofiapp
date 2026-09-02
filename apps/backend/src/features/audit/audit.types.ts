@@ -4,6 +4,8 @@ export type AuditAccion =
   | 'conversation.assign'
   | 'conversation.handoff'
   | 'cliente.update'
+  /** Clasificación de intención de compra que movió (o propuso mover) el semáforo — HU-IA-05. */
+  | 'cliente.semaforo'
   | 'contact-note.create'
   | 'lead.create'
   | 'lead.delete';

@@ -196,3 +196,81 @@ describe('POST /api/conversations/:id/summary — gate por subrol (HU-IA-04)', (
     expect(res.status).toBe(200);
   });
 });
+
+describe('Rutas de semaforización (HU-IA-05)', () => {
+  const SEMAFORO = (): string => `/api/conversations/${clienteId}/semaforo`;
+  const CLASIFICACIONES = (): string => `/api/conversations/${clienteId}/classifications`;
+
+  function post(t: string): request.Test {
+    return request(app)
+      .post(SEMAFORO())
+      .set('Cookie', [`token=${t}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+  }
+
+  it('POST /semaforo sin token → 401', async () => {
+    // Con el CSRF puesto: sin él, el guard responde 403 antes de llegar a autenticar y el test
+    // estaría comprobando el CSRF en vez de la autenticación.
+    const res = await request(app)
+      .post(SEMAFORO())
+      .set('Cookie', [`csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /classifications sin token → 401', async () => {
+    expect((await request(app).get(CLASIFICACIONES())).status).toBe(401);
+  });
+
+  it('POST /semaforo con rol distinto de admin → 403', async () => {
+    const noAdmin = jwt.sign(
+      { sub: ACTOR, tenantId: tenantId.toString(), email: 'u@e.com', nombre: 'U', rol: 'user', activo: true },
+      SECRET,
+      { expiresIn: '1h' },
+    );
+    expect((await post(noAdmin)).status).toBe(403);
+  });
+
+  it('POST /semaforo sin sugerencia pendiente → 409 (AC17)', async () => {
+    const res = await post(token(null));
+
+    expect(res.status).toBe(409);
+    expect(typeof res.body.message).toBe('string');
+  });
+
+  // La vista de la conversación no se cierra por subrol para el semáforo: a diferencia del resumen,
+  // el motivo es una frase acotada que la plantilla obliga a escribir sin datos de contacto.
+  it.each([['coordinator'], ['secretary'], ['director'], ['manager']])(
+    'GET /classifications responde 200 para %s',
+    async (subrol) => {
+      const res = await request(app)
+        .get(CLASIFICACIONES())
+        .set('Cookie', [`token=${token(subrol)}`, `csrfToken=${CSRF}`]);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ data: [], page: 1, limit: 20, total: 0 });
+    },
+  );
+
+  it('GET /classifications de otra empresa → 404 (AC20)', async () => {
+    const otroTenant = jwt.sign(
+      {
+        sub: ACTOR,
+        tenantId: new Types.ObjectId().toString(),
+        email: 'u@e.com',
+        nombre: 'U',
+        rol: 'admin',
+        activo: true,
+      },
+      SECRET,
+      { expiresIn: '1h' },
+    );
+
+    const res = await request(app)
+      .get(CLASIFICACIONES())
+      .set('Cookie', [`token=${otroTenant}`, `csrfToken=${CSRF}`]);
+
+    expect(res.status).toBe(404);
+  });
+});

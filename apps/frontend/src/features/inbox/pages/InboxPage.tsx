@@ -25,10 +25,12 @@ import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useTh
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
 import { useConversationOverview } from '../hooks/useConversationOverview.js';
+import { useAplicarSemaforo } from '../hooks/useAplicarSemaforo.js';
 import {
   ConversationSummaryStrip,
   ConversationSummaryStripSkeleton,
 } from '../components/ConversationSummaryStrip.js';
+import { IntentStrip } from '../components/IntentStrip.js';
 import { initials } from '../lib/format.js';
 import { errorMessage } from '../lib/errors.js';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
@@ -117,6 +119,7 @@ export function InboxPage(): React.ReactElement {
   // porque solo cambia cuando cambia la conversación, no con cada mensaje entrante.
   const overview = useConversationOverview(activeId);
   const generarResumen = useGenerateSummary(activeId);
+  const aplicarSemaforo = useAplicarSemaforo(activeId);
   const extraidos = ficha.data?.datosExtraidos ?? null;
 
   // Campo a campo: la extracción manda en lo que sí encontró y la conversación cubre el resto.
@@ -289,6 +292,15 @@ export function InboxPage(): React.ReactElement {
                 onGenerate={() => generarResumen.mutate()}
               />
             ) : null}
+
+            {/* Intención de compra (HU-IA-05), bajo el resumen. No lleva skeleton propio: el de
+                arriba ya dice que el overview está cargando, y dos marcadores para una sola
+                petición serían ruido. Se pinta sola o no se pinta. */}
+            <IntentStrip
+              semaforoIA={overview.data?.semaforoIA ?? null}
+              pending={aplicarSemaforo.isPending}
+              onApply={() => aplicarSemaforo.mutate()}
+            />
 
             {threadIsError ? (
               <InboxError

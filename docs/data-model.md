@@ -132,6 +132,17 @@
     sensible: Boolean             // default false
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
+  // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
+  // la conversación, nadie filtra la bandeja por esto.
+  semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
+    slug: "azul" | "rojo" | "naranja" | "verde",   // semáforo que sugiere
+    confianza: Number,            // [0, 1] reportada por el modelo
+    motivo: String,               // justificación en una frase, <= 240 chars, SIN datos de contacto
+    nivelInteres: "frio" | "tibio" | "caliente",   // escala del LLM, NO el catálogo del tenant
+    objecion: "precio" | "tiempo" | "confianza" | "otra" | null,
+    at: ISODate,
+    aplicado: "azul" | "rojo" | "naranja" | "verde" | null   // null = solo se propuso
+  },
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
@@ -438,7 +449,15 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > (cambios de `estadoComercial`, borrados, etc.).
 >
 > Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
-> `cliente.update` y `contact-note.create` (HU-CRM-02).
+> `cliente.update` y `contact-note.create` (HU-CRM-02); `conversation.handoff` (HU-IA-03);
+> `cliente.semaforo` (HU-IA-05).
+>
+> **`cliente.semaforo`** registra cada cambio del semáforo por clasificación de intención de compra:
+> `antes: { semaforo }`, `despues: { semaforo, aplicado, confianza, motivo, nivelInteres, objecion }`.
+> `actorId: null` cuando lo decidió el sistema; el id de quien pulsó cuando se aplicó una propuesta a
+> mano. Solo se escribe cuando el slug sugerido **difiere** del vigente: un evento por mensaje
+> inundaría la colección. El `motivo` viene recortado y la plantilla `classify` prohíbe que cite
+> datos de contacto, por la regla de abajo.
 >
 > En `lead.delete` el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado
 > duro, es la única copia que queda — y el `despues` lleva solo `{ motivo }`.

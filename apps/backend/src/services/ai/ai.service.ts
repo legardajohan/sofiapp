@@ -26,6 +26,13 @@ import type {
   RetrievedChunk,
 } from './ai-service.types.js';
 
+/**
+ * Tope del `motivo` de la clasificación (HU-IA-05). El texto acaba en `audit_events`, que no tiene
+ * control de acceso por subrol, así que se recorta aquí además de pedirlo en la plantilla: lo que
+ * el modelo devuelve no es una promesa, es una sugerencia.
+ */
+const MOTIVO_MAX_LEN = 240;
+
 /** Sin matcher cableado, el servicio se comporta como antes de HU-KB-02. */
 const noopFaqMatcher: FaqMatcher = async () => ({ matched: false });
 
@@ -153,9 +160,20 @@ export class AIService {
       return { data: cached, cacheHit: true, fromFaq: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
-    const { result: classifyResult, usage } = await this.provider.classifyLead({
+    const { result: raw, usage } = await this.provider.classifyLead({
       historial: params.historial,
+      // HU-IA-05: hasta ahora `template` solo servía para versionar la cache key y el `systemPrompt`
+      // sembrado no llegaba nunca al modelo.
+      instrucciones: template.systemPrompt,
     });
+    const classifyResult: ClassifyResult = {
+      nivelInteres: raw.nivelInteres,
+      objecion: raw.objecion ?? null,
+      // `Number(x) || 0` cubre `undefined`, `null` y `NaN` de una vez, y ese 0 no alcanza ningún
+      // umbral: ante una salida rara del modelo, el semáforo NO se toca. Es el default seguro.
+      confianza: Math.min(1, Math.max(0, Number(raw.confianza) || 0)),
+      motivo: (raw.motivo ?? '').trim().slice(0, MOTIVO_MAX_LEN),
+    };
     await setCached(this.redis, cacheKey, classifyResult, env.AI_CACHE_TTL_CLASSIFY_S);
     const durationMs = Date.now() - start;
     this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });

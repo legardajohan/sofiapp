@@ -14,6 +14,7 @@ import {
   CHAT_FRASE_DERIVACION,
   CHAT_SYSTEM_PROMPT,
   CHAT_TEMPLATE_VERSION,
+  CLASSIFY_TEMPLATE_VERSION,
   seedPromptTemplates,
 } from './seed-prompt-templates.js';
 import { PromptTemplateModel, type IPromptTemplate } from '../services/ai/prompt-template.model.js';
@@ -48,6 +49,19 @@ describe('seedPromptTemplates — plantillas globales', () => {
     for (const nivel of ['frio', 'tibio', 'caliente']) {
       expect(tpl?.systemPrompt).toContain(nivel);
     }
+  });
+
+  // HU-IA-05: la plantilla pasa a pedir dos campos más y a llegar de verdad al modelo. El bump de
+  // versión es lo que además invalida la caché de `classify`, cuya clave la incluye.
+  it('la plantilla `classify` está en la versión que pide confianza y motivo (AC3)', async () => {
+    await seedPromptTemplates();
+
+    const tpl = await global('classify');
+    expect(tpl?.version).toBe(CLASSIFY_TEMPLATE_VERSION);
+    expect(tpl?.systemPrompt).toContain('CONFIANZA');
+    expect(tpl?.systemPrompt).toContain('MOTIVO');
+    // El motivo acaba en `audit_events`, que no tiene gate por subrol (AC16).
+    expect(tpl?.systemPrompt).toContain('PROHIBIDO');
   });
 
   it('es idempotente y no pisa una edición posterior', async () => {

@@ -99,6 +99,8 @@ describe('GeminiProvider.generateReply', () => {
   });
 });
 
+const INSTRUCCIONES = 'Clasificas conversaciones comerciales.';
+
 describe('GeminiProvider.classifyLead', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,13 +109,21 @@ describe('GeminiProvider.classifyLead', () => {
   it('devuelve nivelInteres y objecion del JSON de Gemini', async () => {
     mockGenerateContent.mockResolvedValue({
       response: {
-        text: () => JSON.stringify({ nivelInteres: 'tibio', objecion: 'precio' }),
+        text: () =>
+          JSON.stringify({
+            nivelInteres: 'tibio',
+            objecion: 'precio',
+            confianza: 0.82,
+            motivo: 'compara precios sin comprometerse',
+          }),
       },
     });
     const provider = new GeminiProvider();
-    const { result } = await provider.classifyLead({ historial: HISTORIAL });
+    const { result } = await provider.classifyLead({ historial: HISTORIAL, instrucciones: INSTRUCCIONES });
     expect(result.nivelInteres).toBe('tibio');
     expect(result.objecion).toBe('precio');
+    expect(result.confianza).toBe(0.82);
+    expect(result.motivo).toBe('compara precios sin comprometerse');
   });
 
   it('objecion null cuando Gemini no devuelve objecion', async () => {
@@ -121,8 +131,31 @@ describe('GeminiProvider.classifyLead', () => {
       response: { text: () => JSON.stringify({ nivelInteres: 'frio' }) },
     });
     const provider = new GeminiProvider();
-    const { result } = await provider.classifyLead({ historial: HISTORIAL });
+    const { result } = await provider.classifyLead({ historial: HISTORIAL, instrucciones: INSTRUCCIONES });
     expect(result.objecion).toBeNull();
+  });
+
+  // HU-IA-05: hasta entonces la plantilla `classify` que el servicio resolvía no llegaba al modelo.
+  it('pasa las instrucciones como systemInstruction', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ nivelInteres: 'frio', confianza: 0.4, motivo: 'x' }) },
+    });
+    const provider = new GeminiProvider();
+    await provider.classifyLead({ historial: HISTORIAL, instrucciones: INSTRUCCIONES });
+    expect(mockGenerateContent.mock.calls[0]![0]).toMatchObject({
+      systemInstruction: INSTRUCCIONES,
+    });
+  });
+
+  // Sin ellos, `AIService.classify` los sanea a 0 y '' — el semáforo simplemente no se mueve.
+  it('confianza 0 y motivo vacío cuando Gemini no los devuelve', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ nivelInteres: 'caliente' }) },
+    });
+    const provider = new GeminiProvider();
+    const { result } = await provider.classifyLead({ historial: HISTORIAL, instrucciones: INSTRUCCIONES });
+    expect(result.confianza).toBe(0);
+    expect(result.motivo).toBe('');
   });
 });
 

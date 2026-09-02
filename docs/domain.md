@@ -94,6 +94,37 @@ Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo
 comportamiento es el mismo; la única diferencia es que las de semáforo llevan un slug estable y
 piden confirmación al borrarse.
 
+### Quién la mueve automáticamente (HU-IA-05)
+
+La IA clasifica la intención de compra al final de cada ciclo de auto-reply y traduce su resultado
+al semáforo con este mapa — **el nivel manda; la objeción solo desempata donde discrimina**:
+
+| `nivelInteres` | sin objeción | con objeción |
+|---|---|---|
+| `caliente` | `verde` | `verde` |
+| `tibio` | `naranja` | `naranja` |
+| `frio` | `azul` | `rojo` |
+
+Es la lectura literal de la tabla de arriba: azul es «sin intención comercial aún» —un frío que solo
+pregunta— y rojo es ese mismo frío cuando ya planteó una objeción. En caliente y tibio la objeción no
+cambia el color: quien pide comprar sigue avanzando aunque mencione el precio.
+
+Reglas de la escritura automática:
+
+- Solo escribe con **confianza ≥ `SEMAFORO_MIN_CONFIANZA`** y al menos
+  `SEMAFORO_MIN_TURNOS_CLIENTE` mensajes del cliente. Por debajo **propone**, y la bandeja ofrece
+  aplicarlo de un clic. `SEMAFORO_AUTO=off` lo desactiva entero.
+- **No pisa a una persona.** Si el semáforo vigente no es el que la propia IA aplicó
+  (`Cliente.semaforoIA.aplicado`), lo cambió alguien a mano y desde entonces la IA solo propone.
+  Una conversación etiquetada antes de HU-IA-05 no lleva ese rastro, así que cuenta como manual.
+- **Sustituye, no reemplaza.** Quita las etiquetas de semáforo y pone la nueva; las etiquetas libres
+  de la empresa no se tocan.
+- Cada cambio de slug queda en `audit_events` como `cliente.semaforo`, con actor de sistema, la
+  confianza y una justificación en una frase. Consultable en
+  `GET /api/conversations/:id/classifications`.
+- La clasificación corre dentro del ciclo de auto-reply, así que **solo con Sofi encendida**: tras un
+  handoff el semáforo vuelve a ser de la persona que tomó la conversación.
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

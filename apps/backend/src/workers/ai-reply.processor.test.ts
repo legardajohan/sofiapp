@@ -8,6 +8,7 @@ const {
   mockMarcarParaAsesor,
   mockHandoffConversation,
   mockGetHandoffSettings,
+  mockClasificarSemaforo,
 } = vi.hoisted(() => ({
   mockChat: vi.fn(),
   mockClassify: vi.fn(),
@@ -15,6 +16,7 @@ const {
   mockMarcarParaAsesor: vi.fn(),
   mockHandoffConversation: vi.fn(),
   mockGetHandoffSettings: vi.fn(),
+  mockClasificarSemaforo: vi.fn(),
 }));
 
 vi.mock('../services/ai/ai-service.singleton.js', () => ({
@@ -25,6 +27,14 @@ vi.mock('../features/conversation/conversation.service.js', () => ({
   replyFromIa: mockReplyFromIa,
   marcarParaAsesor: mockMarcarParaAsesor,
   handoffConversation: mockHandoffConversation,
+  // Lo consume `ai-semaforo.service` para emitir el `conversation:updated` tras aplicar.
+  publishConversationUpdated: vi.fn().mockResolvedValue(undefined),
+}));
+
+// La semaforización (HU-IA-05) tiene sus propios tests; aquí solo importa QUE se enganche, con qué
+// historial y que un fallo suyo no arrastre al auto-reply.
+vi.mock('../features/ai/ai-semaforo.service.js', () => ({
+  clasificarYAplicarSemaforo: mockClasificarSemaforo,
 }));
 
 // Mock PARCIAL: solo se sustituye la lectura de configuración. `evaluarAntesDeGenerar` y
@@ -104,6 +114,7 @@ beforeEach(() => {
   mockClassify.mockReset();
   mockHandoffConversation.mockReset().mockResolvedValue(undefined);
   mockGetHandoffSettings.mockReset().mockResolvedValue(handoffSettings());
+  mockClasificarSemaforo.mockReset().mockResolvedValue(undefined);
 });
 
 describe('processAiReplyJob — auto-reply de Sofi (HU-IA-01)', () => {
@@ -513,5 +524,101 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
     expect(mockChat).toHaveBeenCalledTimes(1);
     expect(mockReplyFromIa).toHaveBeenCalledWith(tenantId.toString(), clienteId.toString(), RESPUESTA);
     expect(mockHandoffConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe('processAiReplyJob — semaforización automática (HU-IA-05)', () => {
+  let tenantId: Types.ObjectId;
+
+  beforeEach(async () => {
+    tenantId = new Types.ObjectId();
+    mockChat.mockReset().mockResolvedValue({
+      data: RESPUESTA,
+      cacheHit: false,
+      fromFaq: false,
+      retrievedChunks: [{ texto: 'x', documentId: 'd' }],
+      promptTokens: 1,
+      completionTokens: 1,
+      totalTokens: 2,
+      durationMs: 1,
+    });
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockMarcarParaAsesor.mockReset().mockResolvedValue(undefined);
+    await Cliente.deleteMany({});
+    await Message.deleteMany({});
+  });
+
+  const job = (clienteId: Types.ObjectId): { tenantId: string; clienteId: string; recibidoEn: number } => ({
+    tenantId: tenantId.toString(),
+    clienteId: clienteId.toString(),
+    recibidoEn: Date.now(),
+  });
+
+  it('se clasifica UNA vez, al final del ciclo, con el historial que se usó (AC12)', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', '¿cuánto cuesta?');
+    await crearMensaje(tenantId, clienteId, 'bot', 'cuesta X');
+    await crearMensaje(tenantId, clienteId, 'user', 'quiero matricularme');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockClasificarSemaforo).toHaveBeenCalledTimes(1);
+    const [tid, cid, historial] = mockClasificarSemaforo.mock.calls[0]!;
+    expect(tid).toBe(tenantId.toString());
+    expect(cid).toBe(clienteId.toString());
+    // El MISMO historial que se le pasó a `chat`: es lo que hace que la clave de caché coincida
+    // con la del disparador de intención de compra y la segunda llamada salga gratis.
+    expect(historial).toEqual(mockChat.mock.calls[0]![0].historial);
+  });
+
+  it('un fallo de la clasificación no rompe el auto-reply (AC13)', async () => {
+    // En producción `clasificarYAplicarSemaforo` no lanza por diseño; aquí se fuerza para fijar que
+    // el job tampoco se cae si algún día dejara de cumplir esa promesa.
+    mockClasificarSemaforo.mockRejectedValue(new Error('Gemini caído'));
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'quiero matricularme');
+
+    await expect(processAiReplyJob(job(clienteId))).rejects.toThrow('Gemini caído');
+    // La respuesta al cliente ya había salido antes de clasificar.
+    expect(mockReplyFromIa).toHaveBeenCalledTimes(1);
+  });
+
+  it('con Sofi apagada no se clasifica nada', async () => {
+    const clienteId = await crearCliente(tenantId, false);
+    await crearMensaje(tenantId, clienteId, 'user', 'quiero matricularme');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockClasificarSemaforo).not.toHaveBeenCalled();
+  });
+
+  it('si el último mensaje no es del cliente, no se clasifica', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'hola');
+    await crearMensaje(tenantId, clienteId, 'bot', 'hola, ¿en qué te ayudo?');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockClasificarSemaforo).not.toHaveBeenCalled();
+  });
+
+  it('también se clasifica cuando la conversación se transfirió por intención de compra', async () => {
+    // Es el caso MÁS valioso de la historia: saltárselo dejaría sin semáforo justo al lead caliente.
+    mockGetHandoffSettings.mockResolvedValue(
+      handoffSettings({
+        activo: true,
+        reglas: {
+          ...handoffSettings().reglas,
+          explicitRequest: { activa: true, frases: FRASES_PETICION_EXPLICITA },
+        },
+      }),
+    );
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'necesito un asesor');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockHandoffConversation).toHaveBeenCalledTimes(1);
+    expect(mockClasificarSemaforo).toHaveBeenCalledTimes(1);
   });
 });

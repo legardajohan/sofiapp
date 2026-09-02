@@ -2,6 +2,7 @@ import type { AdminSubrol } from '../users/user.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import type { ISemaforoIAResponse } from '../ai/ai-semaforo.types.js';
 // El resumen ya tenía su DTO en la ficha del contacto (HU-OMNI-03): se importa en vez de declarar
 // un gemelo que se separaría del original a la primera edición.
 import type { IResumenResponse } from '../cliente/cliente.types.js';
@@ -72,6 +73,12 @@ export interface IConversationOverviewResponse {
   conversation: IConversationResponse;
   /** `null` si no se ha generado nunca **o** si el usuario no puede verlo (ver `permisos`). */
   resumen: IResumenResponse | null;
+  /**
+   * Última clasificación de intención de compra (HU-IA-05). `null` si la IA nunca clasificó esta
+   * conversación. Va aquí y no en un endpoint propio porque la tira que lo muestra ya consume esta
+   * lectura.
+   */
+  semaforoIA: ISemaforoIAResponse | null;
   permisos: IPermisosConversacion;
 }
 

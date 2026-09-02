@@ -42,9 +42,10 @@ function makeProvider(): ILlmProvider {
     extractSlots: vi
       .fn()
       .mockResolvedValue({ result: { slots: { nombre: 'Juan' }, incompletos: [] }, usage: USAGE }),
-    classifyLead: vi
-      .fn()
-      .mockResolvedValue({ result: { nivelInteres: 'tibio', objecion: 'precio' }, usage: USAGE }),
+    classifyLead: vi.fn().mockResolvedValue({
+      result: { nivelInteres: 'tibio', objecion: 'precio', confianza: 0.8, motivo: 'compara precios' },
+      usage: USAGE,
+    }),
     embedTexts: vi
       .fn()
       .mockResolvedValue({ result: [[0.1, 0.2, 0.3]], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }),
@@ -572,6 +573,67 @@ describe('AIService.classify()', () => {
     expect(r1.cacheHit).toBe(false);
     expect(r2.cacheHit).toBe(true);
     expect(provider.classifyLead).toHaveBeenCalledTimes(1);
+  });
+
+  // HU-IA-05. Hasta entonces `classify()` resolvía la plantilla solo para versionar la clave de
+  // caché y el `systemPrompt` no llegaba nunca al modelo: era texto muerto.
+  it('pasa el systemPrompt de la plantilla como instrucciones (AC2)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(provider.classifyLead).toHaveBeenCalledWith({
+      historial: HISTORIAL,
+      instrucciones: 'Plantilla global de prueba para classify',
+    });
+  });
+
+  it('propaga confianza y motivo (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(0.8);
+    expect(data.motivo).toBe('compara precios');
+  });
+
+  it('sanea una salida fuera de rango en vez de romper (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    // Confianza imposible y motivo larguísimo: lo que devuelve el modelo es una sugerencia, no una
+    // promesa. `confianza` ausente cuenta como 0 y por tanto nunca alcanza el umbral.
+    (provider.classifyLead as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { nivelInteres: 'frio', objecion: null, confianza: 1.4, motivo: 'x'.repeat(500) },
+      usage: USAGE,
+    });
+    const service = new AIService(provider, makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(1);
+    expect(data.motivo).toHaveLength(240);
+  });
+
+  it('confianza ausente o no numérica → 0, que no alcanza ningún umbral (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    (provider.classifyLead as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { nivelInteres: 'caliente', objecion: null },
+      usage: USAGE,
+    });
+    const service = new AIService(provider, makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(0);
+    expect(data.motivo).toBe('');
   });
 });
 

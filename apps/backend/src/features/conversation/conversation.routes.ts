@@ -9,8 +9,10 @@ import {
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
+  aplicarSemaforoSchema,
   assignSchema,
   assignmentsSchema,
+  classificationsSchema,
   iaSchema,
   listConversationsSchema,
   overviewSchema,
@@ -21,11 +23,13 @@ import {
   threadSchema,
 } from './conversation.validation.js';
 import {
+  aplicarSemaforoController,
   assignController,
   generateSummaryController,
   getOverviewController,
   getThreadController,
   listAssignmentsController,
+  listClassificationsController,
   listConversationsController,
   markReadController,
   replyController,
@@ -136,6 +140,24 @@ router.get(
   bandejaRoles,
   validate(assignmentsSchema),
   asyncHandler(listAssignmentsController),
+);
+
+router.post(
+  '/:id/semaforo',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(aplicarSemaforoSchema),
+  asyncHandler(aplicarSemaforoController),
+);
+
+router.get(
+  '/:id/classifications',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(classificationsSchema),
+  asyncHandler(listClassificationsController),
 );
 
 export default router;

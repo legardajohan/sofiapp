@@ -1,6 +1,6 @@
 import type { Types } from 'mongoose';
 import type { ZodSchema } from 'zod';
-import type { ChatTurn, SlotSpec, NivelInteres, Objecion } from '../../integrations/llm/llm-provider.types.js';
+import type { ChatTurn, SlotSpec, ClassifyLeadOutput } from '../../integrations/llm/llm-provider.types.js';
 
 export interface AiResult<T> {
   data: T;
@@ -81,4 +81,9 @@ export interface AiSummarizeParams {
   historial: ChatTurn[];
 }
 
-export type ClassifyResult = { nivelInteres: NivelInteres; objecion: Objecion | null };
+/**
+ * Salida del clasificador ya saneada por `AIService.classify` (HU-IA-05): `confianza` recortada a
+ * `[0, 1]` y `motivo` recortado. Es el mismo shape que `ClassifyLeadOutput` del puerto —se
+ * reexporta en vez de duplicarlo— porque el servicio no añade campos, solo garantiza rangos.
+ */
+export type ClassifyResult = ClassifyLeadOutput;

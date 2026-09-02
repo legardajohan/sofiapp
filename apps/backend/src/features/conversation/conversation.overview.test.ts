@@ -78,7 +78,94 @@ describe('HU-IA-04 — getConversationOverview', () => {
 
     const overview = await getConversationOverview(tenantA.toString(), clienteId, true);
 
-    expect(Object.keys(overview).sort()).toEqual(['conversation', 'permisos', 'resumen']);
+    // `semaforoIA` se suma en HU-IA-05: viaja aquí para que la franja de intención no necesite un
+    // segundo viaje. El hilo sigue fuera, que es lo que este test protege.
+    expect(Object.keys(overview).sort()).toEqual([
+      'conversation',
+      'permisos',
+      'resumen',
+      'semaforoIA',
+    ]);
+  });
+
+  // ─── semaforoIA (HU-IA-05) ────────────────────────────────────────────────
+  it('semaforoIA null cuando la IA nunca clasificó (AC18)', async () => {
+    const clienteId = await crearCliente(tenantA);
+
+    const overview = await getConversationOverview(tenantA.toString(), clienteId, true);
+
+    expect(overview.semaforoIA).toBeNull();
+  });
+
+  it('semaforoIA llega con la etiqueta hidratada y `pendiente` resuelto (AC18)', async () => {
+    const verde = await Tag.create({
+      tenantId: tenantA,
+      nombre: 'Avanza',
+      color: '#16A34A',
+      semaforo: 'verde',
+    });
+    const clienteId = await crearCliente(tenantA, {
+      tagIds: [verde._id],
+      semaforoIA: {
+        slug: 'verde',
+        confianza: 0.9,
+        motivo: 'pide instrucciones de pago',
+        nivelInteres: 'caliente',
+        objecion: null,
+        at: new Date(),
+        aplicado: 'verde',
+      },
+    });
+
+    const overview = await getConversationOverview(tenantA.toString(), clienteId, true);
+
+    expect(overview.semaforoIA).toMatchObject({
+      slug: 'verde',
+      motivo: 'pide instrucciones de pago',
+      aplicado: 'verde',
+      pendiente: false,
+    });
+    // Hidratada con el nombre y el color del tenant: el admin pudo renombrarla.
+    expect(overview.semaforoIA?.tag).toMatchObject({ nombre: 'Avanza', color: '#16A34A' });
+  });
+
+  it('una sugerencia sin aplicar llega como pendiente (AC18)', async () => {
+    await Tag.create({ tenantId: tenantA, nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' });
+    const clienteId = await crearCliente(tenantA, {
+      semaforoIA: {
+        slug: 'verde',
+        confianza: 0.3,
+        motivo: 'parece interesado',
+        nivelInteres: 'caliente',
+        objecion: null,
+        at: new Date(),
+        aplicado: null,
+      },
+    });
+
+    const overview = await getConversationOverview(tenantA.toString(), clienteId, true);
+
+    expect(overview.semaforoIA?.pendiente).toBe(true);
+  });
+
+  it('sugerencia hacia una etiqueta borrada: ni tag ni pendiente (AC7)', async () => {
+    // Sin sembrar la etiqueta: el admin la borró desde /etiquetas. Ofrecer "Aplicar" daría un 409.
+    const clienteId = await crearCliente(tenantA, {
+      semaforoIA: {
+        slug: 'verde',
+        confianza: 0.9,
+        motivo: 'quiere pagar',
+        nivelInteres: 'caliente',
+        objecion: null,
+        at: new Date(),
+        aplicado: null,
+      },
+    });
+
+    const overview = await getConversationOverview(tenantA.toString(), clienteId, true);
+
+    expect(overview.semaforoIA?.tag).toBeNull();
+    expect(overview.semaforoIA?.pendiente).toBe(false);
   });
 
   it('resumen null cuando nunca se generó, aun teniendo permiso', async () => {

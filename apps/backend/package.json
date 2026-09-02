@@ -10,6 +10,8 @@
     "seed:inbox": "tsx --env-file .env src/seed/seed-inbox-demo.ts",
     "typecheck": "tsc --noEmit",
     "migrate:tags": "tsx --env-file .env src/scripts/migrate-cliente-tags.ts",
+    "migrate:chat-template": "tsx --env-file .env src/scripts/migrate-chat-template.ts",
+    "migrate:classify-template": "tsx --env-file .env src/scripts/migrate-classify-template.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

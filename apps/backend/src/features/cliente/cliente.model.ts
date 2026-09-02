@@ -73,6 +73,27 @@ const ClienteSchema = new Schema<IClienteDocument>(
       ),
       required: false,
     },
+    // Última clasificación de intención de compra (HU-IA-05). Opcional: solo existe cuando la IA
+    // llegó a clasificar la conversación. SIN `enum` en `slug`/`nivelInteres`/`objecion`, por
+    // coherencia con el resto del modelo; los tipos los garantiza `ISemaforoIA` y el único
+    // productor es `ai-semaforo.service`. Deliberadamente SIN índice: se proyecta al abrir una
+    // conversación, nadie filtra la bandeja por esto.
+    semaforoIA: {
+      type: new Schema(
+        {
+          slug: { type: String, required: true },
+          confianza: { type: Number, required: true },
+          motivo: { type: String, default: '' },
+          nivelInteres: { type: String, required: true },
+          objecion: { type: String, default: null },
+          at: { type: Date, required: true },
+          // `null` = la IA solo propuso. No lleva `required`: null ES un valor con significado.
+          aplicado: { type: String, default: null },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
     // Datos de contacto extraídos por IA bajo demanda (HU-OMNI-03). Cada campo admite `null`
     // cuando la conversación no lo menciona; nunca sobrescriben `nombre`/`telefono`.
     datosExtraidos: {

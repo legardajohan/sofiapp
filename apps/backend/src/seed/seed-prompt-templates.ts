@@ -30,6 +30,53 @@ export const CHAT_TEMPLATE_VERSION = '1.1.0';
 export const CHAT_FRASE_DERIVACION =
   'No tengo información suficiente para responder esa pregunta. Por favor, contacta a un asesor.';
 
+/**
+ * Versión de la plantilla global `classify`. Igual que la de `chat`, se exporta para que
+ * `migrate-classify-template.ts` pueda actualizar las bases ya sembradas: `$setOnInsert` no lo hace.
+ *
+ * `2.0.0` (HU-IA-05) es un cambio de CONTRATO, no de redacción: el modelo pasa a devolver también
+ * `confianza` y `motivo`. Por eso sube el major — y de paso invalida la caché de `classify`, cuya
+ * clave incluye la versión de la plantilla, así que ninguna entrada vieja puede volver sin los
+ * campos nuevos.
+ *
+ * Hasta HU-IA-05 este prompt no llegaba al modelo: `AIService.classify` resolvía la plantilla pero
+ * `classifyLead` no aceptaba instrucciones. Era texto muerto; ahora sí gobierna la clasificación.
+ */
+export const CLASSIFY_TEMPLATE_VERSION = '2.0.0';
+
+export const CLASSIFY_SYSTEM_PROMPT = [
+  'Clasificas conversaciones comerciales de WhatsApp entre una empresa y un cliente potencial.',
+  'Los mensajes con rol "user" son del cliente; los de rol "model" son de la empresa (bot o asesor).',
+  '',
+  'Devuelve el nivel de interés de compra que demuestra el CLIENTE:',
+  '- "frio": pregunta por curiosidad o pide información general, sin señales de querer contratar.',
+  '- "tibio": compara opciones, pide precios, plazos o condiciones, o muestra interés sin comprometerse.',
+  '- "caliente": pide comprar, matricularse, pagar, reservar, agendar una cita o hablar con alguien',
+  '  para cerrar. También cuando confirma que quiere avanzar.',
+  '',
+  'Devuelve además la objeción principal que haya planteado el cliente ("precio", "tiempo",',
+  '"confianza" u "otra"), o null si no ha planteado ninguna.',
+  '',
+  'Clasifica ÚNICAMENTE con lo que aparece en la conversación: no supongas una intención que el',
+  'cliente no haya expresado. Ante la duda entre dos niveles, elige el más bajo — sobreestimar el',
+  'interés hace que un asesor deje lo que está haciendo para atender a quien solo preguntaba.',
+  '',
+  'CONFIANZA (número entre 0 y 1): qué tan seguro estás de tu propia clasificación.',
+  '- Alta (0.8 a 1.0): el cliente lo dice explícitamente ("quiero pagar", "¿dónde me inscribo?").',
+  '- Media (0.5 a 0.8): se deduce del contexto, pero el cliente no lo ha dicho con esas palabras.',
+  '- Baja (menos de 0.5): la conversación tiene uno o dos mensajes, el cliente es ambiguo, o casi',
+  '  todo el hilo lo escribió la empresa.',
+  'Ante la duda, BÁJALA. Una confianza inflada mueve la clasificación de un cliente que después',
+  'alguien tiene que corregir a mano.',
+  '',
+  'MOTIVO: una sola frase en español, en tercera persona, de menos de 200 caracteres, que explique',
+  'QUÉ DIJO el cliente para merecer ese nivel. Ejemplo: "pide instrucciones de pago para',
+  'matricularse". Describe la intención, no repitas el nivel.',
+  'PROHIBIDO incluir en el motivo el nombre, el teléfono, el correo, el documento o cualquier otro',
+  'dato de contacto del cliente: este texto queda registrado en una bitácora que pueden leer',
+  'personas que no tienen permiso para ver esos datos.',
+].join('\n');
+
 export const CHAT_SYSTEM_PROMPT = [
   'Eres el asistente virtual de la empresa y atiendes a clientes por WhatsApp.',
   '',
@@ -91,24 +138,8 @@ const GLOBAL_TEMPLATES: IPromptTemplate[] = [
     // intención de compra.
     tenantId: null,
     method: 'classify',
-    version: '1.0.0',
-    systemPrompt: [
-      'Clasificas conversaciones comerciales de WhatsApp entre una empresa y un cliente potencial.',
-      'Los mensajes con rol "user" son del cliente; los de rol "model" son de la empresa (bot o asesor).',
-      '',
-      'Devuelve el nivel de interés de compra que demuestra el CLIENTE:',
-      '- "frio": pregunta por curiosidad o pide información general, sin señales de querer contratar.',
-      '- "tibio": compara opciones, pide precios, plazos o condiciones, o muestra interés sin comprometerse.',
-      '- "caliente": pide comprar, matricularse, pagar, reservar, agendar una cita o hablar con alguien',
-      '  para cerrar. También cuando confirma que quiere avanzar.',
-      '',
-      'Devuelve además la objeción principal que haya planteado el cliente ("precio", "tiempo",',
-      '"confianza" u "otra"), o null si no ha planteado ninguna.',
-      '',
-      'Clasifica ÚNICAMENTE con lo que aparece en la conversación: no supongas una intención que el',
-      'cliente no haya expresado. Ante la duda entre dos niveles, elige el más bajo — sobreestimar el',
-      'interés hace que un asesor deje lo que está haciendo para atender a quien solo preguntaba.',
-    ].join('\n'),
+    version: CLASSIFY_TEMPLATE_VERSION,
+    systemPrompt: CLASSIFY_SYSTEM_PROMPT,
     isActive: true,
   },
   {

@@ -40,6 +40,27 @@ const EnvSchema = z.object({
   LLM_TIMEOUT_MS: z.coerce.number().positive().default(45000),
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
+  // Ventana de agrupación del auto-reply (HU-IA-02). Los mensajes de un mismo cliente que caen en
+  // la misma ventana producen UNA sola respuesta, en vez de una por mensaje: escribir en tres
+  // mensajes seguidos es lo normal en WhatsApp, y contestarlos por separado es ruido.
+  // Es también latencia deliberada que el cliente percibe, así que súbela con cuidado: 8 s cubren
+  // el tecleo de una ráfaga sin que la respuesta deje de sentirse inmediata.
+  AI_REPLY_WINDOW_MS: z.coerce.number().positive().default(8000),
+
+  // Semaforización automática por intención de compra (HU-IA-05).
+  // Interruptor como enum y NO como booleano: `z.coerce.boolean()` convierte la cadena "false" en
+  // `true` (toda cadena no vacía es truthy), que es justo el fallo que un kill-switch no se puede
+  // permitir. No hay ningún booleano en este archivo; esto no abre el precedente.
+  SEMAFORO_AUTO: z.enum(['on', 'off']).default('on'),
+  // Confianza mínima para que la IA ESCRIBA el semáforo. Por debajo solo propone, y la franja de la
+  // bandeja ofrece aplicarlo a mano.
+  // OJO: escala propia del modelo (él mismo la reporta), SIN relación con KB_MIN_SCORE ni con
+  // FAQ_MATCH_THRESHOLD, que son similitudes de coseno normalizadas. Calibrar mirando la bitácora
+  // de GET /api/conversations/:id/classifications, nunca a ojo.
+  SEMAFORO_MIN_CONFIANZA: z.coerce.number().min(0).max(1).default(0.7),
+  // Turnos del CLIENTE que tiene que haber antes de tocar el semáforo. Con 1, un "hola" suelto
+  // clasifica como frío y pintaría de azul cada conversación nueva: ruido en toda la bandeja.
+  SEMAFORO_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
 
   // TRM oficial USD/COP — Superintendencia Financiera vía datos.gov.co (recurso 32sa-8pi3, SODA API).
   TRM_DATASET_URL: z

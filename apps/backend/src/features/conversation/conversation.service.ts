@@ -16,7 +16,8 @@ import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
-import { assertTagsDelTenant, findTagsByIds } from '../tag/tag.service.js';
+import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
+import { toSemaforoIAResponse } from '../ai/ai-semaforo.types.js';
 import { toResumenResponse } from '../cliente/cliente.service.js';
 import { primerAdminActivo } from '../ai/ai-handoff.service.js';
 import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
@@ -105,6 +106,42 @@ async function resolveAsignado(tenantId: string, asesorId: unknown): Promise<IUs
  */
 async function resolveLeadMap(tenantId: string, clienteId: string): Promise<Map<string, string>> {
   return findLeadIdsByClientes(tenantId, [clienteId]);
+}
+
+/**
+ * Reproyecta la conversación y la publica por tiempo real (HU-IA-05).
+ *
+ * Existe para los escritores que viven fuera de este service —hoy la semaforización automática—,
+ * que necesitan emitir el mismo `conversation:updated` que emiten las mutaciones de aquí. Sin él,
+ * cada uno tendría que reconstruir `resolveAsignado`/`resolveTags`/`resolveLeadMap` por su cuenta y
+ * la bandeja acabaría recibiendo DTOs con forma distinta según quién escribiera.
+ *
+ * No lanza si la conversación desapareció entre la escritura y esta llamada: no hay nada que
+ * publicar y tampoco nada que arreglar.
+ */
+export async function publishConversationUpdated(
+  tenantId: string,
+  clienteId: string,
+): Promise<void> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) return;
+
+  const source = cliente as unknown as IConversationSource;
+  const conversation = toConversationResponse(
+    source,
+    null,
+    new Date(),
+    await resolveAsignado(tenantId, source.asesorId),
+    await resolveTags(tenantId, source),
+    await resolveLeadMap(tenantId, clienteId),
+  );
+
+  await publishRealtime({
+    type: 'conversation:updated',
+    tenantId,
+    conversationId: clienteId,
+    conversation,
+  });
 }
 
 export async function listConversations(
@@ -362,9 +399,18 @@ export async function getConversationOverview(
     await resolveLeadMap(tenantId, clienteId),
   );
 
+  // La sugerencia de semáforo (HU-IA-05) viaja en el overview y NO en un endpoint propio: la tira
+  // que la muestra ya consume esta lectura, y abrir un `GET` aparte para tres campos costaría un
+  // segundo viaje por cada conversación abierta.
+  const tagsPorSlug = await findSemaforoTags(tenantId);
+
   return {
     conversation,
     resumen: toResumenResponse(cliente, puedeVerSensibles),
+    // Sin gate por subrol, a diferencia del resumen (ADR-0006, enmienda de HU-IA-04): no es prosa
+    // libre sobre el transcript sino una frase acotada que la plantilla obliga a escribir sin datos
+    // de contacto. Si esa restricción se relajara, este campo tendría que entrar en el gate.
+    semaforoIA: toSemaforoIAResponse(cliente.semaforoIA, cliente.tagIds ?? [], tagsPorSlug),
     permisos: {
       verResumen: puedeVerSensibles,
       generarResumen: puedeVerSensibles,
@@ -526,7 +572,13 @@ export async function listAssignments(
   if (!cliente) throw new AppError('Conversación no encontrada.', 404);
 
   const { page, limit } = query;
-  const { data, total } = await listAuditEvents(tenantId, 'cliente', clienteId, page, limit);
+  // Las dos acciones que cambian el responsable: la reasignación manual y el handoff automático
+  // (HU-IA-03), que también asigna. El filtro lo añade HU-IA-05: sin él, esta lista se llenaría de
+  // filas vacías —una por clasificación— porque todos los eventos comparten `entidad: 'cliente'`.
+  const { data, total } = await listAuditEvents(tenantId, 'cliente', clienteId, page, limit, [
+    'conversation.assign',
+    'conversation.handoff',
+  ]);
 
   const userIds = new Set<string>();
   for (const evt of data) {

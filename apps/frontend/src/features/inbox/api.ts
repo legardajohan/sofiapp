@@ -56,6 +56,19 @@ export async function fetchConversationOverview(
   return data;
 }
 
+/**
+ * Aplica la sugerencia de semáforo que dejó la IA (HU-IA-05).
+ *
+ * Sin cuerpo: el destino es el que la IA ya guardó. Devuelve el overview recalculado para que la
+ * franja pase a "aplicado" sin esperar a la invalidación.
+ */
+export async function aplicarSemaforo(conversationId: string): Promise<ConversationOverviewDTO> {
+  const { data } = await apiClient.post<ConversationOverviewDTO>(
+    `/conversations/${conversationId}/semaforo`,
+  );
+  return data;
+}
+
 export async function fetchThread(
   conversationId: string,
   page = 1,

@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// `publishRealtime` abre una conexión a Redis y, sin broker escuchando, la promesa nunca resuelve
+// y el test agota su timeout. Es el mismo mock que ya usan los demás tests de conversación.
+vi.mock('../../src/realtime/realtime.publisher.js', () => ({
+  publishRealtime: vi.fn(),
+  subscribeRealtime: vi.fn(),
+}));
 import { Types } from 'mongoose';
 import { createScoped, findByIdScoped } from '../../src/repositories/base.repository.js';
 import { Cliente } from '../../src/features/cliente/cliente.model.js';

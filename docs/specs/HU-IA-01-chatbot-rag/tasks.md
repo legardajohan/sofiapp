@@ -19,11 +19,9 @@ funciona.
   - [x] El `systemPrompt` obliga a responder solo con el bloque CONTEXTO y a devolver la frase
         exacta de fallback cuando no alcance.
   - [x] Verificar que el seed sigue siendo idempotente (`$setOnInsert` no pisa ediciones del admin).
-- [ ] Arrancar el backend y comprobar en el log que el seed reporta las tres globales.
-      > **Pendiente de infraestructura.** No hay Redis ni Docker levantados en esta máquina
-      > (`ECONNREFUSED 127.0.0.1:6379`), y arrancar `app.ts` conecta a Mongo Atlas real y ejecuta
-      > el seed. El montaje de rutas sí quedó verificado por `ai-assistant.routes.test.ts`, que
-      > importa `app` y ejercita los tres endpoints.
+- [x] Arrancar el backend y comprobar en el log que el seed reporta las tres globales.
+      > Hecho durante HU-IA-02, ya con Redis disponible: `app.ts` arranca sin errores y el seed
+      > registra `"globales: chat, summary, extract"`.
 
 ## 1. Recuperación RAG (`searchKnowledge`)
 
@@ -213,6 +211,9 @@ funciona.
       guardado en stash. Causa raíz: esos tests llaman a `publishRealtime`, que intenta conectar a
       Redis (`ECONNREFUSED 127.0.0.1:6379`); sin Redis levantado agotan el timeout de 30 s. Ningún
       test tocado por HU-IA-01 falla.
+      > **Resuelto durante HU-IA-02:** con Redis levantado (contenedor `sofiapp-redis`) la suite
+      > pasa entera —603 tests, cero fallos—, lo que confirma que el diagnóstico era correcto y que
+      > no había nada que arreglar en el código.
 - [x] `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint` sin errores. ✅
 - [x] Checklist de PR de `docs/multi-tenancy.md` §9 revisado (ver "Aislamiento" más abajo).
 - [ ] Smoke contra Atlas real (índice vectorial READY + un `KbDocument` `indexado`):

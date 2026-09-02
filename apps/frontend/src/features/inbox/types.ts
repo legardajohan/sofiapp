@@ -1,6 +1,6 @@
 import type { HandoffMotivo } from '../handoff/types.js';
 import type { AdminSubrol } from '@/stores/authStore';
-import type { TagDTO } from '@/features/tags/types';
+import type { SemaforoSlug, TagDTO } from '@/features/tags/types';
 
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
 
@@ -145,10 +145,33 @@ export interface PermisosConversacionDTO {
 }
 
 /** Vista unificada de la conversación: cabecera, etiquetas, resumen y permisos. Sin el hilo. */
+/** Escala con la que el modelo clasifica la intención de compra (HU-IA-05). */
+export type NivelInteresIA = 'frio' | 'tibio' | 'caliente';
+
+/** Última clasificación de intención de compra de la conversación (HU-IA-05). */
+export interface SemaforoIADTO {
+  slug: SemaforoSlug;
+  /** `[0, 1]`. No se pinta como porcentaje: va en el `title` y en la bitácora. */
+  confianza: number;
+  /** La justificación en una frase. Es lo que la franja muestra al lado del chip. */
+  motivo: string;
+  nivelInteres: NivelInteresIA;
+  objecion: string | null;
+  at: string;
+  /** `null` = la IA solo lo propuso. */
+  aplicado: SemaforoSlug | null;
+  /** La etiqueta del tenant ya hidratada, o `null` si el admin la borró. */
+  tag: TagDTO | null;
+  /** Hay una sugerencia sin aplicar y su etiqueta todavía existe. Lo decide el servidor. */
+  pendiente: boolean;
+}
+
 export interface ConversationOverviewDTO {
   conversation: ConversationDTO;
   /** `null` si no se ha generado nunca **o** si no se puede ver (mira `permisos.verResumen`). */
   resumen: ResumenDTO | null;
+  /** `null` si la IA nunca clasificó esta conversación (HU-IA-05). */
+  semaforoIA: SemaforoIADTO | null;
   permisos: PermisosConversacionDTO;
 }
 

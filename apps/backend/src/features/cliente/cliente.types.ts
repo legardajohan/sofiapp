@@ -1,7 +1,8 @@
 import { Document, Types } from 'mongoose';
 import type { IMessageResponse, IPaginated } from '../conversation/conversation.types.js';
-import type { ITagResponse } from '../tag/tag.types.js';
+import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
 import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import type { NivelInteres, Objecion } from '../../integrations/llm/llm-provider.types.js';
 
 export type CanalOrigen = 'whatsapp' | 'instagram' | 'messenger' | 'formulario' | 'web';
 
@@ -77,6 +78,35 @@ export interface IResumenIA {
   modelo: string;
 }
 
+/**
+ * Última clasificación de intención de compra hecha por la IA (HU-IA-05).
+ *
+ * Guarda lo que el modelo dijo **aunque no se haya aplicado**: la franja de la bandeja necesita
+ * mostrar la sugerencia con su justificación, y el asesor decide. Los valores crudos
+ * (`nivelInteres`, `objecion`) viven aquí y NO en `Cliente.nivelInteres`/`objecionPrincipal`, que
+ * son claves del catálogo del tenant que edita una persona (ver `OpcionContactoKey`): un worker
+ * que corre en cada mensaje no puede revertir lo que un asesor escribió a mano.
+ */
+export interface ISemaforoIA {
+  /** Slug de semáforo que la clasificación sugiere. */
+  slug: SemaforoSlug;
+  /** Seguridad del modelo, en `[0, 1]`. Bajo `SEMAFORO_MIN_CONFIANZA` no se aplica, solo se propone. */
+  confianza: number;
+  /** Justificación en una frase. Se muestra en la bandeja y se copia a la bitácora. */
+  motivo: string;
+  nivelInteres: NivelInteres;
+  objecion: Objecion | null;
+  at: Date;
+  /**
+   * Slug que la IA llegó a escribir en `tagIds`. `null` = solo se propuso.
+   *
+   * Es además el detector de intervención humana: si el semáforo vigente de la conversación no
+   * coincide con este, lo cambió una persona, y desde entonces la IA solo propone. Sin este campo
+   * habría que consultar `audit_events` en cada mensaje para saberlo.
+   */
+  aplicado: SemaforoSlug | null;
+}
+
 export interface ICliente {
   tenantId: Types.ObjectId;
   metaUserId: string;
@@ -104,6 +134,8 @@ export interface ICliente {
   rolContacto?: OpcionContactoKey;
   interesItemId?: Types.ObjectId;
   resumenIA?: IResumenIA;
+  /** Última clasificación de intención de compra (HU-IA-05). */
+  semaforoIA?: ISemaforoIA;
   datosExtraidos?: IDatosExtraidos;
   // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por subrol al leerlos ───
   /**
