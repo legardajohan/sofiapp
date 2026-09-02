@@ -19,6 +19,7 @@ import { getAIService } from '../services/ai/ai-service.singleton.js';
 import type { AiResult } from '../services/ai/ai-service.types.js';
 import type { ChatTurn } from '../integrations/llm/llm-provider.types.js';
 import { clasificarYAplicarSemaforo } from '../features/ai/ai-semaforo.service.js';
+import { extraerDatosSiHaceFalta } from '../features/ai/ai-extract.service.js';
 import { MENSAJE_FALLO } from './ai-reply.messages.js';
 
 /**
@@ -132,7 +133,8 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
 }
 
 /**
- * El job completo: responder y, después, clasificar la intención de compra (HU-IA-05).
+ * El job completo: responder, clasificar la intención de compra (HU-IA-05) y extraer los datos de
+ * contacto que falten (HU-IA-06).
  *
  * La clasificación va DESPUÉS de la decisión de handoff a propósito. Cuando la regla
  * `intentPurchase` está activa, `evaluarDespuesDeGenerar` ya llamó a `classify()` con este mismo
@@ -149,6 +151,11 @@ export async function processAiReplyJob(data: AiReplyJobData): Promise<void> {
   // No hace falta try/catch: `clasificarYAplicarSemaforo` no lanza nunca, por diseño — la respuesta
   // al cliente ya salió y un fallo del clasificador no puede dar el job por fallido.
   await clasificarYAplicarSemaforo(data.tenantId, data.clienteId, historial);
+
+  // Después de la clasificación, no antes: si el proceso muere entre las dos, es preferible perder
+  // la extracción —recuperable en la siguiente ráfaga o con el botón de la ficha— que el semáforo,
+  // que es lo que mueve la conversación en la bandeja. Tampoco lanza.
+  await extraerDatosSiHaceFalta(data.tenantId, data.clienteId, historial);
 }
 
 /**

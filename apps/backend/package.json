@@ -12,6 +12,7 @@
     "migrate:tags": "tsx --env-file .env src/scripts/migrate-cliente-tags.ts",
     "migrate:chat-template": "tsx --env-file .env src/scripts/migrate-chat-template.ts",
     "migrate:classify-template": "tsx --env-file .env src/scripts/migrate-classify-template.ts",
+    "migrate:extract-template": "tsx --env-file .env src/scripts/migrate-extract-template.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -62,6 +62,18 @@ const EnvSchema = z.object({
   // clasifica como frío y pintaría de azul cada conversación nueva: ruido en toda la bandeja.
   SEMAFORO_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
 
+  // Extracción automática de datos de contacto (HU-IA-06).
+  // Enum y no booleano, por el mismo motivo que SEMAFORO_AUTO: "false" coaccionado a booleano da
+  // `true` y el kill-switch dejaría de existir justo cuando hace falta.
+  EXTRACT_AUTO: z.enum(['on', 'off']).default('on'),
+  // Turnos del CLIENTE antes de extraer sola. Con 1, un "hola" suelto dispara una llamada al modelo
+  // que no puede encontrar nada: se paga y se tira.
+  EXTRACT_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
+  // Techo del transcript que se le manda al modelo al extraer. Bastante más que los 10 del
+  // auto-reply —aquí importa no perder un correo dictado al principio del hilo— y bastante menos
+  // que una conversación real de meses, que no cabe en la ventana ni sale a cuenta.
+  EXTRACT_MAX_MENSAJES: z.coerce.number().int().positive().default(60),
+
   // TRM oficial USD/COP — Superintendencia Financiera vía datos.gov.co (recurso 32sa-8pi3, SODA API).
   TRM_DATASET_URL: z
     .string()

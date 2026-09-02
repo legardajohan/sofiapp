@@ -77,6 +77,37 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   'personas que no tienen permiso para ver esos datos.',
 ].join('\n');
 
+/**
+ * Versión de la plantilla global `extract`. Se exporta por el mismo motivo que las otras dos:
+ * `$setOnInsert` no actualiza una global ya sembrada y hace falta `migrate-extract-template.ts`.
+ *
+ * `2.0.0` (HU-IA-06) es un cambio de CONTRATO: se pide un cuarto campo (`interes`). Y sobre todo,
+ * es la primera versión que el modelo llega a leer — hasta HU-IA-06 `AIService.extract` resolvía la
+ * plantilla y descartaba el resultado, así que este texto era letra muerta y el único criterio de
+ * extracción eran las descripciones de los slots (`DATOS_CONTACTO_SLOTS`).
+ */
+export const EXTRACT_TEMPLATE_VERSION = '2.0.0';
+
+export const EXTRACT_SYSTEM_PROMPT = [
+  'Extraes datos de contacto de conversaciones comerciales de WhatsApp. Los mensajes con rol',
+  '"user" son del cliente; los de rol "model" son de la empresa. Devuelve únicamente datos que',
+  'aparezcan literalmente en la conversación: si un campo no se menciona, déjalo vacío en vez de',
+  'deducirlo o inventarlo.',
+  '',
+  'El correo y el teléfono se copian TAL CUAL los escribió el cliente: no los reformatees, no les',
+  'quites ni les añadas prefijos y no corrijas lo que parezca una errata.',
+  '',
+  'El campo "interes" es el producto, servicio, plan o programa CONCRETO que el cliente pide o por',
+  'el que pregunta, con sus propias palabras y en una frase corta ("curso pre-ICFES sabatino",',
+  '"apartamento de dos habitaciones en Laureles").',
+  'NO es cuánto le interesa: "muy interesado", "caliente", "quiere comprar" o "le gustó" NO son',
+  'respuestas válidas para ese campo; en esos casos déjalo vacío.',
+  'Si menciona varios productos, devuelve el más reciente y específico: el que esté negociando.',
+  '',
+  'Si la conversación solo tiene saludos, agradecimientos o preguntas generales, los cuatro campos',
+  'van vacíos. Un dato inventado cuesta más que un campo vacío: el asesor va a actuar sobre esto.',
+].join('\n');
+
 export const CHAT_SYSTEM_PROMPT = [
   'Eres el asistente virtual de la empresa y atiendes a clientes por WhatsApp.',
   '',
@@ -145,13 +176,8 @@ const GLOBAL_TEMPLATES: IPromptTemplate[] = [
   {
     tenantId: null,
     method: 'extract',
-    version: '1.0.0',
-    systemPrompt: [
-      'Extraes datos de contacto de conversaciones comerciales de WhatsApp. Los mensajes con rol',
-      '"user" son del cliente; los de rol "model" son de la empresa. Devuelve únicamente datos que',
-      'aparezcan literalmente en la conversación: si un campo no se menciona, déjalo vacío en vez de',
-      'deducirlo o inventarlo.',
-    ].join('\n'),
+    version: EXTRACT_TEMPLATE_VERSION,
+    systemPrompt: EXTRACT_SYSTEM_PROMPT,
     isActive: true,
   },
 ];

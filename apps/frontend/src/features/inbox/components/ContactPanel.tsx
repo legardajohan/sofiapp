@@ -15,6 +15,7 @@ import {
   useExtractContactData,
   useGenerateSummary,
 } from '../hooks/useContactHistory.js';
+import { useConfirmarExtraccion } from '../hooks/useConfirmarExtraccion.js';
 import { errorMessage } from '../lib/errors.js';
 
 const pressable =
@@ -48,6 +49,7 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
   const { data: history, isLoading, isError } = useContactHistory(open ? clienteId : null);
   const generate = useGenerateSummary(clienteId);
   const extract = useExtractContactData(clienteId);
+  const confirmar = useConfirmarExtraccion(clienteId);
   const [editando, setEditando] = useState(false);
   // El `leadId` ya viene resuelto en la ficha, así que esto solo hidrata el detalle del lead.
   const lead = useLead(history?.contacto.leadId ?? null);
@@ -117,12 +119,14 @@ export function ContactPanel({ clienteId, open, onOpenChange }: Props): React.Re
             <ContactExtractCard
               datos={history.datosExtraidos}
               pending={extract.isPending}
+              confirmando={confirmar.isPending ? (confirmar.variables ?? []) : null}
               error={
                 extract.isError
                   ? errorMessage(extract.error, 'No se pudieron extraer los datos.')
                   : null
               }
               onExtract={() => extract.mutate()}
+              onConfirmar={(campos) => confirmar.mutate(campos)}
             />
             <ContactSummaryCard
               resumen={history.resumen}

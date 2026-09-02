@@ -122,16 +122,34 @@ export interface AtributoDTO {
 /** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
 export type TelefonoOrigen = 'conversacion' | 'whatsapp';
 
+/** Los cuatro campos que la IA extrae (HU-IA-06). El orden es el de la tarjeta. */
+export const CAMPOS_EXTRAIDOS = ['nombreCompleto', 'correo', 'telefono', 'interes'] as const;
+
+export type CampoExtraido = (typeof CAMPOS_EXTRAIDOS)[number];
+
 /**
- * Datos de contacto extraídos por IA. `nombreCompleto` y `correo` son `null` si la conversación
- * no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del contacto).
+ * Datos de contacto extraídos por IA. `nombreCompleto`, `correo` e `interes` son `null` si la
+ * conversación no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del
+ * contacto).
  */
 export interface DatosExtraidosDTO {
   nombreCompleto: string | null;
   correo: string | null;
   telefono: string;
   telefonoOrigen: TelefonoOrigen;
+  /** Qué pide el cliente, con sus palabras. NO es el nivel de interés: eso es `semaforoIA`. */
+  interes: string | null;
+  /** Campos ya aplicados a la ficha. Lo que tiene valor y no está aquí, está solo sugerido. */
+  confirmados: CampoExtraido[];
   extraidoAt: string;
+}
+
+/** Respuesta de confirmar: qué entró en la ficha y qué se dejó como estaba (HU-IA-06). */
+export interface ConfirmarExtraccionDTO {
+  contacto: ContactCardDTO;
+  datosExtraidos: DatosExtraidosDTO;
+  aplicados: CampoExtraido[];
+  omitidos: CampoExtraido[];
 }
 
 /**

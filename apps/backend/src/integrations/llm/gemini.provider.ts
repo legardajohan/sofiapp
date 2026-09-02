@@ -127,11 +127,15 @@ export class GeminiProvider implements ILlmProvider {
   async extractSlots(input: {
     historial: ChatTurn[];
     camposObjetivo: SlotSpec[];
+    instrucciones: string;
   }): Promise<LlmCallResult<SlotResult>> {
     return this.callWithRetry(async (signal) => {
       const schema = slotSpecToSchema(input.camposObjetivo);
       const model = this.genAI.getGenerativeModel({
         model: env.GEMINI_MODEL,
+        // HU-IA-06: hasta ahora la plantilla `extract` no llegaba al modelo y el único criterio de
+        // extracción eran las descripciones de los slots. Mismo patrón que `classifyLead`.
+        systemInstruction: input.instrucciones,
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema },
       });
       const result = await model.generateContent(

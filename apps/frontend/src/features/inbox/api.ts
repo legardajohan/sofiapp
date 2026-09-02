@@ -1,5 +1,7 @@
 import { apiClient } from '../../api/apiClient.js';
 import type {
+  CampoExtraido,
+  ConfirmarExtraccionDTO,
   ContactHistoryDTO,
   ConversationDTO,
   ConversationOverviewDTO,
@@ -139,12 +141,29 @@ export async function generateSummary(clienteId: string): Promise<ResumenDTO> {
   return data;
 }
 
-/** Extrae nombre completo, correo y teléfono de la conversación con IA (bajo demanda). */
+/** Extrae nombre, correo, teléfono e interés de la conversación con IA (bajo demanda). */
 export async function extractContactData(clienteId: string): Promise<DatosExtraidosDTO> {
   const { data } = await apiClient.post<DatosExtraidosDTO>(
     `/clientes/${clienteId}/extract`,
     undefined,
     { timeout: TIMEOUT_IA_MS },
+  );
+  return data;
+}
+
+/**
+ * Pasa a la ficha los datos que la IA propuso (HU-IA-06). El cuerpo dice QUÉ campos, no con qué
+ * valor: el valor es el que ya está persistido tras la extracción.
+ *
+ * Sin `TIMEOUT_IA_MS`: confirmar no llama al modelo, es una escritura en la base.
+ */
+export async function confirmarDatosExtraidos(
+  clienteId: string,
+  campos: CampoExtraido[],
+): Promise<ConfirmarExtraccionDTO> {
+  const { data } = await apiClient.post<ConfirmarExtraccionDTO>(
+    `/clientes/${clienteId}/extract/confirm`,
+    { campos },
   );
   return data;
 }

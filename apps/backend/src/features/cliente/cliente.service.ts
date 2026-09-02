@@ -29,11 +29,13 @@ import { MASK_VALOR, maskCorreo, maskDocumento } from '../../utils/mask.util.js'
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type {
+  CampoExtraido,
   CanalOrigen,
   IAtributoPersonalizado,
   IAtributoResponse,
   ICliente,
   IClienteDocument,
+  IConfirmarExtraccionResponse,
   IContactCardResponse,
   IContactHistoryResponse,
   IDatosExtraidos,
@@ -189,6 +191,10 @@ export function toDatosExtraidosResponse(
     telefono: datos.telefono,
     // Las extracciones anteriores a este campo solo guardaban lo dictado en la conversación.
     telefonoOrigen: datos.telefonoOrigen ?? 'conversacion',
+    // Ausentes en las extracciones anteriores a HU-IA-06: se normalizan aquí para que la UI no
+    // tenga que distinguir "nunca se extrajo" de "se extrajo antes de que el campo existiera".
+    interes: datos.interes ?? null,
+    confirmados: datos.confirmados ?? [],
     extraidoAt: datos.extraidoAt.toISOString(),
   };
 }
@@ -389,10 +395,23 @@ export async function updateCliente(
 
 // ─── Extracción de datos de contacto por IA (HU-OMNI-03) ────────────────────────
 
+/** Tope del campo `interes`: una frase corta, no un párrafo. */
+const INTERES_MAX_LEN = 120;
+
+/** Clave del atributo donde aterriza el interés confirmado (HU-IA-06). */
+const ATRIBUTO_INTERES = 'interes';
+
+/** Clave del atributo donde aterriza un teléfono dictado en la conversación (HU-IA-06). */
+const ATRIBUTO_TELEFONO_ALTERNO = 'telefono-alterno';
+
+/** Mismo tope que `atributosSchema` en la validación: la lista es corta por diseño. */
+const MAX_ATRIBUTOS = 30;
+
 /**
- * Campos que se le piden al modelo. Las descripciones SON el prompt efectivo: `AIService.extract`
- * resuelve la plantilla `extract` solo como gate y no la inyecta, así que la instrucción real
- * viaja aquí, convertida por `GeminiProvider` en el `responseSchema` de salida estructurada.
+ * Campos que se le piden al modelo, convertidos por `GeminiProvider` en el `responseSchema` de
+ * salida estructurada. Desde HU-IA-06 **conviven con la plantilla** `extract`, que `AIService.extract`
+ * ya inyecta como `systemInstruction`: estas descripciones acotan la forma de cada campo, y la
+ * plantilla —editable por el tenant— manda sobre el criterio.
  */
 const DATOS_CONTACTO_SLOTS: SlotSpec[] = [
   {
@@ -418,6 +437,16 @@ const DATOS_CONTACTO_SLOTS: SlotSpec[] = [
     descripcion:
       'Número de teléfono que el cliente indique dentro del texto de los mensajes. ' +
       'Cadena vacía si no menciona ninguno.',
+  },
+  {
+    campo: 'interes',
+    tipo: 'texto',
+    requerido: false,
+    descripcion:
+      'Producto, servicio, plan o programa CONCRETO por el que el cliente pregunta o que dice ' +
+      'querer, con sus propias palabras y en una frase corta ("curso pre-ICFES sabatino"). ' +
+      'NO es el nivel de interés: "muy interesado", "caliente" o "quiere comprar" no son ' +
+      'respuestas válidas. Cadena vacía si no menciona ninguno.',
   },
 ];
 
@@ -445,33 +474,137 @@ const datosExtraidosSchema = z.object({
   telefono: textoLlm.transform((v) =>
     v !== null && (v.match(/\d/g)?.length ?? 0) >= 7 ? v : null,
   ),
+  // Texto libre acotado: es una frase, no un párrafo, y va a caber en una fila de la ficha.
+  interes: textoLlm.transform((v) => (v === null ? null : v.slice(0, INTERES_MAX_LEN))),
 });
 
 type DatosExtraidosLlm = z.infer<typeof datosExtraidosSchema>;
 
 /**
- * Extrae nombre completo, correo y teléfono de la conversación con Gemini y los persiste en
- * `Cliente.datosExtraidos`. Síncrono y **solo bajo demanda** (botón de la ficha), igual que el
- * resumen: nada en el worker ni en el webhook lo invoca, para no gastar tokens de más.
+ * El transcript del que se extrae: los `EXTRACT_MAX_MENSAJES` mensajes de texto más recientes, en
+ * orden cronológico. Mismo patrón que `construirHistorial` en el worker.
+ *
+ * El tope es de HU-IA-06: hasta entonces se cargaba el hilo entero, sin techo de coste ni de
+ * ventana de contexto. Solo mensajes con texto: una imagen o un audio no aportan datos extraíbles.
  */
-export async function extractContactData(
-  tenantId: string,
-  clienteId: string,
-  puedeVerSensibles = false,
-): Promise<IDatosExtraidosResponse> {
-  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
-  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
-
+async function historialParaExtraccion(tenantId: string, clienteId: string): Promise<ChatTurn[]> {
   const docs = await findScoped(Message, tenantId, { clienteId: new Types.ObjectId(clienteId) })
-    .sort({ createdAt: 1 })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(env.EXTRACT_MAX_MENSAJES)
     .lean();
 
-  // Solo mensajes con texto: una imagen o un audio no aportan datos de contacto extraíbles.
   const historial: ChatTurn[] = [];
-  for (const m of docs) {
+  for (const m of docs.reverse()) {
     if (!m.texto) continue;
     historial.push({ role: m.sender === 'user' ? 'user' : 'model', content: m.texto });
   }
+  return historial;
+}
+
+/**
+ * Funde la extracción nueva con la anterior. **Nunca borra por olvido del modelo**: si una pasada
+ * encontró el correo y la siguiente no lo ve, el correo se conserva. Y un campo ya confirmado
+ * mantiene su valor confirmado pase lo que pase — el asesor ya decidió sobre él.
+ */
+function fusionarExtraccion(
+  anterior: IDatosExtraidos | undefined,
+  nuevo: DatosExtraidosLlm,
+  telefonoWhatsapp: string,
+): IDatosExtraidos {
+  const confirmados = anterior?.confirmados ?? [];
+  const confirmado = (campo: CampoExtraido): boolean => confirmados.includes(campo);
+
+  const nombreCompleto = confirmado('nombreCompleto')
+    ? (anterior?.nombreCompleto ?? null)
+    : (nuevo.nombreCompleto ?? anterior?.nombreCompleto ?? null);
+
+  // El correo pasa por el mismo camino de persistencia que el correo manual (HU-CRM-02): es el
+  // mismo dato personal y queda bajo el mismo gate por subrol al leerlo.
+  const correoNuevo = nuevo.correo === null ? null : toStoredValue(nuevo.correo);
+  const correo = confirmado('correo')
+    ? (anterior?.correo ?? null)
+    : (correoNuevo ?? anterior?.correo ?? null);
+
+  const interes = confirmado('interes')
+    ? (anterior?.interes ?? null)
+    : (nuevo.interes ?? anterior?.interes ?? null);
+
+  // El teléfono nunca queda vacío: si el cliente no dictó ninguno en el chat, usamos el número
+  // desde el que escribe, que siempre conocemos. Guardamos el origen para que el asesor sepa si
+  // está viendo un dato que el cliente dio (p. ej. un fijo alterno) o su propio WhatsApp.
+  let telefono: string;
+  let telefonoOrigen: TelefonoOrigen;
+  if (confirmado('telefono') && anterior) {
+    telefono = anterior.telefono;
+    telefonoOrigen = anterior.telefonoOrigen ?? 'conversacion';
+  } else if (nuevo.telefono !== null) {
+    telefono = nuevo.telefono;
+    telefonoOrigen = 'conversacion';
+  } else if (anterior && anterior.telefonoOrigen === 'conversacion') {
+    // Un teléfono que el cliente dictó y esta pasada no vio tampoco se pierde.
+    telefono = anterior.telefono;
+    telefonoOrigen = 'conversacion';
+  } else {
+    telefono = telefonoWhatsapp;
+    telefonoOrigen = 'whatsapp';
+  }
+
+  return {
+    nombreCompleto,
+    correo,
+    telefono,
+    telefonoOrigen,
+    interes,
+    confirmados,
+    confirmadoAt: anterior?.confirmadoAt ?? null,
+    confirmadoPor: anterior?.confirmadoPor ?? null,
+    extraidoAt: new Date(),
+    modelo: env.GEMINI_MODEL,
+  };
+}
+
+/** ¿Cambió algún valor? Si no, no hay nada que auditar y el evento sería ruido. */
+function extraccionCambio(anterior: IDatosExtraidos | undefined, nuevo: IDatosExtraidos): boolean {
+  if (!anterior) return true;
+  return (
+    (anterior.nombreCompleto ?? null) !== nuevo.nombreCompleto ||
+    (anterior.correo ?? null) !== nuevo.correo ||
+    anterior.telefono !== nuevo.telefono ||
+    (anterior.interes ?? null) !== (nuevo.interes ?? null)
+  );
+}
+
+/**
+ * Proyección de la extracción para la bitácora. El correo va como `[oculto]`: `audit_events` no
+ * tiene control de acceso por subrol (`docs/data-model.md`), así que no puede llevarlo en claro.
+ * El `interes` sí va tal cual — es un dato comercial, no personal.
+ */
+function resumirExtraccion(datos: IDatosExtraidos | undefined): Record<string, unknown> {
+  if (!datos) return {};
+  return {
+    nombreCompleto: datos.nombreCompleto,
+    correo: datos.correo ? SENSIBLE_MARKER : null,
+    telefono: datos.telefono,
+    interes: datos.interes ?? null,
+  };
+}
+
+/**
+ * El motor de la extracción, compartido por el botón de la ficha y por el worker (HU-IA-06). Los
+ * dos caminos leen el mismo transcript acotado, así que dan exactamente el mismo resultado.
+ *
+ * `actorId` es `null` cuando lo dispara el worker: en la bitácora eso significa «el sistema», el
+ * mismo convenio que ya usan el handoff automático y la semaforización.
+ */
+export async function ejecutarExtraccion(
+  tenantId: string,
+  clienteId: string,
+  actorId: string | null,
+): Promise<IDatosExtraidos> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
+  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
+
+  const historial = await historialParaExtraccion(tenantId, clienteId);
   if (historial.length === 0) {
     throw new AppError('No hay mensajes de texto de los que extraer datos.', 422);
   }
@@ -483,31 +616,204 @@ export async function extractContactData(
     schema: datosExtraidosSchema,
   });
 
-  // El teléfono nunca queda vacío: si el cliente no dictó ninguno en el chat, usamos el número
-  // desde el que escribe, que siempre conocemos. Guardamos el origen para que el asesor sepa si
-  // está viendo un dato que el cliente dio (p. ej. un fijo alterno) o su propio WhatsApp.
-  const telefonoDictado = data.telefono;
-  const telefonoOrigen: TelefonoOrigen = telefonoDictado === null ? 'whatsapp' : 'conversacion';
-  // El correo pasa por el mismo camino de persistencia que el correo manual (HU-CRM-02): es el mismo
-  // dato personal y queda bajo el mismo gate por subrol al leerlo.
-  const datosExtraidos: IDatosExtraidos = {
-    nombreCompleto: data.nombreCompleto,
-    correo: data.correo === null ? null : toStoredValue(data.correo),
-    telefono: telefonoDictado ?? cliente.telefono,
-    telefonoOrigen,
-    extraidoAt: new Date(),
-    modelo: env.GEMINI_MODEL,
-  };
+  const anterior = cliente.datosExtraidos;
+  const datosExtraidos = fusionarExtraccion(anterior, data, cliente.telefono);
 
   await findOneAndUpdateScoped(
     Cliente,
     tenantId,
     { _id: new Types.ObjectId(clienteId) },
-    { datosExtraidos },
+    { $set: { datosExtraidos } },
     { new: true },
   );
 
+  // Solo cuando algo cambia: con la extracción automática corriendo por ráfaga, auditar siempre
+  // llenaría la colección de eventos idénticos. Mismo criterio que `cliente.semaforo` (HU-IA-05).
+  if (extraccionCambio(anterior, datosExtraidos)) {
+    await recordAuditEvent(tenantId, {
+      actorId,
+      accion: 'cliente.extract',
+      entidad: 'cliente',
+      entidadId: clienteId,
+      antes: resumirExtraccion(anterior),
+      despues: resumirExtraccion(datosExtraidos),
+    });
+  }
+
+  return datosExtraidos;
+}
+
+/**
+ * Extrae los datos de contacto de la conversación con Gemini y los persiste en
+ * `Cliente.datosExtraidos`. Este es el camino **bajo demanda** (botón de la ficha); el automático
+ * vive en `features/ai/ai-extract.service.ts` y comparte el mismo motor.
+ */
+export async function extractContactData(
+  tenantId: string,
+  clienteId: string,
+  actorId: string,
+  puedeVerSensibles = false,
+): Promise<IDatosExtraidosResponse> {
+  const datosExtraidos = await ejecutarExtraccion(tenantId, clienteId, actorId);
   // El mapper descifra y enmascara según el permiso: quien no puede ver el correo tampoco lo ve
   // recién extraído.
   return toDatosExtraidosResponse(datosExtraidos, puedeVerSensibles) as IDatosExtraidosResponse;
+}
+
+// ─── Confirmar los datos extraídos (HU-IA-06) ───────────────────────────────────
+
+/** Un atributo que la confirmación quiere añadir a la ficha. */
+interface AtributoDestino {
+  key: string;
+  label: string;
+  valor: string;
+}
+
+/**
+ * Pasa a la ficha los datos que la IA propuso. **Merge no destructivo**: cada campo se escribe
+ * solo si su destino está vacío. Lo que ya escribió una persona no se toca nunca — se devuelve en
+ * `omitidos` para que la UI lo pueda explicar en vez de fingir que lo aplicó.
+ *
+ * El teléfono jamás pisa `Cliente.telefono`: es la identidad del canal y `upsertByMetaUser` lo
+ * resincroniza desde Meta en cada mensaje entrante, así que escribirlo sería una corrección que el
+ * siguiente mensaje deshace. Un teléfono dictado en el chat entra como atributo alterno.
+ */
+export async function confirmarDatosExtraidos(
+  tenantId: string,
+  actorId: string,
+  clienteId: string,
+  campos: CampoExtraido[],
+  puedeVerSensibles: boolean,
+): Promise<IConfirmarExtraccionResponse> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
+  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
+
+  const datos = cliente.datosExtraidos;
+  if (!datos) throw new AppError('No hay datos extraídos que confirmar.', 409);
+
+  // ── Validación, ENTERA antes de escribir nada ──
+  const valorDe = (campo: CampoExtraido): string | null => {
+    if (campo === 'nombreCompleto') return datos.nombreCompleto;
+    if (campo === 'correo') return datos.correo ? fromStoredValue(datos.correo) : null;
+    if (campo === 'interes') return datos.interes ?? null;
+    return datos.telefono;
+  };
+
+  for (const campo of campos) {
+    if (valorDe(campo) === null) {
+      throw new AppError(`La IA no extrajo ningún valor para "${campo}".`, 400);
+    }
+  }
+  if (campos.includes('telefono') && (datos.telefonoOrigen ?? 'conversacion') === 'whatsapp') {
+    throw new AppError(
+      'Ese teléfono es el número de WhatsApp del contacto: ya está en la ficha.',
+      400,
+    );
+  }
+  // Todo o nada, igual que `updateCliente`: sin permiso no se escribe tampoco lo no sensible.
+  if (campos.includes('correo') && !puedeVerSensibles) {
+    throw new AppError('No tienes permiso para editar los datos sensibles del contacto.', 403);
+  }
+
+  // ── Merge no destructivo ──
+  const $set: Record<string, unknown> = {};
+  const atributos = [...(cliente.atributos ?? [])];
+  const tieneAtributo = (key: string): boolean => atributos.some((a) => a.key === key);
+  const aplicados: CampoExtraido[] = [];
+  const omitidos: CampoExtraido[] = [];
+
+  const antes: Record<string, unknown> = {};
+  const despues: Record<string, unknown> = {};
+
+  const agregarAtributo = (campo: CampoExtraido, destino: AtributoDestino): void => {
+    if (tieneAtributo(destino.key) || atributos.length >= MAX_ATRIBUTOS) {
+      omitidos.push(campo);
+      return;
+    }
+    atributos.push({ ...destino, sensible: false });
+    aplicados.push(campo);
+    antes[destino.key] = null;
+    despues[destino.key] = destino.valor;
+  };
+
+  for (const campo of campos) {
+    const valor = valorDe(campo) as string;
+
+    if (campo === 'nombreCompleto') {
+      if (cliente.nombre) {
+        omitidos.push(campo);
+      } else {
+        $set['nombre'] = valor;
+        aplicados.push(campo);
+        antes['nombre'] = null;
+        despues['nombre'] = valor;
+      }
+    } else if (campo === 'correo') {
+      if (cliente.correoEnc) {
+        omitidos.push(campo);
+      } else {
+        $set['correoEnc'] = toStoredValue(valor);
+        aplicados.push(campo);
+        antes['correo'] = null;
+        despues['correo'] = SENSIBLE_MARKER;
+      }
+    } else if (campo === 'interes') {
+      agregarAtributo(campo, { key: ATRIBUTO_INTERES, label: 'Interés', valor });
+    } else {
+      agregarAtributo(campo, {
+        key: ATRIBUTO_TELEFONO_ALTERNO,
+        label: 'Teléfono alterno',
+        valor,
+      });
+    }
+  }
+
+  if (aplicados.some((c) => c === 'interes' || c === 'telefono')) $set['atributos'] = atributos;
+
+  // Solo se marca confirmado lo APLICADO: marcar un campo omitido sería mentir —el dato no está en
+  // la ficha— y bloquearía volver a proponerlo si el valor guardado se borra.
+  const confirmados = [...new Set([...(datos.confirmados ?? []), ...aplicados])];
+  const datosExtraidos: IDatosExtraidos = {
+    ...datos,
+    confirmados,
+    confirmadoAt: aplicados.length > 0 ? new Date() : (datos.confirmadoAt ?? null),
+    confirmadoPor: aplicados.length > 0 ? new Types.ObjectId(actorId) : (datos.confirmadoPor ?? null),
+  };
+  $set['datosExtraidos'] = datosExtraidos;
+
+  const actualizado = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    { $set },
+    { new: true },
+  ).lean<IClienteLean>();
+
+  // Solo si otra petición lo borró entre la lectura y la escritura; el 404 sigue siendo correcto.
+  if (!actualizado) throw new AppError('Contacto no encontrado.', 404);
+
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'cliente.extract-confirm',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes,
+    despues: { ...despues, aplicados, omitidos },
+  });
+
+  const tagMap = await findTagsByIds(
+    tenantId,
+    (actualizado.tagIds ?? []).map((id) => String(id)),
+  );
+  const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
+
+  return {
+    contacto: toContactCard(actualizado, tagMap, puedeVerSensibles, leadId),
+    datosExtraidos: toDatosExtraidosResponse(
+      datosExtraidos,
+      puedeVerSensibles,
+    ) as IDatosExtraidosResponse,
+    aplicados,
+    omitidos,
+  };
 }

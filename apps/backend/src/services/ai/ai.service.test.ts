@@ -667,6 +667,44 @@ describe('AIService.extract()', () => {
       service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] }),
     ).rejects.toThrow();
   });
+
+  // HU-IA-06 (AC3). Hasta esta historia `extract()` resolvía la plantilla y descartaba el resultado:
+  // el `systemPrompt` sembrado era texto muerto y ningún tenant podía afinar su extracción. Es el
+  // mismo agujero que HU-IA-05 cerró en `classify()`.
+  it('pasa el systemPrompt de la plantilla resuelta como instrucciones', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('extract');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+    const schema = z.object({ nombre: z.string() });
+
+    await service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] });
+
+    expect(provider.extractSlots).toHaveBeenCalledWith(
+      expect.objectContaining({ instrucciones: 'Plantilla global de prueba para extract' }),
+    );
+  });
+
+  it('prefiere la plantilla del tenant sobre la global', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('extract');
+    await PromptTemplateModel.create({
+      tenantId,
+      method: 'extract',
+      version: '2.0.0',
+      isActive: true,
+      systemPrompt: 'La que escribió la empresa.',
+    });
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+    const schema = z.object({ nombre: z.string() });
+
+    await service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] });
+
+    expect(provider.extractSlots).toHaveBeenCalledWith(
+      expect.objectContaining({ instrucciones: 'La que escribió la empresa.' }),
+    );
+  });
 });
 
 // ─── logUsage (aislamiento multi-tenant) ────────────────────────────────────

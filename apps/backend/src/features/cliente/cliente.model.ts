@@ -104,6 +104,14 @@ const ClienteSchema = new Schema<IClienteDocument>(
           // Siempre presente: si la conversación no dicta uno, se guarda el número de WhatsApp.
           telefono: { type: String, required: true },
           telefonoOrigen: { type: String, enum: ['conversacion', 'whatsapp'], required: true },
+          // Qué pide el cliente, en sus palabras (HU-IA-06). NO es el nivel de interés: eso vive
+          // en `semaforoIA.nivelInteres` y es una escala cerrada del modelo.
+          interes: { type: String, default: null },
+          // Campos ya aplicados a la ficha. SIN `enum`, por coherencia con `semaforoIA`: el tipo lo
+          // garantiza `CampoExtraido` y el único productor es `cliente.service`.
+          confirmados: { type: [String], default: [] },
+          confirmadoAt: { type: Date, default: null },
+          confirmadoPor: { type: Schema.Types.ObjectId, ref: 'User', default: null },
           extraidoAt: { type: Date, required: true },
           modelo: { type: String, required: true },
         },

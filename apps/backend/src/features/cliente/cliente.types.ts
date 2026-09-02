@@ -21,7 +21,14 @@ export const ESTADOS_COMERCIALES = [
 export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
 
 /**
- * Datos de contacto extraídos por IA desde la conversación, bajo demanda (HU-OMNI-03).
+ * Los cuatro campos que la IA extrae de la conversación (HU-IA-06). El orden es el de la tarjeta.
+ */
+export const CAMPOS_EXTRAIDOS = ['nombreCompleto', 'correo', 'telefono', 'interes'] as const;
+
+export type CampoExtraido = (typeof CAMPOS_EXTRAIDOS)[number];
+
+/**
+ * Datos de contacto extraídos por IA desde la conversación (HU-OMNI-03, ampliado por HU-IA-06).
  * Se guardan aparte de `nombre`/`telefono` a propósito: esos campos son la identidad real que
  * llega por WhatsApp y no deben pisarse con una inferencia del modelo. Cada campo es `null`
  * cuando la conversación no lo menciona.
@@ -33,6 +40,28 @@ export interface IDatosExtraidos {
   telefono: string;
   /** De dónde salió `telefono`. Opcional por extracciones guardadas antes de existir este campo. */
   telefonoOrigen?: TelefonoOrigen;
+  /**
+   * Qué pide el cliente, con sus palabras («curso pre-ICFES sabatino»). Texto libre de <= 120
+   * caracteres. **No** es el nivel de interés: eso es `semaforoIA.nivelInteres` (HU-IA-05) y es una
+   * escala cerrada del modelo, no lo que el cliente quiere comprar.
+   *
+   * Opcional en lectura por las extracciones guardadas antes de existir este campo.
+   */
+  interes?: string | null;
+  /**
+   * Campos ya aplicados a la ficha (HU-IA-06). Vacío o ausente = todo sugerido. Un campo que esté
+   * aquí no vuelve a proponerse ni se pisa en la siguiente extracción.
+   *
+   * Es una lista y no un booleano por campo: cuatro banderas serían cuatro campos nuevos en el
+   * subdocumento y cuatro en el DTO, y no escalarían a un quinto campo extraído.
+   */
+  confirmados?: CampoExtraido[];
+  /**
+   * Última confirmación, no una por campo: el detalle campo a campo ya queda en `audit_events`,
+   * que es donde se consulta un histórico. Duplicarlo aquí sería una segunda bitácora, peor.
+   */
+  confirmadoAt?: Date | null;
+  confirmadoPor?: Types.ObjectId | null;
   extraidoAt: Date;
   modelo: string;
 }
@@ -227,7 +256,27 @@ export interface IDatosExtraidosResponse {
   correo: string | null;
   telefono: string;
   telefonoOrigen: TelefonoOrigen;
+  interes: string | null;
+  /** Campos ya aplicados a la ficha. Lo que no está aquí y tiene valor está solo sugerido. */
+  confirmados: CampoExtraido[];
   extraidoAt: string;
+}
+
+/**
+ * Resultado de confirmar datos extraídos (HU-IA-06): qué se escribió en la ficha y qué se dejó
+ * como estaba porque ya había un dato guardado. La UI necesita las dos listas para poder explicar
+ * una omisión en vez de mentir con un éxito silencioso.
+ */
+export interface IConfirmarExtraccionResponse {
+  contacto: IContactCardResponse;
+  datosExtraidos: IDatosExtraidosResponse;
+  aplicados: CampoExtraido[];
+  omitidos: CampoExtraido[];
+}
+
+/** Cuerpo de `POST /api/clientes/:id/extract/confirm`. */
+export interface ConfirmarExtraccionDTO {
+  campos: CampoExtraido[];
 }
 
 /** Historial completo del contacto: ficha + resumen + datos extraídos + mensajes paginados. */

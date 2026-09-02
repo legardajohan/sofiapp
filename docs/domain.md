@@ -53,13 +53,28 @@
 
 ## 4. Captura por IA — datos genéricos vs. personalizados
 
-- **Core (todos los tenants):** `nombre`, `rolContacto` (`decisor | usuario | desconocido`),
-  `interesItemId` (producto/servicio del catálogo), `nivelInteres`, `objecionPrincipal`.
-- **Personalizados (por tenant):** `customFields` (mapa libre). Ejemplo Pre-ICFES: `colegio`,
-  `grado`, `acudienteContacto` viven aquí, no como columnas fijas.
+**Lo que la IA captura hoy (HU-IA-06)** son cuatro campos, en `Cliente.datosExtraidos`:
+`nombreCompleto`, `correo`, `telefono` e `interes`. Se guardan **aparte** de la ficha y siguen
+siendo una sugerencia hasta que alguien la confirma; confirmar nunca sobrescribe un dato que ya
+escribió una persona.
 
-> El motor de IA recibe del tenant la definición de qué `customFields` debe intentar capturar
-> (configuración por tenant), además del core fijo.
+> **El «interés» de IA-06 es texto libre**, no una referencia al catálogo: es el producto o servicio
+> concreto que el cliente pide, con sus palabras («curso pre-ICFES sabatino»). Al confirmarse aterriza
+> como **atributo** del contacto (`key: 'interes'`), el mecanismo de extensión de HU-CRM-02.
+>
+> **No confundir con `nivelInteres`**, que es la *temperatura* del prospecto (una clave del catálogo
+> `contact_options` del tenant) y la produce la semaforización de §5.
+
+- **Aspiracional, todavía sin implementar:** `rolContacto` (`decisor | usuario | desconocido`) e
+  `interesItemId` (producto/servicio del catálogo). `rolContacto` existe como campo y lo edita una
+  persona, pero **ninguna IA lo escribe**; `interesItemId` y su modelo `CatalogItem` están
+  especificados en `docs/data-model.md` y **no existen en el backend**. Ver
+  `docs/specs/HU-IA-06-extraccion-datos/spec.md` §«Qué es interés, y por qué».
+- **Personalizados (por tenant):** `atributos` (HU-CRM-02), que superan a `customFields` (mapa libre).
+  Ejemplo Pre-ICFES: `colegio`, `grado`, `acudienteContacto` viven aquí, no como columnas fijas.
+
+> Qué campos se piden al modelo lo fija el producto (`DATOS_CONTACTO_SLOTS`); lo que cada tenant sí
+> puede afinar es **el prompt**, vía su plantilla `extract`.
 
 ## 5. Semaforización (HU-OMNI-04)
 

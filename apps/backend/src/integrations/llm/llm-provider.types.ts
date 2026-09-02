@@ -51,6 +51,13 @@ export interface ILlmProvider {
   extractSlots(input: {
     historial: ChatTurn[];
     camposObjetivo: SlotSpec[];
+    /**
+     * `systemPrompt` de la plantilla `extract` activa. **Obligatorio, no opcional**: hasta HU-IA-06
+     * este parámetro no existía y la plantilla que `extract()` resolvía nunca llegaba al modelo
+     * (era texto muerto, el mismo agujero que HU-IA-05 cerró en `classifyLead`). Hacerlo opcional
+     * lo dejaría vivo, y el fallo es silencioso — el modelo responde igual, solo que sin criterio.
+     */
+    instrucciones: string;
   }): Promise<LlmCallResult<SlotResult>>;
 
   classifyLead(input: {

@@ -16,13 +16,9 @@ import { findUsersByIds } from '../users/user.service.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import { publishConversationUpdated } from '../conversation/conversation.service.js';
+import { turnosDelCliente } from './ai-shared.js';
 import { semaforoDeClasificacion, semaforoVigente } from './ai-semaforo.types.js';
 import type { IClasificacionResponse } from './ai-semaforo.types.js';
-
-/** Turnos escritos por el cliente. Los de rol `model` son de la empresa y no cuentan. */
-function turnosDelCliente(historial: ChatTurn[]): number {
-  return historial.filter((t) => t.role === 'user').length;
-}
 
 /**
  * Mueve el semáforo sin tocar las demás etiquetas.

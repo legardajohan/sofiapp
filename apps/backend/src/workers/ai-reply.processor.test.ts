@@ -9,6 +9,7 @@ const {
   mockHandoffConversation,
   mockGetHandoffSettings,
   mockClasificarSemaforo,
+  mockExtraerDatos,
 } = vi.hoisted(() => ({
   mockChat: vi.fn(),
   mockClassify: vi.fn(),
@@ -17,6 +18,7 @@ const {
   mockHandoffConversation: vi.fn(),
   mockGetHandoffSettings: vi.fn(),
   mockClasificarSemaforo: vi.fn(),
+  mockExtraerDatos: vi.fn(),
 }));
 
 vi.mock('../services/ai/ai-service.singleton.js', () => ({
@@ -35,6 +37,12 @@ vi.mock('../features/conversation/conversation.service.js', () => ({
 // historial y que un fallo suyo no arrastre al auto-reply.
 vi.mock('../features/ai/ai-semaforo.service.js', () => ({
   clasificarYAplicarSemaforo: mockClasificarSemaforo,
+}));
+
+// Igual con la extracción (HU-IA-06): sus guardas y su merge tienen sus propios tests; aquí solo
+// importa QUE se enganche, en qué orden y que un fallo suyo no arrastre al auto-reply.
+vi.mock('../features/ai/ai-extract.service.js', () => ({
+  extraerDatosSiHaceFalta: mockExtraerDatos,
 }));
 
 // Mock PARCIAL: solo se sustituye la lectura de configuración. `evaluarAntesDeGenerar` y
@@ -527,6 +535,82 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
   });
 });
 
+describe('processAiReplyJob — extracción automática de datos (HU-IA-06)', () => {
+  let tenantId: Types.ObjectId;
+
+  beforeEach(async () => {
+    tenantId = new Types.ObjectId();
+    mockChat.mockReset().mockResolvedValue({
+      data: RESPUESTA,
+      cacheHit: false,
+      fromFaq: false,
+      retrievedChunks: [{ texto: 'x', documentId: 'd' }],
+      promptTokens: 1,
+      completionTokens: 1,
+      totalTokens: 2,
+      durationMs: 1,
+    });
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockMarcarParaAsesor.mockReset().mockResolvedValue(undefined);
+    mockClasificarSemaforo.mockReset().mockResolvedValue(undefined);
+    mockExtraerDatos.mockReset().mockResolvedValue(undefined);
+    await Cliente.deleteMany({});
+    await Message.deleteMany({});
+  });
+
+  const job = (clienteId: Types.ObjectId): { tenantId: string; clienteId: string; recibidoEn: number } => ({
+    tenantId: tenantId.toString(),
+    clienteId: clienteId.toString(),
+    recibidoEn: Date.now(),
+  });
+
+  it('se extrae UNA vez por ráfaga, con el historial del ciclo (AC14)', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'hola, soy Diego');
+    await crearMensaje(tenantId, clienteId, 'bot', 'un gusto');
+    await crearMensaje(tenantId, clienteId, 'user', 'me interesa el curso sabatino');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockExtraerDatos).toHaveBeenCalledTimes(1);
+    const [tid, cid, historial] = mockExtraerDatos.mock.calls[0]!;
+    expect(tid).toBe(tenantId.toString());
+    expect(cid).toBe(clienteId.toString());
+    expect(historial).toEqual(mockChat.mock.calls[0]![0].historial);
+  });
+
+  it('va DESPUÉS de la clasificación: si el proceso muere en medio, se pierde lo recuperable', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'me interesa el curso');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockClasificarSemaforo.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockExtraerDatos.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('un fallo de la extracción no impide que la respuesta salga (AC15)', async () => {
+    // En producción `extraerDatosSiHaceFalta` no lanza por diseño; aquí se fuerza para fijar que la
+    // respuesta al cliente ya había salido antes, si algún día dejara de cumplir esa promesa.
+    mockExtraerDatos.mockRejectedValue(new Error('Gemini caído'));
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'me interesa el curso');
+
+    await expect(processAiReplyJob(job(clienteId))).rejects.toThrow('Gemini caído');
+    expect(mockReplyFromIa).toHaveBeenCalledTimes(1);
+  });
+
+  it('con Sofi apagada no se extrae nada', async () => {
+    const clienteId = await crearCliente(tenantId, false);
+    await crearMensaje(tenantId, clienteId, 'user', 'me interesa el curso');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockExtraerDatos).not.toHaveBeenCalled();
+  });
+});
+
 describe('processAiReplyJob — semaforización automática (HU-IA-05)', () => {
   let tenantId: Types.ObjectId;
 
@@ -544,6 +628,8 @@ describe('processAiReplyJob — semaforización automática (HU-IA-05)', () => {
     });
     mockReplyFromIa.mockReset().mockResolvedValue(undefined);
     mockMarcarParaAsesor.mockReset().mockResolvedValue(undefined);
+    mockClasificarSemaforo.mockReset().mockResolvedValue(undefined);
+    mockExtraerDatos.mockReset().mockResolvedValue(undefined);
     await Cliente.deleteMany({});
     await Message.deleteMany({});
   });

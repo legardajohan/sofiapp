@@ -143,6 +143,21 @@
     at: ISODate,
     aplicado: "azul" | "rojo" | "naranja" | "verde" | null   // null = solo se propuso
   },
+  // Datos de contacto leídos de la conversación por la IA (HU-OMNI-03, ampliado por HU-IA-06).
+  // Viven APARTE de `nombre`/`telefono`/`correoEnc` a propósito: son una sugerencia hasta que una
+  // persona la confirma. Sin índice: se proyectan al abrir la ficha, nadie filtra por esto.
+  datosExtraidos: {               // subdoc con _id: false; ausente si nunca se extrajo
+    nombreCompleto: String?,
+    correo: String?,              // mismo gate por subrol que `correoEnc` al leerlo
+    telefono: String,             // NUNCA null: cae al número de WhatsApp del contacto
+    telefonoOrigen: "conversacion" | "whatsapp",
+    interes: String?,             // <= 120 chars, texto libre: QUÉ pide, no cuánto le interesa
+    confirmados: [String],        // campos ya APLICADOS a la ficha; [] = todo sugerido
+    confirmadoAt: ISODate?,       // última confirmación, no una por campo
+    confirmadoPor: ObjectId?,     // ref User
+    extraidoAt: ISODate,
+    modelo: String
+  },
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
@@ -450,7 +465,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 >
 > Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
 > `cliente.update` y `contact-note.create` (HU-CRM-02); `conversation.handoff` (HU-IA-03);
-> `cliente.semaforo` (HU-IA-05).
+> `cliente.semaforo` (HU-IA-05); `cliente.extract` y `cliente.extract-confirm` (HU-IA-06).
 >
 > **`cliente.semaforo`** registra cada cambio del semáforo por clasificación de intención de compra:
 > `antes: { semaforo }`, `despues: { semaforo, aplicado, confianza, motivo, nivelInteres, objecion }`.
@@ -458,6 +473,14 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > mano. Solo se escribe cuando el slug sugerido **difiere** del vigente: un evento por mensaje
 > inundaría la colección. El `motivo` viene recortado y la plantilla `classify` prohíbe que cite
 > datos de contacto, por la regla de abajo.
+>
+> **`cliente.extract`** registra que la IA escribió `datosExtraidos`: `antes`/`despues` con
+> `{ nombreCompleto, correo, telefono, interes }`. `actorId: null` cuando lo disparó el worker; el id
+> de quien pulsó «Extraer datos» cuando fue a mano. Solo se escribe cuando **algún valor cambia**:
+> con la extracción automática corriendo por ráfaga, un evento por pasada inundaría la colección.
+> **`cliente.extract-confirm`** registra el paso de esos datos a la ficha, con `aplicados` y
+> `omitidos` en el `despues` — un campo se omite cuando su destino ya tenía un dato guardado, que
+> nunca se sobrescribe. En las dos acciones el correo viaja como `[oculto]`, por la regla de abajo.
 >
 > En `lead.delete` el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado
 > duro, es la única copia que queda — y el `despues` lleva solo `{ motivo }`.

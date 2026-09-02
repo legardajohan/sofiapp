@@ -132,7 +132,7 @@ export class AIService {
 
   async extract<T>(params: AiExtractParams): Promise<AiResult<T>> {
     const start = Date.now();
-    await this.resolveTemplate(params.tenantId, 'extract');
+    const template = await this.resolveTemplate(params.tenantId, 'extract');
 
     const { result, usage } = await this.provider.extractSlots({
       historial: conTurnoDeTarea(
@@ -140,6 +140,9 @@ export class AIService {
         'Extrae de la conversación anterior los campos solicitados. Deja vacío el que no aparezca.',
       ),
       camposObjetivo: params.camposObjetivo,
+      // HU-IA-06: hasta ahora la plantilla se resolvía y se tiraba, así que el `systemPrompt`
+      // sembrado era texto muerto y ningún tenant podía afinar su extracción.
+      instrucciones: template.systemPrompt,
     });
 
     const parsed = params.schema.parse(result.slots) as T;

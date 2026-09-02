@@ -21,6 +21,25 @@ export const extractSchema = z.object({
   query: empty,
 });
 
+/**
+ * Confirmar datos extraídos (HU-IA-06). El cuerpo dice **qué** campos se aplican a la ficha, no con
+ * qué valor: el valor es el que la IA extrajo y ya está persistido, así que aceptarlo por HTTP
+ * abriría una vía para escribir `nombre` y `correo` saltándose el parche de HU-CRM-02.
+ */
+export const confirmarExtraccionSchema = z.object({
+  body: z
+    .object({
+      campos: z
+        .array(z.enum(['nombreCompleto', 'correo', 'telefono', 'interes']))
+        .min(1, 'Indica al menos un campo para confirmar.')
+        .max(4)
+        .refine((c) => new Set(c).size === c.length, 'No repitas campos.'),
+    })
+    .strict(),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 // ─── Edición de la ficha (HU-CRM-02) ────────────────────────────────────────────
 
 /**

@@ -204,9 +204,29 @@ describe('GeminiProvider.extractSlots', () => {
         { campo: 'nombre', descripcion: 'Nombre del prospecto', tipo: 'texto', requerido: true },
         { campo: 'email', descripcion: 'Email del prospecto', tipo: 'texto', requerido: true },
       ],
+      instrucciones: INSTRUCCIONES,
     });
     expect(result.slots['nombre']).toBe('Juan');
     expect(result.incompletos).toContain('email');
     expect(result.incompletos).not.toContain('nombre');
+  });
+
+  // HU-IA-06 (AC3). Hasta esta historia la plantilla `extract` se resolvía y se descartaba, así que
+  // el prompt sembrado nunca llegaba al modelo: el mismo agujero que HU-IA-05 cerró en `classify`.
+  it('pasa las instrucciones como systemInstruction', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ nombre: 'Juan' }) },
+    });
+    const provider = new GeminiProvider();
+    await provider.extractSlots({
+      historial: HISTORIAL,
+      camposObjetivo: [
+        { campo: 'nombre', descripcion: 'Nombre del prospecto', tipo: 'texto', requerido: false },
+      ],
+      instrucciones: INSTRUCCIONES,
+    });
+    expect(mockGetGenerativeModel).toHaveBeenCalledWith(
+      expect.objectContaining({ systemInstruction: INSTRUCCIONES }),
+    );
   });
 });
