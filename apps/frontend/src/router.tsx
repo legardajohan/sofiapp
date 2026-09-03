@@ -41,6 +41,14 @@ const TagsPage = lazy(() =>
   import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
 );
 
+const FlowsPage = lazy(() =>
+  import('./features/flows/index.js').then((m) => ({ default: m.FlowsPage })),
+);
+
+const FlowEditorPage = lazy(() =>
+  import('./features/flows/index.js').then((m) => ({ default: m.FlowEditorPage })),
+);
+
 const AdminRoutes = lazy(() =>
   import('./routes/AdminRoutes.js').then((m) => ({ default: m.default })),
 );
@@ -145,6 +153,26 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <TagsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/flows',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <FlowsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/flows/:id',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <FlowEditorPage />
                 </Suspense>
               </RequireRole>
             ),

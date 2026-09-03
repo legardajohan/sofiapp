@@ -98,6 +98,10 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | GET | `/api/templates` | admin | Catálogo de plantillas HSM del tenant, paginado (`?page&limit&status&category`) (HT-WA-02). |
 | POST | `/api/templates` | admin | Crea una plantilla en Meta y la persiste localmente en `PENDING` (HT-WA-02). |
 | POST | `/api/templates/sync` | admin | Sincroniza el catálogo local con el estado real en Meta (HT-WA-02). |
+| GET | `/api/flows` | admin | Lista los flujos del tenant (`{ id, nombre, version, estado, activo, updatedAt }`), más recientes primero (HU-FLOW-01-V2). |
+| POST | `/api/flows` | admin | Crea un flujo (`{ nombre, nodos, aristas, entrada, activo? }`) → `201`. El grafo se valida completo en el borde (Zod `superRefine`): ids duplicados, nodo de entrada inexistente, aristas/`nodoDestino`/`ramaPorDefecto` a un id que no existe, o un nodo huérfano → `400`. `activo: true` desactiva el flujo activo anterior del tenant en la misma operación (HU-FLOW-01-V2). |
+| GET | `/api/flows/:id` | admin | Detalle completo del flujo (nodos + aristas). Flujo de otro tenant → `404`, nunca `403` (HU-FLOW-01-V2). |
+| PUT | `/api/flows/:id` | admin | Reemplaza el grafo completo y sube `version`; misma validación que `POST` y la misma exclusividad de `activo` (HU-FLOW-01-V2). |
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |
 | GET/POST | `/api/campaigns` | admin | Campañas de remarketing. |
 | GET | `/api/clientes/filter` | admin | Conteo/listado para segmentar campañas. |

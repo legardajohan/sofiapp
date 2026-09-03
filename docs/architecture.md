@@ -73,7 +73,7 @@ Request → authenticateJWT → requireTenant → authorize([roles]) → validat
 | Estado | Zustand 5.x + TanStack Query 5.x | — |
 | UI | Tailwind 3/4 (+ shadcn/ui opcional) | — |
 | Gráficos | Recharts 2/3 | — |
-| Flujos (Fase 3) | `@xyflow/react` (React Flow) 12.x | — |
+| Flujos | `@xyflow/react` (React Flow) 12.x — implementado en `HU-FLOW-01-V2` | — |
 | Testing | Vitest 3.x + Supertest | — |
 | Monorepo | pnpm workspaces + Turborepo | — |
 | Móvil (Fase 4) | React Native 0.76+ + Expo SDK 52+ | — |

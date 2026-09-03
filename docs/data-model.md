@@ -351,7 +351,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 // Índices: { tenantId: 1, campaignId: 1, estado: 1 }
 ```
 
-## flows  (constructor visual — Fase 3)
+## flows  (constructor visual — implementado en HU-FLOW-01-V2)
 ```js
 {
   _id: ObjectId,
@@ -359,20 +359,38 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   nombre: String,
   nodos: [ {
     id: String,
-    tipo: "mensaje" | "captura" | "condicion" | "espera" | "handoff" | "ia" | "api",
+    tipo: "mensaje" | "captura" | "condicion" | "intencion" | "kb" | "accion" | "handoff" | "espera",
     posicion: { x: Number, y: Number },
-    config: Object                // específico por tipo de nodo (a definir en spec de M06)
+    config: Object                 // unión discriminada por `tipo`, ver detalle abajo
   } ],
   aristas: [ { id: String, from: String, to: String, condicion: String? } ],
+  entrada: String,                 // id del nodo por el que arranca la ejecución
   version: Number,
   estado: "borrador" | "publicado",
-  activo: Boolean,                // solo UNA versión activa por tenant en producción
+  activo: Boolean,                 // solo UNA versión activa por tenant (índice parcial único)
   createdAt, updatedAt
 }
-// Índices: { tenantId: 1, activo: 1 }
+// Índices: { tenantId: 1, activo: 1 } · { tenantId: 1 } único con partialFilterExpression: { activo: true }
 ```
 
-## flow_states  (estado de ejecución del runtime — Fase 3)
+`config` por tipo de nodo (validado por `flow.validation.ts` con `.strict()` en cada rama — una
+clave extra es un 400, no un campo ignorado):
+
+| `tipo` | `config` |
+|---|---|
+| `mensaje` | `{ texto?, templateId?, parametros? }` |
+| `captura` | `{ campo, descripcion, tipoDato: "texto"\|"numero"\|"fecha"\|"booleano", pregunta, reintentos }` |
+| `condicion` | `{ variable: "ultimo_mensaje"\|"var:<nombre>", ramas: [{ operador: "igual_a"\|"contiene"\|"opcion_elegida", valor, nodoDestino }], ramaPorDefecto }` |
+| `intencion` | `{ etiquetas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto }` |
+| `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
+| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
+| `handoff` | `{ motivo?, notificarAsesorId? }` |
+| `espera` | `{ minutos }` — reservado, lo ejecuta `HU-FLOW-02` |
+
+`tipo: "api"` queda **reservado** en el vocabulario del constructor pero no tiene rama en la unión:
+cualquier intento de guardarlo es un 400.
+
+## flow_states  (estado de ejecución del runtime — implementado en HU-FLOW-01-V2)
 ```js
 {
   _id: ObjectId,
@@ -380,10 +398,12 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   clienteId: ObjectId,
   flowId: ObjectId,
   nodoActualId: String,
-  variables: Object,              // contexto de la conversación
-  updatedAt: ISODate
+  variables: Object,               // contexto de la conversación
+  esperandoRespuesta: Boolean,      // true = el flujo está parado (respuesta del cliente o resolución async)
+  ultimoMetaMessageId: String?,     // idempotencia: no reavanza si se reprocesa el mismo mensaje
+  actualizadoAt: ISODate
 }
-// Índices: { tenantId: 1, clienteId: 1 } unique
+// Índices: { tenantId: 1, clienteId: 1 } único · { tenantId: 1, flowId: 1 }
 ```
 
 ## kb_documents  (base de conocimiento — RAG, HU-KB-01 · HU-KB-01-V2)
