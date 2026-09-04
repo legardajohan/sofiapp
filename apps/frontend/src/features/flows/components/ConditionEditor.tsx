@@ -74,44 +74,23 @@ export function ConditionEditor({
             const esLarga = rama.valor.length > UMBRAL_EXPANDIR;
             const expandida = esLarga && (expandidas[index] ?? false);
             return (
-              <div key={index} className="space-y-1 rounded-md border border-border bg-muted/30 p-1.5">
-                <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-1.5">
+              <div key={index} className="space-y-1.5 rounded-md border border-border bg-muted/30 p-2">
+                {/* Apilado, no en grid de 3 columnas: el panel mide 320-384px y tres selects lado a
+                    lado ahí quedan tan angostos que ni el operador ni el destino se leen completos
+                    — el mismo problema de fondo que el scroll horizontal del valor. Una fila por
+                    control, con el ancho completo del panel, es lo que de verdad lo arregla. */}
+                <div className="flex items-center gap-1.5">
                   <Select
                     value={rama.operador}
                     onValueChange={(v) => actualizarRama(index, { operador: v as IRamaCondicion['operador'] })}
                   >
-                    <SelectTrigger className="h-8 text-xs" aria-label="Operador">
+                    <SelectTrigger className="h-8 flex-1 text-xs" aria-label="Operador">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {OPERADORES.map((op) => (
                         <SelectItem key={op} value={op} className="text-xs">
                           {OPERADOR_LABEL[op]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Input
-                    value={rama.valor}
-                    onChange={(e) => actualizarRama(index, { valor: e.target.value })}
-                    placeholder={rama.operador === 'opcion_elegida' ? 'Texto de la opción' : 'Valor'}
-                    className="h-8 text-xs"
-                    aria-label="Valor a comparar"
-                    disabled={expandida}
-                  />
-
-                  <Select
-                    value={rama.nodoDestino || undefined}
-                    onValueChange={(v) => actualizarRama(index, { nodoDestino: v })}
-                  >
-                    <SelectTrigger className="h-8 text-xs" aria-label="Nodo destino">
-                      <SelectValue placeholder="Destino…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {opcionesDestino.map((op) => (
-                        <SelectItem key={op.id} value={op.id} className="text-xs">
-                          {op.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -128,6 +107,15 @@ export function ConditionEditor({
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
+
+                <Input
+                  value={rama.valor}
+                  onChange={(e) => actualizarRama(index, { valor: e.target.value })}
+                  placeholder={rama.operador === 'opcion_elegida' ? 'Texto de la opción' : 'Valor'}
+                  className="h-8 text-xs"
+                  aria-label="Valor a comparar"
+                  disabled={expandida}
+                />
 
                 {esLarga ? (
                   <button
@@ -157,6 +145,22 @@ export function ConditionEditor({
                     />
                   </div>
                 </div>
+
+                <Select
+                  value={rama.nodoDestino || undefined}
+                  onValueChange={(v) => actualizarRama(index, { nodoDestino: v })}
+                >
+                  <SelectTrigger className="h-8 w-full text-xs" aria-label="Nodo destino">
+                    <SelectValue placeholder="Ir a…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opcionesDestino.map((op) => (
+                      <SelectItem key={op.id} value={op.id} className="text-xs">
+                        {op.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             );
           })}
