@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NODE_VISUALS, resumenConfig, tieneSalidaLineal } from '../nodeVisuals.js';
+import { NODE_VISUALS, filasDeRama, resumenConfig, tieneSalidaLineal } from '../nodeVisuals.js';
 import type { INodo } from '../../types.js';
 
 export interface FlowNodeData extends Record<string, unknown> {
@@ -20,11 +20,12 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
   const Icon = visual.icon;
   const esHandoff = nodo.tipo === 'handoff';
   const resumen = resumenConfig(nodo);
+  const filas = filasDeRama(nodo);
 
   return (
     <div
       className={cn(
-        'w-56 rounded-lg border bg-card shadow-sm transition-shadow',
+        'w-64 rounded-lg border bg-card shadow-sm transition-shadow',
         selected ? 'ring-2 ring-ring' : '',
         esEntrada && 'ring-2 ring-primary',
         esHandoff ? 'border-destructive/50' : 'border-border',
@@ -57,9 +58,31 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
         {error ? <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-destructive" /> : null}
       </div>
 
-      <div className="px-3 py-2">
-        <p className="line-clamp-2 text-xs text-muted-foreground">{resumen}</p>
-      </div>
+      {filas.length > 0 ? (
+        // Una fila por rama, cada una con su propio handle de salida (a la derecha, alineado a esa
+        // fila) — es lo que hace arrastrable en el canvas lo que antes solo vivía en el `<Select>`
+        // del inspector. `relative` en la fila es lo que ancla el handle absoluto a SU posición,
+        // no a la del nodo completo.
+        <ul className="divide-y divide-border/60">
+          {filas.map((fila) => (
+            <li key={fila.handleId} className="relative py-1.5 pl-3 pr-5">
+              <span className="block truncate text-[11px] text-muted-foreground" title={fila.label}>
+                {fila.label}
+              </span>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={fila.handleId}
+                className="!bg-primary"
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="px-3 py-2">
+          <p className="line-clamp-2 text-xs text-muted-foreground">{resumen}</p>
+        </div>
+      )}
 
       {tieneSalidaLineal(nodo.tipo) ? (
         <Handle type="source" position={Position.Bottom} className="!bg-muted-foreground/60" />

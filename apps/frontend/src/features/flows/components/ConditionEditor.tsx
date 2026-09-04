@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import { OPERADOR_LABEL, OPERADORES, type IRamaCondicion } from '../types.js';
 
 export interface OpcionDestino {
@@ -27,6 +30,10 @@ function ramaVacia(): IRamaCondicion {
   return { operador: 'igual_a', valor: '', nodoDestino: '' };
 }
 
+/** A partir de este largo, el valor ya no se lee cómodo en el input compacto de una línea (criterio
+ *  6 de HU-FLOW-01-V3): en vez de dejarlo hacer scroll horizontal, se ofrece expandirlo. */
+const UMBRAL_EXPANDIR = 28;
+
 /**
  * Editor de ramas de un nodo `condicion`: operador + valor + destino, y la rama por defecto. Es la
  * tarea literal de la historia — tiene que ser lo más rápido y evidente del inspector, así que cada
@@ -38,6 +45,8 @@ export function ConditionEditor({
   opcionesDestino,
   onChange,
 }: ConditionEditorProps): React.ReactElement {
+  const [expandidas, setExpandidas] = useState<Record<number, boolean>>({});
+
   function actualizarRama(index: number, cambio: Partial<IRamaCondicion>): void {
     const siguiente = ramas.map((r, i) => (i === index ? { ...r, ...cambio } : r));
     onChange(siguiente, ramaPorDefecto);
@@ -61,63 +70,96 @@ export function ConditionEditor({
           Si la respuesta del cliente…
         </Label>
         <div className="space-y-2">
-          {ramas.map((rama, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-1.5 rounded-md border border-border bg-muted/30 p-1.5"
-            >
-              <Select
-                value={rama.operador}
-                onValueChange={(v) => actualizarRama(index, { operador: v as IRamaCondicion['operador'] })}
-              >
-                <SelectTrigger className="h-8 text-xs" aria-label="Operador">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OPERADORES.map((op) => (
-                    <SelectItem key={op} value={op} className="text-xs">
-                      {OPERADOR_LABEL[op]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {ramas.map((rama, index) => {
+            const esLarga = rama.valor.length > UMBRAL_EXPANDIR;
+            const expandida = esLarga && (expandidas[index] ?? false);
+            return (
+              <div key={index} className="space-y-1 rounded-md border border-border bg-muted/30 p-1.5">
+                <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-1.5">
+                  <Select
+                    value={rama.operador}
+                    onValueChange={(v) => actualizarRama(index, { operador: v as IRamaCondicion['operador'] })}
+                  >
+                    <SelectTrigger className="h-8 text-xs" aria-label="Operador">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPERADORES.map((op) => (
+                        <SelectItem key={op} value={op} className="text-xs">
+                          {OPERADOR_LABEL[op]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-              <Input
-                value={rama.valor}
-                onChange={(e) => actualizarRama(index, { valor: e.target.value })}
-                placeholder={rama.operador === 'opcion_elegida' ? 'Texto de la opción' : 'Valor'}
-                className="h-8 text-xs"
-                aria-label="Valor a comparar"
-              />
+                  <Input
+                    value={rama.valor}
+                    onChange={(e) => actualizarRama(index, { valor: e.target.value })}
+                    placeholder={rama.operador === 'opcion_elegida' ? 'Texto de la opción' : 'Valor'}
+                    className="h-8 text-xs"
+                    aria-label="Valor a comparar"
+                    disabled={expandida}
+                  />
 
-              <Select
-                value={rama.nodoDestino || undefined}
-                onValueChange={(v) => actualizarRama(index, { nodoDestino: v })}
-              >
-                <SelectTrigger className="h-8 text-xs" aria-label="Nodo destino">
-                  <SelectValue placeholder="Destino…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {opcionesDestino.map((op) => (
-                    <SelectItem key={op.id} value={op.id} className="text-xs">
-                      {op.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <Select
+                    value={rama.nodoDestino || undefined}
+                    onValueChange={(v) => actualizarRama(index, { nodoDestino: v })}
+                  >
+                    <SelectTrigger className="h-8 text-xs" aria-label="Nodo destino">
+                      <SelectValue placeholder="Destino…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcionesDestino.map((op) => (
+                        <SelectItem key={op.id} value={op.id} className="text-xs">
+                          {op.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => eliminarRama(index)}
-                aria-label="Eliminar rama"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => eliminarRama(index)}
+                    aria-label="Eliminar rama"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {esLarga ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandidas((prev) => ({ ...prev, [index]: !expandida }))}
+                    className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    {expandida ? 'Ver menos' : 'Ver más'}
+                  </button>
+                ) : null}
+
+                {/* Truco de `grid-template-rows` 0fr↔1fr: anima el alto sin medir el contenido y sin
+                    saltos — el valor completo, con wrap, en vez del scroll horizontal del input. */}
+                <div
+                  className={cn(
+                    'grid transition-[grid-template-rows] duration-200 ease-out',
+                    expandida ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <Textarea
+                      value={rama.valor}
+                      onChange={(e) => actualizarRama(index, { valor: e.target.value })}
+                      rows={2}
+                      className="text-xs"
+                      aria-label="Valor a comparar (completo)"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={agregarRama}>

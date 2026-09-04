@@ -8,8 +8,14 @@ import type { IRamaCondicion } from '../types.js';
 /** El input de "valor" es controlado: sin un dueño de estado real, cada tecla se dispara sobre el
  *  mismo `value` de props (nunca actualizado) y `userEvent.type` termina viendo solo el último
  *  carácter. Este wrapper posee el estado de verdad, como lo haría `NodeInspector`. */
-function ControlledEditor({ onChange }: { onChange: (r: IRamaCondicion[], d: string) => void }) {
-  const [ramas, setRamas] = useState<IRamaCondicion[]>([{ operador: 'igual_a', valor: '', nodoDestino: 'n2' }]);
+function ControlledEditor({
+  onChange,
+  inicial = [{ operador: 'igual_a', valor: '', nodoDestino: 'n2' }],
+}: {
+  onChange: (r: IRamaCondicion[], d: string) => void;
+  inicial?: IRamaCondicion[];
+}) {
+  const [ramas, setRamas] = useState<IRamaCondicion[]>(inicial);
   const [porDefecto, setPorDefecto] = useState('n3');
   return (
     <ConditionEditor
@@ -69,5 +75,26 @@ describe('ConditionEditor — ramas de un nodo condición', () => {
     render(<ConditionEditor ramas={[]} ramaPorDefecto="" opcionesDestino={OPCIONES} onChange={vi.fn()} />);
     expect(screen.getByText('Si ninguna rama coincide, ir a')).toBeInTheDocument();
     expect(screen.getByLabelText('Rama por defecto')).toBeInTheDocument();
+  });
+
+  it('un valor corto no muestra el afordance "Ver más"', () => {
+    const ramas: IRamaCondicion[] = [{ operador: 'igual_a', valor: 'si', nodoDestino: 'n2' }];
+    render(<ConditionEditor ramas={ramas} ramaPorDefecto="n3" opcionesDestino={OPCIONES} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Ver más' })).not.toBeInTheDocument();
+  });
+
+  it('un valor largo expande a un textarea con "Ver más" y colapsa con "Ver menos"', async () => {
+    const largo = 'una respuesta bastante larga que ya no cabe cómoda en una sola línea';
+    const ramas: IRamaCondicion[] = [{ operador: 'contiene', valor: largo, nodoDestino: 'n2' }];
+    render(<ConditionEditor ramas={ramas} ramaPorDefecto="n3" opcionesDestino={OPCIONES} onChange={vi.fn()} />);
+
+    expect(screen.getByLabelText('Valor a comparar')).not.toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Ver más' }));
+
+    expect(screen.getByLabelText('Valor a comparar')).toBeDisabled();
+    expect(screen.getByLabelText('Valor a comparar (completo)')).toHaveValue(largo);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ver menos' }));
+    expect(screen.getByLabelText('Valor a comparar')).not.toBeDisabled();
   });
 });

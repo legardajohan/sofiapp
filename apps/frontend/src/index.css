@@ -143,6 +143,17 @@ body {
     --xy-minimap-background-color: hsl(var(--card));
   }
 
+  /* Etiquetas de arista (HU-FLOW-01-V3): las líneas de rama derivadas de `condicion`/`intencion`
+     traen su propio label ("contiene: 'x'", el nombre de la intención) — se pintan con los mismos
+     tokens en vez de dejar el negro/blanco por defecto de la librería. */
+  .react-flow__edge-textbg {
+    fill: hsl(var(--card));
+  }
+  .react-flow__edge-text {
+    fill: hsl(var(--muted-foreground));
+    font-size: 10px;
+  }
+
   /* ── Planes destacados: border gradient animado + resplandor (HU-SAAS-02) ──
      Todo el efecto vive en pseudo-elementos (::before = anillo nítido, ::after = halo
      difuso que pulsa) para no chocar con las utilidades Tailwind del <article>. El anillo

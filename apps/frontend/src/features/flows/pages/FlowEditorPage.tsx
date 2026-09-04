@@ -10,7 +10,13 @@ import { ActivateFlowDialog } from '../components/ActivateFlowDialog.js';
 import { EmptyFlowState } from '../components/EmptyFlowState.js';
 import { FlowCanvas } from '../components/FlowCanvas.js';
 import { NodeInspector } from '../components/NodeInspector.js';
-import { configPorDefecto, resumenConfig, NODE_VISUALS } from '../components/nodeVisuals.js';
+import {
+  configConDestino,
+  configPorDefecto,
+  filasDeRama,
+  resumenConfig,
+  NODE_VISUALS,
+} from '../components/nodeVisuals.js';
 import type { FlowNodeData } from '../components/nodes/FlowNode.js';
 import { useFlow } from '../hooks/useFlow.js';
 import { useFlows } from '../hooks/useFlows.js';
@@ -106,9 +112,55 @@ export function FlowEditorPage(): React.ReactElement {
     [nodes, selectedNodeId],
   );
 
+  // Líneas de rama de `condicion`/`intencion`: se derivan de `config` en cada render, nunca se
+  // guardan en `edges`/`aristas` — evita que el destino de una rama (el `<Select>` del inspector)
+  // y una arista de canvas se desincronicen, que es justo el bug que tenía el diseño anterior.
+  const edgesDerivados = useMemo<Edge[]>(
+    () =>
+      nodes.flatMap((n) => {
+        const nodo = (n.data as FlowNodeData).nodo;
+        return filasDeRama(nodo)
+          .filter((fila) => fila.destino)
+          .map((fila) => ({
+            id: `derivado_${n.id}_${fila.handleId}`,
+            source: n.id,
+            sourceHandle: fila.handleId,
+            target: fila.destino,
+            label: fila.label,
+            deletable: false,
+            reconnectable: false,
+          }));
+      }),
+    [nodes],
+  );
+
+  const actualizarDestinoDeRama = useCallback(
+    (nodeId: string, handleId: string, destino: string) => {
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id !== nodeId) return n;
+          const data = n.data as FlowNodeData;
+          return { ...n, data: { ...data, nodo: { ...data.nodo, config: configConDestino(data.nodo.config, handleId, destino) } } };
+        }),
+      );
+    },
+    [setNodes],
+  );
+
+  const edgesParaCanvas = useMemo(() => [...edges, ...edgesDerivados], [edges, edgesDerivados]);
+
   const onConnect: OnConnect = useCallback(
-    (connection) => setEdges((eds) => addEdge({ ...connection, id: nuevoId('arista') }, eds)),
-    [setEdges],
+    (connection) => {
+      const handle = connection.sourceHandle;
+      const esHandleDeRama =
+        handle !== null && (handle === 'default' || handle.startsWith('rama-') || handle.startsWith('etiqueta-'));
+      if (esHandleDeRama && handle !== null && connection.source && connection.target) {
+        actualizarDestinoDeRama(connection.source, handle, connection.target);
+        return;
+      }
+      setEdges((eds) => addEdge({ ...connection, id: nuevoId('arista') }, eds));
+    },
+    [setEdges, actualizarDestinoDeRama],
   );
 
   const crearNodo = useCallback(
@@ -250,7 +302,7 @@ export function FlowEditorPage(): React.ReactElement {
               </div>
               <FlowCanvas
                 nodes={decoratedNodes}
-                edges={edges}
+                edges={edgesParaCanvas}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}

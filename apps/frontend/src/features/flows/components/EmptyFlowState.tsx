@@ -16,8 +16,9 @@ export function EmptyFlowState({ onCrearInicio }: EmptyFlowStateProps): React.Re
       <div className="max-w-sm space-y-1">
         <h3 className="text-sm font-medium text-foreground">Este flujo todavía no tiene nodos</h3>
         <p className="text-sm text-muted-foreground">
-          Empieza por el nodo de inicio: el primer mensaje o condición que ve el cliente al entrar
-          al flujo.
+          Empieza por el nodo de inicio: el primer mensaje que ve el cliente al entrar al flujo.
+          Si necesitas manejar varios temas a la vez (horarios, precios, ventas), usa un nodo de
+          Intención como punto de entrada para enrutar cada uno.
         </p>
       </div>
       <Button onClick={onCrearInicio}>Crear nodo de inicio</Button>

@@ -9,7 +9,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import type { INodo, TipoNodo } from '../types.js';
+import { OPERADOR_LABEL, type INodo, type TipoNodo } from '../types.js';
 
 export interface NodeVisual {
   icon: LucideIcon;
@@ -30,11 +30,74 @@ export const NODE_VISUALS: Record<TipoNodo, NodeVisual> = {
   espera: { icon: Clock, label: 'Espera' },
 };
 
-/** Tipos cuyo "siguiente" nodo lo decide una arista genérica del canvas. `condicion`/`intencion`
- *  ramifican desde su propia configuración (el inspector), no desde una arista; `handoff` es
- *  siempre terminal. Mostrarles un handle de salida sería una afordancia que no hace nada. */
+/** Tipos cuyo "siguiente" nodo lo decide una arista genérica del canvas (un único handle de
+ *  salida). `condicion`/`intencion` ramifican desde su propia configuración y pintan un handle
+ *  por rama vía `filasDeRama`; `handoff` es siempre terminal y no tiene salida alguna. */
 export function tieneSalidaLineal(tipo: TipoNodo): boolean {
   return tipo !== 'condicion' && tipo !== 'intencion' && tipo !== 'handoff';
+}
+
+export interface FilaRama {
+  /** Id estable del `Handle` de React Flow — también el `sourceHandle` que llega a `onConnect`. */
+  handleId: string;
+  label: string;
+  /** `nodoDestino` (o `ramaPorDefecto`) de esta rama; vacío si aún no se ha elegido destino. */
+  destino: string;
+}
+
+/**
+ * Una fila por rama/etiqueta de un nodo `condicion`/`intencion`, cada una con su propio punto de
+ * conexión — es lo que hace visible en el canvas lo que antes solo vivía en el `<Select>` del
+ * inspector. La última fila es siempre la rama por defecto. Vacío para cualquier otro tipo (nada
+ * que ramifique).
+ */
+export function filasDeRama(nodo: INodo): FilaRama[] {
+  if (nodo.config.tipo === 'condicion') {
+    return [
+      ...nodo.config.ramas.map((rama, i) => ({
+        handleId: `rama-${i}`,
+        label: `${OPERADOR_LABEL[rama.operador]} "${rama.valor || '…'}"`,
+        destino: rama.nodoDestino,
+      })),
+      { handleId: 'default', label: 'Si ninguna coincide', destino: nodo.config.ramaPorDefecto },
+    ];
+  }
+  if (nodo.config.tipo === 'intencion') {
+    return [
+      ...nodo.config.etiquetas.map((etiqueta, i) => ({
+        handleId: `etiqueta-${i}`,
+        label: etiqueta.etiqueta || 'Sin nombre',
+        destino: etiqueta.nodoDestino,
+      })),
+      { handleId: 'default', label: 'Si no reconoce ninguna', destino: nodo.config.ramaPorDefecto },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Devuelve un `ConfigNodo` nuevo con el `nodoDestino` (o `ramaPorDefecto`) del handle indicado ya
+ * actualizado. La usan tanto el `<Select>` del inspector como soltar una conexión sobre ese handle
+ * en el canvas — mismo dato, misma función, así que las dos vías quedan en sync sin código extra.
+ */
+export function configConDestino(config: INodo['config'], handleId: string, destino: string): INodo['config'] {
+  if (config.tipo === 'condicion') {
+    if (handleId === 'default') return { ...config, ramaPorDefecto: destino };
+    const i = Number(handleId.split('-')[1]);
+    return {
+      ...config,
+      ramas: config.ramas.map((r, idx) => (idx === i ? { ...r, nodoDestino: destino } : r)),
+    };
+  }
+  if (config.tipo === 'intencion') {
+    if (handleId === 'default') return { ...config, ramaPorDefecto: destino };
+    const i = Number(handleId.split('-')[1]);
+    return {
+      ...config,
+      etiquetas: config.etiquetas.map((e, idx) => (idx === i ? { ...e, nodoDestino: destino } : e)),
+    };
+  }
+  return config;
 }
 
 const EFECTO_LABEL: Record<string, string> = {

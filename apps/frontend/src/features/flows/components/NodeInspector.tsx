@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +11,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import { ConditionEditor, type OpcionDestino } from './ConditionEditor.js';
 import { NODE_VISUALS } from './nodeVisuals.js';
 import type { ConfigNodo, EstadoComercial, IEtiquetaIntencion, INodo } from '../types.js';
+
+/** Mismo umbral que `ConditionEditor` (criterio 7 de HU-FLOW-01-V3): a partir de este largo, la
+ *  descripción de una intención ya no se lee cómoda en el input de una línea. */
+const UMBRAL_EXPANDIR = 28;
 
 const ESTADOS_COMERCIALES: { valor: EstadoComercial; label: string }[] = [
   { valor: 'nuevo', label: 'Nuevo' },
@@ -96,6 +102,8 @@ function CapturaForm({ config, onChange }: FormProps<'captura'>): React.ReactEle
 }
 
 function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intencion'>): React.ReactElement {
+  const [expandidas, setExpandidas] = useState<Record<number, boolean>>({});
+
   function actualizar(index: number, cambio: Partial<IEtiquetaIntencion>): void {
     onChange({
       ...config,
@@ -107,7 +115,10 @@ function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intenci
     <div className="space-y-4">
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Intenciones que reconoce este nodo</Label>
-        {config.etiquetas.map((etiqueta, index) => (
+        {config.etiquetas.map((etiqueta, index) => {
+          const esLarga = etiqueta.descripcion.length > UMBRAL_EXPANDIR;
+          const expandida = esLarga && (expandidas[index] ?? false);
+          return (
           <div key={index} className="space-y-1.5 rounded-md border border-border bg-muted/30 p-2">
             <div className="flex items-center gap-1.5">
               <Input
@@ -134,7 +145,33 @@ function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intenci
               onChange={(e) => actualizar(index, { descripcion: e.target.value })}
               placeholder="El cliente pregunta por precios o planes"
               className="h-8 text-xs"
+              disabled={expandida}
             />
+            {esLarga ? (
+              <button
+                type="button"
+                onClick={() => setExpandidas((prev) => ({ ...prev, [index]: !expandida }))}
+                className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {expandida ? 'Ver menos' : 'Ver más'}
+              </button>
+            ) : null}
+            <div
+              className={cn(
+                'grid transition-[grid-template-rows] duration-200 ease-out',
+                expandida ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+              )}
+            >
+              <div className="overflow-hidden">
+                <Textarea
+                  value={etiqueta.descripcion}
+                  onChange={(e) => actualizar(index, { descripcion: e.target.value })}
+                  rows={2}
+                  className="text-xs"
+                  aria-label="Descripción completa"
+                />
+              </div>
+            </div>
             <Select value={etiqueta.nodoDestino || undefined} onValueChange={(v) => actualizar(index, { nodoDestino: v })}>
               <SelectTrigger className="h-8 text-xs" aria-label="Nodo destino">
                 <SelectValue placeholder="Destino…" />
@@ -148,7 +185,8 @@ function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intenci
               </SelectContent>
             </Select>
           </div>
-        ))}
+          );
+        })}
         <Button
           type="button"
           variant="outline"
