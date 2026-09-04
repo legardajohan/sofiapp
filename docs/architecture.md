@@ -29,7 +29,9 @@ posible, inmutabilidad, inyección de dependencias para testear.
                          │   • llm-process     (slot filling, scoring)    │
                          │   • outbound-send   (rate-limit Meta ~80/s)    │
                          │   • campaign-broadcast                         │
-                         │   • flow-runtime    (Fase 3)                   │
+                         │   • flow-runtime    (nodos `espera` +          │
+                         │     recordatorios de inactividad, HU-FLOW-02;  │
+                         │     barrido periódico vía Job Scheduler)       │
                          └───────────────┬───────────────────────────────┘
             Redis (ioredis) ◀────────────┤  SOLO colas (sin caché semántica en MVP)
             MongoDB Atlas  ◀─────────────┤  datos (tenant-scoped)

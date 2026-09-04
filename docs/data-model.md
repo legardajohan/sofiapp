@@ -27,6 +27,15 @@
   camposCaptura: [ { key: String, label: String, tipo: "string"|"number"|"enum", opciones: [String] } ],
   kbVersion: Number,              // default 1. Contador de cambios de contenido en la KB; invalida
                                    // la caché exacta de respuestas de IA (HU-KB-03)
+  // HU-FLOW-02: recordatorio de inactividad antes de que expire la ventana de 24 h. Política de
+  // la empresa sobre TODAS sus conversaciones (no un paso de un flujo), así que también cubre las
+  // que nunca entraron a un flujo activo. `activo` arranca en `false`.
+  recordatorio: {
+    activo: Boolean,               // default false
+    antelacionMinutos: Number,     // default 120; Zod exige 15..1440 al escribir
+    texto: String?,
+    templateId: ObjectId?,         // ref WhatsAppTemplate; debe estar APPROVED
+  },
   createdAt, updatedAt
 }
 // Índices: { slug: 1 } unique
@@ -140,6 +149,10 @@
   // Fuera de esta ventana `sendMessage` rechaza el envío de texto libre con 422 — solo se puede
   // responder con plantilla HSM aprobada (HT-WA-02).
   ventana24hExpiraEn: ISODate?,
+  // marca de idempotencia del recordatorio de inactividad (HU-FLOW-02): guarda el valor de
+  // `ventana24hExpiraEn` para el que YA se envió. Como ese valor cambia con cada inbound, una
+  // ventana nueva vuelve a ser candidata automáticamente, sin limpiar banderas a mano.
+  recordatorioEnviadoParaVentana: ISODate?,
   createdAt, updatedAt
 }
 // `asesorId` es el único campo persistido; `asignadoA` (HU-OMNI-02) es el alias público del
@@ -149,6 +162,9 @@
 //          { tenantId: 1, ultimoMensajeAt: -1 }
 //          { tenantId: 1, telefono: 1 }
 //          { tenantId: 1, nivelInteres: 1 }   (segmentación de campañas)
+//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — ÚNICO índice sin tenantId como prefijo
+//          (HU-FLOW-02): el barrido de recordatorios es cross-tenant por naturaleza (una sola
+//          pasada para toda la plataforma). Documentado como excepción en `multi-tenancy.md`.
 ```
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
@@ -385,12 +401,12 @@ clave extra es un 400, no un campo ignorado):
 | `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
 | `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
 | `handoff` | `{ motivo?, notificarAsesorId? }` |
-| `espera` | `{ minutos }` — reservado, lo ejecuta `HU-FLOW-02` |
+| `espera` | `{ minutos }` — job diferido, HU-FLOW-02 |
 
 `tipo: "api"` queda **reservado** en el vocabulario del constructor pero no tiene rama en la unión:
 cualquier intento de guardarlo es un 400.
 
-## flow_states  (estado de ejecución del runtime — implementado en HU-FLOW-01-V2)
+## flow_states  (estado de ejecución del runtime — implementado en HU-FLOW-01-V2, HU-FLOW-02)
 ```js
 {
   _id: ObjectId,
@@ -401,6 +417,11 @@ cualquier intento de guardarlo es un 400.
   variables: Object,               // contexto de la conversación
   esperandoRespuesta: Boolean,      // true = el flujo está parado (respuesta del cliente o resolución async)
   ultimoMetaMessageId: String?,     // idempotencia: no reavanza si se reprocesa el mismo mensaje
+  // HU-FLOW-02: token del job diferido pendiente de un nodo `espera`. Se regenera cada vez que se
+  // programa una espera y se limpia (`null`) en cualquier avance normal; al despertar, el job
+  // compara este valor con el que llevaba y se descarta si no coincide — resuelve la carrera entre
+  // "el cliente responde" y "el job diferido arranca" sin cancelar el job en BullMQ.
+  esperaToken: String?,
   actualizadoAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1 } único · { tenantId: 1, flowId: 1 }

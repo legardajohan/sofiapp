@@ -209,3 +209,43 @@ describe('flow.engine — nodo kb', () => {
     expect(salida.efectos[0]).toMatchObject({ tipo: 'enviar_mensaje', texto: 'No tengo esa información.' });
   });
 });
+
+describe('flow.engine — nodo espera (HU-FLOW-02)', () => {
+  const flowEspera = flow(
+    [
+      { id: 'esp1', posicion: { x: 0, y: 0 }, tipo: 'espera', config: { tipo: 'espera', minutos: 30 } },
+      { id: 'fin', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Ya volviste' } },
+    ],
+    [{ id: 'a1', from: 'esp1', to: 'fin' }],
+    'esp1',
+  );
+
+  it('primera llegada: pide programar_espera y se queda en el mismo nodo esperando', () => {
+    const salida = avanzar({ flow: flowEspera, state: null, mensaje: 'hola' });
+
+    expect(salida.efectos).toEqual([{ tipo: 'programar_espera', minutos: 30 }]);
+    expect(salida.nodoSiguiente).toBe('esp1');
+    expect(salida.esperandoRespuesta).toBe(true);
+  });
+
+  it('el job diferido despierta (resueltos.esperaCumplida): avanza al destino sin reprogramar', () => {
+    const salida = avanzar({
+      flow: flowEspera,
+      state: estado('esp1'),
+      mensaje: '',
+      resueltos: { esperaCumplida: true },
+    });
+
+    expect(salida.efectos).toHaveLength(1);
+    expect(salida.efectos[0]).toMatchObject({ tipo: 'enviar_mensaje', texto: 'Ya volviste' });
+    expect(salida.nodoSiguiente).toBeNull();
+  });
+
+  it('el cliente responde mientras espera: su respuesta manda y NO encola una segunda espera', () => {
+    const salida = avanzar({ flow: flowEspera, state: estado('esp1'), mensaje: 'ya volví' });
+
+    expect(salida.efectos.some((e) => e.tipo === 'programar_espera')).toBe(false);
+    expect(salida.efectos[0]).toMatchObject({ tipo: 'enviar_mensaje', texto: 'Ya volviste' });
+    expect(salida.nodoSiguiente).toBeNull();
+  });
+});

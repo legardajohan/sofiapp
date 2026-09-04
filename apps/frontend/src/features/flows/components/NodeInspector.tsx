@@ -365,13 +365,17 @@ function HandoffForm({ config, onChange }: FormProps<'handoff'>): React.ReactEle
   );
 }
 
+/** Previsión legible del plazo, para no dejar los minutos como un número desnudo (HU-FLOW-02). */
+function previsionEspera(minutos: number): string {
+  if (minutos < 60) return `se reanuda ~${minutos} min después`;
+  const horas = minutos / 60;
+  const horasTexto = Number.isInteger(horas) ? horas : horas.toFixed(1);
+  return `se reanuda ~${horasTexto} h después`;
+}
+
 function EsperaForm({ config, onChange }: FormProps<'espera'>): React.ReactElement {
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        Los nodos de espera se guardan, pero el flujo todavía no los ejecuta — llega con
-        HU-FLOW-02.
-      </div>
       <Field label="Minutos de espera">
         <Input
           type="number"
@@ -380,6 +384,10 @@ function EsperaForm({ config, onChange }: FormProps<'espera'>): React.ReactEleme
           onChange={(e) => onChange({ ...config, minutos: Number(e.target.value) || 1 })}
         />
       </Field>
+      <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        El flujo se detiene aquí y {previsionEspera(config.minutos)}, sin que el cliente tenga que
+        responder nada.
+      </div>
     </div>
   );
 }

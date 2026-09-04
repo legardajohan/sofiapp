@@ -121,6 +121,13 @@ export interface IFlowState {
   esperandoRespuesta: boolean;
   /** `metaMessageId` del último mensaje ya procesado por este `FlowState` (idempotencia). */
   ultimoMetaMessageId?: string;
+  /**
+   * Token del job diferido pendiente de un nodo `espera` (HU-FLOW-02). Se regenera cada vez que se
+   * programa una espera y se limpia en cualquier avance normal; el job comprueba este valor al
+   * despertar y se descarta si no coincide — así se resuelve la carrera entre "el cliente responde"
+   * y "el job diferido arranca" sin intentar cancelar el job de BullMQ.
+   */
+  esperaToken?: string | null;
   actualizadoAt: Date;
 }
 
@@ -131,6 +138,14 @@ export interface IFlowStateDocument extends IFlowState, Document {}
 /** Lo que el motor devuelve para que el runtime lo ejecute; nunca lo ejecuta el motor mismo. */
 export type Efecto =
   | { tipo: 'enviar_mensaje'; texto?: string; templateId?: string; parametros?: string[] }
+  /**
+   * HU-FLOW-02: el motor pide programar un job diferido; el runtime lo encola y guarda el token
+   * en `FlowState.esperaToken`. Al reanudar, el runtime vuelve a entrar al motor en el MISMO nodo
+   * `espera` con `resueltos.esperaCumplida`, así que no hace falta guardar aquí el destino: se
+   * recalcula en ese momento con `flow.aristas`, tal como está en ese instante (si el admin
+   * editó el flujo mientras esperaba, la reanudación sigue el destino vigente, no uno congelado).
+   */
+  | { tipo: 'programar_espera'; minutos: number }
   | EfectoAccion
   | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
   | { tipo: 'error'; mensaje: string };
@@ -146,6 +161,8 @@ export interface EntradaMotor {
     intencion?: string;
     capturado?: unknown;
     respuestaKb?: string;
+    /** HU-FLOW-02: el job diferido del nodo `espera` despertó y el plazo ya se cumplió. */
+    esperaCumplida?: true;
   };
 }
 
@@ -205,3 +222,19 @@ export interface IFlowListItemResponse {
   activo: boolean;
   updatedAt: string;
 }
+
+// ─── Jobs de la cola `flow-runtime` (HU-FLOW-02) ─────────────────────────────
+
+export type FlowJobData =
+  | {
+      tipo: 'resume';
+      tenantId: string;
+      clienteId: string;
+      /** Debe coincidir con `IFlowState.esperaToken` al despertar; si no, el job se descarta. */
+      token: string;
+    }
+  | {
+      tipo: 'reminder';
+      tenantId: string;
+      clienteId: string;
+    };

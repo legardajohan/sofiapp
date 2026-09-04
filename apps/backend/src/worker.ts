@@ -2,25 +2,21 @@ import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { KB_INDEX_QUEUE_NAME } from './config/queues.js';
+import {
+  KB_INDEX_QUEUE_NAME,
+  FLOW_RUNTIME_QUEUE_NAME,
+  REMINDER_SWEEP_JOB,
+  REMINDER_SWEEP_SCHEDULER_ID,
+  flowRuntimeQueue,
+} from './config/queues.js';
 import { inboundMessageProcessor } from './workers/inbound-message.processor.js';
 import { processKbIndexJob } from './workers/kb-index.processor.js';
+import { processFlowRuntimeJob } from './workers/flow-runtime.processor.js';
 import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
+import type { FlowJobData } from './features/flow/flow.types.js';
 
 const redisConnection = { url: env.REDIS_URL };
-
-// TEMP DEBUG — eliminar después de verificar
-{
-  const k = env.GEMINI_API_KEY;
-  const masked = k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)} (len=${k.length})` : `"${k}" (len=${k.length})`;
-  logger.info('TEMP DEBUG GEMINI_API_KEY', {
-    masked,
-    isPlaceholder: k === 'invalid-key-123',
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
-  });
-}
 
 // Placeholder workers — se implementan en M04, M01-02 y M07
 const llmWorker = new Worker(
@@ -56,7 +52,15 @@ const kbIndexWorker = new Worker<KbIndexJobData>(
   { connection: redisConnection },
 );
 
-for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker]) {
+// Eje del tiempo del motor de flujos (HU-FLOW-02): nodos `espera` y recordatorios de inactividad.
+// `concurrency` explícita porque el envío pega contra la Graph API y no conviene ráfagas.
+const flowRuntimeWorker = new Worker<FlowJobData | Record<string, never>>(
+  FLOW_RUNTIME_QUEUE_NAME,
+  processFlowRuntimeJob,
+  { connection: redisConnection, concurrency: 5 },
+);
+
+for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker, flowRuntimeWorker]) {
   w.on('failed', (job, err) => {
     logger.error(`Worker ${w.name} job falló`, { jobId: job?.id, error: String(err) });
   });
@@ -64,7 +68,7 @@ for (const w of [llmWorker, outboundWorker, campaignWorker, kbIndexWorker]) {
 
 mongoose
   .connect(env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     logger.info('Worker conectado a MongoDB');
 
     inboundMessageProcessor.on('completed', (job) => {
@@ -74,6 +78,14 @@ mongoose
     inboundMessageProcessor.on('failed', (job, err) => {
       logger.error('Job fallido', { jobId: job?.id, queue: job?.queueName, error: String(err) });
     });
+
+    // Barrido periódico de recordatorios (HU-FLOW-02): Job Scheduler idempotente por
+    // `schedulerId` — reiniciar el proceso no duplica la programación.
+    await flowRuntimeQueue.upsertJobScheduler(
+      REMINDER_SWEEP_SCHEDULER_ID,
+      { every: env.REMINDER_SWEEP_INTERVAL_MS },
+      { name: REMINDER_SWEEP_JOB, opts: { removeOnComplete: 100 } },
+    );
 
     logger.info('Proceso WORKER iniciado y escuchando colas BullMQ');
   })

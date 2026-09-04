@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useFlows } from '../hooks/useFlows.js';
+import { ReminderSettings } from '../components/ReminderSettings.js';
 
 const ESTADO_LABEL: Record<string, string> = { borrador: 'Borrador', publicado: 'Publicado' };
 
@@ -103,6 +104,8 @@ export function FlowsPage(): React.ReactElement {
           </Button>
         </div>
       )}
+
+      <ReminderSettings />
     </div>
   );
 }

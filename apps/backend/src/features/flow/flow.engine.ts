@@ -175,9 +175,29 @@ function ejecutarNodo(
         esperandoRespuesta: false,
       };
 
-    case 'espera':
-      // Reservado para HU-FLOW-02: el motor no lo ejecuta, se queda parado en el nodo.
-      return { efectos: [], siguiente: nodo.id, variables, esperandoRespuesta: true };
+    case 'espera': {
+      const destino = siguienteLineal(aristas, nodo.id);
+
+      // 1. El job diferido despertó tras el plazo: seguimos adelante.
+      if (entrada.resueltos?.esperaCumplida) {
+        return { efectos: [], siguiente: destino, variables, esperandoRespuesta: false };
+      }
+
+      // 2. El cliente respondió mientras el flujo esperaba aquí: su respuesta manda y NO se
+      //    encola una segunda espera. El token se regenera al persistir (flow.runtime.service.ts),
+      //    lo que anula el job diferido pendiente sin tener que cancelarlo en BullMQ.
+      if (entrada.state?.nodoActualId === nodo.id) {
+        return { efectos: [], siguiente: destino, variables, esperandoRespuesta: false };
+      }
+
+      // 3. Primera llegada al nodo: pide la espera al runtime y se queda aquí.
+      return {
+        efectos: [{ tipo: 'programar_espera', minutos: config.minutos }],
+        siguiente: nodo.id,
+        variables,
+        esperandoRespuesta: true,
+      };
+    }
   }
 }
 

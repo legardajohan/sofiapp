@@ -64,6 +64,9 @@ const FlowStateSchema = new Schema<IFlowStateDocument>(
     variables: { type: Schema.Types.Mixed, required: true, default: {} },
     esperandoRespuesta: { type: Boolean, required: true, default: false },
     ultimoMetaMessageId: { type: String },
+    // HU-FLOW-02: token del job diferido pendiente de un nodo `espera`. Se regenera al programar
+    // una espera y se limpia en cualquier avance normal; ver flow.types.ts para el porqué.
+    esperaToken: { type: String },
     actualizadoAt: { type: Date, required: true, default: () => new Date() },
   },
   { timestamps: false },

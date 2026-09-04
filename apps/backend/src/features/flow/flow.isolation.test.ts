@@ -17,8 +17,15 @@ vi.mock('../message/message.service.js', () => ({ sendOutbound: sendOutboundMock
 vi.mock('../../services/ai/ai-service.singleton.js', () => ({
   getAIService: () => ({ chat: vi.fn(), extract: vi.fn() }),
 }));
+// `flow.runtime.service.ts` importa `flowRuntimeQueue` desde HU-FLOW-02: se mockea por la misma
+// razón (evitar una conexión a Redis real al importar el runtime).
+vi.mock('../../config/queues.js', () => ({
+  FLOW_RESUME_JOB: 'resume',
+  FLOW_REMINDER_JOB: 'reminder',
+  flowRuntimeQueue: { add: vi.fn().mockResolvedValue(undefined) },
+}));
 
-import { ejecutarFlujo } from './flow.runtime.service.js';
+import { ejecutarFlujo, reanudarFlujo } from './flow.runtime.service.js';
 
 const tenantA = new Types.ObjectId();
 const tenantB = new Types.ObjectId();
@@ -115,6 +122,29 @@ describe('HU-FLOW-01-V2 — aislamiento multi-tenant', () => {
       flowId: new Types.ObjectId(flowA.id),
     }).lean();
     expect(desdeB).toBeNull();
+  });
+
+  it('reanudarFlujo(tenantB, clienteDeA, token) no toca el FlowState de A (HU-FLOW-02)', async () => {
+    const nodoEspera: INodo = {
+      id: 'esp1',
+      posicion: { x: 0, y: 0 },
+      tipo: 'espera',
+      config: { tipo: 'espera', minutos: 10 },
+    };
+    await createFlow(tenantA, { nombre: 'Con espera', nodos: [nodoEspera], aristas: [], entrada: 'esp1', activo: true });
+    const clienteA = await crearCliente(tenantA);
+    await ejecutarFlujo(tenantA.toString(), clienteA, 'hola');
+
+    const estadoAntes = await FlowState.findOne({ tenantId: tenantA, clienteId: new Types.ObjectId(clienteA) }).lean();
+    expect(estadoAntes?.esperaToken).toBeTruthy();
+
+    // Con el tenant equivocado, `findOneScoped` no encuentra el FlowState de A: no hace nada,
+    // aunque `token` y `clienteId` sean exactamente los correctos.
+    await reanudarFlujo(tenantB.toString(), clienteA, estadoAntes!.esperaToken as string);
+
+    const estadoDespues = await FlowState.findOne({ tenantId: tenantA, clienteId: new Types.ObjectId(clienteA) }).lean();
+    expect(estadoDespues?.esperaToken).toBe(estadoAntes?.esperaToken);
+    expect(sendOutboundMock).not.toHaveBeenCalled();
   });
 
   it('dos tenants pueden tener a la vez su propio flujo activo sin violar el índice parcial único', async () => {

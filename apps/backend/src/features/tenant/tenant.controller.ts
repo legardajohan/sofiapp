@@ -7,7 +7,12 @@ import {
   assignPlanToTenant,
   deleteTenant,
 } from './tenant.service.js';
-import type { ListTenantsQuery, CreateTenantInput, UpdateTenantInput, UpdateTenantStatusInput } from './tenant.types.js';
+import type {
+  ListTenantsQuery,
+  CreateTenantInput,
+  UpdateTenantInput,
+  UpdateTenantStatusInput,
+} from './tenant.types.js';
 
 export async function listTenantsController(req: Request, res: Response): Promise<void> {
   const result = await listTenants(req.validatedQuery as unknown as ListTenantsQuery);

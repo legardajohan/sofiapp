@@ -1,9 +1,11 @@
+import { randomUUID } from 'crypto';
 import { Types } from 'mongoose';
 import { z } from 'zod';
 import { findByIdScoped, findOneAndUpdateScoped, findOneScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
+import { FLOW_RESUME_JOB, flowRuntimeQueue } from '../../config/queues.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { createLeadFromConversation } from '../lead/lead.service.js';
@@ -131,6 +133,16 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
       case 'handoff':
         await setIaHabilitada(tenantId.toString(), clienteId, false);
         return;
+      case 'programar_espera':
+        // Se intercepta en `correrMotor` ANTES de llegar aquí: necesita devolver el token que
+        // genera para que `persistirFlowState` lo escriba en el mismo `$set`, algo que este
+        // switch fire-and-forget no puede comunicar de vuelta. Si llega hasta aquí es un fallo de
+        // cableado, no un caso de negocio.
+        logger.error('programar_espera llegó a ejecutarEfecto sin interceptar', {
+          tenantId: tenantId.toString(),
+          clienteId,
+        });
+        return;
       case 'error':
         logger.error('El motor de flujos devolvió un efecto de error', {
           tenantId: tenantId.toString(),
@@ -149,12 +161,21 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
   }
 }
 
+/** Delay entre reintentos de un job diferido de `flow-runtime`. El envío pega contra la Graph API,
+ *  así que un backoff exponencial modesto es preferible a martillar en caso de fallo transitorio. */
+const RESUME_JOB_OPTS = {
+  attempts: 3,
+  backoff: { type: 'exponential' as const, delay: 5000 },
+  removeOnComplete: 1000,
+};
+
 async function persistirFlowState(
   tenantId: TenantId,
   clienteId: string,
   flow: IFlowLean,
   salida: SalidaMotor,
   metaMessageId?: string,
+  esperaToken?: string,
 ): Promise<void> {
   await findOneAndUpdateScoped(
     FlowState,
@@ -165,6 +186,11 @@ async function persistirFlowState(
         nodoActualId: salida.nodoSiguiente ?? flow.entrada,
         variables: salida.variables,
         esperandoRespuesta: salida.esperandoRespuesta,
+        // Decide el estado COMPLETO del token en cada persistencia: uno fresco si esta pasada
+        // acaba de programar una espera, o `null` en cualquier otro avance — lo que invalida de
+        // paso cualquier job diferido que hubiera quedado pendiente de un nodo `espera` anterior
+        // (criterio 3 de HU-FLOW-02).
+        esperaToken: esperaToken ?? null,
         actualizadoAt: new Date(),
         ...(metaMessageId ? { ultimoMetaMessageId: metaMessageId } : {}),
       },
@@ -174,14 +200,77 @@ async function persistirFlowState(
 }
 
 /**
+ * Núcleo compartido entre `ejecutarFlujo` (mensaje entrante) y `reanudarFlujo` (job diferido de un
+ * nodo `espera`, HU-FLOW-02): reentra sobre el motor puro (`avanzar`) hasta agotar sus peticiones
+ * `requiere`, resolviéndolas con `AIService`, y al final ejecuta los efectos y persiste el
+ * `FlowState`. El efecto `programar_espera` se intercepta aquí (no en `ejecutarEfecto`) porque
+ * necesita devolver el token generado para que `persistirFlowState` lo escriba en el mismo `$set`.
+ */
+async function correrMotor(
+  tenantId: string,
+  clienteId: string,
+  flow: IFlowLean,
+  stateDoc: IFlowState | null,
+  mensaje: string,
+  resueltosIniciales: EntradaMotor['resueltos'],
+  metaMessageId?: string,
+): Promise<void> {
+  let estadoActual = stateDoc;
+  let resueltos = resueltosIniciales;
+  let salida: SalidaMotor | undefined;
+
+  for (let ronda = 0; ronda < TOPE_RESOLUCIONES; ronda += 1) {
+    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos });
+    if (!salida.requiere) break;
+
+    resueltos = await resolverRequiere(tenantId, salida.requiere, mensaje);
+    estadoActual = {
+      tenantId: flow.tenantId,
+      clienteId: new Types.ObjectId(clienteId),
+      flowId: flow._id,
+      nodoActualId: salida.nodoSiguiente ?? flow.entrada,
+      variables: salida.variables,
+      esperandoRespuesta: salida.esperandoRespuesta,
+      actualizadoAt: new Date(),
+    };
+  }
+
+  if (!salida) return;
+
+  let esperaToken: string | undefined;
+  for (const efecto of salida.efectos) {
+    if (efecto.tipo === 'programar_espera') {
+      try {
+        const token = randomUUID();
+        await flowRuntimeQueue.add(
+          FLOW_RESUME_JOB,
+          { tipo: 'resume', tenantId, clienteId, token },
+          { delay: efecto.minutos * 60_000, ...RESUME_JOB_OPTS },
+        );
+        esperaToken = token;
+      } catch (err) {
+        // Igual que el resto de efectos: un fallo aquí no puede tumbar la persistencia del resto
+        // de la pasada. Sin token, `persistirFlowState` deja `esperaToken: null` — no hay job
+        // encolado, así que no debe quedar un token que nadie va a invalidar.
+        logger.error('No se pudo encolar la reanudación del nodo espera (no propaga)', {
+          tenantId: tenantId.toString(),
+          clienteId,
+          error: String(err),
+        });
+      }
+      continue;
+    }
+    await ejecutarEfecto(tenantId, clienteId, efecto);
+  }
+
+  await persistirFlowState(tenantId, clienteId, flow, salida, metaMessageId, esperaToken);
+}
+
+/**
  * Punto de entrada del motor de flujos para un mensaje entrante (HU-FLOW-01). Guardas del llamador
  * (`iaHabilitada`, flujo activo) van en el worker, no aquí: esta función asume que ya se decidió
- * que el flujo debe intervenir.
- *
- * Reentra sobre el motor puro (`avanzar`) hasta agotar sus peticiones `requiere` (intención, KB o
- * una captura ya respondida), resolviéndolas con `AIService`, y al final ejecuta los efectos y
- * persiste el `FlowState`. `metaMessageId` es la clave de idempotencia: reprocesar el mismo mensaje
- * (reintento del job) no vuelve a avanzar el flujo.
+ * que el flujo debe intervenir. `metaMessageId` es la clave de idempotencia: reprocesar el mismo
+ * mensaje (reintento del job) no vuelve a avanzar el flujo.
  */
 export async function ejecutarFlujo(
   tenantId: string,
@@ -205,31 +294,32 @@ export async function ejecutarFlujo(
 
   if (metaMessageId && stateDoc?.ultimoMetaMessageId === metaMessageId) return;
 
-  let estadoActual = stateDoc;
-  let resueltos: EntradaMotor['resueltos'];
-  let salida: SalidaMotor | undefined;
+  await correrMotor(tenantId, clienteId, flow, stateDoc, mensaje, undefined, metaMessageId);
+}
 
-  for (let ronda = 0; ronda < TOPE_RESOLUCIONES; ronda += 1) {
-    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos });
-    if (!salida.requiere) break;
+/**
+ * Reanuda un flujo parado en un nodo `espera` (HU-FLOW-02), disparado por el job diferido de
+ * `flow-runtime` al vencer el plazo. Reentra al motor en el MISMO nodo `espera` con
+ * `resueltos.esperaCumplida`, así que el destino se recalcula con las aristas vigentes en ese
+ * momento — nunca uno congelado al programar la espera.
+ *
+ * Si `token` no coincide con `FlowState.esperaToken`, el cliente respondió mientras tanto (el
+ * avance por respuesta ya limpió o regeneró el token) y este job se descarta sin hacer nada: es
+ * la resolución de la carrera del criterio 3, comprobada dentro de la ejecución en vez de intentar
+ * cancelar el job en BullMQ.
+ */
+export async function reanudarFlujo(tenantId: string, clienteId: string, token: string): Promise<void> {
+  const stateDoc = await findOneScoped(FlowState, tenantId, {
+    clienteId: new Types.ObjectId(clienteId),
+  }).lean<IFlowState | null>();
 
-    resueltos = await resolverRequiere(tenantId, salida.requiere, mensaje);
-    estadoActual = {
-      tenantId: flow.tenantId,
-      clienteId: new Types.ObjectId(clienteId),
-      flowId: flow._id,
-      nodoActualId: salida.nodoSiguiente ?? flow.entrada,
-      variables: salida.variables,
-      esperandoRespuesta: salida.esperandoRespuesta,
-      actualizadoAt: new Date(),
-    };
-  }
+  if (!stateDoc || stateDoc.esperaToken !== token) return;
 
-  if (!salida) return;
+  const flow = await getActiveFlow(tenantId);
+  if (!flow) return;
 
-  for (const efecto of salida.efectos) {
-    await ejecutarEfecto(tenantId, clienteId, efecto);
-  }
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente || !cliente.iaHabilitada) return;
 
-  await persistirFlowState(tenantId, clienteId, flow, salida, metaMessageId);
+  await correrMotor(tenantId, clienteId, flow, stateDoc, '', { esperaCumplida: true });
 }

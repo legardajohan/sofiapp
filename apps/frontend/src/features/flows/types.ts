@@ -120,3 +120,18 @@ export interface ValidationErrorResponse {
   message: string;
   errors: ZodIssueDTO[];
 }
+
+/** Recordatorio de inactividad (HU-FLOW-02): política del tenant, no de un flujo concreto. */
+export interface ReminderDTO {
+  activo: boolean;
+  antelacionMinutos: number;
+  texto: string;
+  templateId: string | null;
+}
+
+export interface UpdateReminderPayload {
+  activo: boolean;
+  antelacionMinutos: number;
+  texto: string;
+  templateId?: string;
+}
