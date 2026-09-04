@@ -13,6 +13,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ConditionEditor, type OpcionDestino } from './ConditionEditor.js';
+import { DestinoSelect } from './DestinoSelect.js';
 import { NODE_VISUALS } from './nodeVisuals.js';
 import type { ConfigNodo, EstadoComercial, IEtiquetaIntencion, INodo } from '../types.js';
 
@@ -172,18 +173,13 @@ function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intenci
                 />
               </div>
             </div>
-            <Select value={etiqueta.nodoDestino || undefined} onValueChange={(v) => actualizar(index, { nodoDestino: v })}>
-              <SelectTrigger className="h-8 text-xs" aria-label="Nodo destino">
-                <SelectValue placeholder="Destino…" />
-              </SelectTrigger>
-              <SelectContent>
-                {opcionesDestino.map((op) => (
-                  <SelectItem key={op.id} value={op.id} className="text-xs">
-                    {op.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DestinoSelect
+              value={etiqueta.nodoDestino}
+              opcionesDestino={opcionesDestino}
+              onValueChange={(v) => actualizar(index, { nodoDestino: v })}
+              placeholder="Destino…"
+              ariaLabel="Nodo destino"
+            />
           </div>
           );
         })}
@@ -206,18 +202,13 @@ function IntencionForm({ config, opcionesDestino, onChange }: FormProps<'intenci
 
       <div className="space-y-1.5 border-t border-border pt-3">
         <Label className="text-xs text-muted-foreground">Si no reconoce ninguna, ir a</Label>
-        <Select value={config.ramaPorDefecto || undefined} onValueChange={(v) => onChange({ ...config, ramaPorDefecto: v })}>
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="Elige el nodo por defecto…" />
-          </SelectTrigger>
-          <SelectContent>
-            {opcionesDestino.map((op) => (
-              <SelectItem key={op.id} value={op.id} className="text-xs">
-                {op.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DestinoSelect
+          value={config.ramaPorDefecto}
+          opcionesDestino={opcionesDestino}
+          onValueChange={(v) => onChange({ ...config, ramaPorDefecto: v })}
+          placeholder="Elige el nodo por defecto…"
+          ariaLabel="Rama por defecto"
+        />
       </div>
     </div>
   );

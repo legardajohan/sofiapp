@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { DestinoSelect } from './DestinoSelect.js';
 import { OPERADOR_LABEL, OPERADORES, type IRamaCondicion } from '../types.js';
 
 export interface OpcionDestino {
@@ -146,21 +147,13 @@ export function ConditionEditor({
                   </div>
                 </div>
 
-                <Select
-                  value={rama.nodoDestino || undefined}
+                <DestinoSelect
+                  value={rama.nodoDestino}
+                  opcionesDestino={opcionesDestino}
                   onValueChange={(v) => actualizarRama(index, { nodoDestino: v })}
-                >
-                  <SelectTrigger className="h-8 w-full text-xs" aria-label="Nodo destino">
-                    <SelectValue placeholder="Ir a…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {opcionesDestino.map((op) => (
-                      <SelectItem key={op.id} value={op.id} className="text-xs">
-                        {op.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Ir a…"
+                  ariaLabel="Nodo destino"
+                />
               </div>
             );
           })}
@@ -176,18 +169,13 @@ export function ConditionEditor({
         <Label className="text-xs text-muted-foreground">
           Si ninguna rama coincide, ir a
         </Label>
-        <Select value={ramaPorDefecto || undefined} onValueChange={(v) => onChange(ramas, v)}>
-          <SelectTrigger className="h-8 text-xs" aria-label="Rama por defecto">
-            <SelectValue placeholder="Elige el nodo por defecto…" />
-          </SelectTrigger>
-          <SelectContent>
-            {opcionesDestino.map((op) => (
-              <SelectItem key={op.id} value={op.id} className="text-xs">
-                {op.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DestinoSelect
+          value={ramaPorDefecto}
+          opcionesDestino={opcionesDestino}
+          onValueChange={(v) => onChange(ramas, v)}
+          placeholder="Elige el nodo por defecto…"
+          ariaLabel="Rama por defecto"
+        />
       </div>
     </div>
   );

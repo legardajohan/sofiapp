@@ -53,13 +53,22 @@
       expande un `Textarea` de ancho completo debajo de la fila compacta (animado con el truco
       `grid-template-rows` 0fr↔1fr, 200ms ease-out); el input compacto se deshabilita mientras está
       expandido para que solo haya una superficie editable a la vez.
-      - [x] **Ajuste post-commit** (feedback directo del usuario tras ver el editor real): el grid
-            de 3 columnas iguales (operador/valor/destino) dentro de un panel de 320-384px dejaba
-            cada control tan angosto que ni el operador ni el destino se leían completos — el mismo
-            problema de fondo que el scroll horizontal del valor, solo que en otro control. Se
-            apiló la fila (operador+eliminar, luego valor a todo el ancho, luego destino a todo el
-            ancho), igual que ya hacía `IntencionForm` al lado — consistencia con el propio patrón
-            del archivo vecino en vez de inventar uno nuevo.
+      - [x] **Ajuste post-commit #1** (feedback directo del usuario tras ver el editor real): el
+            grid de 3 columnas iguales (operador/valor/destino) dentro de un panel de 320-384px
+            dejaba cada control tan angosto que ni el operador ni el destino se leían completos —
+            el mismo problema de fondo que el scroll horizontal del valor, solo que en otro
+            control. Se apiló la fila (operador+eliminar, luego valor a todo el ancho, luego
+            destino a todo el ancho), igual que ya hacía `IntencionForm` al lado — consistencia con
+            el propio patrón del archivo vecino en vez de inventar uno nuevo.
+      - [x] **Ajuste post-commit #2** (el problema seguía, ahora identificado con precisión: no era
+            el input compacto sino el `<Select>` de destino — `SelectContent` de shadcn no trae
+            límite de ancho ni `white-space` propio, así que una opción larga —el resumen de un
+            nodo `mensaje` puede ser su texto completo— hacía crecer el desplegable sin límite en
+            una sola línea al abrirlo, portal fuera del panel de 320-384px y por eso "de toda la
+            pantalla"). Se extrajo `DestinoSelect.tsx` (nuevo, reusado por `ConditionEditor` y
+            `IntencionForm` en sus 4 selects de destino) con `max-w-xs` + `whitespace-normal
+            break-words` en el contenido: el texto largo ahora se envuelve dentro de un cajón
+            acotado, visible completo, en vez de una sola línea sin límite.
 - [x] `NodeInspector.tsx` (`IntencionForm`): mismo patrón para `etiqueta.descripcion`.
 
 ## Implementación — Backend
