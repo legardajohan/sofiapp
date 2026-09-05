@@ -1,5 +1,6 @@
 import { Types, type FilterQuery } from 'mongoose';
 import {
+  aggregateScoped,
   countScoped,
   findByIdScoped,
   findOneAndUpdateScoped,
@@ -19,8 +20,12 @@ import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
 import { toSemaforoIAResponse } from '../ai/ai-semaforo.types.js';
 import { toResumenResponse } from '../cliente/cliente.service.js';
-import { primerAdminActivo } from '../ai/ai-handoff.service.js';
-import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import { asesorConMenorCarga, primerAdminActivo } from '../ai/ai-handoff.service.js';
+import type {
+  EstrategiaDestino,
+  HandoffMotivo,
+  IHandoffCondicionAplicada,
+} from '../ai/ai-handoff.types.js';
 import { logger } from '../../utils/logger.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
@@ -161,16 +166,19 @@ export async function listConversations(
 
   const ids = clientes.map((c) => c._id as Types.ObjectId);
 
-  // Preview = último mensaje por conversación. No hay helper de aggregate scoped, así que
-  // el `$match { tenantId }` va PRIMERO para preservar el aislamiento (excepción documentada
-  // en docs/multi-tenancy.md; ver también el guard de la skill multi-tenancy-guard).
-  const tenantOid = new Types.ObjectId(tenantId);
+  // Preview = último mensaje por conversación. Desde HU-IA-07 pasa por `aggregateScoped`, que
+  // antepone el `$match` del tenant y castea el id: era la única agregación cruda que quedaba en el
+  // proyecto, y existía solo porque el helper no estaba escrito.
   const previews = ids.length
-    ? await Message.aggregate<{ _id: Types.ObjectId; texto: string | null; tipo: string }>([
-        { $match: { tenantId: tenantOid, clienteId: { $in: ids } } },
-        { $sort: { createdAt: -1 } },
-        { $group: { _id: '$clienteId', texto: { $first: '$texto' }, tipo: { $first: '$tipo' } } },
-      ])
+    ? await aggregateScoped<{ _id: Types.ObjectId; texto: string | null; tipo: string }>(
+        Message,
+        tenantId,
+        [
+          { $match: { clienteId: { $in: ids } } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$clienteId', texto: { $first: '$texto' }, tipo: { $first: '$tipo' } } },
+        ],
+      ).exec()
     : [];
 
   const previewMap = new Map<string, string | null>();
@@ -432,7 +440,10 @@ export async function setIaHabilitada(
     // bandeja no puede seguir diciendo que está transferida. Apagarla a mano NO marca handoff — eso
     // es una decisión del asesor, no una transferencia automática.
     habilitada
-      ? { $set: { iaHabilitada: true }, $unset: { handoffAt: '', handoffMotivo: '' } }
+      ? {
+          $set: { iaHabilitada: true },
+          $unset: { handoffAt: '', handoffMotivo: '', handoffCondicion: '' },
+        }
       : { $set: { iaHabilitada: false } },
     { new: true },
   ).lean();
@@ -649,6 +660,15 @@ export async function handoffConversation(
   clienteId: string,
   motivo: HandoffMotivo,
   asesorDestinoId: string | null,
+  /**
+   * Cómo se elige el destino (HU-IA-07). Omitirlo reproduce el comportamiento anterior a esa
+   * historia: se deriva de si hay asesor fijo, la misma regla que usa `toDTO` para los documentos
+   * guardados antes. Sin esta derivación, una llamada de cuatro argumentos ignoraría en silencio el
+   * asesor que le pasan.
+   */
+  estrategiaDestino?: EstrategiaDestino,
+  /** Qué condición propia del admin lo disparó, cuando el motivo es `custom` (HU-IA-07). */
+  condicion: IHandoffCondicionAplicada | null = null,
 ): Promise<void> {
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
   // Mismo criterio que `marcarParaAsesor`: una conversación borrada a mitad del job no es un error
@@ -662,7 +682,10 @@ export async function handoffConversation(
   if (source.iaHabilitada === false) return;
 
   const yaTeniaAsesor = !!source.asesorId;
-  const destino = yaTeniaAsesor ? String(source.asesorId) : await resolverDestino(tenantId, asesorDestinoId);
+  const estrategia = estrategiaDestino ?? (asesorDestinoId ? 'fijo' : 'primero');
+  const destino = yaTeniaAsesor
+    ? String(source.asesorId)
+    : await resolverDestino(tenantId, estrategia, asesorDestinoId);
 
   const updated = await findOneAndUpdateScoped(
     Cliente,
@@ -673,6 +696,7 @@ export async function handoffConversation(
         iaHabilitada: false,
         handoffAt: new Date(),
         handoffMotivo: motivo,
+        handoffCondicion: condicion,
         ...(yaTeniaAsesor || !destino ? {} : { asesorId: new Types.ObjectId(destino) }),
       },
       // La conversación tiene que aparecer como pendiente aunque el asesor la tuviera leída: a
@@ -690,7 +714,7 @@ export async function handoffConversation(
     entidad: 'cliente',
     entidadId: clienteId,
     antes: { iaHabilitada: true, asignadoA: yaTeniaAsesor ? String(source.asesorId) : null },
-    despues: { iaHabilitada: false, asignadoA: destino, motivo },
+    despues: { iaHabilitada: false, asignadoA: destino, motivo, condicion: condicion?.nombre ?? null },
   });
 
   const updatedSource = updated as unknown as IConversationSource;
@@ -727,9 +751,10 @@ export async function handoffConversation(
  */
 async function resolverDestino(
   tenantId: string,
+  estrategia: EstrategiaDestino,
   asesorDestinoId: string | null,
 ): Promise<string | null> {
-  if (asesorDestinoId) {
+  if (estrategia === 'fijo' && asesorDestinoId) {
     try {
       await assertAssignableAdmin(tenantId, asesorDestinoId);
       return asesorDestinoId;
@@ -740,6 +765,19 @@ async function resolverDestino(
       });
     }
   }
+
+  if (estrategia === 'menor_carga') {
+    try {
+      const elegido = await asesorConMenorCarga(tenantId);
+      if (elegido) return elegido;
+    } catch (err: unknown) {
+      // No se propaga, y el fallback de abajo asigna igual: un handoff que no asigna deja a un
+      // cliente esperando, mientras que uno que asigna al primero en vez de al de menos carga es
+      // solo un reparto subóptimo. La diferencia de coste entre los dos errores no admite discusión.
+      logger.warn('Handoff: falló el reparto por carga', { tenantId, error: String(err) });
+    }
+  }
+
   return primerAdminActivo(tenantId);
 }
 

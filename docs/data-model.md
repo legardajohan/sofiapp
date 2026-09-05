@@ -160,6 +160,11 @@
   },
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
+  // Handoff automático (HU-IA-03 · HU-IA-07). `handoffCondicion` solo viene cuando lo disparó una
+  // condición propia del admin (`handoffMotivo: "custom"`); es `null` para las cuatro de fábrica.
+  handoffAt: ISODate?,
+  handoffMotivo: "explicit_request" | "keyword" | "custom" | "low_confidence" | "intent_purchase" | null,
+  handoffCondicion: { key: String, nombre: String }? ,   // subdoc con _id: false
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
   createdAt, updatedAt
@@ -474,6 +479,9 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > inundaría la colección. El `motivo` viene recortado y la plantilla `classify` prohíbe que cite
 > datos de contacto, por la regla de abajo.
 >
+> **`conversation.handoff`** lleva desde HU-IA-07 el nombre de la condición propia que lo disparó en
+> `despues.condicion` (`null` para los cuatro disparadores de fábrica).
+>
 > **`cliente.extract`** registra que la IA escribió `datosExtraidos`: `antes`/`despues` con
 > `{ nombreCompleto, correo, telefono, interes }`. `actorId: null` cuando lo disparó el worker; el id
 > de quien pulsó «Extraer datos» cuando fue a mano. Solo se escribe cuando **algún valor cambia**:
@@ -553,6 +561,46 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > (ámbar), caliente `#DC2626` (rojo). Los hex salen de la misma gama que ofrece el selector de
 > etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
 > pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
+
+## handoff_settings  (cuándo y a quién transfiere Sofi — HU-IA-03 · HU-IA-07)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required; índice ÚNICO: es configuración, no una colección
+  activo: Boolean,                // default false: no cambia el comportamiento de nadie hasta que un admin lo encienda
+  // A quién le llega la conversación (HU-IA-07). `asesorDestinoId` solo significa algo con "fijo".
+  estrategiaDestino: "primero" | "menor_carga" | "fijo",   // default "primero"
+  asesorDestinoId: ObjectId?,     // ref User (admin activo del tenant)
+  mensajeTransicion: String,      // lo que lee el cliente al ser transferido
+  reglas: {                       // los CUATRO disparadores de fábrica, objeto fijo
+    explicitRequest: { activa: Boolean, frases: [String] },
+    keyword:         { activa: Boolean, palabras: [String] },
+    lowConfidence:   { activa: Boolean, umbral: Number | null },   // >= KB_MIN_SCORE
+    intentPurchase:  { activa: Boolean, nivelMinimo: "tibio" | "caliente" }
+  },
+  // Condiciones que escribió el admin (HU-IA-07). Máx. 10; subdoc con _id: false.
+  condicionesExtras: [{
+    key: String,                  // slug derivado del nombre AL CREARLA; estable al renombrar
+    nombre: String,               // 2..40; es lo que la bandeja pinta al transferir
+    activa: Boolean,
+    palabras: [String]            // 1..30, cada una de 2..80 caracteres
+  }],
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1 } unique
+```
+> **Un documento por empresa, no una colección de reglas.** Los disparadores de fábrica son cuatro y
+> fijos, y su **orden es su prioridad** — la fija el producto, no cada empresa, para que dos tenants
+> con la misma configuración se comporten igual. Por eso no hay campo `orden`.
+>
+> **Las condiciones propias son una lista dentro del mismo documento.** Mismo `PUT`, sin colección ni
+> endpoints nuevos, y sin criterio de orden que inventar: el orden es el del array, que es el que ve
+> quien las configura. Se evalúan **después** de las dos reglas de texto de fábrica y **antes** de
+> `lowConfidence`/`intentPurchase`, porque son gratis: no llaman al modelo.
+>
+> **`estrategiaDestino` y `condicionesExtras` no necesitaron migración.** Los documentos guardados
+> antes de HU-IA-07 no los traen, y el servicio los deriva al leer (`asesorDestinoId ? "fijo" :
+> "primero"`, y `[]`). Un tenant que no abra esa pantalla se comporta exactamente igual que antes.
 
 ## prompt_templates  (system prompt por método y empresa — HT-AI-01 · HU-IA-01)
 ```js

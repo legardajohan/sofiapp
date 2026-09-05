@@ -19,11 +19,16 @@ import { CHAT_FRASE_DERIVACION } from '../../seed/seed-prompt-templates.js';
 const TENANT = '6a8dbe9c479f47f5e11d6242';
 const HISTORIAL: ChatTurn[] = [{ role: 'user', content: 'Hola' }];
 
-function settings(overrides: Partial<HandoffSettingsDTO['reglas']> = {}): HandoffSettingsDTO {
+function settings(
+  overrides: Partial<HandoffSettingsDTO['reglas']> = {},
+  condicionesExtras: HandoffSettingsDTO['condicionesExtras'] = [],
+): HandoffSettingsDTO {
   return {
     activo: true,
     asesorDestinoId: null,
+    estrategiaDestino: 'primero',
     mensajeTransicion: 'Ya le pasé tu conversación a un asesor.',
+    condicionesExtras,
     heredado: false,
     reglas: {
       explicitRequest: { activa: false, frases: FRASES_PETICION_EXPLICITA },
@@ -258,5 +263,84 @@ describe('HU-IA-03 — evaluación después de generar: intención de compra', (
       dispara: false,
     });
     expect(mockClassify).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Condiciones de transferencia propias del admin (HU-IA-07). Son grupos de palabras CON NOMBRE:
+ * lo que añaden sobre `reglas.keyword` es poder encenderlas por separado y que la bandeja diga
+ * cuál de ellas fue.
+ */
+describe('HU-IA-07 — condiciones de transferencia propias', () => {
+  const facturacion = {
+    key: 'facturacion',
+    nombre: 'Facturación',
+    activa: true,
+    palabras: ['factura', 'recibo', 'nit'],
+  };
+
+  beforeEach(() => {
+    mockClassify.mockReset();
+  });
+
+  it('una condición encendida dispara con motivo custom y devuelve su nombre (AC6)', () => {
+    const s = settings({}, [facturacion]);
+
+    expect(evaluarAntesDeGenerar(s, 'necesito la factura de mi matrícula')).toEqual({
+      dispara: true,
+      motivo: 'custom',
+      condicion: { key: 'facturacion', nombre: 'Facturación' },
+    });
+  });
+
+  it('no llama al modelo: se decide con el texto del cliente (AC6)', () => {
+    evaluarAntesDeGenerar(settings({}, [facturacion]), 'necesito la factura');
+    expect(mockClassify).not.toHaveBeenCalled();
+  });
+
+  it('una condición apagada no dispara (AC9)', () => {
+    const s = settings({}, [{ ...facturacion, activa: false }]);
+    expect(evaluarAntesDeGenerar(s, 'necesito la factura')).toEqual({ dispara: false });
+  });
+
+  it('con el interruptor maestro apagado no dispara ninguna (AC9)', () => {
+    const s = { ...settings({}, [facturacion]), activo: false };
+    expect(evaluarAntesDeGenerar(s, 'necesito la factura')).toEqual({ dispara: false });
+  });
+
+  // AC8: es la MISMA función que usan las de fábrica. Si alguien la duplicara, este test lo caza.
+  it('coincide por palabra completa: «facturación» no activa la palabra «factura»', () => {
+    const s = settings({}, [facturacion]);
+    expect(evaluarAntesDeGenerar(s, 'una pregunta sobre facturación')).toEqual({ dispara: false });
+  });
+
+  it('ignora mayúsculas y tildes, como las de fábrica', () => {
+    const s = settings({}, [{ ...facturacion, palabras: ['gestión'] }]);
+    expect(evaluarAntesDeGenerar(s, 'quiero una GESTION nueva')).toMatchObject({ motivo: 'custom' });
+  });
+
+  // AC7: la prioridad entre las de fábrica la fija el producto, así que las del admin van detrás.
+  it('una regla de fábrica gana a una extra que también se cumple', () => {
+    const s = settings(
+      { keyword: { activa: true, palabras: ['factura'] } },
+      [facturacion],
+    );
+    expect(evaluarAntesDeGenerar(s, 'necesito la factura')).toEqual({
+      dispara: true,
+      motivo: 'keyword',
+    });
+  });
+
+  it('entre varias extras gana la primera del array, que es el orden que ve el admin (AC7)', () => {
+    const reclamos = { key: 'reclamos', nombre: 'Reclamos', activa: true, palabras: ['factura'] };
+    const s = settings({}, [facturacion, reclamos]);
+
+    expect(evaluarAntesDeGenerar(s, 'necesito la factura')).toMatchObject({
+      condicion: { key: 'facturacion' },
+    });
+  });
+
+  it('sin condiciones extra el comportamiento es exactamente el anterior', () => {
+    expect(evaluarAntesDeGenerar(settings(), 'necesito la factura')).toEqual({ dispara: false });
   });
 });

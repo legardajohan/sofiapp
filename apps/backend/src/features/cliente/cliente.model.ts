@@ -40,6 +40,16 @@ const ClienteSchema = new Schema<IClienteDocument>(
     // lee al proyectar la conversación, nadie filtra la bandeja por esto todavía.
     handoffAt: { type: Date, default: null },
     handoffMotivo: { type: String, default: null },
+    // Qué condición propia del admin la disparó (HU-IA-07); `null` para las cuatro de fábrica.
+    // Guarda el NOMBRE a propósito: si el admin la renombra o la borra, esta conversación tiene que
+    // seguir diciendo por qué se transfirió entonces. `_id: false` como el resto de subdocs.
+    handoffCondicion: {
+      type: new Schema(
+        { key: { type: String, required: true }, nombre: { type: String, required: true } },
+        { _id: false },
+      ),
+      default: null,
+    },
     customFields: { type: Schema.Types.Mixed, default: {} },
     // Etiquetas de empresa (HU-OMNI-04). Sustituyen al antiguo `tags: [String]` de texto libre;
     // la migración vive en `scripts/migrate-cliente-tags.ts`.

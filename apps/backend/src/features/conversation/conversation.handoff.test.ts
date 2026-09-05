@@ -83,6 +83,8 @@ describe('HU-IA-03 — handoffConversation', () => {
     expect(evt.conversation.handoff).toEqual({
       at: expect.any(String),
       motivo: 'keyword',
+      // `null` porque lo disparo una regla de fabrica, no una condicion del admin (HU-IA-07).
+      condicion: null,
     });
   });
 

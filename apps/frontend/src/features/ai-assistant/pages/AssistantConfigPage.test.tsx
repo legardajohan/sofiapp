@@ -1,6 +1,9 @@
 /**
  * Cubre los criterios de HU-IA-01 que se ven en pantalla: heredar la configuración de fábrica,
- * guardar la propia, y que la vista previa muestre el system prompt tal como lo recibe el modelo.
+ * guardar la propia y descartar los cambios.
+ *
+ * La vista previa del prompt («Así lo recibe el modelo») se retiró en HU-IA-07: reconstruía a mano
+ * algo que `AiResponseContextSheet` (HU-IA-04) muestra de verdad, con la respuesta real.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -103,18 +106,6 @@ describe('AssistantConfigPage (HU-IA-01)', () => {
     await userEvent.click(screen.getByRole('button', { name: /descartar cambios/i }));
 
     expect(tono).toHaveValue('profesional, claro y cercano');
-  });
-
-  it('la vista previa refleja en vivo lo que se escribe, con el bloque de contexto', async () => {
-    renderPage();
-
-    const tono = await screen.findByLabelText('Tono');
-    await userEvent.clear(tono);
-    await userEvent.type(tono, 'informal');
-
-    const preview = screen.getByText(/--- CONTEXTO ---/);
-    expect(preview).toBeInTheDocument();
-    expect(screen.getByText('informal')).toBeInTheDocument();
   });
 
   it('si la carga falla ofrece reintentar en vez de quedarse en blanco', async () => {

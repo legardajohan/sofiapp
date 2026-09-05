@@ -17,6 +17,14 @@ const HandoffSettingsSchema = new Schema<IHandoffSettingsDocument>(
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true },
     activo: { type: Boolean, default: false },
     asesorDestinoId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    // HU-IA-07. `default: 'primero'` y NINGÚN script de migración: para los documentos guardados
+    // antes, `toDTO` la deriva de `asesorDestinoId`, así que un tenant que no abra esta pantalla se
+    // comporta exactamente igual que antes.
+    estrategiaDestino: {
+      type: String,
+      enum: ['primero', 'menor_carga', 'fijo'],
+      default: 'primero',
+    },
     mensajeTransicion: { type: String, required: true, trim: true },
     reglas: {
       explicitRequest: {
@@ -35,6 +43,26 @@ const HandoffSettingsSchema = new Schema<IHandoffSettingsDocument>(
         activa: { type: Boolean, default: false },
         nivelMinimo: { type: String, enum: ['tibio', 'caliente'], default: 'caliente' },
       },
+    },
+    // Condiciones propias del admin (HU-IA-07). Van en ESTE documento y no en una colección: mismo
+    // PUT, sin endpoints nuevos y sin criterio de orden que inventar — el orden es el del array,
+    // que es el que ve quien lo configura.
+    //
+    // `_id: false` como en `semaforoIA` y `atributos`: la identidad es la `key`, y un `_id` de Mongo
+    // sería un segundo identificador que nadie usa y que el DTO tendría que ocultar.
+    condicionesExtras: {
+      type: [
+        new Schema(
+          {
+            key: { type: String, required: true },
+            nombre: { type: String, required: true, trim: true },
+            activa: { type: Boolean, default: true },
+            palabras: { type: [String], default: [] },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
     },
   },
   { timestamps: true, collection: 'handoff_settings' },

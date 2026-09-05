@@ -22,7 +22,9 @@ function dto(overrides: Partial<UpdateHandoffSettingsDTO> = {}): UpdateHandoffSe
   return {
     activo: true,
     asesorDestinoId: null,
+    estrategiaDestino: 'primero',
     mensajeTransicion: 'Te paso con un asesor.',
+    condicionesExtras: [],
     reglas: {
       explicitRequest: { activa: true, frases: ['hablar con un asesor'] },
       keyword: { activa: false, palabras: [] },

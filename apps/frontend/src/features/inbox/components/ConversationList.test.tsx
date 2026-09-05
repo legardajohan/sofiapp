@@ -157,7 +157,7 @@ describe('ConversationList — conversación transferida por Sofi (HU-IA-03)', (
         conversations={[
           makeConversation({
             iaHabilitada: false,
-            handoff: { at: '2026-07-26T18:05:00.000Z', motivo: 'explicit_request' },
+            handoff: { at: '2026-07-26T18:05:00.000Z', motivo: 'explicit_request', condicion: null },
           }),
         ]}
         activeId={null}

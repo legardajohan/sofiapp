@@ -102,7 +102,9 @@ function handoffSettings(overrides: Partial<HandoffSettingsDTO> = {}): HandoffSe
   return {
     activo: false,
     asesorDestinoId: null,
+    estrategiaDestino: 'primero',
     mensajeTransicion: MENSAJE_TRANSICION,
+    condicionesExtras: [],
     heredado: true,
     reglas: {
       explicitRequest: { activa: false, frases: FRASES_PETICION_EXPLICITA },
@@ -411,6 +413,9 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       clienteId.toString(),
       'explicit_request',
       null,
+      'primero',
+      // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
+      null,
     );
   });
 
@@ -443,6 +448,9 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       clienteId.toString(),
       'low_confidence',
       null,
+      'primero',
+      // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
+      null,
     );
   });
 
@@ -474,6 +482,9 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       clienteId.toString(),
       'intent_purchase',
       null,
+      'primero',
+      // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
+      null,
     );
   });
 
@@ -482,6 +493,8 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
     mockGetHandoffSettings.mockResolvedValue(
       handoffSettings({
         activo: true,
+        // Desde HU-IA-07 el asesor fijo solo manda con la estrategia `fijo`.
+        estrategiaDestino: 'fijo',
         asesorDestinoId: asesor,
         reglas: {
           ...handoffSettings().reglas,
@@ -499,6 +512,8 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       clienteId.toString(),
       'keyword',
       asesor,
+      'fijo',
+      null,
     );
   });
 
@@ -706,5 +721,109 @@ describe('processAiReplyJob — semaforización automática (HU-IA-05)', () => {
 
     expect(mockHandoffConversation).toHaveBeenCalledTimes(1);
     expect(mockClasificarSemaforo).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Que la condición propia del admin llegue hasta la conversación (HU-IA-07). El motor y la
+ * validación tienen sus propios tests; aquí lo que importa es que el dato no se pierda por el
+ * camino entre `evaluarAntesDeGenerar` y `handoffConversation`.
+ */
+describe('processAiReplyJob — condiciones propias de transferencia (HU-IA-07)', () => {
+  let tenantId: Types.ObjectId;
+
+  beforeEach(async () => {
+    tenantId = new Types.ObjectId();
+    mockChat.mockReset().mockResolvedValue({
+      data: RESPUESTA,
+      cacheHit: false,
+      fromFaq: false,
+      retrievedChunks: [{ texto: 'x', documentId: 'd' }],
+      promptTokens: 1,
+      completionTokens: 1,
+      totalTokens: 2,
+      durationMs: 1,
+    });
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockMarcarParaAsesor.mockReset().mockResolvedValue(undefined);
+    mockClasificarSemaforo.mockReset().mockResolvedValue(undefined);
+    mockExtraerDatos.mockReset().mockResolvedValue(undefined);
+    mockHandoffConversation.mockReset().mockResolvedValue(undefined);
+    await Cliente.deleteMany({});
+    await Message.deleteMany({});
+  });
+
+  const job = (
+    clienteId: Types.ObjectId,
+  ): { tenantId: string; clienteId: string; recibidoEn: number } => ({
+    tenantId: tenantId.toString(),
+    clienteId: clienteId.toString(),
+    recibidoEn: Date.now(),
+  });
+
+  const facturacion = {
+    key: 'facturacion',
+    nombre: 'Facturación',
+    activa: true,
+    palabras: ['factura', 'recibo'],
+  };
+
+  it('transfiere con motivo custom y arrastra la condición hasta la conversación (AC10)', async () => {
+    mockGetHandoffSettings.mockResolvedValue(
+      handoffSettings({ activo: true, condicionesExtras: [facturacion] }),
+    );
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'necesito la factura de mi matrícula');
+
+    await processAiReplyJob(job(clienteId));
+
+    // Sin llamar al modelo: la condición se decide con el texto del cliente.
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(mockHandoffConversation).toHaveBeenCalledWith(
+      tenantId.toString(),
+      clienteId.toString(),
+      'custom',
+      null,
+      'primero',
+      { key: 'facturacion', nombre: 'Facturación' },
+    );
+  });
+
+  it('un handoff de fábrica no arrastra ninguna condición', async () => {
+    mockGetHandoffSettings.mockResolvedValue(
+      handoffSettings({
+        activo: true,
+        reglas: {
+          explicitRequest: { activa: true, frases: ['hablar con un asesor'] },
+          keyword: { activa: false, palabras: [] },
+          lowConfidence: { activa: false, umbral: null },
+          intentPurchase: { activa: false, nivelMinimo: 'caliente' },
+        },
+      }),
+    );
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'quiero hablar con un asesor');
+
+    await processAiReplyJob(job(clienteId));
+
+    const [, , motivo, , , condicion] = mockHandoffConversation.mock.calls[0]!;
+    expect(motivo).toBe('explicit_request');
+    expect(condicion).toBeNull();
+  });
+
+  it('pasa la estrategia de destino configurada', async () => {
+    mockGetHandoffSettings.mockResolvedValue(
+      handoffSettings({
+        activo: true,
+        estrategiaDestino: 'menor_carga',
+        condicionesExtras: [facturacion],
+      }),
+    );
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'necesito la factura');
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockHandoffConversation.mock.calls[0]![4]).toBe('menor_carga');
   });
 });

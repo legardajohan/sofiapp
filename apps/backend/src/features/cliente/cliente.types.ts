@@ -1,7 +1,7 @@
 import { Document, Types } from 'mongoose';
 import type { IMessageResponse, IPaginated } from '../conversation/conversation.types.js';
 import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
-import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
 import type { NivelInteres, Objecion } from '../../integrations/llm/llm-provider.types.js';
 
 export type CanalOrigen = 'whatsapp' | 'instagram' | 'messenger' | 'formulario' | 'web';
@@ -155,6 +155,13 @@ export interface ICliente {
    */
   handoffAt: Date | null;
   handoffMotivo: HandoffMotivo | null;
+  /**
+   * Qué condición propia del admin disparó la transferencia (HU-IA-07). `null` para las cuatro de
+   * fábrica. Guarda el **nombre** además de la clave: el banner de la bandeja no puede leer la
+   * configuración de handoff para pintar una línea, y si el admin renombra o borra la condición,
+   * esta conversación debe seguir diciendo por qué se transfirió **entonces**.
+   */
+  handoffCondicion?: IHandoffCondicionAplicada | null;
   customFields: Record<string, unknown>;
   /** Etiquetas de empresa aplicadas a la conversación (HU-OMNI-04). */
   tagIds: Types.ObjectId[];

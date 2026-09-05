@@ -1,7 +1,7 @@
 import type { AdminSubrol } from '../users/user.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
-import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
 import type { ISemaforoIAResponse } from '../ai/ai-semaforo.types.js';
 // El resumen ya tenía su DTO en la ficha del contacto (HU-OMNI-03): se importa en vez de declarar
 // un gemelo que se separaría del original a la primera edición.
@@ -42,7 +42,12 @@ export interface IConversationResponse {
    * haya pasado, y vuelve a `null` cuando un asesor reactiva a Sofi en el hilo. Viaja resuelto para
    * que la bandeja lo pinte sin consultar `audit_events` fila a fila.
    */
-  handoff: { at: string; motivo: HandoffMotivo } | null;
+  handoff: {
+    at: string;
+    motivo: HandoffMotivo;
+    /** La condición propia que lo disparó (HU-IA-07); `null` para las cuatro de fábrica. */
+    condicion: IHandoffCondicionAplicada | null;
+  } | null;
 }
 
 /**

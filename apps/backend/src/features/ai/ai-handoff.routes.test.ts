@@ -41,7 +41,9 @@ function body(overrides: Record<string, unknown> = {}): Record<string, unknown> 
   return {
     activo: true,
     asesorDestinoId: null,
+    estrategiaDestino: 'primero',
     mensajeTransicion: 'Te paso con un asesor.',
+    condicionesExtras: [],
     reglas: {
       explicitRequest: { activa: true, frases: ['hablar con un asesor'] },
       keyword: { activa: false, palabras: [] },
@@ -148,7 +150,15 @@ describe('GET/PUT /api/ai/handoff-rules (HU-IA-03)', () => {
       activo: true,
     });
 
-    const res = await put(token, body({ asesorDestinoId: (ajeno._id as Types.ObjectId).toString() }));
+    const res = await put(
+      token,
+      body({
+        // `fijo` a proposito: si no, el rechazo vendria de Zod y este test dejaria de comprobar
+        // `assertAssignableAdmin`, que es la guarda que impide asignar a otra empresa.
+        estrategiaDestino: 'fijo',
+        asesorDestinoId: (ajeno._id as Types.ObjectId).toString(),
+      }),
+    );
 
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(await HandoffSettings.countDocuments({ tenantId })).toBe(0);
@@ -170,5 +180,186 @@ describe('GET/PUT /api/ai/handoff-rules (HU-IA-03)', () => {
     const res = await request(app).get(RUTA).set('Cookie', [`token=${token}`]);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('reglas');
+  });
+});
+
+/**
+ * Las condiciones propias del admin y la estrategia de destino (HU-IA-07). Aquí se comprueba lo que
+ * la validación del borde tiene que rechazar: el servicio nunca llega a ver un cuerpo mal formado.
+ */
+describe('PUT /api/ai/handoff-rules — condiciones propias y estrategia (HU-IA-07)', () => {
+  let tenantId: string;
+  let token: string;
+
+  beforeEach(async () => {
+    await HandoffSettings.deleteMany({});
+    await User.deleteMany({});
+    tenantId = new Types.ObjectId().toString();
+    token = makeToken(tenantId, 'admin');
+  });
+
+  const facturacion = {
+    key: 'facturacion',
+    nombre: 'Facturación',
+    activa: true,
+    palabras: ['factura', 'recibo'],
+  };
+
+  it('guarda las condiciones propias y las devuelve', async () => {
+    const res = await put(token, body({ condicionesExtras: [facturacion] }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.condicionesExtras).toEqual([facturacion]);
+  });
+
+  // AC4: la clave se deriva del nombre al crearla y sobrevive al renombrado.
+  it('la key no cambia al renombrar la condición', async () => {
+    await put(token, body({ condicionesExtras: [facturacion] }));
+
+    const res = await put(
+      token,
+      body({ condicionesExtras: [{ ...facturacion, nombre: 'Cobros' }] }),
+    );
+
+    expect(res.body.condicionesExtras[0].key).toBe('facturacion');
+    expect(res.body.condicionesExtras[0].nombre).toBe('Cobros');
+  });
+
+  it('rechaza un nombre demasiado corto (AC5)', async () => {
+    const res = await put(token, body({ condicionesExtras: [{ ...facturacion, nombre: 'A' }] }));
+    expect(res.status).toBe(400);
+  });
+
+  // Una condición sin palabras no puede dispararse nunca: guardarla dejaría al admin creyendo que
+  // configuró algo.
+  it('rechaza una condición sin palabras (AC5)', async () => {
+    const res = await put(token, body({ condicionesExtras: [{ ...facturacion, palabras: [] }] }));
+    expect(res.status).toBe(400);
+  });
+
+  it('rechaza dos condiciones con la misma key (AC5)', async () => {
+    const res = await put(token, body({ condicionesExtras: [facturacion, facturacion] }));
+    expect(res.status).toBe(400);
+  });
+
+  it('rechaza dos nombres iguales ignorando mayúsculas y tildes (AC5)', async () => {
+    const res = await put(
+      token,
+      body({
+        condicionesExtras: [facturacion, { ...facturacion, key: 'otra', nombre: 'FACTURACION' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rechaza más de 10 condiciones (AC5)', async () => {
+    const once = Array.from({ length: 11 }, (_, i) => ({
+      ...facturacion,
+      key: `c${i}`,
+      nombre: `Condición ${i}`,
+    }));
+
+    expect((await put(token, body({ condicionesExtras: once }))).status).toBe(400);
+  });
+
+  it('guarda la estrategia de menor carga sin asesor fijo (AC14)', async () => {
+    const res = await put(token, body({ estrategiaDestino: 'menor_carga' }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.estrategiaDestino).toBe('menor_carga');
+    expect(res.body.asesorDestinoId).toBeNull();
+  });
+
+  // AC15: un cuerpo con las dos cosas describe dos destinos a la vez.
+  it('rechaza «fijo» sin asesor', async () => {
+    const res = await put(token, body({ estrategiaDestino: 'fijo', asesorDestinoId: null }));
+    expect(res.status).toBe(400);
+  });
+
+  it('rechaza un asesor fijo con una estrategia automática', async () => {
+    const res = await put(
+      token,
+      body({ estrategiaDestino: 'menor_carga', asesorDestinoId: ACTOR }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  // AC12: los tenants que guardaron antes de HU-IA-07 no tienen los campos nuevos.
+  it('un documento guardado sin los campos nuevos se lee con los valores derivados', async () => {
+    await HandoffSettings.collection.insertOne({
+      tenantId: new Types.ObjectId(tenantId),
+      activo: true,
+      asesorDestinoId: null,
+      mensajeTransicion: 'De antes de HU-IA-07.',
+      reglas: {
+        explicitRequest: { activa: true, frases: ['hablar con alguien'] },
+        keyword: { activa: false, palabras: [] },
+        lowConfidence: { activa: false, umbral: null },
+        intentPurchase: { activa: false, nivelMinimo: 'caliente' },
+      },
+    });
+
+    const res = await request(app).get(RUTA).set('Cookie', [`token=${token}`]);
+
+    expect(res.status).toBe(200);
+    expect(res.body.condicionesExtras).toEqual([]);
+    expect(res.body.estrategiaDestino).toBe('primero');
+    expect(res.body.mensajeTransicion).toBe('De antes de HU-IA-07.');
+  });
+});
+
+describe('GET /api/ai/handoff-rules/asesores/metricas (HU-IA-07)', () => {
+  let tenantId: string;
+  let token: string;
+  const RUTA_METRICAS = `${RUTA}/asesores/metricas`;
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    tenantId = new Types.ObjectId().toString();
+    token = makeToken(tenantId, 'admin');
+  });
+
+  it('sin JWT → 401', async () => {
+    expect((await request(app).get(RUTA_METRICAS)).status).toBe(401);
+  });
+
+  it('con un rol que no es admin → 403', async () => {
+    const otro = makeToken(tenantId, 'asesor');
+    const res = await request(app).get(RUTA_METRICAS).set('Cookie', [`token=${otro}`]);
+    expect(res.status).toBe(403);
+  });
+
+  it('devuelve una fila por admin activo del tenant (AC20)', async () => {
+    await User.create({
+      tenantId: new Types.ObjectId(tenantId),
+      nombre: 'Ana Ruiz',
+      email: 'ana@empresa.test',
+      passwordHash: 'x'.repeat(20),
+      rol: 'admin',
+      activo: true,
+    });
+
+    const res = await request(app).get(RUTA_METRICAS).set('Cookie', [`token=${token}`]);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({ nombre: 'Ana Ruiz', activas: 0 });
+    expect(res.body[0].porEstado).toMatchObject({ nuevo: 0, pagado: 0 });
+  });
+
+  it('AISLAMIENTO: no ve a los asesores de otro tenant (AC23)', async () => {
+    await User.create({
+      tenantId: new Types.ObjectId(),
+      nombre: 'De otra empresa',
+      email: 'ajeno@empresa.test',
+      passwordHash: 'x'.repeat(20),
+      rol: 'admin',
+      activo: true,
+    });
+
+    const res = await request(app).get(RUTA_METRICAS).set('Cookie', [`token=${token}`]);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });

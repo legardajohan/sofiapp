@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRightLeft,
+  BarChart3,
   HandCoins,
   HelpCircle,
   Loader2,
   MessageSquareText,
+  Pencil,
+  Plus,
   Save,
+  SlidersHorizontal,
   Tags,
+  Trash2,
   UserRoundCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,8 +29,13 @@ import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
 import { useSaveHandoffSettings } from '../hooks/useHandoffSettings.js';
 import { TriggerCard } from './TriggerCard.js';
 import { TermList } from './TermList.js';
+import { CondicionDialog } from './CondicionDialog.js';
+import { AsignacionDialog } from './AsignacionDialog.js';
 import {
+  CONDICIONES_MAX,
   MENSAJE_TRANSICION_MAX,
+  type CondicionExtra,
+  type EstrategiaDestino,
   type HandoffReglas,
   type HandoffSettings,
   type NivelMinimoInteres,
@@ -35,14 +45,21 @@ interface HandoffSettingsFormProps {
   settings: HandoffSettings;
 }
 
-/** Valor del `Select` cuando no hay asesor fijo. Radix no admite `value=""`. */
-const SIN_ASESOR_FIJO = '__primero_disponible__';
+// Valores del `Select` para las dos estrategias automáticas. Radix no admite `value=""`, y un
+// asesor concreto viaja con su propio id (HU-IA-07).
+const PRIMERO = '__primero_del_equipo__';
+const MENOR_CARGA = '__menor_carga__';
 
 export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): React.ReactElement {
   const [activo, setActivo] = useState(settings.activo);
   const [asesorDestinoId, setAsesorDestinoId] = useState(settings.asesorDestinoId);
+  const [estrategiaDestino, setEstrategiaDestino] = useState(settings.estrategiaDestino);
   const [mensajeTransicion, setMensajeTransicion] = useState(settings.mensajeTransicion);
   const [reglas, setReglas] = useState<HandoffReglas>(settings.reglas);
+  const [condicionesExtras, setCondicionesExtras] = useState(settings.condicionesExtras);
+  // `null` = el diálogo está cerrado; `{ condicion: null }` = abierto para crear una nueva.
+  const [editando, setEditando] = useState<{ condicion: CondicionExtra | null } | null>(null);
+  const [viendoAsignacion, setViendoAsignacion] = useState(false);
 
   const guardar = useSaveHandoffSettings();
   const { data: asesores } = useTenantUsers();
@@ -52,8 +69,10 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
   useEffect(() => {
     setActivo(settings.activo);
     setAsesorDestinoId(settings.asesorDestinoId);
+    setEstrategiaDestino(settings.estrategiaDestino);
     setMensajeTransicion(settings.mensajeTransicion);
     setReglas(settings.reglas);
+    setCondicionesExtras(settings.condicionesExtras);
   }, [settings]);
 
   function actualizarRegla<K extends keyof HandoffReglas>(
@@ -63,18 +82,28 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
     setReglas((prev) => ({ ...prev, [clave]: { ...prev[clave], ...cambios } }));
   }
 
-  const actual = { activo, asesorDestinoId, mensajeTransicion, reglas };
+  const actual = {
+    activo,
+    asesorDestinoId,
+    estrategiaDestino,
+    mensajeTransicion,
+    reglas,
+    condicionesExtras,
+  };
   const guardado = {
     activo: settings.activo,
     asesorDestinoId: settings.asesorDestinoId,
+    estrategiaDestino: settings.estrategiaDestino,
     mensajeTransicion: settings.mensajeTransicion,
     reglas: settings.reglas,
+    condicionesExtras: settings.condicionesExtras,
   };
   const hayCambios = JSON.stringify(actual) !== JSON.stringify(guardado);
 
   // Encender la transferencia sin ningún disparador la deja sin efecto: es un error de
   // configuración silencioso, así que se bloquea el guardado en vez de dejar que ocurra.
-  const algunDisparador = Object.values(reglas).some((r) => r.activa);
+  const algunDisparador =
+    Object.values(reglas).some((r) => r.activa) || condicionesExtras.some((c) => c.activa);
   const listasNoVacias =
     (!reglas.explicitRequest.activa || reglas.explicitRequest.frases.length > 0) &&
     (!reglas.keyword.activa || reglas.keyword.palabras.length > 0);
@@ -85,8 +114,30 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
   function descartar(): void {
     setActivo(settings.activo);
     setAsesorDestinoId(settings.asesorDestinoId);
+    setEstrategiaDestino(settings.estrategiaDestino);
     setMensajeTransicion(settings.mensajeTransicion);
     setReglas(settings.reglas);
+    setCondicionesExtras(settings.condicionesExtras);
+  }
+
+  /** Guardar una condición del diálogo: sustituye la que tenga su `key`, o la añade al final. */
+  function guardarCondicion(condicion: CondicionExtra): void {
+    setCondicionesExtras((prev) => {
+      const i = prev.findIndex((c) => c.key === condicion.key);
+      if (i === -1) return [...prev, condicion];
+      return prev.map((c, j) => (j === i ? condicion : c));
+    });
+  }
+
+  /** El `Select` fija estrategia y asesor a la vez: son un solo destino, no dos campos sueltos. */
+  function elegirDestino(valor: string): void {
+    if (valor === PRIMERO || valor === MENOR_CARGA) {
+      setEstrategiaDestino(valor === PRIMERO ? 'primero' : ('menor_carga' as EstrategiaDestino));
+      setAsesorDestinoId(null);
+      return;
+    }
+    setEstrategiaDestino('fijo');
+    setAsesorDestinoId(valor);
   }
 
   function handleSubmit(e: React.FormEvent): void {
@@ -95,8 +146,10 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
     guardar.mutate({
       activo,
       asesorDestinoId,
+      estrategiaDestino,
       mensajeTransicion: mensajeTransicion.trim(),
       reglas,
+      condicionesExtras,
     });
   }
 
@@ -229,6 +282,80 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
             </p>
           </div>
         </TriggerCard>
+
+        {/* Las condiciones que escribió el admin (HU-IA-07). Van después de las cuatro de fábrica,
+            en el mismo orden en que las evalúa el backend. */}
+        {condicionesExtras.map((condicion, i) => (
+          <TriggerCard
+            key={condicion.key}
+            id={`handoff-extra-${condicion.key}`}
+            icon={SlidersHorizontal}
+            titulo={condicion.nombre}
+            descripcion={`Transfiere cuando el cliente escribe ${condicion.palabras
+              .slice(0, 3)
+              .map((p) => `«${p}»`)
+              .join(', ')}${condicion.palabras.length > 3 ? ' o alguna más.' : '.'}`}
+            activa={condicion.activa}
+            disabled={!activo}
+            onToggle={(activa) =>
+              setCondicionesExtras((prev) =>
+                prev.map((c, j) => (j === i ? { ...c, activa } : c)),
+              )
+            }
+            acciones={
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setEditando({ condicion })}
+                  aria-label={`Editar la condición ${condicion.nombre}`}
+                >
+                  <Pencil className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-destructive"
+                  onClick={() =>
+                    setCondicionesExtras((prev) => prev.filter((c) => c.key !== condicion.key))
+                  }
+                  aria-label={`Eliminar la condición ${condicion.nombre}`}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </Button>
+              </>
+            }
+          >
+            <TermList
+              id={`handoff-extra-${condicion.key}-palabras`}
+              label="Palabras que la activan"
+              ayuda="Coinciden como palabra completa: «factura» no se activa dentro de «facturación»."
+              placeholder="factura"
+              terminos={condicion.palabras}
+              onChange={(palabras) =>
+                setCondicionesExtras((prev) =>
+                  prev.map((c, j) => (j === i ? { ...c, palabras } : c)),
+                )
+              }
+            />
+          </TriggerCard>
+        ))}
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full border-dashed"
+          disabled={condicionesExtras.length >= CONDICIONES_MAX}
+          onClick={() => setEditando({ condicion: null })}
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          {condicionesExtras.length >= CONDICIONES_MAX
+            ? `Máximo ${CONDICIONES_MAX} condiciones propias`
+            : 'Añadir condición'}
+        </Button>
       </div>
 
       {/* 3. El destino va al final: solo importa una vez que hay algún disparador encendido. */}
@@ -238,7 +365,7 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
             <MessageSquareText className="size-4 text-secondary-foreground" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-foreground">Qué pasa al transferir</h2>
+            <h2 className="text-base font-semibold text-foreground">Asignación y aviso</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
               A quién le llega la conversación y qué se le dice al cliente mientras tanto.
             </p>
@@ -248,25 +375,47 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
         <div className="mt-5 space-y-5">
           <div className="space-y-2">
             <Label htmlFor="handoff-asesor">Asesor que la recibe</Label>
-            <Select
-              value={asesorDestinoId ?? SIN_ASESOR_FIJO}
-              onValueChange={(v) => setAsesorDestinoId(v === SIN_ASESOR_FIJO ? null : v)}
-            >
-              <SelectTrigger id="handoff-asesor" className="w-full sm:w-72">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SIN_ASESOR_FIJO}>El primero del equipo</SelectItem>
-                {(asesores ?? []).map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.nombre}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Select
+                value={
+                  estrategiaDestino === 'fijo' && asesorDestinoId
+                    ? asesorDestinoId
+                    : estrategiaDestino === 'menor_carga'
+                      ? MENOR_CARGA
+                      : PRIMERO
+                }
+                onValueChange={elegirDestino}
+              >
+                <SelectTrigger id="handoff-asesor" className="w-full sm:w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PRIMERO}>El primero del equipo</SelectItem>
+                  <SelectItem value={MENOR_CARGA}>
+                    Quien tenga menos conversaciones activas
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {(asesores ?? []).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setViendoAsignacion(true)}
+              >
+                <BarChart3 className="size-4" aria-hidden="true" />
+                Ver asignación
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Si la conversación ya tiene un asesor asignado, se queda con él: transferir no se la
-              quita a quien la lleva.
+              «El primero del equipo» es el primero por orden alfabético, así que todas las
+              transferencias le llegan a la misma persona. Si la conversación ya tiene un asesor
+              asignado, se queda con él: transferir no se la quita a quien la lleva.
             </p>
           </div>
 
@@ -312,6 +461,18 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
           )}
         </Button>
       </div>
+
+      {/* Fuera del flujo del formulario: Radix los lleva a un portal. Ninguno guarda contra el
+          servidor — el diálogo de condición devuelve al estado de arriba, y el de asignación solo
+          lee. Así «Descartar cambios» sigue significando lo mismo. */}
+      <CondicionDialog
+        open={editando !== null}
+        onOpenChange={(open) => !open && setEditando(null)}
+        condicion={editando?.condicion ?? null}
+        keysUsadas={condicionesExtras.map((c) => c.key)}
+        onGuardar={guardarCondicion}
+      />
+      <AsignacionDialog open={viendoAsignacion} onOpenChange={setViendoAsignacion} />
     </form>
   );
 }

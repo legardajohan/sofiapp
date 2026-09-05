@@ -3,7 +3,7 @@ import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/m
 import type { IUserResponse } from '../users/user.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import type { IAuditEventResponse } from '../audit/audit.types.js';
-import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
+import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
 import type {
   IAssignmentResponse,
   IConversationResponse,
@@ -26,6 +26,8 @@ export interface IConversationSource {
   /** Handoff automático (HU-IA-03). Opcionales: los documentos anteriores no traen los campos. */
   handoffAt?: Date | null;
   handoffMotivo?: HandoffMotivo | null;
+  /** Condición propia que lo disparó (HU-IA-07). Ausente en las transferidas antes de existir. */
+  handoffCondicion?: IHandoffCondicionAplicada | null;
 }
 
 /** Forma mínima de un `Message` (lean) necesaria para proyectar un mensaje. */
@@ -75,7 +77,11 @@ export function toConversationResponse(
     // se transfirió, y una fecha suelta no es información accionable para el asesor.
     handoff:
       cliente.handoffAt && cliente.handoffMotivo
-        ? { at: cliente.handoffAt.toISOString(), motivo: cliente.handoffMotivo }
+        ? {
+            at: cliente.handoffAt.toISOString(),
+            motivo: cliente.handoffMotivo,
+            condicion: cliente.handoffCondicion ?? null,
+          }
         : null,
   };
 }

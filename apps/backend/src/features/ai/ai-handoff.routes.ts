@@ -5,10 +5,12 @@ import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
+  asesorMetricasSchema,
   getHandoffSettingsSchema,
   updateHandoffSettingsSchema,
 } from './ai-handoff.validation.js';
 import {
+  getAsesorMetricasController,
   getHandoffSettingsController,
   updateHandoffSettingsController,
 } from './ai-handoff.controller.js';
@@ -27,6 +29,17 @@ router.get(
   handoffRoles,
   validate(getHandoffSettingsSchema),
   asyncHandler(getHandoffSettingsController),
+);
+
+// Va ANTES del `PUT /` por claridad, no por necesidad de matching: es una lectura auxiliar de la
+// misma configuración. Mismos roles: quien decide el destino es quien necesita ver el reparto.
+router.get(
+  '/asesores/metricas',
+  authenticateJWT,
+  requireTenant,
+  handoffRoles,
+  validate(asesorMetricasSchema),
+  asyncHandler(getAsesorMetricasController),
 );
 
 router.put(

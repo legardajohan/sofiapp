@@ -14,7 +14,7 @@ import {
   evaluarDespuesDeGenerar,
   getHandoffSettings,
 } from '../features/ai/ai-handoff.service.js';
-import type { HandoffMotivo, HandoffSettingsDTO } from '../features/ai/ai-handoff.types.js';
+import type { HandoffDecision, HandoffSettingsDTO } from '../features/ai/ai-handoff.types.js';
 import { getAIService } from '../services/ai/ai-service.singleton.js';
 import type { AiResult } from '../services/ai/ai-service.types.js';
 import type { ChatTurn } from '../integrations/llm/llm-provider.types.js';
@@ -80,7 +80,7 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
   // de espera a alguien que acaba de pedir hablar con un humano.
   const previa = evaluarAntesDeGenerar(handoff, ultimo.content);
   if (previa.dispara) {
-    await ejecutarHandoff(tenantId, clienteId, handoff, previa.motivo, null);
+    await ejecutarHandoff(tenantId, clienteId, handoff, previa, null);
     return historial;
   }
 
@@ -101,7 +101,7 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
   // compra). Va aquí y no después de enviar: si hay handoff, lo que sale por WhatsApp cambia.
   const posterior = await evaluarDespuesDeGenerar(handoff, tenantId, historial, resultado);
   if (posterior.dispara) {
-    await ejecutarHandoff(tenantId, clienteId, handoff, posterior.motivo, resultado.data);
+    await ejecutarHandoff(tenantId, clienteId, handoff, posterior, resultado.data);
     return historial;
   }
 
@@ -178,9 +178,12 @@ async function ejecutarHandoff(
   tenantId: string,
   clienteId: string,
   settings: HandoffSettingsDTO,
-  motivo: HandoffMotivo,
+  // La decisión entera y no solo el motivo: desde HU-IA-07 arrastra ademas qué condición del admin
+  // disparó, que es lo que la bandeja necesita para decir «facturación» y no «palabra clave».
+  decision: Extract<HandoffDecision, { dispara: true }>,
   respuestaGenerada: string | null,
 ): Promise<void> {
+  const { motivo } = decision;
   const texto =
     motivo === 'intent_purchase' && respuestaGenerada
       ? `${respuestaGenerada}\n\n${settings.mensajeTransicion}`
@@ -196,7 +199,14 @@ async function ejecutarHandoff(
     }
   }
 
-  await handoffConversation(tenantId, clienteId, motivo, settings.asesorDestinoId);
+  await handoffConversation(
+    tenantId,
+    clienteId,
+    motivo,
+    settings.asesorDestinoId,
+    settings.estrategiaDestino,
+    decision.condicion ?? null,
+  );
   logger.info('Handoff ejecutado', { tenantId, clienteId, motivo });
 }
 

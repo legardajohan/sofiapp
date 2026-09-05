@@ -76,6 +76,43 @@ escribió una persona.
 > Qué campos se piden al modelo lo fija el producto (`DATOS_CONTACTO_SLOTS`); lo que cada tenant sí
 > puede afinar es **el prompt**, vía su plantilla `extract`.
 
+## 4bis. Cuándo Sofi deja de responder (handoff — HU-IA-03 · HU-IA-07)
+
+Los disparadores se evalúan **en este orden, que es su prioridad**. Si en un mismo turno se cumplen
+varios, se ejecuta un solo handoff: el del primero de la lista.
+
+| # | Disparador | Motivo registrado | Cuándo se decide |
+|---|---|---|---|
+| 1 | Pide hablar con una persona | `explicit_request` | antes de generar |
+| 2 | Menciona una palabra clave | `keyword` | antes de generar |
+| 3 | **Condiciones propias del admin**, en el orden de su lista | `custom` | antes de generar |
+| 4 | Sofi no encuentra la respuesta | `low_confidence` | con la respuesta ya generada |
+| 5 | Muestra intención de compra | `intent_purchase` | con la respuesta ya generada |
+
+> **La prioridad entre los cuatro de fábrica la fija el producto, no cada empresa** — así dos tenants
+> con la misma configuración se comportan igual, y por eso no hay campo de orden configurable. Las
+> condiciones propias van **detrás de ellos** por esa misma razón, y **delante** de los dos últimos
+> porque son gratis: se deciden con el texto del cliente, sin llamar al modelo. Si la conversación se
+> va a una persona, pagar una generación para tirar la respuesta es gasto y latencia puros.
+
+> **Un solo motivo `custom` para todas las condiciones propias.** Cuál fue viaja aparte, en
+> `Cliente.handoffCondicion`, con **el nombre grabado**: si el admin la renombra o la borra, esa
+> conversación tiene que seguir diciendo por qué se transfirió entonces.
+
+### A quién le llega
+
+- `primero` — el primer admin activo por orden alfabético. Es el valor de fábrica, y significa que
+  **todo el volumen automático cae sobre la misma persona**.
+- `menor_carga` (HU-IA-07) — el admin activo con menos conversaciones **sin cerrar** (`estadoComercial`
+  distinto de `pagado` y `perdido`, es decir los tres primeros estados de §3). Cuenta también lo
+  asignado a mano: la carga de un asesor es la que tiene, venga de donde venga. **Ante un empate gana
+  el primero por nombre**, porque el reparto tiene que poder explicársele a quien pregunte.
+- `fijo` — un asesor concreto. Si dejó de ser asignable, se cae a `primero` en vez de dejar la
+  conversación sin dueño.
+
+> Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
+> que no tienen dueño.
+
 ## 5. Semaforización (HU-OMNI-04)
 
 **Semaforización** es el vocabulario compartido con el que el CRM expresa, de un vistazo, en qué

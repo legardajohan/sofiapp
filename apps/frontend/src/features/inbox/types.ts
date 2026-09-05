@@ -1,4 +1,4 @@
-import type { HandoffMotivo } from '../handoff/types.js';
+import type { CondicionExtra, HandoffMotivo } from '../handoff/types.js';
 import type { AdminSubrol } from '@/stores/authStore';
 import type { SemaforoSlug, TagDTO } from '@/features/tags/types';
 
@@ -38,7 +38,12 @@ export interface ConversationDTO {
    * Sofi transfirió esta conversación a una persona (HU-IA-03). `null` mientras no haya pasado, y
    * vuelve a `null` cuando alguien reactiva a Sofi en el hilo.
    */
-  handoff: { at: string; motivo: HandoffMotivo } | null;
+  handoff: {
+    at: string;
+    motivo: HandoffMotivo;
+    /** La condición propia que lo disparó (HU-IA-07); `null` para las cuatro de fábrica. */
+    condicion: Pick<CondicionExtra, 'key' | 'nombre'> | null;
+  } | null;
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */

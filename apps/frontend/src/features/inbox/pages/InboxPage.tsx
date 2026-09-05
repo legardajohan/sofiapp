@@ -312,7 +312,11 @@ export function InboxPage(): React.ReactElement {
             )}
 
             {active.handoff && (
-              <HandoffBanner motivo={active.handoff.motivo} at={active.handoff.at} />
+              <HandoffBanner
+                motivo={active.handoff.motivo}
+                at={active.handoff.at}
+                condicion={active.handoff.condicion}
+              />
             )}
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer

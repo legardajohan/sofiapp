@@ -1,5 +1,11 @@
 import { Types } from 'mongoose';
-import { findOneScoped, findOneAndUpdateScoped } from '../../repositories/base.repository.js';
+import {
+  aggregateScoped,
+  findOneScoped,
+  findOneAndUpdateScoped,
+} from '../../repositories/base.repository.js';
+import { Cliente } from '../cliente/cliente.model.js';
+import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
@@ -11,6 +17,7 @@ import { MENSAJE_HANDOFF } from '../../workers/ai-reply.messages.js';
 import { HandoffSettings } from './ai-handoff.model.js';
 import {
   NO_DISPARA,
+  type AsesorMetricasDTO,
   type HandoffDecision,
   type HandoffSettingsDTO,
   type IHandoffReglas,
@@ -55,7 +62,9 @@ function settingsDeFabrica(): HandoffSettingsDTO {
   return {
     activo: false,
     asesorDestinoId: null,
+    estrategiaDestino: 'primero',
     mensajeTransicion: MENSAJE_HANDOFF,
+    condicionesExtras: [],
     // Copia profunda: sin esto, dos tenants sin configuración compartirían el mismo array de frases
     // y una mutación accidental en un request afectaría al siguiente.
     reglas: structuredClone(REGLAS_DE_FABRICA),
@@ -67,8 +76,13 @@ function toDTO(doc: IHandoffSettings): HandoffSettingsDTO {
   return {
     activo: doc.activo,
     asesorDestinoId: doc.asesorDestinoId ? String(doc.asesorDestinoId) : null,
+    // HU-IA-07: los documentos guardados antes no traen el campo. Derivarlo aquí es lo que evita un
+    // script de migración, y lo que garantiza que un tenant que no abra esta pantalla se comporte
+    // exactamente igual que antes.
+    estrategiaDestino: doc.estrategiaDestino ?? (doc.asesorDestinoId ? 'fijo' : 'primero'),
     mensajeTransicion: doc.mensajeTransicion,
     reglas: doc.reglas,
+    condicionesExtras: doc.condicionesExtras ?? [],
     heredado: false,
   };
 }
@@ -108,8 +122,10 @@ export async function updateHandoffSettings(
       $set: {
         activo: dto.activo,
         asesorDestinoId: dto.asesorDestinoId ? new Types.ObjectId(dto.asesorDestinoId) : null,
+        estrategiaDestino: dto.estrategiaDestino,
         mensajeTransicion: dto.mensajeTransicion,
         reglas: dto.reglas,
+        condicionesExtras: dto.condicionesExtras,
       },
     },
     { new: true, upsert: true, setDefaultsOnInsert: true },
@@ -129,6 +145,118 @@ export async function updateHandoffSettings(
 export async function primerAdminActivo(tenantId: string): Promise<string | null> {
   const admins = await listTenantUsers(tenantId, { rol: 'admin', activo: true });
   return admins[0]?.id ?? null;
+}
+
+// ─── Reparto por carga y métricas por asesor (HU-IA-07) ─────────────────────────
+
+/**
+ * Estados que cuentan como carga viva. `pagado` y `perdido` son cierres (`docs/domain.md` §3).
+ *
+ * **Una sola definición** para el reparto automático y para el panel de asignación: si divergieran,
+ * el modal enseñaría un número distinto del que decide a quién le llega la conversación.
+ */
+export const ESTADOS_ACTIVOS = ['nuevo', 'en_gestion', 'pago_pendiente'] as const;
+
+interface CargaFila {
+  _id: Types.ObjectId | null;
+  activas: number;
+}
+
+interface EstadoFila {
+  _id: { asesorId: Types.ObjectId | null; estadoComercial: string };
+  total: number;
+}
+
+/**
+ * Conversaciones activas por asesor, en UNA consulta. La clave del mapa es el id del asesor.
+ *
+ * Se apoya en los índices `{ tenantId, asesorId }` y `{ tenantId, estadoComercial }` que ya existen:
+ * esta historia no añade ninguno.
+ */
+async function cargaPorAsesor(tenantId: string): Promise<Map<string, number>> {
+  const filas = await aggregateScoped<CargaFila>(Cliente, tenantId, [
+    { $match: { asesorId: { $ne: null }, estadoComercial: { $in: [...ESTADOS_ACTIVOS] } } },
+    { $group: { _id: '$asesorId', activas: { $sum: 1 } } },
+  ]).exec();
+
+  return new Map(filas.map((f) => [String(f._id), f.activas]));
+}
+
+/**
+ * Admin activo con menos conversaciones activas (HU-IA-07).
+ *
+ * **Empate → el primero por nombre.** El reparto tiene que poder explicársele a quien pregunte por
+ * qué le llegó a él, y un desempate aleatorio no se puede explicar. `listTenantUsers` ya devuelve la
+ * lista ordenada por nombre, así que basta recorrerla en orden y quedarse con el primero que mejore
+ * el mínimo.
+ *
+ * Un admin sin ninguna conversación cuenta 0 y por tanto gana: es exactamente a quien queremos
+ * mandarle la siguiente.
+ */
+export async function asesorConMenorCarga(tenantId: string): Promise<string | null> {
+  const [admins, carga] = await Promise.all([
+    listTenantUsers(tenantId, { rol: 'admin', activo: true }),
+    cargaPorAsesor(tenantId),
+  ]);
+
+  const primero = admins[0];
+  if (!primero) return null;
+
+  let elegido = primero;
+  let minimo = carga.get(primero.id) ?? 0;
+  for (const admin of admins.slice(1)) {
+    const activas = carga.get(admin.id) ?? 0;
+    // `<` y no `<=`: ante un empate gana el que ya estaba, que es el primero por nombre.
+    if (activas < minimo) {
+      elegido = admin;
+      minimo = activas;
+    }
+  }
+  return elegido.id;
+}
+
+/**
+ * Cómo está repartido el trabajo, por asesor (HU-IA-07).
+ *
+ * Se parte de los admins **activos** y se rellena desde el agregado, no al revés: un asesor sin nada
+ * asignado cuenta 0 y aparece igual — es justo el que hay que ver. Un usuario desactivado no puede
+ * recibir conversaciones, así que listarlo sería ofrecer un destino imposible.
+ */
+export async function metricasPorAsesor(tenantId: string): Promise<AsesorMetricasDTO[]> {
+  const [admins, filas] = await Promise.all([
+    listTenantUsers(tenantId, { rol: 'admin', activo: true }),
+    aggregateScoped<EstadoFila>(Cliente, tenantId, [
+      { $match: { asesorId: { $ne: null } } },
+      {
+        $group: {
+          _id: { asesorId: '$asesorId', estadoComercial: '$estadoComercial' },
+          total: { $sum: 1 },
+        },
+      },
+    ]).exec(),
+  ]);
+
+  const porAsesor = new Map<string, Record<string, number>>();
+  for (const fila of filas) {
+    const id = String(fila._id.asesorId);
+    const actual = porAsesor.get(id) ?? {};
+    actual[fila._id.estadoComercial] = fila.total;
+    porAsesor.set(id, actual);
+  }
+
+  return admins.map((admin) => {
+    const conteos = porAsesor.get(admin.id) ?? {};
+    // Los cinco estados siempre presentes: que la UI no tenga que distinguir «cero» de «ausente».
+    const porEstado: Record<string, number> = {};
+    for (const estado of ESTADOS_COMERCIALES) porEstado[estado] = conteos[estado] ?? 0;
+
+    return {
+      asesorId: admin.id,
+      nombre: admin.nombre,
+      activas: ESTADOS_ACTIVOS.reduce((suma, e) => suma + (porEstado[e] ?? 0), 0),
+      porEstado,
+    };
+  });
 }
 
 // ─── Motor de evaluación ────────────────────────────────────────────────────────
@@ -184,6 +312,27 @@ export function evaluarAntesDeGenerar(
   if (keyword.activa && algunTermino(ultimoMensajeCliente, keyword.palabras)) {
     return { dispara: true, motivo: 'keyword' };
   }
+
+  // Las condiciones del admin (HU-IA-07), en el orden del array — que es el que él ve en pantalla.
+  //
+  // Van DESPUÉS de las dos de fábrica porque la prioridad entre las de fábrica la fija el producto
+  // (ver la cabecera de `MOTIVOS_HANDOFF`), y ANTES de `lowConfidence`/`intentPurchase` por el mismo
+  // motivo que ya pone `keyword` delante: son gratis, no llaman al modelo, y si la conversación se
+  // va a una persona, pagar una generación para tirarla es gasto y latencia puros.
+  //
+  // `algunTermino` es la MISMA función que usan las de fábrica, no una copia: duplicarla dejaría que
+  // las condiciones del admin se comportaran distinto ante «asesoría» vs «asesor».
+  for (const condicion of settings.condicionesExtras) {
+    if (!condicion.activa) continue;
+    if (algunTermino(ultimoMensajeCliente, condicion.palabras)) {
+      return {
+        dispara: true,
+        motivo: 'custom',
+        condicion: { key: condicion.key, nombre: condicion.nombre },
+      };
+    }
+  }
+
   return NO_DISPARA;
 }
 

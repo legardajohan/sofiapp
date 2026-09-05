@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { SystemPromptPreview } from './SystemPromptPreview.js';
 import { useSaveAssistantConfig } from '../hooks/useAssistantConfig.js';
 import { SYSTEM_PROMPT_MAX, TONO_MAX, type AssistantConfig } from '../types.js';
 
@@ -89,8 +88,6 @@ export function AssistantConfigForm({ config }: AssistantConfigFormProps): React
           </div>
         </div>
       </section>
-
-      <SystemPromptPreview tono={tono} systemPrompt={systemPrompt} />
 
       <div className="flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
         <Button

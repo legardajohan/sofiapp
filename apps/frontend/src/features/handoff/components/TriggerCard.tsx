@@ -10,6 +10,14 @@ interface TriggerCardProps {
   activa: boolean;
   disabled: boolean;
   onToggle: (activa: boolean) => void;
+  /**
+   * Acciones sobre el disparador en sí (editar, eliminar). Solo las condiciones propias del admin
+   * las traen (HU-IA-07): las cuatro de fábrica no se editan ni se borran.
+   *
+   * Es un slot y no un componente aparte porque una condición propia **es** un disparador; lo único
+   * que cambia es que además se puede modificar.
+   */
+  acciones?: React.ReactNode;
   /** Parámetros propios del disparador. Solo se muestran cuando está encendido. */
   children?: React.ReactNode;
 }
@@ -30,6 +38,7 @@ export function TriggerCard({
   activa,
   disabled,
   onToggle,
+  acciones,
   children,
 }: TriggerCardProps): React.ReactElement {
   return (
@@ -59,13 +68,16 @@ export function TriggerCard({
           </p>
         </div>
 
-        <Switch
-          id={id}
-          checked={activa}
-          disabled={disabled}
-          onCheckedChange={onToggle}
-          aria-describedby={`${id}-ayuda`}
-        />
+        <div className="flex shrink-0 items-center gap-1">
+          {acciones}
+          <Switch
+            id={id}
+            checked={activa}
+            disabled={disabled}
+            onCheckedChange={onToggle}
+            aria-describedby={`${id}-ayuda`}
+          />
+        </div>
       </div>
 
       {activa && !disabled && children && (
