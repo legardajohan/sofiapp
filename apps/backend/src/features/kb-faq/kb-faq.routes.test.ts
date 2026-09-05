@@ -44,6 +44,7 @@ vi.mock('./kb-faq.repository.js', async (importOriginal) => {
 import app from '../../app.js';
 import { env } from '../../config/env.js';
 import { createFaq } from './kb-faq.service.js';
+import type { IKbFaqResponse } from './kb-faq.types.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -54,6 +55,23 @@ const makeToken = (tenantId: string | null, rol: string) =>
     SECRET,
     { expiresIn: '1h' },
   );
+
+/** Deja al tenant con exactamente `n` FAQs activas y devuelve las creadas (HU-KB-02-V3). */
+async function sembrarActivas(
+  tenantId: Types.ObjectId,
+  n: number,
+): Promise<IKbFaqResponse[]> {
+  const creadas: IKbFaqResponse[] = [];
+  for (let i = 0; i < n; i += 1) {
+    creadas.push(
+      await createFaq(tenantId, {
+        pregunta: `¿Pregunta número ${i}?`,
+        respuesta: `Respuesta ${i}.`,
+      }),
+    );
+  }
+  return creadas;
+}
 
 const authed = (req: request.Test, token: string) =>
   req.set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`]).set('X-CSRF-Token', CSRF);
@@ -195,6 +213,8 @@ describe('PATCH /api/kb/faqs/:id', () => {
 describe('DELETE /api/kb/faqs/:id', () => {
   it('admin borra una FAQ de su tenant → 200', async () => {
     const tenantId = new Types.ObjectId();
+    // Con margen sobre el mínimo de activas (HU-KB-02-V3).
+    await sembrarActivas(tenantId, env.FAQ_MIN_ACTIVAS);
     const faq = await createFaq(tenantId, { pregunta: '¿Borrable?', respuesta: 'x' });
     const token = makeToken(tenantId.toString(), 'admin');
 
@@ -230,6 +250,74 @@ describe('DELETE /api/kb/faqs/:id', () => {
       makeToken(tenantId.toString(), 'asesor'),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+// ─── Mínimo de FAQs activas (HU-KB-02-V3) ─────────────────────────────────────
+describe('mínimo de preguntas activas', () => {
+  const MINIMO = env.FAQ_MIN_ACTIVAS;
+
+  it('DELETE que rompería el mínimo → 409 con las activas y el mínimo en el cuerpo', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await authed(request(app).delete(`/api/kb/faqs/${primera!.id}`), token);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toContain(String(MINIMO));
+    expect(res.body.activas).toBe(MINIMO);
+    expect(res.body.minimo).toBe(MINIMO);
+  });
+
+  it('PATCH { activo: false } que rompería el mínimo → 409', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await authed(request(app).patch(`/api/kb/faqs/${primera!.id}`), token).send({
+      activo: false,
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.activas).toBe(MINIMO);
+  });
+
+  it('POST sigue devolviendo 201 aunque el tenant esté por debajo del mínimo', async () => {
+    // Al mínimo se sube escribiendo: crear nunca se limita.
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+
+    const res = await authed(request(app).post('/api/kb/faqs'), token).send({
+      pregunta: '¿La primera de todas?',
+      respuesta: 'Sí.',
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('GET expone las activas del tenant y el mínimo vigente', async () => {
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, 2);
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await authed(request(app).get('/api/kb/faqs'), token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.activas).toBe(2);
+    expect(res.body.minimoActivas).toBe(MINIMO);
+  });
+
+  it('GET ?activo=false sigue informando las activas del tenant, no 0', async () => {
+    // Donde se notaría confundir `total` (que respeta el filtro) con `activas` (que no).
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, 3);
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await authed(request(app).get('/api/kb/faqs?activo=false'), token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.activas).toBe(3);
   });
 });
 

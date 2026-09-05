@@ -106,6 +106,11 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | PUT | `/api/ai/assistant` | admin | Guarda tono e instrucciones de la empresa (`{ tono }` 1–200, `{ systemPrompt }` 1–8000). Crea la plantilla `chat` del tenant si no existía y **sube su `version`**, lo que deja inalcanzables las respuestas cacheadas con el prompt anterior. Nunca modifica la global (HU-IA-01). |
 | GET | `/api/ai/responses` | admin | Auditoría paginada de llamadas a la IA; `?method` (HU-KB-04). |
 | GET | `/api/ai/responses/:id/context` | admin | Prompt, `kbVersion` y fragmentos de KB que sustentaron una respuesta. `contextAvailable: false` si la llamada no dejó trace (HU-KB-04). |
+| GET | `/api/kb/faqs` | admin | Preguntas frecuentes del tenant, paginado, `?activo` opcional. Además de `total` (que sí responde al filtro) devuelve `activas` y `minimoActivas`, **de alcance tenant**: son el conteo contra el que se aplica el mínimo (HU-KB-02-V3). |
+| POST | `/api/kb/faqs` | admin | Crea una FAQ y embebe su pregunta → `201`. **Nunca** limitada por el mínimo: al mínimo se sube escribiendo. `409` si la pregunta ya existe en el tenant. |
+| PATCH | `/api/kb/faqs/:id` | admin | Edita pregunta, respuesta y/o `activo`. Solo re-embebe si cambia el **texto** de la pregunta. `409` con `{ activas, minimo }` si `activo: false` dejaría al tenant por debajo de `FAQ_MIN_ACTIVAS`; editar textos y reactivar nunca se bloquean (HU-KB-02-V3). |
+| DELETE | `/api/kb/faqs/:id` | admin | Mismo `409` al eliminar una FAQ **activa** que rompería el mínimo. Eliminar una ya inactiva nunca se bloquea: no mueve el conteo. |
+| POST | `/api/kb/faqs/test` | admin | Probador de calibración (`{ pregunta }`). Devuelve el mejor candidato **aunque no matchee**, con `umbral`, `margenMinimo`, `overlapMinimo` y el desglose de las tres señales del cortocircuito (HU-KB-02-V2). Solo lectura. |
 | GET/POST | `/api/webhooks/meta` | público | Verificación + recepción de eventos de Meta. |
 
 ## 7. Tiempo real (Socket.IO)

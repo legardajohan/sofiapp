@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose';
+import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import {
@@ -30,6 +31,42 @@ type TenantId = string | Types.ObjectId;
 
 const DUPLICADA = 'Ya existe una pregunta frecuente con ese texto.';
 const NO_ENCONTRADA = 'No se encontró la pregunta frecuente.';
+
+type AccionQueReduce = 'desactivar' | 'eliminar';
+
+const minimoActivasMsg = (minimo: number, accion: AccionQueReduce): string =>
+  `Sofi necesita al menos ${minimo} preguntas frecuentes activas. ` +
+  `Activa otra antes de ${accion === 'desactivar' ? 'apagar' : 'eliminar'} esta.`;
+
+/**
+ * Piso duro del número de FAQs activas (HU-KB-02-V3): la baja solo se permite si por encima del
+ * mínimo queda margen. Con `minimo` en 0 la regla no existe.
+ *
+ * Un tenant que ya está por debajo (datos previos) queda igualmente bloqueado para bajar más, y
+ * **no queda atrapado**: crear y editar el texto nunca pasan por aquí, así que una FAQ equivocada
+ * se reescribe en el sitio y al mínimo se sube escribiendo.
+ *
+ * Pura a propósito: se verifica exhaustivamente sin Mongo y sin depender del valor del entorno.
+ */
+export function puedeReducirActivas(activas: number, minimo: number): boolean {
+  return minimo === 0 || activas > minimo;
+}
+
+/** Guarda previa a toda operación que reduce el número de FAQs activas del tenant. */
+async function asegurarMinimoActivas(
+  tenantId: TenantId,
+  accion: AccionQueReduce,
+): Promise<void> {
+  const minimo = env.FAQ_MIN_ACTIVAS;
+  if (minimo === 0) return; // regla desactivada: ni siquiera se cuenta
+
+  const activas = await countScoped(KbFaq, tenantId, { activo: true }).exec();
+  if (puedeReducirActivas(activas, minimo)) return;
+
+  // `details` viaja junto al mensaje para que la UI diga cuántas faltan sin volver a preguntar
+  // (mismo patrón que el `leadId` del 409 de HU-CRM-01; ver docs/api-contract.md §4).
+  throw new AppError(minimoActivasMsg(minimo, accion), 409, { activas, minimo });
+}
 
 /** El índice único {tenantId, pregunta} puede saltar por carrera pese al pre-chequeo. */
 function isDuplicateKeyError(err: unknown): boolean {
@@ -68,7 +105,7 @@ export async function listFaqs(
 ): Promise<KbFaqsListResponse> {
   const filtro = activo === undefined ? {} : { activo };
 
-  const [faqs, total] = await Promise.all([
+  const [faqs, total, activas] = await Promise.all([
     findScoped(KbFaq, tenantId, filtro)
       .select('-embedding')
       .sort({ createdAt: -1 })
@@ -77,9 +114,19 @@ export async function listFaqs(
       .lean<LeanKbFaq[]>()
       .exec(),
     countScoped(KbFaq, tenantId, filtro).exec(),
+    // Sin `filtro` a propósito: `activas` es del tenant entero, porque es el número contra el que
+    // se compara el mínimo. Cuando el filtro ya es `activo: true` ambos coinciden, y está bien.
+    countScoped(KbFaq, tenantId, { activo: true }).exec(),
   ]);
 
-  return { data: faqs.map(mapKbFaqToResponse), total, page, limit };
+  return {
+    data: faqs.map(mapKbFaqToResponse),
+    total,
+    page,
+    limit,
+    activas,
+    minimoActivas: env.FAQ_MIN_ACTIVAS,
+  };
 }
 
 /**
@@ -125,6 +172,13 @@ export async function updateFaq(
   const actual = await findByIdScoped(KbFaq, tenantId, id).lean<LeanKbFaq | null>().exec();
   if (!actual) throw new AppError(NO_ENCONTRADA, 404);
 
+  // Antes de re-embeber: si la operación se va a rechazar, no tiene sentido pagarle una llamada
+  // a Gemini. Solo la transición true → false reduce el conteo; reactivar o reenviar `false` sobre
+  // una ya inactiva no lo mueven.
+  if (dto.activo === false && actual.activo) {
+    await asegurarMinimoActivas(tenantId, 'desactivar');
+  }
+
   const cambiaPregunta = dto.pregunta !== undefined && dto.pregunta !== actual.pregunta;
 
   const set: Record<string, unknown> = {};
@@ -167,8 +221,11 @@ export async function deleteFaq(
   tenantId: TenantId,
   id: string,
 ): Promise<DeleteKbFaqResponse> {
-  const existing = await findByIdScoped(KbFaq, tenantId, id).lean().exec();
+  const existing = await findByIdScoped(KbFaq, tenantId, id).lean<LeanKbFaq | null>().exec();
   if (!existing) throw new AppError(NO_ENCONTRADA, 404);
+
+  // Borrar una FAQ ya apagada no mueve el conteo de activas, así que nunca se bloquea.
+  if (existing.activo) await asegurarMinimoActivas(tenantId, 'eliminar');
 
   await findOneAndDeleteScoped(KbFaq, tenantId, { _id: id });
   return { deleted: true };

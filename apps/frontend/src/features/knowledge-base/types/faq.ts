@@ -22,9 +22,17 @@ export interface UpdateFaqPayload {
 
 export interface KbFaqsListResponse {
   data: IKbFaq[];
+  /** Coincidencias del filtro pedido: responde a `page`, `limit` y `activo`. */
   total: number;
   page: number;
   limit: number;
+  /**
+   * Activas del tenant completo, al margen de la página y del filtro. Es el número contra el que
+   * se compara `minimoActivas`.
+   */
+  activas: number;
+  /** Mínimo de activas que el servidor exige antes de dejar apagar o eliminar una. */
+  minimoActivas: number;
 }
 
 /**

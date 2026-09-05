@@ -117,6 +117,14 @@ const EnvSchema = z.object({
   // legítimas ("¿cuánto vale?" contra la FAQ "¿Cuál es el precio del curso?", que no comparten
   // ninguna palabra). Con 0 en ambos, el matching vuelve exactamente al comportamiento anterior.
   FAQ_MATCH_MIN_OVERLAP: z.coerce.number().min(0).max(1).default(0.2),
+  // Preguntas frecuentes ACTIVAS que un tenant debe sostener (HU-KB-02-V3). El cortocircuito de FAQ
+  // existe para no pagar tokens en lo que más preguntan; con la lista vacía no ahorra nada, así que
+  // esto es un piso y no una sugerencia. Se comprueba ANTES de desactivar o eliminar una FAQ activa,
+  // nunca al crear ni al editar: al mínimo se sube escribiendo, no borrando. Un tenant por debajo
+  // (datos previos) puede crear y editar sin límite, pero no bajar más — y como editar el texto
+  // nunca se bloquea, una FAQ equivocada se corrige en el sitio sin tener que borrarla.
+  // Con 0 la regla queda desactivada por completo, sin desplegar código.
+  FAQ_MIN_ACTIVAS: z.coerce.number().int().nonnegative().default(5),
 
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),

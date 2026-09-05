@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageCircleQuestion, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -24,22 +24,52 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { deleteKbFaq, faqErrorMessage, getKbFaqs, updateKbFaq } from '../../../api/kb-faqs.js';
-import type { IKbFaq, KbFaqsListResponse } from '../types/index.js';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { deleteKbFaq, faqErrorMessage, updateKbFaq } from '../../../api/kb-faqs.js';
+import { estadoMinimo, useKbFaqs } from '../hooks/useKbFaqs.js';
+import type { IKbFaq } from '../types/index.js';
 
 interface Props {
   onEdit: (faq: IKbFaq) => void;
   onCreate: () => void;
 }
 
+/**
+ * Envuelve un control que está deshabilitado por el mínimo de activas y explica por qué.
+ *
+ * El disparador es un `<span tabIndex={0}>` y no el control: un elemento `disabled` no emite
+ * eventos de puntero, así que un tooltip colgado de él nunca aparecería. Envolviéndolo, el motivo
+ * queda además alcanzable con el teclado.
+ */
+function MotivoDelBloqueo({ motivo, children }: {
+  motivo: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0} className="inline-flex rounded-md">
+            {children}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-56 text-pretty">{motivo}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
   const queryClient = useQueryClient();
   const [enCurso, setEnCurso] = useState<string | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery<KbFaqsListResponse>({
-    queryKey: ['kb', 'faqs'],
-    queryFn: () => getKbFaqs({ page: 1, limit: 50 }),
-  });
+  const { data, isLoading, isError, refetch } = useKbFaqs();
+  const { activas, minimo, cumple, puedeReducir } = estadoMinimo(data);
 
   const invalidar = (): void => {
     void queryClient.invalidateQueries({ queryKey: ['kb', 'faqs'] });
@@ -94,6 +124,15 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
               {total === 0
                 ? 'Ninguna todavía'
                 : `${total} ${total === 1 ? 'pregunta' : 'preguntas'}`}
+              {minimo > 0 && (
+                <>
+                  {total > 0 && ' · '}
+                  {/* El número es el progreso: con cinco elementos, una barra sería decoración. */}
+                  <span className={cumple ? undefined : 'font-medium text-destructive'}>
+                    {activas} de {minimo} activas
+                  </span>
+                </>
+              )}
             </p>
           )}
         </div>
@@ -148,6 +187,9 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
             <TableBody>
               {faqs.map((faq) => {
                 const ocupada = enCurso === faq.id;
+                // Solo apagar o borrar una ACTIVA baja el conteo; sobre una apagada no hay nada
+                // que proteger. El servidor rechaza igual: esto solo evita el viaje.
+                const bloqueaBaja = faq.activo && !puedeReducir;
                 return (
                   <TableRow key={faq.id} className={faq.activo ? undefined : 'opacity-60'}>
                     <TableCell className="align-top font-medium text-foreground">
@@ -161,12 +203,24 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
                       </span>
                     </TableCell>
                     <TableCell className="align-top">
-                      <Switch
-                        checked={faq.activo}
-                        disabled={ocupada}
-                        onCheckedChange={(v) => handleToggle(faq, v)}
-                        aria-label={`${faq.activo ? 'Desactivar' : 'Activar'} la pregunta ${faq.pregunta}`}
-                      />
+                      {bloqueaBaja ? (
+                        <MotivoDelBloqueo
+                          motivo={`Sofi necesita al menos ${minimo} preguntas activas. Activa otra antes de apagar esta.`}
+                        >
+                          <Switch
+                            checked
+                            disabled
+                            aria-label={`Desactivar la pregunta ${faq.pregunta}`}
+                          />
+                        </MotivoDelBloqueo>
+                      ) : (
+                        <Switch
+                          checked={faq.activo}
+                          disabled={ocupada}
+                          onCheckedChange={(v) => handleToggle(faq, v)}
+                          aria-label={`${faq.activo ? 'Desactivar' : 'Activar'} la pregunta ${faq.pregunta}`}
+                        />
+                      )}
                     </TableCell>
                     <TableCell className="align-top text-right">
                       <div className="flex justify-end gap-1">
@@ -180,6 +234,21 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
                         >
                           <Pencil className="size-4" />
                         </Button>
+                        {bloqueaBaja ? (
+                          <MotivoDelBloqueo
+                            motivo={`Sofi necesita al menos ${minimo} preguntas activas. Activa otra antes de eliminar esta.`}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Eliminar la pregunta ${faq.pregunta}`}
+                              className="text-destructive hover:text-destructive"
+                              disabled
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </MotivoDelBloqueo>
+                        ) : (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
@@ -208,6 +277,7 @@ export function FaqTable({ onEdit, onCreate }: Props): React.ReactElement {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

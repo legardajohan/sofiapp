@@ -20,10 +20,11 @@ import {
   listFaqs,
   mapKbFaqToResponse,
   matchFaq,
+  puedeReducirActivas,
   testFaq,
   updateFaq,
 } from './kb-faq.service.js';
-import type { IKbFaq, LeanKbFaq } from './kb-faq.types.js';
+import type { IKbFaq, IKbFaqResponse, LeanKbFaq } from './kb-faq.types.js';
 
 const ZERO_USAGE = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 const VECTOR = [0.1, 0.2, 0.3];
@@ -48,6 +49,24 @@ function candidato(overrides: Partial<LeanKbFaq> & { score: number }) {
     embedding: [],
     ...overrides,
   };
+}
+
+/** El mínimo vigente, leído del entorno: las fixtures no hardcodean el 5. */
+const MINIMO = env.FAQ_MIN_ACTIVAS;
+
+/** Deja al tenant con exactamente `n` FAQs activas, y devuelve las creadas en orden. */
+async function sembrarActivas(tenantId: Types.ObjectId, n: number): Promise<IKbFaqResponse[]> {
+  const creadas: IKbFaqResponse[] = [];
+  for (let i = 0; i < n; i += 1) {
+    creadas.push(
+      await createFaq(
+        tenantId,
+        { pregunta: `¿Pregunta número ${i}?`, respuesta: `Respuesta ${i}.` },
+        makeProvider(),
+      ),
+    );
+  }
+  return creadas;
 }
 
 beforeEach(() => {
@@ -132,6 +151,8 @@ describe('updateFaq', () => {
 
   it('editar solo activo NO vuelve a llamar a Gemini', async () => {
     const tenantId = new Types.ObjectId();
+    // Con margen sobre el mínimo de activas (HU-KB-02-V3): apagar una es legal aquí.
+    await sembrarActivas(tenantId, MINIMO);
     const creada = await createFaq(
       tenantId,
       { pregunta: '¿Hay parqueadero?', respuesta: 'Sí.' },
@@ -199,6 +220,8 @@ describe('updateFaq', () => {
 describe('deleteFaq', () => {
   it('borra la FAQ del propio tenant', async () => {
     const tenantId = new Types.ObjectId();
+    // Con margen sobre el mínimo de activas (HU-KB-02-V3): borrar una es legal aquí.
+    await sembrarActivas(tenantId, MINIMO);
     const creada = await createFaq(
       tenantId,
       { pregunta: '¿Borrable?', respuesta: 'Sí.' },
@@ -563,5 +586,222 @@ describe('listFaqs', () => {
 
     const lista = await listFaqs(tenantId, 1, 20);
     expect(lista.data[0]).not.toHaveProperty('embedding');
+  });
+
+  it('informa las activas del tenant y el mínimo vigente', async () => {
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, 2);
+    await createFaq(tenantId, { pregunta: '¿Apagada?', respuesta: 'x', activo: false }, makeProvider());
+
+    const lista = await listFaqs(tenantId, 1, 20);
+
+    expect(lista.total).toBe(3);
+    expect(lista.activas).toBe(2);
+    expect(lista.minimoActivas).toBe(MINIMO);
+  });
+
+  it('activas es del tenant entero: no lo mueve el filtro ni la paginación', async () => {
+    // `total` responde al filtro; `activas` NO, porque es el número contra el que se compara el
+    // mínimo. Si respetara el filtro, `?activo=false` diría que no queda ninguna activa.
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, 3);
+    await createFaq(tenantId, { pregunta: '¿Apagada?', respuesta: 'x', activo: false }, makeProvider());
+
+    const soloInactivas = await listFaqs(tenantId, 1, 20, false);
+
+    expect(soloInactivas.total).toBe(1);
+    expect(soloInactivas.activas).toBe(3);
+  });
+});
+
+// ─── Mínimo de FAQs activas (HU-KB-02-V3) ─────────────────────────────────────
+describe('puedeReducirActivas', () => {
+  it('permite bajar solo si queda margen sobre el mínimo', () => {
+    expect(puedeReducirActivas(6, 5)).toBe(true);
+    expect(puedeReducirActivas(5, 5)).toBe(false);
+  });
+
+  it('piso duro: por debajo del mínimo tampoco se puede bajar más', () => {
+    expect(puedeReducirActivas(3, 5)).toBe(false);
+    expect(puedeReducirActivas(0, 5)).toBe(false);
+  });
+
+  it('con el mínimo en 0 la regla no existe', () => {
+    expect(puedeReducirActivas(0, 0)).toBe(true);
+    expect(puedeReducirActivas(1, 0)).toBe(true);
+  });
+});
+
+describe('mínimo de activas — bloqueo', () => {
+  it('justo en el mínimo, desactivar una activa → 409 y el documento no cambia', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+
+    await expect(
+      updateFaq(tenantId, primera!.id, { activo: false }, makeProvider()),
+    ).rejects.toThrow(AppError);
+
+    const saved = await KbFaq.findById(primera!.id).lean<IKbFaq>();
+    expect(saved?.activo).toBe(true);
+  });
+
+  it('el 409 adjunta cuántas activas hay y cuál es el mínimo', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+
+    const err = await updateFaq(tenantId, primera!.id, { activo: false }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).statusCode).toBe(409);
+    expect((err as AppError).details).toEqual({ activas: MINIMO, minimo: MINIMO });
+  });
+
+  it('justo en el mínimo, eliminar una activa → 409 y la FAQ sobrevive', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+
+    await expect(deleteFaq(tenantId, primera!.id)).rejects.toThrow(AppError);
+    expect(await KbFaq.findById(primera!.id)).not.toBeNull();
+  });
+
+  it('piso duro: un tenant YA por debajo del mínimo tampoco puede bajar más', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO - 2);
+
+    await expect(deleteFaq(tenantId, primera!.id)).rejects.toThrow(AppError);
+    await expect(
+      updateFaq(tenantId, primera!.id, { activo: false }, makeProvider()),
+    ).rejects.toThrow(AppError);
+  });
+
+  it('la guarda corre ANTES de re-embeber: no se gasta una llamada a Gemini en un rechazo', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO);
+    const provider = makeProvider();
+
+    await expect(
+      updateFaq(tenantId, primera!.id, { pregunta: '¿Otro texto?', activo: false }, provider),
+    ).rejects.toThrow(AppError);
+
+    expect(provider.embedTexts).not.toHaveBeenCalled();
+  });
+});
+
+describe('mínimo de activas — lo que nunca se bloquea', () => {
+  it('por encima del mínimo, desactivar funciona y deja el conteo justo en el mínimo', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO + 1);
+
+    const res = await updateFaq(tenantId, primera!.id, { activo: false }, makeProvider());
+
+    expect(res.activo).toBe(false);
+    expect((await listFaqs(tenantId, 1, 50)).activas).toBe(MINIMO);
+  });
+
+  it('por encima del mínimo, eliminar una activa funciona', async () => {
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO + 1);
+
+    expect(await deleteFaq(tenantId, primera!.id)).toEqual({ deleted: true });
+  });
+
+  it('crear nunca se bloquea, ni siquiera con cero activas', async () => {
+    const tenantId = new Types.ObjectId();
+
+    const res = await createFaq(
+      tenantId,
+      { pregunta: '¿La primera?', respuesta: 'Sí.' },
+      makeProvider(),
+    );
+
+    expect(res.activo).toBe(true);
+  });
+
+  it('editar el texto es la salida del piso duro: nunca se bloquea', async () => {
+    // Es lo que impide que un tenant por debajo del mínimo quede atrapado con una FAQ equivocada.
+    const tenantId = new Types.ObjectId();
+    const [primera] = await sembrarActivas(tenantId, MINIMO - 2);
+
+    const res = await updateFaq(
+      tenantId,
+      primera!.id,
+      { pregunta: '¿Texto corregido?', respuesta: 'Respuesta corregida.' },
+      makeProvider(),
+    );
+
+    expect(res.pregunta).toBe('¿Texto corregido?');
+    expect(res.respuesta).toBe('Respuesta corregida.');
+  });
+
+  it('reactivar una apagada nunca se bloquea', async () => {
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, MINIMO);
+    const apagada = await createFaq(
+      tenantId,
+      { pregunta: '¿Dormida?', respuesta: 'x', activo: false },
+      makeProvider(),
+    );
+
+    const res = await updateFaq(tenantId, apagada.id, { activo: true }, makeProvider());
+
+    expect(res.activo).toBe(true);
+  });
+
+  it('mandar activo: false sobre una que YA estaba inactiva no toca la guarda', async () => {
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, MINIMO);
+    const apagada = await createFaq(
+      tenantId,
+      { pregunta: '¿Dormida?', respuesta: 'x', activo: false },
+      makeProvider(),
+    );
+
+    const res = await updateFaq(tenantId, apagada.id, { activo: false }, makeProvider());
+
+    expect(res.activo).toBe(false);
+  });
+
+  it('eliminar una INACTIVA está permitido aunque el tenant esté justo en el mínimo', async () => {
+    // No mueve el conteo de activas, así que la regla no tiene nada que decir.
+    const tenantId = new Types.ObjectId();
+    await sembrarActivas(tenantId, MINIMO);
+    const apagada = await createFaq(
+      tenantId,
+      { pregunta: '¿Dormida?', respuesta: 'x', activo: false },
+      makeProvider(),
+    );
+
+    expect(await deleteFaq(tenantId, apagada.id)).toEqual({ deleted: true });
+  });
+});
+
+describe('mínimo de activas — aislamiento multi-tenant', () => {
+  it('cada tenant se mide con SU conteo: A por encima puede, B justo en el mínimo no', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const [aPrimera] = await sembrarActivas(tenantA, MINIMO + 2);
+    const [bPrimera] = await sembrarActivas(tenantB, MINIMO);
+
+    expect(await deleteFaq(tenantA, aPrimera!.id)).toEqual({ deleted: true });
+    await expect(deleteFaq(tenantB, bPrimera!.id)).rejects.toThrow(AppError);
+  });
+
+  it('a la inversa: el conteo holgado de B no desbloquea a A', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    const [aPrimera] = await sembrarActivas(tenantA, MINIMO);
+    await sembrarActivas(tenantB, MINIMO + 5);
+
+    await expect(deleteFaq(tenantA, aPrimera!.id)).rejects.toThrow(AppError);
+  });
+
+  it('listFaqs de un tenant nunca cuenta las activas del otro', async () => {
+    const tenantA = new Types.ObjectId();
+    const tenantB = new Types.ObjectId();
+    await sembrarActivas(tenantA, 4);
+    await sembrarActivas(tenantB, 2);
+
+    expect((await listFaqs(tenantA, 1, 50)).activas).toBe(4);
+    expect((await listFaqs(tenantB, 1, 50)).activas).toBe(2);
   });
 });

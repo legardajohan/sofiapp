@@ -46,9 +46,17 @@ export interface IKbFaqResponse {
 
 export interface KbFaqsListResponse {
   data: IKbFaqResponse[];
+  /** Coincidencias del filtro pedido: responde a `page`, `limit` y `activo`. */
   total: number;
   page: number;
   limit: number;
+  /**
+   * Activas del TENANT completo, al margen de `page`, `limit` y del filtro `activo` (HU-KB-02-V3).
+   * Es el número contra el que se compara `minimoActivas`: si respetara el filtro, `?activo=false`
+   * daría 0 y la interfaz diría que no queda ninguna activa.
+   */
+  activas: number;
+  minimoActivas: number;
 }
 
 export interface DeleteKbFaqResponse {
