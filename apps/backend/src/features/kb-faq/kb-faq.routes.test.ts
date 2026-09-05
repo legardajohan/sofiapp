@@ -234,7 +234,7 @@ describe('DELETE /api/kb/faqs/:id', () => {
 });
 
 describe('POST /api/kb/faqs/test', () => {
-  it('admin prueba una pregunta → 200 con el umbral vigente', async () => {
+  it('admin prueba una pregunta → 200 con los tres mínimos vigentes', async () => {
     const token = makeToken(new Types.ObjectId().toString(), 'admin');
 
     const res = await authed(request(app).post('/api/kb/faqs/test'), token).send({
@@ -244,6 +244,8 @@ describe('POST /api/kb/faqs/test', () => {
     expect(res.status).toBe(200);
     expect(res.body.matched).toBe(false);
     expect(res.body.umbral).toBe(env.FAQ_MATCH_THRESHOLD);
+    expect(res.body.margenMinimo).toBe(env.FAQ_MATCH_MIN_MARGIN);
+    expect(res.body.overlapMinimo).toBe(env.FAQ_MATCH_MIN_OVERLAP);
   });
 
   it('devuelve el candidato con su score aunque no supere el umbral', async () => {

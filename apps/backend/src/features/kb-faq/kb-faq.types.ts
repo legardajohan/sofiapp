@@ -67,11 +67,32 @@ export interface FaqMatchResult {
 }
 
 /**
+ * Las tres señales del cortocircuito, tal como las evaluó el service (HU-KB-02-V2).
+ * Solo viaja en el probador del admin: el flujo de conversación no las necesita.
+ */
+export interface FaqTestSenales {
+  score: number;
+  /** Score del segundo candidato. Ausente si el tenant solo tenía una FAQ activa. */
+  segundoScore?: number;
+  margen: number;
+  overlap: number;
+  pasaUmbral: boolean;
+  pasaMargen: boolean;
+  pasaOverlap: boolean;
+}
+
+/**
  * Diagnóstico para el probador del admin: devuelve el mejor candidato **aunque no
- * supere el umbral**, para poder calibrar `FAQ_MATCH_THRESHOLD` con datos reales.
+ * supere las señales**, para poder calibrar los tres mínimos con datos reales.
  */
 export interface FaqTestResult extends FaqMatchResult {
   umbral: number;
+  margenMinimo: number;
+  overlapMinimo: number;
   faqId?: string;
   pregunta?: string; // la pregunta de la FAQ candidata, no la que escribió el admin
+  /** Pregunta del segundo candidato: es lo que explica un margen pequeño. */
+  segundaPregunta?: string;
+  /** Ausente si no hubo ningún candidato que evaluar. */
+  senales?: FaqTestSenales;
 }

@@ -100,6 +100,23 @@ const EnvSchema = z.object({
   // Calibrar con POST /api/kb/faqs/test, nunca a ojo.
   FAQ_VECTOR_INDEX: z.string().default('kb_faqs_vector'),
   FAQ_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  // Margen mínimo del mejor candidato sobre el segundo (HU-KB-02-V2). MISMA escala normalizada que
+  // FAQ_MATCH_THRESHOLD, así que 0.02 aquí ≈ 0.04 de coseno crudo. El embedding mide cercanía
+  // TEMÁTICA, no intención: cuando dos FAQs de temas distintos compiten por la misma pregunta
+  // ("¿a qué hora abren?" contra horarios Y contra precios) quedan empatadas dentro de esa franja,
+  // y responder literal ahí es apostar. Sin segundo candidato (tenant con una sola FAQ activa) la
+  // señal PASA: no hay ambigüedad que medir. Calibrar con POST /api/kb/faqs/test, nunca a ojo.
+  FAQ_MATCH_MIN_MARGIN: z.coerce.number().min(0).max(1).default(0.02),
+  // Coincidencia léxica mínima entre la pregunta entrante y la de la FAQ, medida sobre el conjunto
+  // MÁS PEQUEÑO de tokens significativos (sin tildes, sin palabras vacías, con el plural recortado).
+  // 0.2 ≈ "al menos una palabra clave de cada cinco". Escala propia, SIN relación con las dos de
+  // arriba. No cuesta ni una llamada a Gemini: es texto→tokens. Deliberadamente severo, porque los
+  // dos errores no cuestan igual — un falso negativo solo manda la pregunta al LLM, que la responde
+  // igual pagando tokens; un falso positivo manda al prospecto una respuesta literal equivocada con
+  // la firma de la empresa. Súbelo si aún se cuelan confusiones; bájalo si se pierden paráfrasis
+  // legítimas ("¿cuánto vale?" contra la FAQ "¿Cuál es el precio del curso?", que no comparten
+  // ninguna palabra). Con 0 en ambos, el matching vuelve exactamente al comportamiento anterior.
+  FAQ_MATCH_MIN_OVERLAP: z.coerce.number().min(0).max(1).default(0.2),
 
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
