@@ -30,6 +30,7 @@ vi.mock('../features/conversation/conversation.service.js', () => ({
 
 import { processInboundJob, ventanaJobId } from './inbound-message.processor.js';
 import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 import { Cliente } from '../features/cliente/cliente.model.js';
 import { Message } from '../features/message/message.model.js';
@@ -246,6 +247,55 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
     expect(opts.jobId).toContain(tenantId.toString());
   });
 
+  it('si encolar falla, la ingesta NO se cae: el mensaje ya está guardado y notificado', async () => {
+    // HT-AI-02: un fallo aquí dejaba el job de ingesta en `failed` pese a que el mensaje había
+    // entrado bien. Ahora el fallo se aísla.
+    await crearCliente(tenantId, true);
+    mockAdd.mockRejectedValue(new Error('Custom Id cannot contain :'));
+
+    await expect(
+      processInboundJob({
+        tenantId: tenantId.toString(),
+        payload: payload([{ id: 'wamid.err1', type: 'text', body: 'Hola' }]),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockNotifyInbound).toHaveBeenCalledTimes(1);
+    expect(await Message.countDocuments({ metaMessageId: 'wamid.err1' })).toBe(1);
+  });
+
+  it('ese fallo se registra en nivel error, con tenant y cliente', async () => {
+    // Sin la cola de fallidos, este log es el único rastro que queda.
+    await crearCliente(tenantId, true);
+    mockAdd.mockRejectedValue(new Error('boom'));
+    const error = vi.spyOn(logger, 'error');
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.err2', type: 'text', body: 'Hola' }]),
+    });
+
+    expect(error).toHaveBeenCalledWith(
+      'Sofi no pudo atender el mensaje entrante',
+      expect.objectContaining({ tenantId: tenantId.toString(), error: expect.stringContaining('boom') }),
+    );
+    error.mockRestore();
+  });
+
+  it('un fallo del acuse tampoco tumba la ingesta de un audio', async () => {
+    await crearCliente(tenantId, true);
+    mockReplyFromIa.mockRejectedValue(new Error('WhatsApp caído'));
+
+    await expect(
+      processInboundJob({
+        tenantId: tenantId.toString(),
+        payload: payload([{ id: 'wamid.err3', type: 'audio' }]),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(await Message.countDocuments({ metaMessageId: 'wamid.err3' })).toBe(1);
+  });
+
   it('una ráfaga de tres mensajes comparte un único jobId', async () => {
     await crearCliente(tenantId, true);
 
@@ -263,6 +313,63 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
     const jobIds = mockAdd.mock.calls.map((c) => (c[2] as { jobId: string }).jobId);
     expect(jobIds).toHaveLength(3);
     expect(new Set(jobIds).size).toBe(1);
+  });
+});
+
+/**
+ * El contrato que BullMQ impone al `jobId` personalizado, y que ningún mock puede verificar:
+ * `vi.mock` sustituye `aiReplyQueue` por un `vi.fn()` que acepta cualquier cosa, así que el resto
+ * de la suite pasa aunque el id sea inválido. Eso fue HT-AI-02: el auto-reply llevaba muerto en
+ * producción con la suite entera en verde.
+ *
+ * Las dos reglas se replican **verbatim** desde `bullmq@5.79.2`,
+ * `dist/cjs/classes/job.js:1041-1051` (`Job.validateOptions`). Se replican y no se invocan porque
+ * `validateOptions` es un método de instancia: construir un `Job` exige el `createScripts` interno
+ * de una `Queue` real, y `Queue.add` exige una conexión a Redis. Atarse a esa maquinaria haría el
+ * test frágil frente a un upgrade menor de BullMQ, por motivos ajenos a este contrato.
+ *
+ * Al actualizar BullMQ, contrastar contra esas líneas. Su propio código anuncia que endurecerá la
+ * regla de los dos puntos: `TODO: replace this check in next breaking check with include(':')`.
+ */
+function bullmqRechazaElJobId(jobId: string): string | null {
+  if (`${parseInt(jobId, 10)}` === jobId) return 'Custom Id cannot be integers';
+  if (jobId.includes(':') && jobId.split(':').length !== 3) return 'Custom Id cannot contain :';
+  return null;
+}
+
+describe('ventanaJobId — contrato del identificador con BullMQ (HT-AI-02)', () => {
+  const tenantId = new Types.ObjectId().toString();
+  const clienteId = new Types.ObjectId().toString();
+  const ahora = 1_700_000_000_000;
+
+  it('el id NO contiene dos puntos', () => {
+    // La regresión de HT-AI-02. `ai-reply:tenant:cliente:ventana` hacía que `aiReplyQueue.add`
+    // lanzara y el auto-reply no se encolara nunca.
+    expect(ventanaJobId(tenantId, clienteId, ahora)).not.toContain(':');
+  });
+
+  it('BullMQ aceptaría el id que generamos', () => {
+    expect(bullmqRechazaElJobId(ventanaJobId(tenantId, clienteId, ahora))).toBeNull();
+  });
+
+  it('el id nunca es un entero puro: el prefijo lo garantiza', () => {
+    // La otra regla de validateOptions, que se cumple sola gracias al prefijo `ai-reply`.
+    const id = ventanaJobId(tenantId, clienteId, ahora);
+    expect(`${parseInt(id, 10)}`).not.toBe(id);
+  });
+
+  it('sigue siendo válido en los bordes: ventana 0 y ObjectId reales', () => {
+    const enElOrigen = ventanaJobId(tenantId, clienteId, 0);
+    expect(bullmqRechazaElJobId(enElOrigen)).toBeNull();
+    expect(enElOrigen).not.toContain(':');
+  });
+
+  it('el detector replicado sí caza el formato viejo, así que no es un test vacío', () => {
+    // Sin esto, `bullmqRechazaElJobId` podría estar devolviendo null siempre y nadie lo notaría.
+    expect(bullmqRechazaElJobId(`ai-reply:${tenantId}:${clienteId}:1`)).toBe(
+      'Custom Id cannot contain :',
+    );
+    expect(bullmqRechazaElJobId('12345')).toBe('Custom Id cannot be integers');
   });
 });
 

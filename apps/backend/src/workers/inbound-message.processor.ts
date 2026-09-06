@@ -43,10 +43,20 @@ function mapMsgType(type: string): TipoMensaje {
  *
  * El `tenantId` va por delante: dos clientes con el mismo `_id` en empresas distintas —imposible
  * hoy, pero gratis de blindar— nunca deben compartir ventana.
+ *
+ * **Sin `:` en el identificador.** BullMQ los rechaza en un `jobId` personalizado
+ * (`Custom Id cannot contain :`, `job.js:1047-1050`). Tolera el caso de exactamente tres tramos por
+ * compatibilidad con repeatable jobs antiguos, pero su propio código marca esa rama para
+ * eliminarla, así que aquí no hay ninguno — no se trata de dejar tres, se trata de no dejar
+ * ninguno. Con dos puntos, `aiReplyQueue.add` lanzaba y el auto-reply no se encolaba jamás: eso fue
+ * HT-AI-02, y la suite entera pasaba porque el mock de la cola acepta cualquier id.
+ *
+ * El prefijo `ai-reply` es redundante con el nombre de la cola, pero garantiza que el id nunca sea
+ * un entero puro, que es la otra regla de `validateOptions`.
  */
 export function ventanaJobId(tenantId: string, clienteId: string, ahora: number): string {
   const ventana = Math.floor(ahora / env.AI_REPLY_WINDOW_MS);
-  return `ai-reply:${tenantId}:${clienteId}:${ventana}`;
+  return `ai-reply-${tenantId}-${clienteId}-${ventana}`;
 }
 
 /**
@@ -129,7 +139,20 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
         await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
 
         if (cliente.iaHabilitada) {
-          await atenderConSofi(tenantId, clienteId.toString(), msg.type, msg.text?.body);
+          try {
+            await atenderConSofi(tenantId, clienteId.toString(), msg.type, msg.text?.body);
+          } catch (err: unknown) {
+            // Que Sofi no arranque no deshace lo que ya pasó: el mensaje está guardado y en la
+            // bandeja. Tumbar el job entero no recupera nada y ensucia la cola de fallidos
+            // mezclando "no se ingestó" con "se ingestó y la IA no arrancó".
+            // Nivel `error` a propósito: al no quedar el job en `failed`, este log es el único
+            // rastro que queda. Fue la cola de fallidos la que permitió diagnosticar HT-AI-02.
+            logger.error('Sofi no pudo atender el mensaje entrante', {
+              tenantId,
+              clienteId: clienteId.toString(),
+              error: String(err),
+            });
+          }
         }
       }
 
