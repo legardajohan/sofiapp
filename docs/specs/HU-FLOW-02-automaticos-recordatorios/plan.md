@@ -18,6 +18,12 @@ apps/frontend/src/features/flows/
 └── hooks/useReminderSettings.ts
 ```
 
+> **Nota de replaneación (post `HU-FLOW-01-V3`).** Este plan es del 1-sep; V3 ya entregó el nodo
+> `espera` completo en el editor (paleta, icono, `configPorDefecto`, `resumenConfig` y `EsperaForm`).
+> Lo que queda de frontend es `ReminderSettings` y quitar el aviso "todavía no los ejecuta" de
+> `NodeInspector.tsx:372`. Lo que **crece** respecto al plan original es el backend: el motor no
+> tenía cómo pedir una espera (§`Nodo espera`), y `IFlowState` no declara `esperaToken`.
+
 ## Archivos a modificar
 
 ```
@@ -25,13 +31,20 @@ apps/backend/src/
 ├── config/queues.ts                    # FLOW_RUNTIME_QUEUE_NAME + flowRuntimeQueue
 ├── config/env.ts                       # cadencia del barrido y antelación por defecto
 ├── worker.ts                           # worker real; elimina el placeholder de la línea 42
-├── features/flow/flow.types.ts         # FlowJobData, IReminderConfig
-├── features/flow/flow.runtime.service.ts # encolar espera; anular al llegar respuesta
+├── features/flow/flow.types.ts         # FlowJobData, IReminderConfig, Efecto programar_espera,
+│                                       #   IFlowState.esperaToken, EntradaMotor.resueltos.esperaCumplida
+├── features/flow/flow.engine.ts        # case 'espera' real (3 situaciones)
+├── features/flow/flow.model.ts         # + FlowState.esperaToken
+├── features/flow/flow.runtime.service.ts # encolar espera; anular al llegar respuesta; reanudarFlujo
 ├── features/cliente/cliente.model.ts   # + recordatorioEnviadoParaVentana + índice
-├── features/tenant/tenant.model.ts     # + recordatorio { activo, antelacionMinutos, templateId }
-└── features/tenant/tenant.validation.ts
+├── features/tenant/tenant.model.ts     # + recordatorio { activo, antelacionMinutos, texto, templateId }
+├── features/tenant/tenant.types.ts     # IReminderConfig, IReminderResponse
+├── features/tenant/tenant.validation.ts # getReminderSchema, updateReminderSchema
+├── features/tenant/tenant.service.ts   # getReminderConfig / updateReminderConfig (por _id del tenant)
+├── features/flow/flow.controller.ts    # getReminderController / updateReminderController
+└── features/flow/flow.routes.ts        # GET/PUT /api/flows/reminder (admin, requireTenant)
 docs/
-├── data-model.md · architecture.md · api-contract.md
+├── data-model.md · architecture.md · api-contract.md · multi-tenancy.md
 ```
 
 ## Contratos
@@ -47,14 +60,16 @@ export const REMINDER_SWEEP_JOB = 'sweep';      // barrido periódico
 export const flowRuntimeQueue = new Queue(FLOW_RUNTIME_QUEUE_NAME, { connection });
 ```
 
-El nombre `flow-runtime` ya está reservado en `docs/architecture.md` y en `worker.ts:42` como
-placeholder. Esta spec lo convierte en real y elimina el placeholder.
+El nombre `flow-runtime` está reservado en `docs/architecture.md` y en `apps/backend/CLAUDE.md`,
+pero **no** hay ningún placeholder suyo en `worker.ts` (los tres placeholders de ahí son
+`llm-process`, `outbound-send` y `campaign-broadcast`, de features que esta spec no toca). Esta spec
+convierte el nombre reservado en cola y worker reales.
 
 ### Datos de los jobs
 
 ```ts
 export type FlowJobData =
-  | { tipo: 'resume';   tenantId: string; clienteId: string; flowId: string; nodoId: string; token: string }
+  | { tipo: 'resume';   tenantId: string; clienteId: string; flowId: string; nodoDestino: string; token: string }
   | { tipo: 'reminder'; tenantId: string; clienteId: string; ventanaExpiraEn: string };
 ```
 
@@ -64,22 +79,100 @@ coincide con el del `FlowState` significa que el cliente respondió mientras tan
 por otro lado, así que el job **se descarta sin hacer nada**. Es más robusto que intentar borrar el
 job de BullMQ: no hay carrera posible.
 
-### Nodo `espera` — de decisión a job diferido
+### Nodo `espera` — el motor pide, el runtime encola
 
-En `flow.runtime.service.ts`, al recibir del motor un efecto de espera:
+`flow.engine.ts:178-180` hoy devuelve `esperandoRespuesta: true` y deja el flujo parado para
+siempre. La espera se pide con un **`Efecto` nuevo**, no con un campo suelto en `SalidaMotor`: así
+`avanzar()` sigue siendo una función pura que devuelve "qué hay que hacer" y el runtime sigue siendo
+el único que hace IO.
 
 ```ts
-const token = randomUUID();
-await findOneAndUpdateScoped(FlowState, tenantId, { clienteId }, { esperaToken: token, ... });
-await flowRuntimeQueue.add(
-  FLOW_RESUME_JOB,
-  { tipo: 'resume', tenantId, clienteId, flowId, nodoId, token },
-  { delay: minutos * 60_000, attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000 },
-);
+// flow.types.ts
+export type Efecto =
+  | { tipo: 'enviar_mensaje'; texto?: string; templateId?: string; parametros?: string[] }
+  | { tipo: 'programar_espera'; minutos: number; nodoDestino: string }   // ← nuevo
+  | EfectoAccion
+  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
+  | { tipo: 'error'; mensaje: string };
+
+// EntradaMotor.resueltos gana un caso más, igual que `intencion` / `capturado` / `respuestaKb`:
+resueltos?: { intencion?: string; capturado?: unknown; respuestaKb?: string; esperaCumplida?: true };
 ```
 
-Y en el avance por respuesta del cliente, `esperaToken` se regenera (o se limpia), lo que invalida
-cualquier job diferido pendiente.
+`case 'espera'` distingue tres situaciones, en este orden:
+
+```ts
+case 'espera': {
+  const destino = siguienteLineal(aristas, nodo.id);
+
+  // 1. El job diferido despertó: seguimos adelante.
+  if (entrada.resueltos?.esperaCumplida) {
+    return { efectos: [], siguiente: destino, variables, esperandoRespuesta: false };
+  }
+
+  // 2. El cliente respondió durante la pausa: su respuesta manda y no se encola otra espera
+  //    (criterio 4). El token se regenera al persistir, lo que anula el job pendiente.
+  if (entrada.state?.nodoActualId === nodo.id) {
+    return { efectos: [], siguiente: destino, variables, esperandoRespuesta: false };
+  }
+
+  // 3. Primera llegada al nodo: pedir la espera y quedarse aquí.
+  return {
+    efectos: [{ tipo: 'programar_espera', minutos: config.minutos, nodoDestino: destino ?? '' }],
+    siguiente: nodo.id,
+    variables,
+    esperandoRespuesta: true,
+  };
+}
+```
+
+Sin la situación 2, cada mensaje del cliente durante la pausa emitiría otro `programar_espera` y
+encolaría un job más.
+
+### El efecto `programar_espera` en el runtime
+
+En `flow.runtime.service.ts`, `ejecutarEfecto` gana su caso:
+
+```ts
+case 'programar_espera': {
+  const token = randomUUID();
+  await findOneAndUpdateScoped(
+    FlowState, tenantId,
+    { clienteId: new Types.ObjectId(clienteId), flowId },
+    { $set: { esperaToken: token } },
+  );
+  await flowRuntimeQueue.add(
+    FLOW_RESUME_JOB,
+    { tipo: 'resume', tenantId, clienteId, flowId, nodoDestino: efecto.nodoDestino, token },
+    { delay: efecto.minutos * 60_000, attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000 },
+  );
+  return;
+}
+```
+
+**Orden importante:** `ejecutarEfecto` corre *antes* de `persistirFlowState`
+(`flow.runtime.service.ts:230-234`), así que `persistirFlowState` no debe pisar `esperaToken` — usa
+`$set` de campos concretos y el token no está entre ellos. Y en cualquier avance normal, el token se
+regenera (o se limpia), lo que invalida cualquier job diferido pendiente.
+
+### `reanudarFlujo` — el otro punto de entrada del motor
+
+`ejecutarFlujo` asume un mensaje entrante. La reanudación programada necesita su gemela, exportada
+del mismo `flow.runtime.service.ts` para no duplicar el bucle de resolución ni la persistencia:
+
+```ts
+export async function reanudarFlujo(
+  tenantId: string, clienteId: string, flowId: string, nodoDestino: string, token: string,
+): Promise<void>;
+```
+
+Qué hace, en orden: carga el `FlowState` con `findOneScoped`; **si `state.esperaToken !== token`,
+vuelve sin hacer nada** (el cliente respondió mientras tanto — criterio 3); comprueba
+`cliente.iaHabilitada` igual que `ejecutarFlujo`; y entra al motor con
+`state.nodoActualId = nodoDestino` y `resueltos: { esperaCumplida: true }`, `mensaje: ''`. A partir
+de ahí reusa el mismo bucle de `requiere`, los mismos `ejecutarEfecto` y el mismo
+`persistirFlowState`. Al persistir, limpia `esperaToken`.
 
 ### Barrido de recordatorios — Job Scheduler de BullMQ
 
@@ -94,9 +187,9 @@ await flowRuntimeQueue.upsertJobScheduler(
 );
 ```
 
-> Si la versión de BullMQ instalada aún no expone `upsertJobScheduler`, usar
-> `add(..., { repeat: { every } , jobId: 'reminder-sweep' })`. Confirmar la API contra la versión de
-> `bullmq` del `package.json` al implementar; el comportamiento requerido es el mismo.
+> **Confirmado:** `apps/backend/package.json` declara `"bullmq": "^5.34.0"`, que sí expone
+> `upsertJobScheduler`. El fallback `add(..., { repeat: { every }, jobId: 'reminder-sweep' })` queda
+> como nota histórica; no hace falta.
 
 ### `flow.reminder.service.ts` — a quién le toca
 
@@ -112,7 +205,7 @@ export async function buscarCandidatos(ahora: Date): Promise<ICandidatoRecordato
 export async function enviarRecordatorio(tenantId: string, clienteId: string): Promise<void>;
 ```
 
-**La consulta del barrido** (criterios 4 y 5), sobre `Cliente`:
+**La consulta del barrido** (criterios 5 y 6), sobre `Cliente`:
 
 ```ts
 {
@@ -123,7 +216,7 @@ export async function enviarRecordatorio(tenantId: string, clienteId: string): P
 }
 ```
 
-`recordatorioEnviadoParaVentana: Date` es la marca de idempotencia (criterio 6): guarda **el valor
+`recordatorioEnviadoParaVentana: Date` es la marca de idempotencia (criterio 7): guarda **el valor
 de `ventana24hExpiraEn` para el que ya se envió**. Como ese valor cambia con cada inbound, una
 ventana nueva vuelve a ser candidata automáticamente, sin necesidad de limpiar banderas. La marca se
 escribe con `findOneAndUpdateScoped` **antes** de enviar, para que dos barridos solapados no
@@ -159,15 +252,15 @@ await sendOutbound(tenantId, clienteId, {
 }, 'bot');
 ```
 
-`modo: 'auto'` es exactamente lo que pide el criterio 8: si la ventana sigue abierta sale texto
+`modo: 'auto'` es exactamente lo que pide el criterio 9: si la ventana sigue abierta sale texto
 libre; si ya expiró sale la plantilla. **Esta spec no consulta `ventana24hExpiraEn` para decidir el
 modo** — solo para decidir *a quién* recordarle. La decisión del modo es de `sendOutbound`.
 
 Los dos casos degradados del `spec`:
 
 ```ts
-// Criterio 9: fuera de ventana y sin plantilla utilizable → omitir, no reintentar.
-// Criterio 10: cuota agotada → terminar sin enviar, registrando.
+// Criterio 10: fuera de ventana y sin plantilla utilizable → omitir, no reintentar.
+// Criterio 11: cuota agotada → terminar sin enviar, registrando.
 catch (err) {
   if (err instanceof AppError && [422, 429].includes(err.statusCode)) {
     logger.warn('Recordatorio omitido', { tenantId, clienteId, motivo: err.message });
@@ -189,8 +282,44 @@ recordatorio: {
 ```
 
 Va en `Tenant` y no en `Flow` porque es una política de la empresa sobre **todas** sus
-conversaciones, no un paso de un flujo concreto. Arranca `activo: false`: nadie empieza a enviar
-mensajes automáticos a sus clientes sin haberlo pedido.
+conversaciones, no un paso de un flujo concreto — y así también cubre las conversaciones que nunca
+entraron a un flujo, que si viviera en `Flow` quedarían fuera. Arranca `activo: false`: nadie empieza
+a enviar mensajes automáticos a sus clientes sin haberlo pedido.
+
+### Endpoints — el admin configura su propio recordatorio
+
+**Corrección de ruteo (verificado en `app.ts:64`):** `tenant.routes.ts` (`tenantAdminRoutes`) se
+monta en `/api/admin/tenants` — es el router de **superadmin cross-tenant**, sin `requireTenant`.
+Colgar aquí una ruta `requireTenant + authorize(['admin'])` mezclaría dos modelos de seguridad bajo
+el mismo prefijo `/admin/`, y el path resultante (`/api/admin/tenants/me/reminder`) leería como una
+acción de superadmin cuando es justo lo contrario: el admin configurando SU PROPIO tenant.
+
+En su lugar, los endpoints se exponen en `flow.routes.ts` (ya montado en `/api/flows`, ya
+tenant-aware) — es además donde el admin ya está parado cuando piensa en esto, en el editor de
+flujos. El **service** (`getReminderConfig`/`updateReminderConfig`) se queda en `tenant.service.ts`
+porque el dato vive en el modelo `Tenant`; el **controller** y las **rutas** van en el feature
+`flow`, que es quien las consume:
+
+```
+GET  /api/flows/reminder   authenticateJWT → requireTenant → authorize(['admin']) → validate → asyncHandler
+PUT  /api/flows/reminder   ídem
+```
+
+`tenantId` se resuelve desde `req.user!.tenantId`, **nunca** desde params — regla 2 del `CLAUDE.md`
+raíz. **Orden de registro:** `/reminder` debe declararse ANTES de `GET/PUT /:id` en
+`flow.routes.ts` — Express matchea por orden de registro, y `/:id` capturaría literalmente
+`"reminder"` como si fuera un id si se registrara después.
+
+Respuesta (`IReminderResponse`), con el `templateId` como string:
+
+```ts
+{ activo: boolean; antelacionMinutos: number; texto: string; templateId: string | null }
+```
+
+Zod del `PUT`: `antelacionMinutos` entero entre 15 y 1440 (menos de 15 min no da margen al barrido;
+más de 24 h no tiene sentido contra una ventana de 24 h), `texto` con el mismo tope que un mensaje
+de WhatsApp, `templateId` un ObjectId opcional. **Regla de coherencia**, validada en el service y no
+solo en Zod: no se puede dejar `activo: true` sin `texto`.
 
 ### `config/env.ts`
 
@@ -217,9 +346,12 @@ para que la franja no se escape entre dos pasadas.
 ### Frontend
 
 - `ReminderSettings.tsx`: activar/desactivar, antelación en minutos, texto y selector de plantilla
-  (alimentado por el catálogo de `HT-WA-02`, filtrando solo las `APPROVED`).
-- El nodo `espera` gana su panel en el `NodeInspector` de `HU-FLOW-01`: minutos, con una previsión
-  legible ("se reanuda ~2 h después").
+  (alimentado por el catálogo de `HT-WA-02`, filtrando solo las `APPROVED`). Se monta en la página
+  de flujos (`FlowsPage`), que es donde el admin ya piensa en automatizaciones, y no en una pantalla
+  de ajustes nueva.
+- `EsperaForm` (`NodeInspector.tsx:368-380`) **ya existe** desde V3. El único cambio es sustituir su
+  aviso *"los nodos de espera se guardan, pero el flujo todavía no los ejecuta"* por una previsión
+  legible del plazo ("se reanuda ~2 h después"). El campo de minutos se queda como está.
 
 **Decisiones de las skills de diseño** (invocar `emil-design-eng`, `impeccable:impeccable` y
 `frontend-design:frontend-design` antes de escribir):

@@ -7,6 +7,7 @@ import { resolveWebhookTenant } from '../features/webhook/webhook.service.js';
 import { upsertByMetaUser } from '../features/cliente/cliente.service.js';
 import { saveMessage, updateDeliveryStatus } from '../features/message/message.service.js';
 import { notifyInboundMessage } from '../features/conversation/conversation.service.js';
+import { ejecutarFlujo } from '../features/flow/flow.runtime.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import { parseDeliveryStatuses } from '../integrations/meta/meta-whatsapp.normalizer.js';
 import type { IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
@@ -68,7 +69,25 @@ export const inboundMessageProcessor = new Worker<InboundJobData>(
           // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
           await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
 
-          // TODO(Fase 3): si cliente.iaHabilitada, encolar auto-reply de Sofi (generateReply de Gemini).
+          // Motor de flujos (HU-FLOW-01-V2). Dos guardas, en este orden:
+          //  1. `iaHabilitada` false → un asesor tomó la conversación; el bot no interviene.
+          //  2. Sin flujo `activo` en el tenant → `ejecutarFlujo` resuelve `null` y no hace nada.
+          // El try/catch es deliberado y es la EXCEPCIÓN a la regla del proyecto (controllers/
+          // services no llevan try/catch redundante): el `attempts` que HT-WA-01-V2 añade al job
+          // reintentaría TODO el procesamiento (incluida la persistencia ya hecha arriba) si el
+          // flujo lanzara, y un flujo mal configurado no puede impedir que el mensaje llegue a la
+          // bandeja.
+          if (cliente.iaHabilitada) {
+            try {
+              await ejecutarFlujo(tenantId, clienteId.toString(), msg.text?.body ?? '', msg.id);
+            } catch (err) {
+              logger.error('Fallo del motor de flujos', {
+                tenantId,
+                clienteId: clienteId.toString(),
+                error: String(err),
+              });
+            }
+          }
         }
 
         const statuses = parseDeliveryStatuses(value);
