@@ -3,6 +3,7 @@ import {
   Clock,
   GitBranch,
   MessageSquare,
+  Sparkles,
   Target,
   TextCursorInput,
   UserCheck,
@@ -28,13 +29,14 @@ export const NODE_VISUALS: Record<TipoNodo, NodeVisual> = {
   accion: { icon: Zap, label: 'Acción' },
   handoff: { icon: UserCheck, label: 'Transferir a humano' },
   espera: { icon: Clock, label: 'Espera' },
+  ia: { icon: Sparkles, label: 'Asistente IA', destacado: true },
 };
 
 /** Tipos cuyo "siguiente" nodo lo decide una arista genérica del canvas (un único handle de
- *  salida). `condicion`/`intencion` ramifican desde su propia configuración y pintan un handle
- *  por rama vía `filasDeRama`; `handoff` es siempre terminal y no tiene salida alguna. */
+ *  salida). `condicion`/`intencion`/`ia` ramifican desde su propia configuración y pintan un
+ *  handle por rama vía `filasDeRama`; `handoff` es siempre terminal y no tiene salida alguna. */
 export function tieneSalidaLineal(tipo: TipoNodo): boolean {
-  return tipo !== 'condicion' && tipo !== 'intencion' && tipo !== 'handoff';
+  return tipo !== 'condicion' && tipo !== 'intencion' && tipo !== 'ia' && tipo !== 'handoff';
 }
 
 export interface FilaRama {
@@ -72,6 +74,16 @@ export function filasDeRama(nodo: INodo): FilaRama[] {
       { handleId: 'default', label: 'Si no reconoce ninguna', destino: nodo.config.ramaPorDefecto },
     ];
   }
+  if (nodo.config.tipo === 'ia') {
+    return [
+      ...nodo.config.salidas.map((salida, i) => ({
+        handleId: `salida-${i}`,
+        label: salida.etiqueta || 'Sin nombre',
+        destino: salida.nodoDestino,
+      })),
+      { handleId: 'default', label: 'Si no resuelve', destino: nodo.config.ramaPorDefecto },
+    ];
+  }
   return [];
 }
 
@@ -95,6 +107,14 @@ export function configConDestino(config: INodo['config'], handleId: string, dest
     return {
       ...config,
       etiquetas: config.etiquetas.map((e, idx) => (idx === i ? { ...e, nodoDestino: destino } : e)),
+    };
+  }
+  if (config.tipo === 'ia') {
+    if (handleId === 'default') return { ...config, ramaPorDefecto: destino };
+    const i = Number(handleId.split('-')[1]);
+    return {
+      ...config,
+      salidas: config.salidas.map((s, idx) => (idx === i ? { ...s, nodoDestino: destino } : s)),
     };
   }
   return config;
@@ -127,6 +147,8 @@ export function resumenConfig(nodo: INodo): string {
       return nodo.config.motivo || 'Pasa la conversación a un asesor';
     case 'espera':
       return `${nodo.config.minutos} min`;
+    case 'ia':
+      return `${nodo.config.salidas.length} salida${nodo.config.salidas.length === 1 ? '' : 's'} · máx. ${nodo.config.maxTurnos} turnos`;
   }
 }
 
@@ -149,5 +171,7 @@ export function configPorDefecto(tipo: TipoNodo): INodo['config'] {
       return { tipo };
     case 'espera':
       return { tipo, minutos: 5 };
+    case 'ia':
+      return { tipo, objetivo: '', salidas: [], ramaPorDefecto: '', maxTurnos: 3, usarKb: true };
   }
 }

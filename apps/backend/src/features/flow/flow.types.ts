@@ -11,6 +11,7 @@ export const TIPOS_NODO = [
   'accion',
   'handoff',
   'espera',
+  'ia',
 ] as const;
 export type TipoNodo = (typeof TIPOS_NODO)[number];
 
@@ -50,6 +51,14 @@ export interface IEtiquetaIntencion {
   nodoDestino: string;
 }
 
+export interface ISalidaIa {
+  /** Nombre corto de la salida; es lo que la IA devuelve para decidir por dónde sale. */
+  etiqueta: string;
+  /** Cuándo se considera cumplida. Es la instrucción real que lee el modelo. */
+  descripcion: string;
+  nodoDestino: string;
+}
+
 export type EfectoAccion =
   | { tipo: 'cambiar_estado'; estado: EstadoComercial }
   | { tipo: 'aplicar_etiquetas'; tagIds: string[] }
@@ -80,7 +89,18 @@ export type ConfigNodo =
   | { tipo: 'kb'; pregunta: 'ultimo_mensaje' | string; kSobrescrito?: number; siNoHayRespuesta: string }
   | { tipo: 'accion'; efecto: EfectoAccion }
   | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
-  | { tipo: 'espera'; minutos: number };
+  | { tipo: 'espera'; minutos: number }
+  | {
+      tipo: 'ia';
+      /** Qué debe lograr el asistente mientras tenga el turno, en lenguaje natural. */
+      objetivo: string;
+      salidas: ISalidaIa[];
+      ramaPorDefecto: string;
+      /** Tope duro de turnos; al alcanzarlo sale por `ramaPorDefecto` sin llamar a la IA. */
+      maxTurnos: number;
+      /** Si consulta la base de conocimiento del tenant para responder. */
+      usarKb: boolean;
+    };
 
 export interface INodo extends INodoBase {
   tipo: TipoNodo;
@@ -163,13 +183,16 @@ export interface EntradaMotor {
     respuestaKb?: string;
     /** HU-FLOW-02: el job diferido del nodo `espera` despertó y el plazo ya se cumplió. */
     esperaCumplida?: true;
+    /** HU-FLOW-03: respuesta del nodo `ia`. `salida: null` = todavía no puede decidir. */
+    ia?: { respuesta: string; salida: string | null };
   };
 }
 
 export type RequiereMotor =
   | { tipo: 'intencion'; etiquetas: string[] }
   | { tipo: 'kb'; pregunta: string; kSobrescrito?: number }
-  | { tipo: 'captura'; spec: SlotSpec };
+  | { tipo: 'captura'; spec: SlotSpec }
+  | { tipo: 'ia'; objetivo: string; salidas: ISalidaIa[]; usarKb: boolean };
 
 export interface SalidaMotor {
   /** `null` = el flujo terminó (o se detuvo, p. ej. por un `handoff`). */

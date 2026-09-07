@@ -10,10 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ConditionEditor, type OpcionDestino } from './ConditionEditor.js';
 import { DestinoSelect } from './DestinoSelect.js';
+import { IaOutputsEditor } from './IaOutputsEditor.js';
 import { NODE_VISUALS } from './nodeVisuals.js';
 import type { ConfigNodo, EstadoComercial, IEtiquetaIntencion, INodo } from '../types.js';
 
@@ -392,6 +394,68 @@ function EsperaForm({ config, onChange }: FormProps<'espera'>): React.ReactEleme
   );
 }
 
+function IaForm({ config, opcionesDestino, onChange }: FormProps<'ia'>): React.ReactElement {
+  return (
+    <div className="space-y-4">
+      <Field label="Objetivo (lo que debe lograr el asistente mientras tenga el turno)">
+        <Textarea
+          value={config.objetivo}
+          onChange={(e) => onChange({ ...config, objetivo: e.target.value })}
+          placeholder="Descubrir si el cliente ya decidió comprar o solo está averiguando precios."
+          rows={3}
+        />
+      </Field>
+
+      <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+        <div className="space-y-0.5">
+          <Label className="text-xs font-medium text-foreground">Consultar la base de conocimiento</Label>
+          <p className="text-[11px] text-muted-foreground">Responde apoyándose en la KB del negocio.</p>
+        </div>
+        <Switch checked={config.usarKb} onCheckedChange={(v) => onChange({ ...config, usarKb: v })} />
+      </div>
+
+      <Field label="Máximo de turnos">
+        <Input
+          type="number"
+          min={1}
+          max={10}
+          value={config.maxTurnos}
+          onChange={(e) => onChange({ ...config, maxTurnos: Math.min(10, Math.max(1, Number(e.target.value) || 1)) })}
+        />
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Cada turno es una consulta al modelo. Al llegar al tope, el nodo sale por su rama por
+          defecto sin volver a preguntar.
+        </p>
+      </Field>
+
+      <div className="space-y-2 border-t border-border pt-3">
+        <Label className="text-xs text-muted-foreground">Cuándo se cumple cada salida</Label>
+        <IaOutputsEditor
+          salidas={config.salidas}
+          opcionesDestino={opcionesDestino}
+          onChange={(salidas) => onChange({ ...config, salidas })}
+        />
+      </div>
+
+      <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Al elegir una salida, el mensaje lo da el nodo siguiente — este nodo no envía nada en ese
+        turno.
+      </div>
+
+      <div className="space-y-1.5 border-t border-border pt-3">
+        <Label className="text-xs text-muted-foreground">Si no resuelve, ir a</Label>
+        <DestinoSelect
+          value={config.ramaPorDefecto}
+          opcionesDestino={opcionesDestino}
+          onValueChange={(v) => onChange({ ...config, ramaPorDefecto: v })}
+          placeholder="Elige el nodo por defecto…"
+          ariaLabel="Rama por defecto"
+        />
+      </div>
+    </div>
+  );
+}
+
 interface NodeInspectorProps {
   nodo: INodo | null;
   esEntrada: boolean;
@@ -502,6 +566,9 @@ export function NodeInspector({
         ) : null}
         {nodo.config.tipo === 'espera' ? (
           <EsperaForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
+        ) : null}
+        {nodo.config.tipo === 'ia' ? (
+          <IaForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
         ) : null}
       </div>
     </div>

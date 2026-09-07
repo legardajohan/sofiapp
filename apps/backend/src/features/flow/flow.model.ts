@@ -20,7 +20,7 @@ const AristaSchema = new Schema(
 const NodoSchema = new Schema(
   {
     id: { type: String, required: true },
-    tipo: { type: String, required: true, enum: ['mensaje', 'captura', 'condicion', 'intencion', 'kb', 'accion', 'handoff', 'espera'] },
+    tipo: { type: String, required: true, enum: ['mensaje', 'captura', 'condicion', 'intencion', 'kb', 'accion', 'handoff', 'espera', 'ia'] },
     posicion: { type: PosicionSchema, required: true },
     config: { type: Schema.Types.Mixed, required: true },
   },

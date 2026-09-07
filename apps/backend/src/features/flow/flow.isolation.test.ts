@@ -2,21 +2,28 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { createScoped, findByIdScoped, findOneScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { Message } from '../message/message.model.js';
 import { Flow, FlowState } from './flow.model.js';
 import { createFlow, getFlowById, listFlows } from './flow.service.js';
 import type { INodo } from './flow.types.js';
 
 // `vi.mock` se sube por encima de TODO el módulo, incluidas las `const` de arriba: `vi.hoisted`
 // es la forma soportada de tener una referencia al mock disponible dentro de la factory.
-const { sendOutboundMock } = vi.hoisted(() => ({ sendOutboundMock: vi.fn().mockResolvedValue({}) }));
+const { sendOutboundMock, extractMock, searchKnowledgeMock } = vi.hoisted(() => ({
+  sendOutboundMock: vi.fn().mockResolvedValue({}),
+  extractMock: vi.fn(),
+  searchKnowledgeMock: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('../message/message.service.js', () => ({ sendOutbound: sendOutboundMock }));
 
 // El motor no llega a pedir nada async en este flujo (solo `mensaje`), pero se mockea igual para
 // que importar el runtime no arrastre una conexión Redis real. `vi.mock` se sube (hoist) por
 // encima de los imports estáticos de abajo, así que el import normal ya usa el mock.
 vi.mock('../../services/ai/ai-service.singleton.js', () => ({
-  getAIService: () => ({ chat: vi.fn(), extract: vi.fn() }),
+  getAIService: () => ({ chat: vi.fn(), extract: extractMock }),
 }));
+// HU-FLOW-03: el nodo `ia` consulta la KB tenant-scoped cuando `usarKb` es `true`.
+vi.mock('../kb/kb.retrieval.service.js', () => ({ searchKnowledge: searchKnowledgeMock }));
 // `flow.runtime.service.ts` importa `flowRuntimeQueue` desde HU-FLOW-02: se mockea por la misma
 // razón (evitar una conexión a Redis real al importar el runtime).
 vi.mock('../../config/queues.js', () => ({
@@ -57,7 +64,11 @@ describe('HU-FLOW-01-V2 — aislamiento multi-tenant', () => {
     await Cliente.deleteMany({});
     await Flow.syncIndexes();
     await FlowState.syncIndexes();
+    await Message.deleteMany({});
     sendOutboundMock.mockClear();
+    extractMock.mockReset();
+    searchKnowledgeMock.mockReset();
+    searchKnowledgeMock.mockResolvedValue([]);
   });
 
   it('un flujo creado bajo tenantA no aparece en el listado de tenantB', async () => {
@@ -158,5 +169,58 @@ describe('HU-FLOW-01-V2 — aislamiento multi-tenant', () => {
 
     expect(await Flow.countDocuments({ tenantId: tenantA, activo: true })).toBe(1);
     expect(await Flow.countDocuments({ tenantId: tenantB, activo: true })).toBe(1);
+  });
+
+  describe('nodo ia — aislamiento multi-tenant (HU-FLOW-03)', () => {
+    const nodoIa: INodo = {
+      id: 'ia1',
+      posicion: { x: 0, y: 0 },
+      tipo: 'ia',
+      config: {
+        tipo: 'ia',
+        objetivo: 'Averiguar si el cliente quiere comprar.',
+        salidas: [{ etiqueta: 'quiere_comprar', descripcion: 'Confirma intención de compra', nodoDestino: 'fin' }],
+        ramaPorDefecto: 'default',
+        maxTurnos: 3,
+        usarKb: true,
+      },
+    };
+    const nodoFin: INodo = { id: 'fin', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Listo' } };
+    const nodoDefault: INodo = { id: 'default', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Fin' } };
+
+    it('el historial y la KB que alimentan la respuesta del nodo ia de A nunca son los de B', async () => {
+      extractMock.mockResolvedValue({ data: { respuesta: 'ok', salida: 'quiere_comprar' } });
+
+      await createFlow(tenantA, {
+        nombre: 'Con nodo ia',
+        nodos: [nodoIa, nodoFin, nodoDefault],
+        aristas: [],
+        entrada: 'ia1',
+        activo: true,
+      });
+      const clienteA = await crearCliente(tenantA);
+      const clienteB = await crearCliente(tenantB);
+
+      // Mensajes previos SOLO del cliente de B, con el mismo `clienteId` shape pero tenant distinto.
+      await createScoped(Message, tenantB, {
+        clienteId: new Types.ObjectId(clienteB),
+        canal: 'whatsapp',
+        direccion: 'inbound',
+        sender: 'user',
+        tipo: 'text',
+        texto: 'Mensaje secreto de B',
+        status: 'sent',
+      });
+
+      await ejecutarFlujo(tenantA.toString(), clienteA, 'hola desde A');
+
+      // El tenantId con el que se llamó a AIService.extract y a searchKnowledge es el de A, nunca el de B.
+      expect(extractMock).toHaveBeenCalledTimes(1);
+      const [extractParams] = extractMock.mock.calls[0] as [{ tenantId: Types.ObjectId; historial: { content: string }[] }];
+      expect(extractParams.tenantId.toString()).toBe(tenantA.toString());
+      expect(extractParams.historial.some((h) => h.content.includes('Mensaje secreto de B'))).toBe(false);
+
+      expect(searchKnowledgeMock).toHaveBeenCalledWith(tenantA.toString(), 'hola desde A');
+    });
   });
 });

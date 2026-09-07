@@ -175,6 +175,46 @@ function ejecutarNodo(
         esperandoRespuesta: false,
       };
 
+    case 'ia': {
+      const clave = `_ia:${nodo.id}:turnos`;
+      const turnos = Number(variables[clave] ?? 0);
+      const limpio = { ...variables };
+      delete limpio[clave]; // al salir del nodo, el contador se va con él
+
+      // (a) El runtime ya resolvió la llamada a la IA.
+      if (entrada.resueltos?.ia !== undefined) {
+        const { respuesta, salida } = entrada.resueltos.ia;
+        if (salida !== null) {
+          const destino =
+            config.salidas.find((s) => s.etiqueta === salida)?.nodoDestino ?? config.ramaPorDefecto;
+          return { efectos: [], siguiente: destino, variables: limpio, esperandoRespuesta: false };
+        }
+        // Sigue conversando: responde y se queda en el nodo esperando al cliente.
+        return {
+          efectos: [{ tipo: 'enviar_mensaje', texto: respuesta }],
+          siguiente: nodo.id,
+          variables: { ...variables, [clave]: turnos + 1 },
+          esperandoRespuesta: true,
+        };
+      }
+
+      // (b) Se agotaron los turnos: sale por defecto SIN volver a llamar a la IA. Se comprueba
+      // antes que (c) porque llegar aquí con `resueltos.ia` ya se resolvió en (a) — este orden
+      // evita descartar una respuesta ya pagada a Gemini.
+      if (turnos >= config.maxTurnos) {
+        return { efectos: [], siguiente: config.ramaPorDefecto, variables: limpio, esperandoRespuesta: false };
+      }
+
+      // (c) Pide el turno de IA y cede el control, igual que hace `intencion`.
+      return {
+        efectos: [],
+        siguiente: nodo.id,
+        variables,
+        esperandoRespuesta: false,
+        requiere: { tipo: 'ia', objetivo: config.objetivo, salidas: config.salidas, usarKb: config.usarKb },
+      };
+    }
+
     case 'espera': {
       const destino = siguienteLineal(aristas, nodo.id);
 

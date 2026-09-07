@@ -7,6 +7,7 @@ export const TIPOS_NODO = [
   'accion',
   'handoff',
   'espera',
+  'ia',
 ] as const;
 export type TipoNodo = (typeof TIPOS_NODO)[number];
 
@@ -45,6 +46,12 @@ export interface IEtiquetaIntencion {
   nodoDestino: string;
 }
 
+export interface ISalidaIa {
+  etiqueta: string;
+  descripcion: string;
+  nodoDestino: string;
+}
+
 export type EfectoAccion =
   | { tipo: 'cambiar_estado'; estado: EstadoComercial }
   | { tipo: 'aplicar_etiquetas'; tagIds: string[] }
@@ -66,7 +73,15 @@ export type ConfigNodo =
   | { tipo: 'kb'; pregunta: string; kSobrescrito?: number; siNoHayRespuesta: string }
   | { tipo: 'accion'; efecto: EfectoAccion }
   | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
-  | { tipo: 'espera'; minutos: number };
+  | { tipo: 'espera'; minutos: number }
+  | {
+      tipo: 'ia';
+      objetivo: string;
+      salidas: ISalidaIa[];
+      ramaPorDefecto: string;
+      maxTurnos: number;
+      usarKb: boolean;
+    };
 
 export interface INodo {
   id: string;

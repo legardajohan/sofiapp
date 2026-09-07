@@ -29,6 +29,14 @@ const etiquetaIntencion = z
   })
   .strict();
 
+const salidaIa = z
+  .object({
+    etiqueta: z.string().min(1).max(40),
+    descripcion: z.string().min(1).max(500),
+    nodoDestino: z.string().min(1),
+  })
+  .strict();
+
 const efectoAccion = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('cambiar_estado'), estado: z.enum(ESTADOS_COMERCIALES) }).strict(),
   z.object({ tipo: z.literal('aplicar_etiquetas'), tagIds: z.array(objectId).min(1) }).strict(),
@@ -94,6 +102,18 @@ const configNodo = z.discriminatedUnion('tipo', [
     })
     .strict(),
   z.object({ tipo: z.literal('espera'), minutos: z.number().int().positive() }).strict(),
+  z
+    .object({
+      tipo: z.literal('ia'),
+      objetivo: z.string().min(10).max(2000),
+      salidas: z.array(salidaIa).min(1).max(8),
+      ramaPorDefecto: z.string().min(1),
+      // Tope duro (criterio 4 del spec): no se puede guardar un nodo `ia` capaz de conversar
+      // indefinidamente.
+      maxTurnos: z.number().int().min(1).max(10),
+      usarKb: z.boolean(),
+    })
+    .strict(),
 ]);
 
 const nodo = z
@@ -173,6 +193,14 @@ const grafoFlow = z
         n.config.etiquetas.forEach((e, j) => {
           validarDestino(e.nodoDestino, ['nodos', i, 'config', 'etiquetas', j, 'nodoDestino']);
           destinosConEntrada.add(e.nodoDestino);
+        });
+        validarDestino(n.config.ramaPorDefecto, ['nodos', i, 'config', 'ramaPorDefecto']);
+        destinosConEntrada.add(n.config.ramaPorDefecto);
+      }
+      if (n.config.tipo === 'ia') {
+        n.config.salidas.forEach((s, j) => {
+          validarDestino(s.nodoDestino, ['nodos', i, 'config', 'salidas', j, 'nodoDestino']);
+          destinosConEntrada.add(s.nodoDestino);
         });
         validarDestino(n.config.ramaPorDefecto, ['nodos', i, 'config', 'ramaPorDefecto']);
         destinosConEntrada.add(n.config.ramaPorDefecto);

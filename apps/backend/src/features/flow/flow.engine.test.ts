@@ -249,3 +249,119 @@ describe('flow.engine — nodo espera (HU-FLOW-02)', () => {
     expect(salida.nodoSiguiente).toBeNull();
   });
 });
+
+describe('flow.engine — nodo ia (HU-FLOW-03)', () => {
+  const flowIa = flow(
+    [
+      {
+        id: 'ia1',
+        posicion: { x: 0, y: 0 },
+        tipo: 'ia',
+        config: {
+          tipo: 'ia',
+          objetivo: 'Averiguar si el cliente quiere comprar o solo está curioseando.',
+          salidas: [
+            { etiqueta: 'quiere_comprar', descripcion: 'El cliente confirma intención de compra', nodoDestino: 'compra' },
+            { etiqueta: 'solo_curiosea', descripcion: 'El cliente no tiene intención de compra', nodoDestino: 'curiosea' },
+          ],
+          ramaPorDefecto: 'default',
+          maxTurnos: 3,
+          usarKb: false,
+        },
+      },
+      { id: 'compra', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Vamos a comprar' } },
+      { id: 'curiosea', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Gracias por curiosear' } },
+      { id: 'default', posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Se acabaron los turnos' } },
+    ],
+    [],
+    'ia1',
+  );
+
+  it('sin resueltos.ia: pide requiere de tipo ia y no emite efectos', () => {
+    const salida = avanzar({ flow: flowIa, state: null, mensaje: 'hola' });
+    expect(salida.requiere).toEqual({
+      tipo: 'ia',
+      objetivo: 'Averiguar si el cliente quiere comprar o solo está curioseando.',
+      salidas: [
+        { etiqueta: 'quiere_comprar', descripcion: 'El cliente confirma intención de compra', nodoDestino: 'compra' },
+        { etiqueta: 'solo_curiosea', descripcion: 'El cliente no tiene intención de compra', nodoDestino: 'curiosea' },
+      ],
+      usarKb: false,
+    });
+    expect(salida.efectos).toHaveLength(0);
+  });
+
+  it('salida que coincide con una etiqueta: avanza al nodoDestino y NO envía la respuesta de ese turno (criterio 2)', () => {
+    // `compra` es un nodo `mensaje` terminal (sin arista saliente): el motor puro encadena hacia
+    // él dentro de la MISMA invocación y `nodoSiguiente` termina en `null` — el efecto es la
+    // prueba de que salió por esa rama, no `nodoSiguiente` (que solo importaría si `compra`
+    // tuviera más pasos después).
+    const salida = avanzar({
+      flow: flowIa,
+      state: estado('ia1'),
+      mensaje: 'sí, quiero comprar',
+      resueltos: { ia: { respuesta: 'Perfecto, vamos con la compra', salida: 'quiere_comprar' } },
+    });
+    expect(salida.efectos.map((e) => (e as { texto?: string }).texto)).toEqual(['Vamos a comprar']);
+  });
+
+  it('salida que no coincide con ninguna etiqueta: avanza por ramaPorDefecto', () => {
+    const salida = avanzar({
+      flow: flowIa,
+      state: estado('ia1'),
+      mensaje: 'algo raro',
+      resueltos: { ia: { respuesta: 'No entendí', salida: 'etiqueta_inexistente' } },
+    });
+    expect(salida.efectos.map((e) => (e as { texto?: string }).texto)).toEqual(['Se acabaron los turnos']);
+  });
+
+  it('salida: null → envía la respuesta, se queda en el nodo y esperandoRespuesta: true (criterio 3)', () => {
+    const salida = avanzar({
+      flow: flowIa,
+      state: estado('ia1'),
+      mensaje: 'cuéntame más',
+      resueltos: { ia: { respuesta: '¿Qué presupuesto manejas?', salida: null } },
+    });
+    expect(salida.efectos).toEqual([{ tipo: 'enviar_mensaje', texto: '¿Qué presupuesto manejas?' }]);
+    expect(salida.nodoSiguiente).toBe('ia1');
+    expect(salida.esperandoRespuesta).toBe(true);
+    expect(salida.variables['_ia:ia1:turnos']).toBe(1);
+  });
+
+  it('el contador sube un turno por respuesta y desaparece de variables al salir por cualquier rama', () => {
+    const conUnTurno = estado('ia1', { '_ia:ia1:turnos': 1 });
+    const sigueConversando = avanzar({
+      flow: flowIa,
+      state: conUnTurno,
+      mensaje: 'mmm',
+      resueltos: { ia: { respuesta: '¿Y tu presupuesto?', salida: null } },
+    });
+    expect(sigueConversando.variables['_ia:ia1:turnos']).toBe(2);
+
+    const sale = avanzar({
+      flow: flowIa,
+      state: conUnTurno,
+      mensaje: 'ok compro',
+      resueltos: { ia: { respuesta: '', salida: 'quiere_comprar' } },
+    });
+    expect(sale.variables['_ia:ia1:turnos']).toBeUndefined();
+  });
+
+  it('alcanzado maxTurnos: sale por ramaPorDefecto y NO devuelve requiere (criterio 4)', () => {
+    const conTope = estado('ia1', { '_ia:ia1:turnos': 3 });
+    const salida = avanzar({ flow: flowIa, state: conTope, mensaje: 'otra vez' });
+    expect(salida.efectos.map((e) => (e as { texto?: string }).texto)).toEqual(['Se acabaron los turnos']);
+    expect(salida.requiere).toBeUndefined();
+  });
+
+  it('un resueltos.ia que llega justo con el contador en el tope se atiende igual (no se descarta una respuesta ya generada)', () => {
+    const conTope = estado('ia1', { '_ia:ia1:turnos': 3 });
+    const salida = avanzar({
+      flow: flowIa,
+      state: conTope,
+      mensaje: 'listo compro',
+      resueltos: { ia: { respuesta: 'Genial', salida: 'quiere_comprar' } },
+    });
+    expect(salida.efectos.map((e) => (e as { texto?: string }).texto)).toEqual(['Vamos a comprar']);
+  });
+});

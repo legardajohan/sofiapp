@@ -112,3 +112,71 @@ describe('flow.validation — validación de grafo en el borde', () => {
     expect(parse(body).success).toBe(false);
   });
 });
+
+describe('flow.validation — nodo ia (HU-FLOW-03)', () => {
+  function nodoIa(overrides: Record<string, unknown> = {}): unknown {
+    return {
+      id: 'n1',
+      tipo: 'ia',
+      posicion,
+      config: {
+        tipo: 'ia',
+        objetivo: 'Averiguar si el cliente quiere comprar el producto.',
+        salidas: [{ etiqueta: 'quiere_comprar', descripcion: 'El cliente confirma', nodoDestino: 'n2' }],
+        ramaPorDefecto: 'n2',
+        maxTurnos: 3,
+        usarKb: true,
+        ...overrides,
+      },
+    };
+  }
+
+  const destino = { id: 'n2', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Gracias' } };
+
+  it('un nodo ia válido pasa', () => {
+    const body = base({ nodos: [nodoIa(), destino], entrada: 'n1' });
+    expect(parse(body).success).toBe(true);
+  });
+
+  it('maxTurnos: 0 → 400', () => {
+    const body = base({ nodos: [nodoIa({ maxTurnos: 0 }), destino], entrada: 'n1' });
+    expect(parse(body).success).toBe(false);
+  });
+
+  it('maxTurnos: 11 → 400', () => {
+    const body = base({ nodos: [nodoIa({ maxTurnos: 11 }), destino], entrada: 'n1' });
+    expect(parse(body).success).toBe(false);
+  });
+
+  it('salidas: [] → 400', () => {
+    const body = base({ nodos: [nodoIa({ salidas: [] }), destino], entrada: 'n1' });
+    expect(parse(body).success).toBe(false);
+  });
+
+  it('una clave extra en el config de un nodo ia → 400 (.strict())', () => {
+    const body = base({ nodos: [nodoIa({ respuesta: 'texto colado' }), destino], entrada: 'n1' });
+    expect(parse(body).success).toBe(false);
+  });
+
+  it('un nodoDestino de salida que no existe → 400', () => {
+    const body = base({
+      nodos: [nodoIa({ salidas: [{ etiqueta: 'x', descripcion: 'y', nodoDestino: 'no-existe' }] }), destino],
+      entrada: 'n1',
+    });
+    expect(parse(body).success).toBe(false);
+  });
+
+  it('un nodo alcanzable solo desde una salida de ia no se reporta como huérfano (criterio 5)', () => {
+    const body = base({
+      nodos: [
+        nodoIa({
+          salidas: [{ etiqueta: 'quiere_comprar', descripcion: 'El cliente confirma', nodoDestino: 'solo-desde-ia' }],
+        }),
+        { id: 'solo-desde-ia', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Alcanzado solo por ia' } },
+        destino,
+      ],
+      entrada: 'n1',
+    });
+    expect(parse(body).success).toBe(true);
+  });
+});

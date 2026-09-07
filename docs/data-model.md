@@ -375,7 +375,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   nombre: String,
   nodos: [ {
     id: String,
-    tipo: "mensaje" | "captura" | "condicion" | "intencion" | "kb" | "accion" | "handoff" | "espera",
+    tipo: "mensaje" | "captura" | "condicion" | "intencion" | "kb" | "accion" | "handoff" | "espera" | "ia",
     posicion: { x: Number, y: Number },
     config: Object                 // unión discriminada por `tipo`, ver detalle abajo
   } ],
@@ -402,6 +402,7 @@ clave extra es un 400, no un campo ignorado):
 | `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
 | `handoff` | `{ motivo?, notificarAsesorId? }` |
 | `espera` | `{ minutos }` — job diferido, HU-FLOW-02 |
+| `ia` | `{ objetivo, salidas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto, maxTurnos, usarKb }` — conversa varios turnos con `AIService.extract()` (historial real, no solo el último mensaje) y retoma el flujo por la salida que la IA decide cumplida; `maxTurnos` (1-10) fuerza salida por `ramaPorDefecto` sin llamar de nuevo a la IA. HU-FLOW-03 |
 
 `tipo: "api"` queda **reservado** en el vocabulario del constructor pero no tiene rama en la unión:
 cualquier intento de guardarlo es un 400.

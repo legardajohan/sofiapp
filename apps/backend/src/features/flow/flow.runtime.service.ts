@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Types } from 'mongoose';
 import { z } from 'zod';
-import { findByIdScoped, findOneAndUpdateScoped, findOneScoped } from '../../repositories/base.repository.js';
+import { findByIdScoped, findOneAndUpdateScoped, findOneScoped, findScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
@@ -11,12 +11,38 @@ import { Cliente } from '../cliente/cliente.model.js';
 import { createLeadFromConversation } from '../lead/lead.service.js';
 import { assignConversation, setConversationTags, setIaHabilitada } from '../conversation/conversation.service.js';
 import { sendOutbound } from '../message/message.service.js';
+import { Message } from '../message/message.model.js';
+import type { IMessage } from '../message/message.types.js';
+import { searchKnowledge } from '../kb/kb.retrieval.service.js';
 import { avanzar } from './flow.engine.js';
 import { getActiveFlow } from './flow.service.js';
 import { FlowState } from './flow.model.js';
-import type { Efecto, EntradaMotor, IFlowLean, IFlowState, RequiereMotor, SalidaMotor } from './flow.types.js';
+import type { Efecto, EntradaMotor, IFlowLean, IFlowState, ISalidaIa, RequiereMotor, SalidaMotor } from './flow.types.js';
 
 type TenantId = string | Types.ObjectId;
+
+/** Cuántos turnos de historial real le llegan al nodo `ia` como contexto (HU-FLOW-03). Constante
+ *  del módulo, no una env var: no es algo que se ajuste por despliegue. */
+const TURNOS_HISTORIAL = 20;
+
+/** Últimos `limite` mensajes de la conversación como `ChatTurn[]`, del más antiguo al más nuevo.
+ *  Solo la usa el caso `'ia'`: `intencion`, `kb` y `captura` se quedan con su historial de un
+ *  turno — cambiarlo alteraría el comportamiento ya probado de HU-FLOW-01. */
+async function construirHistorial(
+  tenantId: TenantId,
+  clienteId: string,
+  limite: number,
+): Promise<ChatTurn[]> {
+  const mensajes = await findScoped(Message, tenantId, { clienteId: new Types.ObjectId(clienteId) })
+    .sort({ createdAt: -1 })
+    .limit(limite)
+    .lean<IMessage[]>();
+
+  return mensajes
+    .reverse()
+    .filter((m) => m.texto)
+    .map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', content: m.texto! }) as ChatTurn);
+}
 
 /**
  * Actor sintético para las auditorías que disparan los efectos `crear_lead`/`asignar_asesor` del
@@ -33,6 +59,7 @@ const TOPE_RESOLUCIONES = 5;
 
 async function resolverRequiere(
   tenantId: TenantId,
+  clienteId: string,
   requiere: RequiereMotor,
   mensajeCliente: string,
 ): Promise<NonNullable<EntradaMotor['resueltos']>> {
@@ -66,6 +93,48 @@ async function resolverRequiere(
       historial: [{ role: 'user', content: requiere.pregunta }],
     });
     return { respuestaKb: data };
+  }
+
+  if (requiere.tipo === 'ia') {
+    const historialReal = await construirHistorial(tenantId, clienteId, TURNOS_HISTORIAL);
+    const contexto = requiere.usarKb
+      ? (await searchKnowledge(tenantId, mensajeCliente)).map((c) => c.texto).join('\n---\n')
+      : '';
+
+    const salidas: ISalidaIa[] = requiere.salidas;
+    const etiquetas = salidas.map((s) => s.etiqueta) as [string, ...string[]];
+    const schema = z.object({
+      respuesta: z.string(),
+      // `extractSlots` deja vacío lo que no encuentra; '' significa "aún no puedo decidir".
+      salida: z
+        .union([z.enum(etiquetas), z.literal('')])
+        .transform((v) => (v ? v : null)),
+    });
+
+    const { data } = await ai.extract<{ respuesta: string; salida: string | null }>({
+      tenantId: tenantOid,
+      historial: contexto
+        ? [...historialReal, { role: 'user', content: `Contexto:\n${contexto}` }]
+        : historialReal,
+      schema,
+      camposObjetivo: [
+        {
+          campo: 'respuesta',
+          tipo: 'texto',
+          requerido: true,
+          descripcion: `Redacta el siguiente mensaje para el cliente. Objetivo: ${requiere.objetivo}`,
+        },
+        {
+          campo: 'salida',
+          tipo: 'texto',
+          requerido: false,
+          descripcion: `Si ya se cumplió una de estas condiciones, devuelve su nombre; si ninguna, déjalo vacío. ${salidas
+            .map((s) => `"${s.etiqueta}": ${s.descripcion}`)
+            .join(' | ')}`,
+        },
+      ],
+    });
+    return { ia: data };
   }
 
   // 'captura'
@@ -223,7 +292,7 @@ async function correrMotor(
     salida = avanzar({ flow, state: estadoActual, mensaje, resueltos });
     if (!salida.requiere) break;
 
-    resueltos = await resolverRequiere(tenantId, salida.requiere, mensaje);
+    resueltos = await resolverRequiere(tenantId, clienteId, salida.requiere, mensaje);
     estadoActual = {
       tenantId: flow.tenantId,
       clienteId: new Types.ObjectId(clienteId),
