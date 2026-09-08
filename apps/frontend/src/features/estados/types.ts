@@ -9,6 +9,13 @@ export interface EstadoDTO {
   orden: number;
   activo: boolean;
   esDefecto: boolean;
+  /**
+   * Etapa terminal del embudo (HU-PIPE-01): de fábrica, «Perdido» y «Declinado».
+   *
+   * Es descriptivo, no restrictivo: no impide mover un lead fuera de ella. Solo sirve para que el
+   * tablero señale qué columnas cierran el recorrido.
+   */
+  esSalida: boolean;
 }
 
 export interface CreateEstadoPayload {

@@ -1,4 +1,4 @@
-import type { EstadoComercial, ResumenDTO } from '../inbox/types.js';
+import type { ResumenDTO } from '../inbox/types.js';
 import type { SemaforoSlug, TagDTO } from '../tags/types.js';
 
 /** Referencia ya resuelta por el backend: la tarjeta pinta nombres, nunca ids. */
@@ -12,7 +12,11 @@ export interface LeadDTO {
   nombre: string;
   telefono: string;
   correo: string | null;
-  estado: EstadoComercial;
+  /**
+   * `key` de una etapa del catálogo del tenant (HU-CRM-03), no la unión cerrada de
+   * `Cliente.estadoComercial`: cada empresa define las suyas y puede crear «Visita agendada».
+   */
+  estado: string;
   contacto: { id: string; nombre: string | null; telefono: string };
   responsable: RefDTO | null;
   /** De dónde nació el lead: la trazabilidad que pide la Definición de Hecho de HU-CRM-01. */
@@ -58,7 +62,8 @@ export interface LeadListItemDTO {
   nombre: string;
   telefono: string;
   correo: string | null;
-  estado: EstadoComercial;
+  /** `key` de una etapa del catálogo del tenant (HU-CRM-03), no una unión cerrada. */
+  estado: string;
   responsable: RefDTO | null;
   /** Con esto se abre la conversación en la bandeja. */
   conversacionId: string;

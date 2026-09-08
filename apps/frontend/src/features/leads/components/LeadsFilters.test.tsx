@@ -45,10 +45,10 @@ function renderFilters(filtros: Partial<LeadsFiltros> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockFetchEstados.mockResolvedValue([
-    { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true },
-    { id: 'e2', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true },
+    { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true, esSalida: false },
+    { id: 'e2', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true, esSalida: false },
     // Archivado: sigue existiendo pero no debe ofrecerse para filtrar.
-    { id: 'e3', key: 'antiguo', label: 'Antiguo', color: '#475569', orden: 9, activo: false, esDefecto: false },
+    { id: 'e3', key: 'antiguo', label: 'Antiguo', color: '#475569', orden: 9, activo: false, esDefecto: false, esSalida: false },
   ]);
   mockFetchTags.mockResolvedValue([
     { id: 't1', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' },
