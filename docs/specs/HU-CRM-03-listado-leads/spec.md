@@ -79,7 +79,9 @@ Fuera de alcance (otros features / fases):
 - Métricas y reportes de conversión → `CRM-05`.
 - Exportar el listado a CSV, y las acciones en lote sobre la selección.
 - Búsqueda por texto libre (nombre / teléfono): no está en los criterios de la historia.
-- Tablero Kanban y drag&drop: descartados por producto (`docs/product.md` §5).
+- Tablero Kanban y drag&drop: descartados por producto (`docs/product.md` §5). **Superado por
+  HU-PIPE-01**, que los reincorpora como segunda vista de esta misma pantalla, sobre el catálogo
+  `estados` que entrega esta historia (ver `docs/adr/0007-tablero-kanban-pipeline.md`).
 
 ## Criterios de aceptación
 

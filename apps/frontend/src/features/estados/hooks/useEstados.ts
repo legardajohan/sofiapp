@@ -1,16 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import axios from 'axios';
 import { createEstado, fetchEstados } from '../api.js';
+// Un solo extractor del mensaje del backend para toda la pantalla de leads (HU-PIPE-01).
+import { motivo } from '../../leads/lib/errors.js';
 import type { CreateEstadoPayload, EstadoDTO } from '../types.js';
-
-/** Mensaje del backend si lo hay: "Ya existe un estado con ese nombre" dice más que un genérico. */
-function motivo(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
-    return error.response.data.message;
-  }
-  return fallback;
-}
 
 export function useEstados() {
   return useQuery<EstadoDTO[]>({ queryKey: ['estados'], queryFn: fetchEstados });

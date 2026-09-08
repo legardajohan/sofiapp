@@ -5,7 +5,7 @@
 > del tenant y dejó cambiarlas de una en una desde el panel de detalle; esta historia es la que por
 > fin las **muestra como un embudo** y deja moverlas con el gesto que el trabajo pide.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Objetivo
 

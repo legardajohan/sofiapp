@@ -313,9 +313,14 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > **No confundir con la métrica de cuota.** `plans.limites.leads` y `QuotaMetric = 'leads'` cuentan
 > documentos de **`clientes`** vía `countScoped`, no esta colección. HU-CRM-01 no toca cuotas.
 
-> `estado` reutiliza la unión de `clientes.estadoComercial` (fuente única:
-> `ESTADOS_COMERCIALES` en `cliente.types.ts`). El lead **no** introduce etapas ni pipeline propio;
-> Kanban sigue descartado por `product.md` §5.
+> `estado` guarda la **`key` de una etapa del catálogo `estados`** del tenant (HU-CRM-03), no un
+> enum: el schema no lleva `enum` y lo valida el service contra el catálogo de la empresa. Las cinco
+> claves sembradas coinciden con el antiguo `ESTADOS_COMERCIALES`, así que los leads anteriores
+> siguen resolviendo su etiqueta sin migración.
+>
+> El lead **no** introduce etapas ni pipeline propio: el embudo de HU-PIPE-01 se dibuja sobre este
+> campo y sobre `estados`, sin colección nueva. El tablero Kanban, que `product.md` §5 había
+> descartado, se reincorporó en esa historia — ver `docs/adr/0007-tablero-kanban-pipeline.md`.
 
 ## campaigns  (remarketing)
 ```js
@@ -483,7 +488,10 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
 > (cambios de `estadoComercial`, borrados, etc.).
 >
-> Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
+> Acciones registradas hoy: `conversation.assign`, `lead.create`, `lead.delete` (HU-CRM-01),
+> `lead.estado` (HU-PIPE-01: cambio de etapa del pipeline; acción propia para que el historial de
+> etapa no tenga que colar las altas y las bajas — los cambios anteriores quedaron como
+> `lead.update` y **no se migran**, se consultan);
 > `cliente.update` y `contact-note.create` (HU-CRM-02).
 >
 > En `lead.delete` el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado
@@ -643,10 +651,16 @@ del modelo en `contact_options`.
 | `orden` | number | Posición en el pipeline. El orden cuenta una historia; alfabético la rompe. |
 | `activo` | boolean | `false` = archivado: no se ofrece para filtrar, pero sigue resolviendo su etiqueta. |
 | `esDefecto` | boolean | Sembrado al crear el tenant. Informativo. |
+| `esSalida` | boolean | Etapa terminal del embudo (HU-PIPE-01). **Descriptivo, no restrictivo**: marca qué columnas cierran el recorrido para que la UI las señale, sin bloquear ninguna transición. |
 
 Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que los
 leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.
 
+> Desde HU-PIPE-01 se siembra además **`declinado`** («Declinado», `esSalida: true`), que convive
+> con `perdido`: `perdido` es la oportunidad que se enfrió y `declinado` la que dijo que no. Los
+> tenants anteriores la reciben por `backfillEstadoDeclinado()`, un backfill dirigido — la siembra
+> general ya no pasa por ellos porque llevan `estadosSeeded: true`.
+>
 > Las cinco claves sembradas (`nuevo`, `en_gestion`, `pago_pendiente`, `pagado`, `perdido`) son
 > **exactamente** los valores del enum anterior, así que el paso de enum a catálogo no necesita
 > migrar un solo documento. `Lead.estado` deja de tener `enum` en el schema: lo valida el service
