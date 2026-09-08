@@ -3,11 +3,18 @@ import {
   createLeadFromConversation,
   deleteLead,
   getLeadById,
+  listHistorialEstado,
   listLeads,
   updateLeadEstado,
 } from './lead.service.js';
 import type { ListLeadsQuery } from './lead.types.js';
-import type { CreateLeadBody, DeleteLeadQuery, UpdateLeadBody } from './lead.validation.js';
+import type {
+  CreateLeadBody,
+  DeleteLeadQuery,
+  HistorialEstadoQuery,
+  UpdateLeadBody,
+  UpdateLeadStageBody,
+} from './lead.validation.js';
 
 export const createLeadController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
@@ -47,4 +54,25 @@ export const updateLeadController: RequestHandler = async (req, res) => {
   const id = req.params['id'] as string;
   const { estado } = req.body as UpdateLeadBody;
   res.status(200).json(await updateLeadEstado(tenantId, actorId, id, estado));
+};
+
+/**
+ * Ruta propia del cambio de etapa (HU-PIPE-01). Delega en el **mismo** service que
+ * `updateLeadController`: lo único que cambia es que su schema es `.strict()`.
+ */
+export const updateLeadStageController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const actorId = req.user!.sub;
+  const id = req.params['id'] as string;
+  const { estado } = req.body as UpdateLeadStageBody;
+  res.status(200).json(await updateLeadEstado(tenantId, actorId, id, estado));
+};
+
+export const historialEstadoController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  // `validatedQuery`, no `req.query`: en Express 5 el getter re-parsea el query string crudo y
+  // perdería los defaults y las coerciones de Zod (ver `validate.middleware.ts`).
+  const { page, limit } = req.validatedQuery as unknown as HistorialEstadoQuery;
+  res.status(200).json(await listHistorialEstado(tenantId, id, page, limit));
 };

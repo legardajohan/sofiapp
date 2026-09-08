@@ -3,6 +3,7 @@ import { createScoped, countScoped, findScoped } from '../../repositories/base.r
 import { logger } from '../../utils/logger.js';
 import { AuditEvent } from './audit.model.js';
 import type {
+  AuditAccion,
   AuditEntidad,
   IAuditEventDocument,
   IAuditEventResponse,
@@ -47,12 +48,36 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
   }
 }
 
+/**
+ * Filtro de la bitácora, **compartido por la página y por el conteo**.
+ *
+ * Que sea uno solo no es estética: si la consulta paginada filtrara por acción y el `countScoped`
+ * no, el `total` contaría eventos que la página nunca devuelve. Y filtrar *después* de paginar
+ * —quedándose con las filas que interesan de las 20 traídas— rompería el conteo igual.
+ *
+ * `accion` admite un array porque un mismo eje puede haberse registrado con más de un nombre a lo
+ * largo del tiempo: el historial de etapa consulta `lead.estado` y el `lead.update` con el que se
+ * grabó antes de HU-PIPE-01.
+ */
+function buildAuditFilter(
+  entidad: AuditEntidad,
+  entidadId: string,
+  accion?: AuditAccion | AuditAccion[],
+): Record<string, unknown> {
+  const filter: Record<string, unknown> = { entidad, entidadId };
+  if (accion) filter['accion'] = Array.isArray(accion) ? { $in: accion } : accion;
+  return filter;
+}
+
 export function listAuditEventsQuery(
   tenantId: TenantId,
   entidad: AuditEntidad,
   entidadId: string,
+  accion?: AuditAccion | AuditAccion[],
 ): Query<IAuditEventDocument[], IAuditEventDocument> {
-  return findScoped(AuditEvent, tenantId, { entidad, entidadId }).sort({ createdAt: -1 });
+  return findScoped(AuditEvent, tenantId, buildAuditFilter(entidad, entidadId, accion)).sort({
+    createdAt: -1,
+  });
 }
 
 export async function listAuditEvents(
@@ -61,10 +86,11 @@ export async function listAuditEvents(
   entidadId: string,
   page: number,
   limit: number,
+  accion?: AuditAccion | AuditAccion[],
 ): Promise<{ data: IAuditEventResponse[]; page: number; limit: number; total: number }> {
-  const filter = { entidad, entidadId };
+  const filter = buildAuditFilter(entidad, entidadId, accion);
   const [docs, total] = await Promise.all([
-    listAuditEventsQuery(tenantId, entidad, entidadId)
+    listAuditEventsQuery(tenantId, entidad, entidadId, accion)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean<IAuditEventDocument[]>(),

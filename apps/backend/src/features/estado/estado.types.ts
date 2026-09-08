@@ -32,6 +32,16 @@ export interface IEstado {
   activo: boolean;
   /** Sembrado al crear el tenant. Informativo: se renombra y se archiva como cualquier otro. */
   esDefecto: boolean;
+  /**
+   * Etapa terminal del embudo: el recorrido acaba aquí (HU-PIPE-01). De fábrica lo son `perdido`
+   * —la oportunidad se enfrió— y `declinado` —dijo que no—.
+   *
+   * Es **descriptivo, no restrictivo**: no bloquea ninguna transición. Las etapas activas siguen
+   * siendo libremente alcanzables entre sí; esto solo le dice a la UI qué columnas cierran el
+   * embudo para que pueda señalarlas. Convertirlo en una regla de permisos reintroduciría por la
+   * puerta de atrás la máquina de transiciones que la historia descarta a propósito.
+   */
+  esSalida: boolean;
 }
 
 export interface IEstadoDocument extends IEstado, Document {}
@@ -50,4 +60,5 @@ export interface IEstadoResponse {
   orden: number;
   activo: boolean;
   esDefecto: boolean;
+  esSalida: boolean;
 }

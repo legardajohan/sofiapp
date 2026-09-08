@@ -114,6 +114,36 @@ export const listLeadsSchema = z.object({
     }),
 });
 
+// ─── Embudo (HU-PIPE-01) ────────────────────────────────────────────────────────
+
+/**
+ * Cambio de etapa por su ruta propia (`PATCH /leads/:id/stage`).
+ *
+ * `.strict()` porque el body tiene UNA llave: colar `responsableId` o `nombre` por aquí debe ser un
+ * `400` explícito, no un cambio por la puerta de atrás. Es la diferencia con `updateLeadSchema`,
+ * que se conserva sin `.strict()` para no romper a quien ya llamaba a `PATCH /leads/:id`.
+ *
+ * Zod solo comprueba la forma; que la clave exista **y esté activa** en el catálogo de ESTE tenant
+ * lo valida el service, que es quien puede consultarlo.
+ */
+export const updateLeadStageSchema = z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({ estado: z.string().trim().min(1).max(40) }).strict(),
+});
+
+/** Historial de cambios de etapa del lead. Misma paginación que el resto del contrato. */
+export const historialEstadoSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+  }),
+});
+
+export type UpdateLeadStageBody = z.infer<typeof updateLeadStageSchema>['body'];
+export type HistorialEstadoQuery = z.infer<typeof historialEstadoSchema>['query'];
+
 export type CreateLeadBody = z.infer<typeof createLeadSchema>['body'];
 export type DeleteLeadQuery = z.infer<typeof deleteLeadSchema>['query'];
 export type ListLeadsQueryInput = z.infer<typeof listLeadsSchema>['query'];

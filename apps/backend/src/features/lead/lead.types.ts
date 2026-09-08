@@ -148,3 +148,16 @@ export interface ILeadListItemResponse {
   ultimoMensajeAt: string | null;
   createdAt: string;
 }
+
+/**
+ * Una entrada del historial de etapa (HU-PIPE-01). Sale de `audit_events`, no de una colección
+ * propia: es exactamente el uso para el que esa bitácora se creó.
+ */
+export interface IHistorialEstadoResponse {
+  id: string;
+  /** `key` de la etapa anterior. `null` solo si el evento antiguo no la registró. */
+  de: string | null;
+  a: string | null;
+  actor: IRefResponse | null;
+  at: string;
+}

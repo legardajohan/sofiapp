@@ -6,7 +6,10 @@ export type AuditAccion =
   | 'contact-note.create'
   | 'lead.create'
   | 'lead.update'
-  | 'lead.delete';
+  | 'lead.delete'
+  // Cambio de etapa del pipeline (HU-PIPE-01). Accion propia y no 'lead.update' para que el
+  // historial de etapa se pueda consultar sin que se le cuelen las altas y las bajas.
+  | 'lead.estado';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.

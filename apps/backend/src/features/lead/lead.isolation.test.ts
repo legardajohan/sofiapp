@@ -1,16 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// El cambio de etapa publica un evento de tiempo real (HU-PIPE-01). Sin este mock, `publishRealtime`
+// abre una conexion Redis real que, con `maxRetriesPerRequest: null`, encola el comando para
+// siempre en vez de fallar: el test se queda colgado hasta el timeout. Mismo mock que usan los
+// tests de `conversation`.
+vi.mock('../../realtime/realtime.publisher.js', () => ({
+  publishRealtime: vi.fn(),
+  subscribeRealtime: vi.fn(),
+}));
 import { Types } from 'mongoose';
 import { countScoped, createScoped, findByIdScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Tag } from '../tag/tag.model.js';
 import { User } from '../users/user.model.js';
 import { listConversations } from '../conversation/conversation.service.js';
+import { Estado } from '../estado/estado.model.js';
+import { seedEstados } from '../../seed/seed-estados.js';
 import { Lead } from './lead.model.js';
 import {
   createLeadFromConversation,
   deleteLead,
   findLeadIdsByClientes,
   getLeadById,
+  listHistorialEstado,
   listLeads,
   updateLeadEstado,
 } from './lead.service.js';
@@ -240,5 +252,71 @@ describe('HU-CRM-03 — aislamiento multi-tenant del listado de leads', () => {
     expect(listadoB.data).toHaveLength(1);
     expect(listadoB.data[0]?.responsable?.id).toBe(asesorB);
     expect(listadoB.data.map((l) => l.nombre)).not.toContain('Solo de A');
+  });
+});
+
+describe('HU-PIPE-01 — aislamiento multi-tenant del cambio de etapa', () => {
+  let clienteA: string;
+  let asesorA: string;
+  let asesorB: string;
+  let leadA: string;
+
+  beforeEach(async () => {
+    await Lead.deleteMany({});
+    await Cliente.deleteMany({});
+    await User.deleteMany({});
+    await Estado.deleteMany({});
+    await Lead.syncIndexes();
+    await Estado.syncIndexes();
+
+    // Los dos tenants tienen el mismo catálogo de fábrica: las claves coinciden a propósito, y es
+    // justo eso lo que haría pasar desapercibida una fuga si el filtro no llevara `tenantId`.
+    await seedEstados(tenantA);
+    await seedEstados(tenantB);
+
+    clienteA = await crearCliente(tenantA, 'wa_pipe_iso_a');
+    asesorA = await crearAsesor(tenantA, 'a@empresa-a.test');
+    asesorB = await crearAsesor(tenantB, 'b@empresa-b.test');
+
+    const lead = await createLeadFromConversation(tenantA.toString(), asesorA, {
+      nombre: 'Solo de A',
+      telefono: '573001112233',
+      clienteId: clienteA,
+    });
+    leadA = lead.id;
+  });
+
+  it('el tenantB no mueve de etapa un lead del tenantA → 404 y el lead queda INTACTO', async () => {
+    await expect(
+      updateLeadEstado(tenantB.toString(), asesorB, leadA, 'pagado'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    // El 404 sin comprobar la escritura no probaría nada: lo que importa es que no tocó el lead.
+    const intacto = await findByIdScoped(Lead, tenantA, leadA).lean<ILeadLean>();
+    expect(intacto?.estado).toBe('nuevo');
+  });
+
+  it('nunca 403: un 403 confirmaría que el lead existe en otra empresa', async () => {
+    await expect(
+      updateLeadEstado(tenantB.toString(), asesorB, leadA, 'pagado'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('el tenantB no lee el historial de etapa de un lead del tenantA → 404', async () => {
+    await updateLeadEstado(tenantA.toString(), asesorA, leadA, 'en_gestion');
+
+    await expect(listHistorialEstado(tenantB.toString(), leadA, 1, 20)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+
+    // Y su dueño sí lo ve: el 404 es aislamiento, no un historial roto.
+    const historialA = await listHistorialEstado(tenantA.toString(), leadA, 1, 20);
+    expect(historialA.total).toBe(1);
+  });
+
+  it('el dueño sí mueve su propio lead: el 404 de B no es un cambio de etapa roto', async () => {
+    const movido = await updateLeadEstado(tenantA.toString(), asesorA, leadA, 'pagado');
+
+    expect(movido.estado).toBe('pagado');
   });
 });

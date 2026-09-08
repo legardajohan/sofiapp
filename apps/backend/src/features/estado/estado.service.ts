@@ -1,5 +1,10 @@
 import type { Types } from 'mongoose';
-import { countScoped, createScoped, findScoped } from '../../repositories/base.repository.js';
+import {
+  countScoped,
+  createScoped,
+  findOneScoped,
+  findScoped,
+} from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { Lead } from '../lead/lead.model.js';
 import { Estado } from './estado.model.js';
@@ -24,6 +29,9 @@ function toResponse(doc: IEstadoLean): IEstadoResponse {
     orden: doc.orden,
     activo: doc.activo,
     esDefecto: doc.esDefecto,
+    // `?? false`: los documentos sembrados antes de HU-PIPE-01 no traen el campo, y salir como
+    // `undefined` haría que la UI tuviera que distinguir "no es de salida" de "no lo sé".
+    esSalida: doc.esSalida ?? false,
   };
 }
 
@@ -97,6 +105,8 @@ export async function createEstado(
       orden,
       activo: true,
       esDefecto: false,
+      // Una etapa creada a mano no es de salida: el administrador la marca después si lo es.
+      esSalida: false,
     });
 
     return toResponse(creado as unknown as IEstadoLean);
@@ -113,6 +123,30 @@ export async function createEstado(
  */
 export async function existeEstado(tenantId: TenantId, key: string): Promise<boolean> {
   return (await countScoped(Estado, tenantId, { key })) > 0;
+}
+
+/**
+ * La etapa del catálogo del tenant, o `null` si esa clave no es suya. La usan el tablero y el
+ * cambio de etapa, que necesitan algo más que un booleano: el `label`, el `color` y `activo`.
+ */
+export async function findEstadoByKey(
+  tenantId: TenantId,
+  key: string,
+): Promise<IEstadoResponse | null> {
+  const doc = await findOneScoped(Estado, tenantId, { key }).lean<IEstadoLean>();
+  return doc ? toResponse(doc) : null;
+}
+
+/**
+ * `true` solo si la clave existe en el catálogo del tenant **y está activa** (HU-PIPE-01).
+ *
+ * No basta con `existeEstado`, que es lo que usa el filtro `?estado=` del listado: allí una etapa
+ * archivada es legítima —un lead puede llevarla grabada de antes— pero **mover** un lead hacia
+ * ella lo haría desaparecer del tablero, que solo pinta las activas, sin que nadie pudiera
+ * explicar dónde fue a parar. Por eso escribir es más estricto que leer.
+ */
+export async function existeEstadoActivo(tenantId: TenantId, key: string): Promise<boolean> {
+  return (await countScoped(Estado, tenantId, { key, activo: true })) > 0;
 }
 
 /** Cuántos leads del tenant llevan grabado ese estado. Para no archivar a ciegas. */

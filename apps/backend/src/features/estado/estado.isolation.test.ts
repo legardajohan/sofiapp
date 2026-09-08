@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 import { Estado } from './estado.model.js';
 import { createEstado, existeEstado, listEstados } from './estado.service.js';
-import { seedEstados } from '../../seed/seed-estados.js';
+import { ESTADOS_DEFECTO, seedEstados } from '../../seed/seed-estados.js';
 
 /**
  * Aislamiento multi-tenant del catálogo de estados (HU-CRM-03). El pipeline es dato del tenant: si
@@ -26,8 +26,9 @@ describe('HU-CRM-03 — aislamiento multi-tenant del catálogo de estados', () =
     const listadoB = await listEstados(tenantB.toString());
 
     expect(listadoB.map((e) => e.key)).not.toContain('visita-agendada');
-    // Solo los cinco de fábrica, que son suyos propios y no los de A.
-    expect(listadoB).toHaveLength(5);
+    // Solo los de fábrica, que son suyos propios y no los de A. Se cuenta contra la semilla y
+    // no contra un número escrito a mano: añadir una etapa de fábrica no debe romper este test.
+    expect(listadoB).toHaveLength(ESTADOS_DEFECTO.length);
 
     const idsA = (await listEstados(tenantA.toString())).map((e) => e.id);
     expect(listadoB.every((e) => !idsA.includes(e.id))).toBe(true);

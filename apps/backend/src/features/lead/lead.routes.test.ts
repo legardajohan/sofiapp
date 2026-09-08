@@ -12,6 +12,15 @@ vi.mock('../../config/queues.js', () => ({
   kbIndexQueue: { add: vi.fn().mockResolvedValue(undefined) },
 }));
 
+// El cambio de etapa publica un evento de tiempo real (HU-PIPE-01). Sin este mock, `publishRealtime`
+// abre una conexion Redis real que, con `maxRetriesPerRequest: null`, encola el comando para
+// siempre en vez de fallar: el test se queda colgado hasta el timeout. Mismo mock que usan los
+// tests de `conversation`.
+vi.mock('../../realtime/realtime.publisher.js', () => ({
+  publishRealtime: vi.fn(),
+  subscribeRealtime: vi.fn(),
+}));
+
 import app from '../../app.js';
 import { createScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
@@ -395,5 +404,151 @@ describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
       .get('/api/leads')
       .set('Cookie', [`token=${superadmin}`, `csrfToken=${CSRF}`])
       .expect(403);
+  });
+});
+
+describe('HU-PIPE-01 — contrato HTTP del embudo', () => {
+  let tenantId: Types.ObjectId;
+  let token: string;
+  let leadId: string;
+
+  /** PATCH pasa por el guard CSRF (double-submit): cookie legible + header con el mismo valor. */
+  function patchStage(t: string, id: string, body: Record<string, unknown>): request.Test {
+    return request(app)
+      .patch(`/api/leads/${id}/stage`)
+      .set('Cookie', [`token=${t}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send(body);
+  }
+
+  function get(t: string, url: string): request.Test {
+    return request(app).get(url).set('Cookie', [`token=${t}`]);
+  }
+
+  beforeEach(async () => {
+    await Lead.deleteMany({});
+    await Cliente.deleteMany({});
+    await User.deleteMany({});
+    await Estado.deleteMany({});
+    await Lead.syncIndexes();
+    await Estado.syncIndexes();
+
+    tenantId = new Types.ObjectId();
+    token = makeToken(tenantId.toString(), 'admin');
+    await seedEstados(tenantId);
+
+    const clienteId = await crearCliente(tenantId);
+    await createScoped(User, tenantId, {
+      _id: new Types.ObjectId(ACTOR),
+      nombre: 'Carolina',
+      email: 'carolina@empresa.test',
+      passwordHash: 'x',
+      rol: 'admin',
+      activo: true,
+    });
+
+    const creado = await post(token, {
+      nombre: 'Ana Pérez',
+      telefono: '573001112233',
+      clienteId,
+    });
+    leadId = creado.body.id;
+  });
+
+  // ─── PATCH /api/leads/:id/stage ──────────────────────────────────────────────
+
+  it('mueve el lead y devuelve 200 con el lead actualizado', async () => {
+    const res = await patchStage(token, leadId, { estado: 'en_gestion' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.estado).toBe('en_gestion');
+  });
+
+  it('una llave de más en el body es 400: `.strict()` cierra la puerta de atrás', async () => {
+    const res = await patchStage(token, leadId, { estado: 'en_gestion', responsableId: ACTOR });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('una etapa archivada es 400', async () => {
+    await Estado.updateOne({ tenantId, key: 'pagado' }, { $set: { activo: false } });
+
+    const res = await patchStage(token, leadId, { estado: 'pagado' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('un lead de otro tenant es 404, nunca 403', async () => {
+    const otro = makeToken(new Types.ObjectId().toString(), 'admin');
+
+    const res = await patchStage(otro, leadId, { estado: 'pagado' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('sin CSRF es 403, antes incluso de mirar el body', async () => {
+    const res = await request(app)
+      .patch(`/api/leads/${leadId}/stage`)
+      .set('Cookie', [`token=${token}`])
+      .send({ estado: 'en_gestion' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('un superadmin no entra: la ruta es del tenant', async () => {
+    const res = await patchStage(makeToken(null, 'superadmin'), leadId, { estado: 'en_gestion' });
+
+    expect([401, 403, 500]).toContain(res.status);
+  });
+
+  it('`PATCH /api/leads/:id` (HU-CRM-03) SIGUE funcionando: la ruta nueva no la rompe', async () => {
+    const res = await request(app)
+      .patch(`/api/leads/${leadId}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+      .set('X-CSRF-Token', CSRF)
+      .send({ estado: 'pagado' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.estado).toBe('pagado');
+  });
+
+  // ─── GET /api/leads/:id/historial-etapa ──────────────────────────────────────
+
+  it('el historial de etapa responde paginado', async () => {
+    await patchStage(token, leadId, { estado: 'en_gestion' });
+
+    const res = await get(token, `/api/leads/${leadId}/historial-etapa`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.data[0].a).toBe('en_gestion');
+  });
+
+  // ─── GET /api/pipeline ───────────────────────────────────────────────────────
+
+  it('devuelve el tablero con una columna por etapa activa', async () => {
+    const res = await get(token, '/api/pipeline');
+
+    expect(res.status).toBe(200);
+    expect(res.body.columnas).toHaveLength(6);
+    expect(res.body.limit).toBe(20);
+  });
+
+  it('`?estado=` es 400: el tablero ya agrupa por etapa', async () => {
+    const res = await get(token, '/api/pipeline?estado=nuevo');
+
+    expect(res.status).toBe(400);
+  });
+
+  it('`?limit=` por encima del techo es 400', async () => {
+    const res = await get(token, '/api/pipeline?limit=99');
+
+    expect(res.status).toBe(400);
+  });
+
+  it('sin JWT es 401', async () => {
+    const res = await request(app).get('/api/pipeline');
+
+    expect(res.status).toBe(401);
   });
 });
