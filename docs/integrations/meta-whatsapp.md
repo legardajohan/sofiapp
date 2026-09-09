@@ -73,3 +73,51 @@ TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM para cifrar accessToken por tena
 
 > **Nota:** `v19.0` es un valor de referencia. Meta deprecia versiones antiguas de Graph API; al
 > implementar M01 confirma la versión vigente soportada y fíjala en `META_GRAPH_VERSION`.
+
+## 7. Diagnóstico de envíos rechazados con `403 (#131005) Access denied`
+
+Cuando `sendMessage` falla con `403 (#131005)` y el token **sí** está vigente, la causa suele ser
+que la cuenta sandbox de Meta está **`BLOCKED` para conversaciones business-initiated**, no un bug
+de SofiApp.
+
+### Síntoma típico
+
+Un mismo tenant envía bien a algunos números y falla con `403` a otros. La diferencia: los que
+funcionan tienen **ventana de 24h abierta** (el contacto escribió primero); los que fallan son
+envíos *fuera de ventana* (business-initiated) contra una WABA bloqueada.
+
+### Verificar el estado real (nunca adivinar)
+
+```bash
+GET https://graph.facebook.com/v19.0/{phone_number_id}?fields=health_status,quality_rating,messaging_limit_tier
+Authorization: Bearer {access_token}
+```
+
+Respuesta relevante: `health_status.can_send_message` puede ser `AVAILABLE`, `LIMITED` o `BLOCKED`,
+con un array `entities[].errors[]` que da el `error_code` y `possible_solution` exactos. Ver
+[buildwithchirp.com/whatsapp/error-codes](https://docs.buildwithchirp.com/whatsapp/error-codes).
+
+### Errores ya observados en el sandbox (09/2026)
+
+| error_code | Entity | Significado | Solución |
+|---|---|---|---|
+| `141006` | WABA | Error en el método de pago; bloquea conversaciones business-initiated | Agregar método de pago válido (Business Settings → Payment) |
+| `141010` | BUSINESS | El negocio no ha pasado *business verification* | Iniciar/resolver verificación en Business Settings |
+| `131000` | BUSINESS | Perfil incompleto: faltan `Legal Name`, `Country`, `Website` | Completar perfil en Meta Business Suite → Settings → Business Info |
+| `131030` | — | Destinatario no está en la lista permitida del sandbox (PTN) | Agregar el número como *test recipient* en el dashboard |
+| `131005` | — | Permiso denegado: típica cuando la WABA está `BLOCKED` para business-initiated | Resolver los errores de `health_status` anteriores |
+
+### Particularidades del número de prueba (Test Number `+1 555-...`)
+
+- Solo puede enviar a **hasta 5 destinatarios de prueba verificados**; el resto da `131030`.
+- Un destinatario que **sí** está en la lista pero recibe `403 131005` (no `400 131030`) apunta a la
+  WABA bloqueada (pagos/verificación), no al destinatario.
+- `messaging_limit_tier` `TIER_250` (sin verificación) → tope de 250 destinatarios únicos/24h.
+- El token del dashboard es **de vida corta (< 24h)**: para producción usar un **System User** con
+  permiso `whatsapp_business_messaging` y *expiration = Never*.
+
+### Workaround rápido para pruebas en el sandbox
+
+Hacer que el número destino **escriba primero**: abre la ventana de 24h y el `send` dentro de
+ventana pasa aunque la WABA esté `BLOCKED`. Así funcionan los envíos a números con conversación
+abierta mientras el resto sigue fallando.
