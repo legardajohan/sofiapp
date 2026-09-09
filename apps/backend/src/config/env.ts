@@ -71,6 +71,12 @@ const EnvSchema = z.object({
   FAQ_VECTOR_INDEX: z.string().default('kb_faqs_vector'),
   FAQ_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
 
+  // HU-FLOW-02 — recordatorios de inactividad. La cadencia del barrido debe quedar bastante por
+  // debajo de la antelación por defecto del recordatorio (120 min) para que la franja no se
+  // escape entre dos pasadas.
+  REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().positive().default(600_000),
+  REMINDER_SWEEP_BATCH: z.coerce.number().positive().default(200),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

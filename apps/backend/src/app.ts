@@ -38,6 +38,7 @@ import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
 import aiRoutes from './features/ai/ai.routes.js';
+import flowRoutes from './features/flow/flow.routes.js';
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai/responses', aiRoutes);
+app.use('/api/flows', flowRoutes);
 
 app.use(errorHandler);
 

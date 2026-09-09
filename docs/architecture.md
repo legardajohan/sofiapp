@@ -29,7 +29,9 @@ posible, inmutabilidad, inyección de dependencias para testear.
                          │   • llm-process     (slot filling, scoring)    │
                          │   • outbound-send   (rate-limit Meta ~80/s)    │
                          │   • campaign-broadcast                         │
-                         │   • flow-runtime    (Fase 3)                   │
+                         │   • flow-runtime    (nodos `espera` +          │
+                         │     recordatorios de inactividad, HU-FLOW-02;  │
+                         │     barrido periódico vía Job Scheduler)       │
                          └───────────────┬───────────────────────────────┘
             Redis (ioredis) ◀────────────┤  SOLO colas (sin caché semántica en MVP)
             MongoDB Atlas  ◀─────────────┤  datos (tenant-scoped)
@@ -73,7 +75,7 @@ Request → authenticateJWT → requireTenant → authorize([roles]) → validat
 | Estado | Zustand 5.x + TanStack Query 5.x | — |
 | UI | Tailwind 3/4 (+ shadcn/ui opcional) | — |
 | Gráficos | Recharts 2/3 | — |
-| Flujos (Fase 3) | `@xyflow/react` (React Flow) 12.x | — |
+| Flujos | `@xyflow/react` (React Flow) 12.x — implementado en `HU-FLOW-01-V2` | — |
 | Testing | Vitest 3.x + Supertest | — |
 | Monorepo | pnpm workspaces + Turborepo | — |
 | Móvil (Fase 4) | React Native 0.76+ + Expo SDK 52+ | — |

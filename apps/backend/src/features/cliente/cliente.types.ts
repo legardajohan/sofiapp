@@ -85,6 +85,8 @@ export interface ICliente {
   estadoComercial: EstadoComercial;
   ventana24hExpiraEn?: Date;
   ultimoMensajeAt?: Date;
+  /** HU-FLOW-02: `ventana24hExpiraEn` para la que ya se envió el recordatorio de inactividad. */
+  recordatorioEnviadoParaVentana?: Date;
   noLeidos: number;
   iaHabilitada: boolean;
   asesorId?: Types.ObjectId;

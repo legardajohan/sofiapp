@@ -16,6 +16,7 @@ import {
   UserCheck,
   Users,
   UserX,
+  Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { UserRol } from '@/stores/authStore';
@@ -71,6 +72,7 @@ export const navGroups: NavGroup[] = [
         ],
       },
       { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
+      { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'] },
       { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
       {
         label: 'Clientes',

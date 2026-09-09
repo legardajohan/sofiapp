@@ -5,6 +5,7 @@ import {
   createTenantSchema,
   updateTenantSchema,
   updateTenantStatusSchema,
+  updateReminderSchema,
 } from './tenant.validation.js';
 
 export type EstadoTenant = 'activo' | 'suspendido' | 'prueba';
@@ -43,6 +44,21 @@ export interface ITenant {
   estadosSeeded?: boolean;
   /** Contador de cambios de contenido en la KB; invalida la caché exacta de respuestas de IA (HU-KB-03). */
   kbVersion?: number;
+  /**
+   * Recordatorio de inactividad antes de que expire la ventana de 24 h (HU-FLOW-02). Es una
+   * política de la empresa sobre TODAS sus conversaciones, no un paso de un flujo concreto — así
+   * también cubre las conversaciones que nunca entraron a un flujo. `activo` arranca en `false`:
+   * nadie empieza a enviar mensajes automáticos a sus clientes sin haberlo pedido.
+   */
+  recordatorio?: IReminderConfig;
+}
+
+export interface IReminderConfig {
+  activo: boolean;
+  /** Minutos de antelación antes de `Cliente.ventana24hExpiraEn` para disparar el recordatorio. */
+  antelacionMinutos: number;
+  texto?: string;
+  templateId?: Types.ObjectId;
 }
 
 export interface ITenantDocument extends ITenant, Document {}
@@ -73,6 +89,21 @@ export interface UpdateTenantDTO {
 
 export interface UpdateTenantStatusDTO {
   estado: 'activo' | 'suspendido';
+}
+
+// DTOs para HU-FLOW-02 — recordatorio de inactividad, configurado por el `admin` de su propio tenant
+export interface UpdateReminderDTO {
+  activo: boolean;
+  antelacionMinutos: number;
+  texto: string;
+  templateId?: string;
+}
+
+export interface IReminderResponse {
+  activo: boolean;
+  antelacionMinutos: number;
+  texto: string;
+  templateId: string | null;
 }
 
 export interface ITenantResponse {
@@ -107,3 +138,4 @@ export interface TenantsListResponse {
 export type CreateTenantInput = z.infer<typeof createTenantSchema.shape.body>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema.shape.body>;
 export type UpdateTenantStatusInput = z.infer<typeof updateTenantStatusSchema.shape.body>;
+export type UpdateReminderInput = z.infer<typeof updateReminderSchema.shape.body>;

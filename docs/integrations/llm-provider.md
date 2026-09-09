@@ -7,15 +7,45 @@ en el futuro.)
 ## 1. Interfaz `ILlmProvider`
 
 ```ts
+export interface LlmCallResult<T> {
+  result: T;
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+}
+
 export interface ILlmProvider {
   // Extracción estructurada (slot filling) con salida JSON forzada
-  extractSlots(input: { historial: ChatTurn[]; camposObjetivo: SlotSpec[] }): Promise<SlotResult>;
+  extractSlots(input: { historial: ChatTurn[]; camposObjetivo: SlotSpec[] }): Promise<LlmCallResult<SlotResult>>;
   // Clasificación de nivel de interés y objeción
-  classifyLead(input: { historial: ChatTurn[] }): Promise<{ nivelInteres: NivelInteres; objecion: Objecion | null }>;
-  // (Fase 3) respuesta conversacional para nodos IA del flujo
-  generateReply(input: { historial: ChatTurn[]; tono: string; instrucciones: string }): Promise<string>;
+  classifyLead(input: { historial: ChatTurn[] }): Promise<LlmCallResult<{ nivelInteres: NivelInteres; objecion: Objecion | null }>>;
+  // Respuesta conversacional: la usan `AIService.chat()` (nodo `kb`) y `AIService.summarize()`
+  generateReply(input: { historial: ChatTurn[]; tono: string; instrucciones: string }): Promise<LlmCallResult<string>>;
+  // Embeddings para RAG (HU-KB-01): un vector por texto de entrada
+  embedTexts(input: { texts: string[]; taskType: 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY' }): Promise<LlmCallResult<number[][]>>;
 }
 ```
+
+Fuente de verdad: `apps/backend/src/integrations/llm/llm-provider.types.ts`. El dominio nunca llama
+al `provider` directo — pasa siempre por `AIService` (`apps/backend/src/services/ai/ai.service.ts`),
+que añade caché Redis, cortocircuito por FAQ (`chat()`), plantillas por tenant y registro de uso.
+
+## 1.1. Nodo `ia` del constructor de flujos (HU-FLOW-03)
+
+El nodo `ia` del constructor visual (`docs/data-model.md` → `flows`) es el único consumidor de
+`AIService.extract()` que lleva conversación multi-turno en vez de resolver una pregunta puntual:
+
+- El motor de flujos (`flow.engine.ts`) sigue puro — nunca llama a la IA. Cuando el nodo `ia` no
+  puede decidir aún, devuelve `requiere: { tipo: 'ia', objetivo, salidas, usarKb }` y cede el
+  control; el runtime (`flow.runtime.service.ts`) resuelve con **una sola** llamada a
+  `ai.extract()` que pide a la vez `respuesta` (qué decirle al cliente) y `salida` (si ya se
+  cumplió alguna de las salidas declaradas).
+- El contexto no es el último mensaje sino el **historial real** de la conversación
+  (`construirHistorial()`, últimos `TURNOS_HISTORIAL = 20` mensajes de `Message`), a diferencia de
+  `intencion`/`kb`/`captura`, que solo ven el mensaje que disparó la invocación.
+- Con `usarKb: true` antepone al historial los fragmentos de `searchKnowledge()`
+  (`features/kb/kb.retrieval.service.ts`, RAG tenant-scoped) — es el primer consumidor real de esa
+  función, hasta ahora reservada para `HU-IA-01/02` (no implementadas).
+- `maxTurnos` (1-10, Zod) es el corte duro: agotado, el nodo sale por `ramaPorDefecto` sin volver
+  a llamar a la IA. Ver `docs/specs/HU-FLOW-03-nodo-ia/` para el contrato completo.
 
 - Implementación `GeminiProvider` que llama a la API de Gemini 1.5 Flash con **JSON mode /
   function calling** para respuestas estructuradas.
