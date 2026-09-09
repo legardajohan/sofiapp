@@ -5,6 +5,7 @@ import { LeadDetailSheet } from '../components/LeadDetailSheet.js';
 import { LeadsFilters } from '../components/LeadsFilters.js';
 import { LeadsTable } from '../components/LeadsTable.js';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 import { PipelineBoard } from '../../pipeline/index.js';
 import { useLeads } from '../hooks/useLeads.js';
 import { useEstados } from '../../estados/hooks/useEstados.js';
@@ -173,13 +174,21 @@ export function LeadsPage(): React.ReactElement {
     (leadDelEmbudo?.id === selectedId ? leadDelEmbudo : null);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div
+      className={cn(
+        'mx-auto w-full space-y-6',
+        // El embudo necesita el ancho: con siete etapas, `max-w-6xl` dejaba fuera de pantalla la
+        // mitad del tablero y obligaba a descubrir por scroll que había más columnas. La tabla se
+        // queda estrecha, que es lo que le conviene a una línea de texto.
+        vista === 'embudo' ? 'max-w-[110rem]' : 'max-w-6xl',
+      )}
+    >
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Leads</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {vista === 'embudo'
-              ? 'Arrastra una oportunidad para moverla de etapa.'
+              ? 'Arrastra una oportunidad por su asa para moverla de etapa, o enfócala con el tabulador y pulsa Espacio.'
               : 'Todo lo que se convirtió desde una conversación, con su estado y su resumen.'}
           </p>
         </div>

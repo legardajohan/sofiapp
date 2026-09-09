@@ -121,8 +121,9 @@ export function PipelineBoard({ filtros, onSelect, onVerEnTabla }: Props): React
     return (
       <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
         <p className="text-sm font-medium text-foreground">El embudo no tiene etapas activas.</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Crea una etapa desde los filtros de la tabla para empezar a organizar las oportunidades.
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+          Todas las etapas de la empresa están archivadas. Reactiva al menos una en el catálogo de
+          etapas para poder organizar las oportunidades aquí.
         </p>
       </div>
     );
@@ -138,8 +139,13 @@ export function PipelineBoard({ filtros, onSelect, onVerEnTabla }: Props): React
       onDragCancel={() => setArrastrando(null)}
     >
       {/* El scroll horizontal vive aquí y no en el `main`: el tablero se desplaza dentro de la
-          página, sin arrastrar consigo la cabecera ni los filtros. */}
-      <div className="flex gap-3 overflow-x-auto pb-2">
+          página, sin arrastrar consigo la cabecera ni los filtros.
+
+          Altura fija para todas las columnas, cada una con su propio scroll. Dejarlas crecer con su
+          contenido dentaba el tablero —una columna de nueve tarjetas al lado de una vacía— y hacía
+          que el borde inferior, que es la superficie donde se sueltan las tarjetas, cambiara de
+          sitio en cada movimiento. */}
+      <div className="flex h-[min(70vh,44rem)] min-h-[24rem] gap-3 overflow-x-auto pb-3">
         {data.columnas.map((columna) => (
           <PipelineColumn
             key={columna.etapa.key}
