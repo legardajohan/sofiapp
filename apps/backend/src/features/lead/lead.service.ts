@@ -24,6 +24,7 @@ import type { AuditAccion } from '../audit/audit.types.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { Lead } from './lead.model.js';
 import { existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
+import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
 import type {
   CreateLeadDTO,
   IHistorialEstadoResponse,
@@ -142,7 +143,7 @@ export async function createLeadFromConversation(
       telefono,
       correo: dto.correo,
       clienteId: conversacionOid,
-      estado: 'nuevo',
+      estado: KEY_ESTADO_ENTRADA,
       responsableId: actorOid,
       origen: {
         tipo: 'conversacion',

@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
+import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
 import type { ILeadDocument } from './lead.types.js';
 
 const OrigenSchema = new Schema(
@@ -24,7 +25,7 @@ const LeadSchema = new Schema<ILeadDocument>(
     // Sin `enum`: las etapas son un catálogo por tenant (`estados`, HU-CRM-03), no estructura.
     // Aquí se graba el `key` del estado; quién valida que exista es el service, contra el catálogo
     // del tenant. Los leads sembrados con los 5 valores de fábrica siguen siendo válidos tal cual.
-    estado: { type: String, required: true, default: 'nuevo', trim: true },
+    estado: { type: String, required: true, default: KEY_ESTADO_ENTRADA, trim: true },
   },
   { timestamps: true },
 );
