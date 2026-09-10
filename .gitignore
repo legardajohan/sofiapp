@@ -44,3 +44,9 @@ dev/
 
 # Capturas/imágenes sueltas (no deben commitearse por error)
 *.png
+
+# MCP de Open Code
+opencode.json
+
+# Scripts de debug ad-hoc (pueden contener credenciales sueltas, nunca son fuente de verdad)
+apps/backend/check-*.cjs

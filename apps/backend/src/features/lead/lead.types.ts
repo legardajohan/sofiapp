@@ -1,5 +1,6 @@
 import type { Document, Types } from 'mongoose';
-import type { EstadoComercial } from '../cliente/cliente.types.js';
+import type { EstadoComercial, IResumenResponse } from '../cliente/cliente.types.js';
+import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
 
 /**
  * De dónde nació el lead. Hoy solo se convierte desde una conversación, pero el discriminador
@@ -92,5 +93,58 @@ export interface ILeadResponse {
     convertidoPor: IRefResponse | null;
     convertidoAt: string;
   };
+  createdAt: string;
+}
+
+// ─── Listado (HU-CRM-03) ────────────────────────────────────────────────────────
+
+/**
+ * Filtros del listado, ya validados y coercidos por Zod. Todos son opcionales y combinables.
+ *
+ * Ojo con dos de ellos, que NO son campos del lead:
+ * - `asesor` es un userId que filtra `responsableId`. No existe el rol "Asesor" (AUTH-02): todo
+ *   usuario de un tenant es `admin` y "asesor" es la función, no el rol.
+ * - `semaforo` es el slug de una etiqueta de sistema aplicada a la CONVERSACIÓN (`Cliente.tagIds`),
+ *   no algo que el lead guarde. Se resuelve pasando por el cliente; ver `listLeads`.
+ */
+export interface ListLeadsQuery {
+  page: number;
+  limit: number;
+  /** `key` de un estado del catálogo del tenant (HU-CRM-03). Ya no es un enum cerrado. */
+  estado?: string;
+  asesor?: string;
+  semaforo?: SemaforoSlug;
+  desde?: Date;
+  hasta?: Date;
+}
+
+/**
+ * Proyección de listado. **No** es `ILeadResponse`: responden preguntas distintas.
+ *
+ * El detalle contesta "cuéntame todo de este lead" y trae el `origen` resuelto a nombres. La tabla
+ * contesta "dame veinte leads que pueda escanear", así que necesita el semáforo, el resumen y el
+ * `ultimoMensajeAt` —que el detalle no tiene— y no necesita el origen completo, que costaría una
+ * resolución de usuarios extra por página para pintar algo que la tabla no muestra.
+ */
+export interface ILeadListItemResponse {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string | null;
+  estado: EstadoComercial;
+  responsable: IRefResponse | null;
+  /** `origen.conversacionId`: con esto la UI abre la conversación en la bandeja. */
+  conversacionId: string;
+  /**
+   * Etiquetas de semáforo de la conversación, con su color. Vacío si no tiene ninguna.
+   *
+   * **La primera es la aplicada más recientemente**: es la que la tabla muestra como principal y
+   * el resto queda detrás de un `+N`. Es un array y no una sola etiqueta porque nada impide
+   * aplicar varias a la misma conversación, y quedarse con una escondía el resto.
+   */
+  semaforos: ITagResponse[];
+  /** Resumen IA de la conversación (HU-OMNI-03). `null` si nunca se generó. */
+  resumen: IResumenResponse | null;
+  ultimoMensajeAt: string | null;
   createdAt: string;
 }

@@ -102,6 +102,16 @@ propio código:
 3. **Superadmin** — opera **cross-tenant** por diseño. Sus rutas saltan `requireTenant` y usan
    funciones de repositorio NO scoped, restringidas por `authorize(['superadmin'])`. Las
    agregaciones globales se documentan como tales.
+4. **Barrido de recordatorios de inactividad (HU-FLOW-02)** — `flow.reminder.service.ts:buscarCandidatos`
+   consulta `Cliente.find({...})` sin `tenantId` en el filtro: el barrido periódico (job `sweep` de
+   la cola `flow-runtime`) es cross-tenant por naturaleza, una sola pasada para toda la plataforma.
+   Es el mismo patrón que la resolución de tenant del webhook: `buscarCandidatos` **solo devuelve
+   identificadores** (`{ tenantId, clienteId, ventana24hExpiraEn }`), nunca datos de un tenant
+   expuestos a otro. A partir de ahí, cada candidato se procesa con su propio `tenantId` y todo
+   vuelve a pasar por `*Scoped` (`enviarRecordatorio`, `Tenant.findById` por su propio `_id`). El
+   índice que sostiene esta consulta, `Cliente: { ventana24hExpiraEn: 1, iaHabilitada: 1 }`, es el
+   único del proyecto que no empieza por `tenantId` — documentado junto al índice en
+   `cliente.model.ts`. Test de aislamiento: `flow.reminder.isolation.test.ts`.
 
 ## 6. El Superadmin (User global)
 

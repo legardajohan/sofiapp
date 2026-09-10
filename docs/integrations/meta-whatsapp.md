@@ -13,8 +13,8 @@ tenant conecta su propio número, ese id es único por tenant.
 ### Flujo
 
 ```
-POST /api/webhooks/meta
-  1. Validar firma HMAC (X-Hub-Signature-256) con el APP_SECRET.   → si falla, 401
+POST /api/webhooks/whatsapp
+  1. Validar firma HMAC (X-Hub-Signature-256) con el APP_SECRET.   → si falla, 403
   2. Responder HTTP 200 INMEDIATAMENTE (SLA de Meta).
   3. Extraer phone_number_id del payload.
   4. tenant = MetaIntegration.findOne({ phoneNumberId })           → lookup GLOBAL (excepción documentada)
@@ -30,8 +30,17 @@ POST /api/webhooks/meta
 
 ### Verificación inicial (GET)
 
-`GET /api/webhooks/meta?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...` →
-comparar `verify_token` con `META_VERIFY_TOKEN` y devolver el `hub.challenge`.
+`GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...` →
+comparar `verify_token` con `META_VERIFY_TOKEN` y devolver el `hub.challenge`. Token incorrecto o
+ausente → 403 (no 401: es el código que ya usa `verifyChallenge`).
+
+### Montaje y orden de middlewares (importante)
+
+El router de este webhook (`features/webhook/webhook.routes.ts`) usa `express.raw({ type:
+'application/json' })` porque la firma HMAC se calcula sobre los **bytes exactos** del cuerpo. Por
+eso se monta en `app.ts` **antes** de `express.json()`: si el parser JSON global corriera primero,
+`req.body` llegaría como objeto y la firma nunca calzaría con la que envía Meta — ver
+`HT-WA-01-V2/spec.md` para el detalle del defecto que esto corrigió.
 
 ## 2. Embedded Signup (onboarding por empresa)
 
@@ -48,33 +57,67 @@ comparar `verify_token` con `META_VERIFY_TOKEN` y devolver el `hub.challenge`.
 - **Ventana de 24h:** fuera de la ventana de servicio solo se puede enviar **plantillas HSM**
   aprobadas. Dentro de la ventana, texto libre.
 
-## 4. Plantillas HSM y campañas
+## 4. Plantillas HSM (HT-WA-02)
 
-- Las difusiones masivas usan plantillas HSM aprobadas por Meta.
+El catálogo local (`whatsapp_templates`, ver `data-model.md`) es un **espejo** del estado real en
+Meta, nunca una fuente de verdad paralela: su cuerpo lo dicta Meta y cambiarlo exige re-aprobación.
+
+```
+GET  /api/templates        → catálogo local paginado, filtrable por status/category.
+POST /api/templates/sync   → GET /{wabaId}/message_templates (metaTemplateClient.list, pagina por
+                              paging.next hasta agotarla); upsert por {tenantId, name, language}:
+                              crea las nuevas, actualiza status/components de las existentes, marca
+                              obsoleta:true las que Meta ya no devuelve (nunca se borran).
+POST /api/templates        → POST /{wabaId}/message_templates (crea en Meta); solo si Meta acepta
+                              se persiste localmente en PENDING. Si Meta rechaza, no queda
+                              documento local huérfano.
+```
+
+**`sendOutbound(tenantId, clienteId, contenido)`** (`message.service.ts`) es el **único** punto del
+sistema que decide entre texto libre y plantilla HSM según `Cliente.ventana24hExpiraEn`:
+
+- Ventana abierta → texto libre (`sendMessage`, la bandeja).
+- Ventana cerrada → exige una plantilla `APPROVED`; sin ella, `AppError` 422 (mismo mensaje que
+  usaba `sendMessage` antes de esta spec — no rompe el `WindowClosedBanner` del frontend).
+- Enviar una plantilla es válido dentro **y** fuera de la ventana (Meta lo acepta siempre).
+
+`HU-FLOW-02` (recordatorios antes de las 24 h) y la futura épica de Remarketing consumen
+`sendOutbound`; ninguna reimplementa la regla de la ventana.
+
+`buildTemplatePayload` (`whatsapp-template.service.ts`) valida, **antes** de llamar a la Graph API:
+plantilla `APPROVED` (si no, 422) y número de parámetros exacto (`parametrosBody`, derivado al
+persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 con
+`{ esperados, recibidos }`).
+
+## 5. Campañas (fuera de alcance de HT-WA-02)
+
+- Las difusiones masivas reutilizarán las mismas plantillas HSM aprobadas.
 - **Rate limiting:** worker BullMQ con concurrencia controlada para respetar el límite de Meta
   (~80 msg/s). Backoff ante error 429. Registro de estado por destinatario (`campaign_recipients`).
 - **Riesgo operativo:** una infracción de políticas puede suspender la WABA del tenant. Probar
   con números sandbox antes de producción.
 
-## 5. Normalización de canales
+## 6. Normalización de canales
 
 Payloads de Instagram Direct y Facebook Messenger se normalizan a un **modelo canónico interno**
 de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 
-## 6. Variables de entorno relevantes
+## 7. Variables de entorno relevantes
 
 ```
 META_APP_ID=
-META_APP_SECRET=            # validación HMAC del webhook
-META_VERIFY_TOKEN=          # verificación GET del webhook
-META_GRAPH_VERSION=v19.0    # valor de ejemplo: verifica la versión vigente al hacer scaffold
-TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM para cifrar accessToken por tenant
+META_APP_SECRET=            # validación HMAC del webhook — OBLIGATORIA fuera de NODE_ENV=test
+META_VERIFY_TOKEN=          # verificación GET del webhook — OBLIGATORIA fuera de NODE_ENV=test
+META_GRAPH_VERSION=v26.0    # confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
+TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM (64 hex) — OBLIGATORIA fuera de NODE_ENV=test
 ```
 
-> **Nota:** `v19.0` es un valor de referencia. Meta deprecia versiones antiguas de Graph API; al
-> implementar M01 confirma la versión vigente soportada y fíjala en `META_GRAPH_VERSION`.
+> **Nota:** Meta deprecia versiones antiguas de Graph API cada pocos meses; confirma la vigente
+> antes de fijar `META_GRAPH_VERSION`. Las otras tres variables **no** tienen fallback: el proceso
+> aborta al arrancar si faltan fuera de `test` (`HT-WA-01-V2`, tras un incidente donde arrancaba
+> sin ellas y todo webhook fallaba en silencio).
 
-## 7. Diagnóstico de envíos rechazados con `403 (#131005) Access denied`
+## 8. Diagnóstico de envíos rechazados con `403 (#131005) Access denied`
 
 Cuando `sendMessage` falla con `403 (#131005)` y el token **sí** está vigente, la causa suele ser
 que la cuenta sandbox de Meta está **`BLOCKED` para conversaciones business-initiated**, no un bug
@@ -89,7 +132,7 @@ envíos *fuera de ventana* (business-initiated) contra una WABA bloqueada.
 ### Verificar el estado real (nunca adivinar)
 
 ```bash
-GET https://graph.facebook.com/v19.0/{phone_number_id}?fields=health_status,quality_rating,messaging_limit_tier
+GET https://graph.facebook.com/v26.0/{phone_number_id}?fields=health_status,quality_rating,messaging_limit_tier
 Authorization: Bearer {access_token}
 ```
 

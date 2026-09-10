@@ -34,7 +34,12 @@ export const receiveController = async (req: Request, res: Response): Promise<vo
   }
   const rawBody: Buffer = req.body;
 
+  logger.info('Webhook POST recibido', { hasSignature: !!signature, bytes: rawBody?.length ?? 0 });
+
   if (!validateHmacSignature(rawBody, signature)) {
+    logger.warn('Webhook: firma HMAC inválida, revisar META_APP_SECRET', {
+      hasSignature: !!signature,
+    });
     res.status(403).json({ message: 'Firma inválida.' });
     return;
   }

@@ -12,6 +12,7 @@ import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { Cliente } from './cliente.model.js';
+import { toResumenResponse } from './cliente.mapper.js';
 import { Message } from '../message/message.model.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
@@ -151,27 +152,11 @@ function toContactCard(
 /**
  * El resumen queda desactualizado si llegaron mensajes después de generarlo.
  *
- * Desde HU-IA-04 es un **dato sensible** (ADR-0006, enmienda): lo escribe el modelo sobre el
- * transcript completo, así que puede citar en claro el correo o el documento que `toContactCard`
- * enmascara. Y al ser prosa no se puede enmascarar por partes —el mismo argumento con el que
- * ADR-0006 cerró las notas—, así que se omite entero en vez de recortarlo.
- *
- * El default es `false` igual que en `toContactCard` y `toDatosExtraidosResponse`: si mañana
- * aparece un tercer sitio que proyecte el resumen y su autor olvide pasar el permiso, el fallo es
- * ocultar de más, nunca filtrar.
+ * Se re-exporta desde `cliente.mapper` para no romper a quien ya lo importaba de aquí. Vive allí
+ * porque el listado de leads (HU-CRM-03) también lo necesita y este módulo importa de
+ * `lead.service`: tenerlo aquí cerraría un ciclo de imports.
  */
-export function toResumenResponse(
-  c: Pick<IClienteLean, 'resumenIA' | 'ultimoMensajeAt'>,
-  puedeVerSensibles = false,
-): IResumenResponse | null {
-  if (!c.resumenIA || !puedeVerSensibles) return null;
-  const desactualizado = !!c.ultimoMensajeAt && c.ultimoMensajeAt > c.resumenIA.mensajesHasta;
-  return {
-    texto: c.resumenIA.texto,
-    generadoAt: c.resumenIA.generadoAt.toISOString(),
-    desactualizado,
-  };
-}
+export { toResumenResponse };
 
 /**
  * El `correo` extraído por IA se enmascara con la misma regla que el correo manual: es el mismo dato

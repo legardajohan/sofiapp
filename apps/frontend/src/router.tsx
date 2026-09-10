@@ -21,6 +21,10 @@ const KnowledgeFaqsPage = lazy(() =>
   import('./features/knowledge-base/index.js').then((m) => ({ default: m.KnowledgeFaqsPage })),
 );
 
+const TemplatesPage = lazy(() =>
+  import('./features/whatsapp-templates/index.js').then((m) => ({ default: m.TemplatesPage })),
+);
+
 const AiContextPage = lazy(() =>
   import('./features/ai-context/index.js').then((m) => ({ default: m.AiContextPage })),
 );
@@ -36,8 +40,20 @@ const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
 );
 
+const LeadsPage = lazy(() =>
+  import('./features/leads/index.js').then((m) => ({ default: m.LeadsPage })),
+);
+
 const TagsPage = lazy(() =>
   import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
+);
+
+const FlowsPage = lazy(() =>
+  import('./features/flows/index.js').then((m) => ({ default: m.FlowsPage })),
+);
+
+const FlowEditorPage = lazy(() =>
+  import('./features/flows/index.js').then((m) => ({ default: m.FlowEditorPage })),
 );
 
 const AdminRoutes = lazy(() =>
@@ -99,6 +115,16 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/settings/templates',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <TemplatesPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
             path: '/settings/knowledge/context',
             element: (
               <RequireRole roles={['admin']}>
@@ -139,11 +165,41 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/leads',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <LeadsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
             path: '/etiquetas',
             element: (
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <TagsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/flows',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <FlowsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/flows/:id',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <FlowEditorPage />
                 </Suspense>
               </RequireRole>
             ),

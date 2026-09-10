@@ -4,6 +4,7 @@ import {
   Bot,
   Building2,
   CreditCard,
+  FileStack,
   Inbox,
   LineChart,
   MessageCircleQuestion,
@@ -13,9 +14,11 @@ import {
   ScanSearch,
   Sparkles,
   Tags,
+  Target,
   UserCheck,
   Users,
   UserX,
+  Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { UserRol } from '@/stores/authStore';
@@ -70,6 +73,8 @@ export const navGroups: NavGroup[] = [
           { label: 'Sofi activa', to: '/inbox?filtro=sofi', icon: Sparkles },
         ],
       },
+      { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
+      { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'] },
       { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
       {
         label: 'Clientes',
@@ -94,6 +99,12 @@ export const navGroups: NavGroup[] = [
         label: 'WhatsApp',
         to: '/settings/channels/whatsapp',
         icon: MessageSquareText,
+        roles: ['admin'],
+      },
+      {
+        label: 'Plantillas',
+        to: '/settings/templates',
+        icon: FileStack,
         roles: ['admin'],
       },
       {

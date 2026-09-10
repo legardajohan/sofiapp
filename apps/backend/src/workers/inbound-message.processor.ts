@@ -9,9 +9,11 @@ import { upsertByMetaUser } from '../features/cliente/cliente.service.js';
 import { saveMessage, updateDeliveryStatus } from '../features/message/message.service.js';
 import { notifyInboundMessage, replyFromIa } from '../features/conversation/conversation.service.js';
 import { Message } from '../features/message/message.model.js';
+import { ejecutarFlujo } from '../features/flow/flow.runtime.service.js';
+import { getActiveFlow } from '../features/flow/flow.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import { parseDeliveryStatuses } from '../integrations/meta/meta-whatsapp.normalizer.js';
-import type { IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
+import type { IWhatsAppMessage, IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
 import type { TipoMensaje } from '../features/message/message.types.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 
@@ -140,14 +142,14 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
 
         if (cliente.iaHabilitada) {
           try {
-            await atenderConSofi(tenantId, clienteId.toString(), msg.type, msg.text?.body);
+            await responderAutomaticamente(tenantId, clienteId.toString(), msg);
           } catch (err: unknown) {
-            // Que Sofi no arranque no deshace lo que ya pasó: el mensaje está guardado y en la
-            // bandeja. Tumbar el job entero no recupera nada y ensucia la cola de fallidos
-            // mezclando "no se ingestó" con "se ingestó y la IA no arrancó".
+            // Que el bot no arranque no deshace lo que ya pasó: el mensaje está guardado y en la
+            // bandeja. Tumbar el job entero no recupera nada, y con `attempts` > 1 reintentaría
+            // TODA la ingesta (persistencia incluida) por un fallo que no está ahí.
             // Nivel `error` a propósito: al no quedar el job en `failed`, este log es el único
             // rastro que queda. Fue la cola de fallidos la que permitió diagnosticar HT-AI-02.
-            logger.error('Sofi no pudo atender el mensaje entrante', {
+            logger.error('La respuesta automática falló en un mensaje entrante', {
               tenantId,
               clienteId: clienteId.toString(),
               error: String(err),
@@ -158,10 +160,38 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
 
       const statuses = parseDeliveryStatuses(value);
       for (const { metaMessageId, status } of statuses) {
-        await updateDeliveryStatus(metaMessageId, status);
+        await updateDeliveryStatus(tenantId, metaMessageId, status);
       }
     }
   }
+}
+
+/**
+ * Decide QUIÉN contesta un mensaje entrante cuando la IA está habilitada para el cliente.
+ *
+ * Hay dos motores de respuesta automática y solo puede hablar uno, o el cliente recibe dos
+ * respuestas al mismo mensaje:
+ *  - **Motor de flujos** (HU-FLOW-01/02/03) si el tenant tiene un flujo `activo`. Es un guión
+ *    explícito que la empresa diseñó, así que manda sobre la conversación libre.
+ *  - **Sofi** (HU-IA-01/02) en caso contrario: RAG sobre la KB, con la ventana de agrupación.
+ *
+ * El discriminante es `getActiveFlow` y no el resultado de `ejecutarFlujo`: este último también
+ * corta en seco por idempotencia (`metaMessageId` repetido) o porque un asesor tomó la
+ * conversación, y en esos casos tampoco debe entrar Sofi de rebote.
+ */
+async function responderAutomaticamente(
+  tenantId: string,
+  clienteId: string,
+  msg: IWhatsAppMessage,
+): Promise<void> {
+  const flujoActivo = await getActiveFlow(tenantId);
+
+  if (flujoActivo) {
+    await ejecutarFlujo(tenantId, clienteId, msg.text?.body ?? '', msg.id);
+    return;
+  }
+
+  await atenderConSofi(tenantId, clienteId, msg.type, msg.text?.body);
 }
 
 /**

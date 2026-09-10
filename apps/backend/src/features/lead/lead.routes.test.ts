@@ -20,6 +20,8 @@ import { createScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { User } from '../users/user.model.js';
 import { Lead } from './lead.model.js';
+import { Estado } from '../estado/estado.model.js';
+import { seedEstados } from '../../seed/seed-estados.js';
 
 const SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const CSRF = 'test-csrf-token';
@@ -139,7 +141,11 @@ describe('POST /api/leads — cadena de middlewares y contrato HTTP', () => {
     const primero = await post(token, { nombre: 'Ana', telefono: '573001112233', clienteId });
     expect(primero.status).toBe(201);
 
-    const segundo = await post(token, { nombre: 'Ana otra vez', telefono: '573001112233', clienteId });
+    const segundo = await post(token, {
+      nombre: 'Ana otra vez',
+      telefono: '573001112233',
+      clienteId,
+    });
     expect(segundo.status).toBe(409);
     expect(segundo.body.message).toBe('Ya existe un lead con ese teléfono.');
     // Sin esto la UI no podría ofrecer "Ver lead existente".
@@ -280,5 +286,117 @@ describe('DELETE /api/leads/:id — borrado con motivo obligatorio', () => {
 
     expect(res.status).toBe(404);
     expect(await Lead.countDocuments({ _id: new Types.ObjectId(id) })).toBe(1);
+  });
+});
+
+describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
+  let tenantId: Types.ObjectId;
+  let token: string;
+
+  /** GET no pasa por el guard CSRF: solo necesita la cookie de sesión. */
+  function list(query = ''): request.Test {
+    return request(app)
+      .get(`/api/leads${query}`)
+      .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`]);
+  }
+
+  beforeEach(async () => {
+    await Lead.deleteMany({});
+    await Cliente.deleteMany({});
+    await User.deleteMany({});
+    await Lead.syncIndexes();
+
+    tenantId = new Types.ObjectId();
+    token = makeToken(tenantId.toString(), 'admin');
+
+    // El pipeline es un catálogo por tenant (HU-CRM-03); sin él, `?estado=` no resuelve la clave.
+    await Estado.deleteMany({});
+    await seedEstados(tenantId);
+
+    const clienteId = await crearCliente(tenantId);
+    await createScoped(User, tenantId, {
+      _id: new Types.ObjectId(ACTOR),
+      nombre: 'Carolina',
+      email: 'carolina@empresa.test',
+      passwordHash: 'x',
+      rol: 'admin',
+      activo: true,
+    });
+
+    await post(token, {
+      nombre: 'Ana Pérez',
+      telefono: '573001112233',
+      clienteId,
+    }).expect(201);
+  });
+
+  it('responde 200 con la forma paginada canónica', async () => {
+    const res = await list().expect(200);
+
+    expect(res.body).toMatchObject({ page: 1, limit: 20, total: 1 });
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0]).toMatchObject({
+      nombre: 'Ana Pérez',
+      telefono: '573001112233',
+      estado: 'nuevo',
+      responsable: { id: ACTOR, nombre: 'Carolina' },
+      semaforos: [],
+      resumen: null,
+    });
+    expect(res.body.data[0].conversacionId).toEqual(expect.any(String));
+  });
+
+  it('aplica los defaults de Zod cuando no llega ningún parámetro', async () => {
+    // Los defaults viven en `req.validatedQuery`; leer `req.query` los perdería (Express 5).
+    const res = await list().expect(200);
+    expect(res.body.page).toBe(1);
+    expect(res.body.limit).toBe(20);
+  });
+
+  it('respeta `page` y `limit` de la query', async () => {
+    const res = await list('?page=2&limit=5').expect(200);
+    expect(res.body).toMatchObject({ page: 2, limit: 5, total: 1, data: [] });
+  });
+
+  it('rechaza un `limit` por encima del tope con 400', async () => {
+    await list('?limit=999').expect(400);
+  });
+
+  it('un `estado` que no está en el catálogo del tenant devuelve página vacía, no 400', async () => {
+    // Dejó de ser un enum cerrado: las etapas son datos del tenant (HU-CRM-03), así que Zod ya no
+    // puede saber cuáles existen. Mismo criterio que el semáforo cuya etiqueta se borró: página
+    // vacía, nunca el listado sin filtrar ni un 500.
+    const res = await list('?estado=archivado').expect(200);
+
+    expect(res.body).toMatchObject({ data: [], total: 0 });
+  });
+
+  it('rechaza un `semaforo` que no existe con 400', async () => {
+    await list('?semaforo=morado').expect(400);
+  });
+
+  it('rechaza un rango de fechas invertido con 400', async () => {
+    const res = await list('?desde=2026-08-31&hasta=2026-08-01').expect(400);
+    expect(res.body.message).toBe('Error de validación.');
+  });
+
+  it('acepta el rango en el orden correcto', async () => {
+    await list('?desde=2026-08-01&hasta=2026-08-31').expect(200);
+  });
+
+  it('rechaza un `asesor` que no es un ObjectId con 400', async () => {
+    await list('?asesor=carolina').expect(400);
+  });
+
+  it('sin cookie de sesión responde 401', async () => {
+    await request(app).get('/api/leads').expect(401);
+  });
+
+  it('rol superadmin (no admin) → 403', async () => {
+    const superadmin = makeToken(tenantId.toString(), 'superadmin');
+    await request(app)
+      .get('/api/leads')
+      .set('Cookie', [`token=${superadmin}`, `csrfToken=${CSRF}`])
+      .expect(403);
   });
 });

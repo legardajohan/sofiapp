@@ -106,3 +106,36 @@ describe('conversation.service — filtros de bandeja (HU-OMNI-02)', () => {
     expect(conAsignadoA.data.map((d) => d.id)).toEqual([otherConv._id.toString()]);
   });
 });
+
+describe('conversation.service — exclusión de conversaciones demo (HU-OMNI-05)', () => {
+  it('excluye clientes con metaUserId demo- y conserva los normales', async () => {
+    const real = await crearCliente();
+    await crearCliente({ metaUserId: 'demo-573001112233' });
+
+    const result = await listConversations(
+      tenantId,
+      new Types.ObjectId().toString(),
+      query({}),
+    );
+    expect(result.data.map((d) => d.id)).toEqual([real._id.toString()]);
+    expect(result.total).toBe(1);
+  });
+
+  it('la exclusión demo se mantiene combinada con otros filtros', async () => {
+    const admin = await crearAdmin();
+    const match = await crearCliente({ asesorId: admin._id, estadoComercial: 'en_gestion' });
+    await crearCliente({
+      asesorId: admin._id,
+      estadoComercial: 'en_gestion',
+      metaUserId: 'demo-573001112233',
+    });
+
+    const result = await listConversations(
+      tenantId,
+      admin._id.toString(),
+      query({ asignadoA: admin._id.toString(), estado: 'en_gestion' }),
+    );
+    expect(result.data.map((d) => d.id)).toEqual([match._id.toString()]);
+    expect(result.total).toBe(1);
+  });
+});

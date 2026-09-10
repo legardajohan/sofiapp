@@ -12,9 +12,15 @@ vi.mock('../../config/queues.js', () => ({
   KB_INDEX_JOB_NAME: 'index-document',
   AI_REPLY_QUEUE_NAME: 'ai-reply',
   AI_REPLY_JOB_NAME: 'auto-reply',
+  FLOW_RUNTIME_QUEUE_NAME: 'flow-runtime',
+  FLOW_RESUME_JOB: 'resume',
+  FLOW_REMINDER_JOB: 'reminder',
+  REMINDER_SWEEP_JOB: 'sweep',
+  REMINDER_SWEEP_SCHEDULER_ID: 'reminder-sweep',
   inboundQueue: { add: mockInboundAdd },
   aiReplyQueue: { add: vi.fn().mockResolvedValue(undefined) },
   kbIndexQueue: { add: vi.fn().mockResolvedValue(undefined) },
+  flowRuntimeQueue: { add: vi.fn().mockResolvedValue(undefined), upsertJobScheduler: vi.fn() },
 }));
 
 import app from '../../app.js';

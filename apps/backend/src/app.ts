@@ -13,9 +13,11 @@ import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
 import { backfillContactOptions } from './seed/seed-contact-options.js';
+import { backfillEstados } from './seed/seed-estados.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
+import estadoRoutes from './features/estado/estado.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -30,12 +32,14 @@ import contactNoteRoutes from './features/contact-note/contact-note.routes.js';
 import contactOptionRoutes from './features/contact-option/contact-option.routes.js';
 import kbRoutes from './features/kb/kb.routes.js';
 import kbFaqRoutes from './features/kb-faq/kb-faq.routes.js';
+import whatsappTemplateRoutes from './features/whatsapp-template/whatsapp-template.routes.js';
 import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
 import aiRoutes from './features/ai/ai.routes.js';
 import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
 import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
+import flowRoutes from './features/flow/flow.routes.js';
 
 const app = express();
 
@@ -75,6 +79,7 @@ app.use('/api/admin/cost-items', costCatalogRoutes);
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/templates', whatsappTemplateRoutes);
 // `/api/webhooks/whatsapp` NO va aquí: necesita el cuerpo crudo y se monta arriba, antes de
 // `express.json()`.
 // La ruta más específica primero, igual que `/api/kb/faqs` antes de `/api/kb`.
@@ -86,6 +91,7 @@ app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/estados', estadoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai/responses', aiRoutes);
@@ -93,6 +99,7 @@ app.use('/api/ai/handoff-rules', aiHandoffRoutes);
 // Va DESPUÉS de `/api/ai/responses` y `/api/ai/handoff-rules`: el prefijo más específico tiene que
 // resolverse primero, o el genérico se los come.
 app.use('/api/ai', aiAssistantRoutes);
+app.use('/api/flows', flowRoutes);
 
 app.use(errorHandler);
 
@@ -123,6 +130,7 @@ if (env.NODE_ENV !== 'test') {
       await seedPromptTemplates();
       await backfillSemaforoTags();
       await backfillContactOptions();
+      await backfillEstados();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

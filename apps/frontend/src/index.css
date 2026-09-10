@@ -119,6 +119,41 @@ body {
     --sidebar-ring: 217 91% 60%;
   }
 
+  /* @xyflow/react (HU-FLOW-01-V2): alinea las variables CSS de la librería a la paleta del
+     proyecto en vez de dejar los grises por defecto — mismo criterio que se aplicó a
+     `--sidebar-*` en DSN-03. Un solo bloque: como ya referencia los tokens de arriba vía
+     `hsl(var(--x))`, hereda light/dark solo. Los nodos custom (`FlowNode`) pintan su propio
+     fondo/borde con clases Tailwind, así que aquí solo importan el patrón de fondo, las
+     aristas, la línea de conexión en vivo y los controles de zoom. */
+  .react-flow {
+    --xy-background-color: hsl(var(--background));
+    --xy-background-pattern-color: hsl(var(--border));
+    --xy-edge-stroke: hsl(var(--border));
+    --xy-edge-stroke-selected: hsl(var(--primary));
+    --xy-edge-stroke-width: 1.5;
+    --xy-connectionline-stroke: hsl(var(--primary));
+    --xy-connectionline-stroke-width: 1.5;
+    --xy-controls-button-background-color: hsl(var(--card));
+    --xy-controls-button-background-color-hover: hsl(var(--accent));
+    --xy-controls-button-color: hsl(var(--foreground));
+    --xy-controls-button-color-hover: hsl(var(--foreground));
+    --xy-controls-button-border-color: hsl(var(--border));
+    --xy-handle-background-color: hsl(var(--muted-foreground));
+    --xy-handle-border-color: hsl(var(--background));
+    --xy-minimap-background-color: hsl(var(--card));
+  }
+
+  /* Etiquetas de arista (HU-FLOW-01-V3): las líneas de rama derivadas de `condicion`/`intencion`
+     traen su propio label ("contiene: 'x'", el nombre de la intención) — se pintan con los mismos
+     tokens en vez de dejar el negro/blanco por defecto de la librería. */
+  .react-flow__edge-textbg {
+    fill: hsl(var(--card));
+  }
+  .react-flow__edge-text {
+    fill: hsl(var(--muted-foreground));
+    font-size: 10px;
+  }
+
   /* ── Planes destacados: border gradient animado + resplandor (HU-SAAS-02) ──
      Todo el efecto vive en pseudo-elementos (::before = anillo nítido, ::after = halo
      difuso que pulsa) para no chocar con las utilidades Tailwind del <article>. El anillo

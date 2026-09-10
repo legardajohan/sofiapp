@@ -8,6 +8,7 @@
     "dev:worker": "tsx watch --env-file .env src/worker.ts",
     "build": "tsc",
     "seed:inbox": "tsx --env-file .env src/seed/seed-inbox-demo.ts",
+    "seed:flow": "tsx --env-file .env src/seed/seed-flow-crm-ventas.ts",
     "typecheck": "tsc --noEmit",
     "migrate:tags": "tsx --env-file .env src/scripts/migrate-cliente-tags.ts",
     "migrate:chat-template": "tsx --env-file .env src/scripts/migrate-chat-template.ts",

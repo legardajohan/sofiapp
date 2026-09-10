@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MessageSquare, Target, UserPlus, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, MessageSquare, Target, UserPlus, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from '../components/ConversationList.js';
@@ -63,6 +63,18 @@ export function InboxPage(): React.ReactElement {
     ? (rawEstado as EstadoComercial)
     : undefined;
   const etiqueta = params.get('etiqueta') ?? undefined;
+  // Enlace profundo desde el listado de leads (HU-CRM-03): abre esa conversación al entrar.
+  const conversacion = params.get('conversacion');
+  /**
+   * De dónde se vino, para poder volver (HU-CRM-03). Solo se acepta una ruta **interna**: el valor
+   * sale de la barra de direcciones, así que cualquiera puede escribir ahí un `https://` ajeno y
+   * convertir el botón en un salto fuera de la aplicación.
+   */
+  const volverACrudo = params.get('volverA');
+  const volverA =
+    volverACrudo && volverACrudo.startsWith('/') && !volverACrudo.startsWith('//')
+      ? volverACrudo
+      : null;
 
   const activeId = useInboxStore((s) => s.activeId);
   const setActiveId = useInboxStore((s) => s.setActiveId);
@@ -71,6 +83,15 @@ export function InboxPage(): React.ReactElement {
   const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
   const resumenExpandido = useInboxStore((s) => s.resumenExpandido);
   const toggleResumen = useInboxStore((s) => s.toggleResumen);
+
+  // Se aplica UNA vez por id: sin el guard, cerrar la conversación la volvería a abrir en cada
+  // render mientras el parámetro siguiera en la URL, y el usuario no podría salir de ella.
+  const deepLinkAplicado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversacion || deepLinkAplicado.current === conversacion) return;
+    deepLinkAplicado.current = conversacion;
+    setActiveId(conversacion);
+  }, [conversacion, setActiveId]);
 
   // Filtros combinables (OMNI-02) + etiqueta (OMNI-04) + estados de error (OMNI-03).
   const {
@@ -129,7 +150,11 @@ export function InboxPage(): React.ReactElement {
     telefono: extraidos?.telefono ?? active?.telefono ?? '',
     correo: extraidos?.correo ?? null,
   };
-  const leadFuente: FuenteInicial = ficha.isLoading ? 'cargando' : extraidos ? 'ia' : 'conversacion';
+  const leadFuente: FuenteInicial = ficha.isLoading
+    ? 'cargando'
+    : extraidos
+      ? 'ia'
+      : 'conversacion';
 
   function abrirConversion(): void {
     setLeadDuplicado(null);
@@ -192,6 +217,17 @@ export function InboxPage(): React.ReactElement {
         {active ? (
           <>
             <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+              {/* Solo cuando se llegó desde otra vista: sin esto, abrir la conversación de un lead
+                  era un viaje de ida — se aterrizaba en la bandeja sin forma de volver al listado
+                  ni de recuperar los filtros que se venían usando. */}
+              {volverA && (
+                <Button asChild variant="ghost" size="sm" className="-ml-2 shrink-0">
+                  <Link to={volverA} aria-label="Volver al lead">
+                    <ArrowLeft className="mr-1.5 h-4 w-4" />
+                    Volver al lead
+                  </Link>
+                </Button>
+              )}
               <Avatar className="h-9 w-9">
                 <AvatarFallback className="text-xs font-medium text-muted-foreground">
                   {initials(active.nombre, active.telefono)}

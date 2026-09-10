@@ -6,10 +6,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 
-const { mockAdd, mockReplyFromIa, mockNotifyInbound } = vi.hoisted(() => ({
+const { mockAdd, mockReplyFromIa, mockNotifyInbound, mockEjecutarFlujo } = vi.hoisted(() => ({
   mockAdd: vi.fn(),
   mockReplyFromIa: vi.fn(),
   mockNotifyInbound: vi.fn(),
+  mockEjecutarFlujo: vi.fn(),
 }));
 
 vi.mock('../config/queues.js', () => ({
@@ -28,11 +29,14 @@ vi.mock('../features/conversation/conversation.service.js', () => ({
   notifyInboundMessage: mockNotifyInbound,
 }));
 
+vi.mock('../features/flow/flow.runtime.service.js', () => ({ ejecutarFlujo: mockEjecutarFlujo }));
+
 import { processInboundJob, ventanaJobId } from './inbound-message.processor.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 import { Cliente } from '../features/cliente/cliente.model.js';
+import { Flow } from '../features/flow/flow.model.js';
 import { Message } from '../features/message/message.model.js';
 import { MetaIntegration } from '../features/channel/channel.model.js';
 import { Tenant } from '../features/tenant/tenant.model.js';
@@ -107,10 +111,12 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
       Cliente.deleteMany({}),
       Message.deleteMany({}),
       MetaIntegration.deleteMany({}),
+      Flow.deleteMany({}),
     ]);
     mockAdd.mockReset().mockResolvedValue(undefined);
     mockReplyFromIa.mockReset().mockResolvedValue(undefined);
     mockNotifyInbound.mockReset().mockResolvedValue(undefined);
+    mockEjecutarFlujo.mockReset().mockResolvedValue(undefined);
     tenantId = await crearTenantConCanal();
   });
 
@@ -276,7 +282,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
     });
 
     expect(error).toHaveBeenCalledWith(
-      'Sofi no pudo atender el mensaje entrante',
+      'La respuesta automática falló en un mensaje entrante',
       expect.objectContaining({ tenantId: tenantId.toString(), error: expect.stringContaining('boom') }),
     );
     error.mockRestore();
@@ -399,6 +405,118 @@ describe('ventanaJobId — aislamiento y agrupación', () => {
     const a = ventanaJobId('tenant-a', clienteId, ahora);
     const b = ventanaJobId('tenant-b', clienteId, ahora);
     expect(a).not.toBe(b);
+  });
+});
+
+/**
+ * Sofi (HU-IA-01/02) y el motor de flujos (HU-FLOW-01/02/03) llegaron por ramas distintas y ambos
+ * cuelgan de la misma guarda `iaHabilitada`. Si los dos contestaran, el cliente recibiría dos
+ * respuestas al mismo mensaje: estos tests fijan que manda uno solo, y cuál.
+ */
+describe('processInboundJob — flujo activo y Sofi no contestan a la vez', () => {
+  let tenantId: Types.ObjectId;
+
+  async function crearFlujoActivo(): Promise<void> {
+    await createScoped(Flow, tenantId, {
+      nombre: 'Bienvenida',
+      nodos: [
+        {
+          id: 'n1',
+          tipo: 'mensaje',
+          posicion: { x: 0, y: 0 },
+          config: { texto: 'Hola, ¿en qué te ayudo?' },
+        },
+      ],
+      aristas: [],
+      entrada: 'n1',
+      estado: 'publicado',
+      activo: true,
+    });
+  }
+
+  beforeEach(async () => {
+    await Promise.all([
+      Cliente.deleteMany({}),
+      Message.deleteMany({}),
+      MetaIntegration.deleteMany({}),
+      Flow.deleteMany({}),
+    ]);
+    mockAdd.mockReset().mockResolvedValue(undefined);
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockNotifyInbound.mockReset().mockResolvedValue(undefined);
+    mockEjecutarFlujo.mockReset().mockResolvedValue(undefined);
+    tenantId = await crearTenantConCanal();
+  });
+
+  it('con un flujo activo manda el flujo: Sofi no encola auto-reply', async () => {
+    await crearFlujoActivo();
+    await crearCliente(tenantId, true);
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f1', type: 'text', body: 'hola' }]),
+    });
+
+    expect(mockEjecutarFlujo).toHaveBeenCalledTimes(1);
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
+  it('el flujo recibe el texto y el metaMessageId, que es su llave de idempotencia', async () => {
+    await crearFlujoActivo();
+    await crearCliente(tenantId, true);
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f2', type: 'text', body: 'quiero precios' }]),
+    });
+
+    expect(mockEjecutarFlujo).toHaveBeenCalledWith(
+      tenantId.toString(),
+      expect.any(String),
+      'quiero precios',
+      'wamid.f2',
+    );
+  });
+
+  it('sin flujo activo contesta Sofi, y el motor de flujos ni se toca', async () => {
+    await crearCliente(tenantId, true);
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f3', type: 'text', body: 'hola' }]),
+    });
+
+    expect(mockEjecutarFlujo).not.toHaveBeenCalled();
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('un flujo activo pero `iaHabilitada` en false no dispara ninguno de los dos', async () => {
+    // Un asesor tomó la conversación: la guarda es anterior a la elección de motor.
+    await crearFlujoActivo();
+    await crearCliente(tenantId, false);
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f4', type: 'text', body: '¿sigue ahí?' }]),
+    });
+
+    expect(mockEjecutarFlujo).not.toHaveBeenCalled();
+    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockNotifyInbound).toHaveBeenCalledTimes(1);
+  });
+
+  it('con flujo activo, un audio no recibe el acuse de solo-texto de Sofi', async () => {
+    // El acuse es de Sofi; si contesta el flujo, es él quien decide qué hacer con un no-texto.
+    await crearFlujoActivo();
+    await crearCliente(tenantId, true);
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f5', type: 'audio' }]),
+    });
+
+    expect(mockReplyFromIa).not.toHaveBeenCalled();
+    expect(mockEjecutarFlujo).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -30,6 +30,10 @@ const ClienteSchema = new Schema<IClienteDocument>(
     },
     ventana24hExpiraEn: { type: Date },
     ultimoMensajeAt: { type: Date },
+    // HU-FLOW-02: marca de idempotencia del recordatorio de inactividad — guarda el valor de
+    // `ventana24hExpiraEn` para el que YA se envió. Como ese valor cambia con cada inbound, una
+    // ventana nueva vuelve a ser candidata automáticamente sin limpiar banderas a mano.
+    recordatorioEnviadoParaVentana: { type: Date },
     // Bandeja (HU-OMNI-01): contador de no leídos y flag de Sofi (IA) por conversación.
     noLeidos: { type: Number, default: 0 },
     iaHabilitada: { type: Boolean, default: true },
@@ -139,5 +143,11 @@ ClienteSchema.index({ tenantId: 1, ultimoMensajeAt: -1 });
 ClienteSchema.index({ tenantId: 1, asesorId: 1 });
 // Filtro de bandeja por etiqueta: un ObjectId suelto contra un array significa "contiene".
 ClienteSchema.index({ tenantId: 1, tagIds: 1 });
+
+// HU-FLOW-02 — ÚNICO índice del proyecto que no empieza por `tenantId`, y es deliberado: el
+// barrido de recordatorios es cross-tenant por naturaleza (una sola pasada para toda la
+// plataforma, documentada como excepción en `docs/multi-tenancy.md`). Solo devuelve
+// identificadores (`tenantId`, `clienteId`); a partir de ahí todo vuelve a pasar por `*Scoped`.
+ClienteSchema.index({ ventana24hExpiraEn: 1, iaHabilitada: 1 });
 
 export const Cliente = model<IClienteDocument>('Cliente', ClienteSchema);

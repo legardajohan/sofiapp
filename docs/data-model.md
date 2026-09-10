@@ -27,6 +27,15 @@
   camposCaptura: [ { key: String, label: String, tipo: "string"|"number"|"enum", opciones: [String] } ],
   kbVersion: Number,              // default 1. Contador de cambios de contenido en la KB; invalida
                                    // la caché exacta de respuestas de IA (HU-KB-03)
+  // HU-FLOW-02: recordatorio de inactividad antes de que expire la ventana de 24 h. Política de
+  // la empresa sobre TODAS sus conversaciones (no un paso de un flujo), así que también cubre las
+  // que nunca entraron a un flujo activo. `activo` arranca en `false`.
+  recordatorio: {
+    activo: Boolean,               // default false
+    antelacionMinutos: Number,     // default 120; Zod exige 15..1440 al escribir
+    texto: String?,
+    templateId: ObjectId?,         // ref WhatsAppTemplate; debe estar APPROVED
+  },
   createdAt, updatedAt
 }
 // Índices: { slug: 1 } unique
@@ -167,6 +176,14 @@
   handoffCondicion: { key: String, nombre: String }? ,   // subdoc con _id: false
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
+  // ventana de servicio de WhatsApp (HT-WA-01): se recalcula a `now + 24h` en cada inbound.
+  // Fuera de esta ventana `sendMessage` rechaza el envío de texto libre con 422 — solo se puede
+  // responder con plantilla HSM aprobada (HT-WA-02).
+  ventana24hExpiraEn: ISODate?,
+  // marca de idempotencia del recordatorio de inactividad (HU-FLOW-02): guarda el valor de
+  // `ventana24hExpiraEn` para el que YA se envió. Como ese valor cambia con cada inbound, una
+  // ventana nueva vuelve a ser candidata automáticamente, sin limpiar banderas a mano.
+  recordatorioEnviadoParaVentana: ISODate?,
   createdAt, updatedAt
 }
 // `asesorId` es el único campo persistido; `asignadoA` (HU-OMNI-02) es el alias público del
@@ -176,6 +193,9 @@
 //          { tenantId: 1, ultimoMensajeAt: -1 }
 //          { tenantId: 1, telefono: 1 }
 //          { tenantId: 1, nivelInteres: 1 }   (segmentación de campañas)
+//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — ÚNICO índice sin tenantId como prefijo
+//          (HU-FLOW-02): el barrido de recordatorios es cross-tenant por naturaleza (una sola
+//          pasada para toda la plataforma). Documentado como excepción en `multi-tenancy.md`.
 ```
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
@@ -209,12 +229,46 @@
   tipo: "text" | "image" | "template" | "audio" | "document" | "other",
   texto: String?,
   attachmentUrl: String?,         // DO Spaces (media recibida/enviada)
-  metaMessageId: String?,         // idempotencia con Meta
+  metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
+  // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
+  status: "sent" | "delivered" | "read" | "failed",   // default "sent"
   createdAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1, createdAt: 1 }   (hilo de conversación)
-//          { metaMessageId: 1 }  (dedupe de webhooks)
+//          { tenantId: 1, metaMessageId: 1 } sparse      (dedupe de webhooks, POR TENANT — nunca
+//                                                          global: HT-WA-01-V2 cerró una fuga de
+//                                                          aislamiento donde el dedupe y el update
+//                                                          de `status` no llevaban `tenantId`)
 ```
+
+## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  metaTemplateId: String,         // id devuelto por Meta al crear/sincronizar
+  name: String,                   // nombre aprobado por Meta (snake_case)
+  language: String,               // 'es', 'es_CO', 'en_US'
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION",
+  status: "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED",
+  components: [{                  // tal y como los devuelve/espera la Graph API, íntegros
+    type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS",
+    format: "TEXT" | "IMAGE" | "DOCUMENT" | "VIDEO",
+    text: String?,
+    buttons: [Mixed]?,
+    example: { body_text: [[String]] }?,   // sets de ejemplo, para la vista previa
+  }],
+  parametrosBody: Number,         // nº de placeholders {{n}} del componente BODY, derivado al persistir
+  syncedAt: ISODate,              // último sync (manual, POST /api/templates/sync) o alta
+  obsoleta: Boolean,              // Meta dejó de devolverla en el último sync; NO se borra
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
+//          { tenantId: 1, status: 1 }
+```
+> **Por qué no es único global `metaTemplateId`:** dos tenants distintos conectan WABAs distintas
+> y pueden tener plantillas homónimas; a diferencia de `MetaIntegration.phoneNumberId`, aquí el
+> identificador de Meta no es único por construcción entre tenants.
 
 ## catalog_items  (catálogo genérico — antes "cursos")
 ```js
@@ -283,6 +337,14 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   dos empresas pueden tener el mismo número.
 - `{ tenantId: 1, clienteId: 1 }` — responde "¿esta conversación ya se convirtió?" en lote, para la
   bandeja y la ficha del contacto (`leadId`).
+- `{ tenantId: 1, createdAt: -1 }` — orden por defecto del listado (HU-CRM-03).
+- `{ tenantId: 1, estado: 1, createdAt: -1 }` — `GET /api/leads?estado=`.
+- `{ tenantId: 1, responsableId: 1, createdAt: -1 }` — `GET /api/leads?asesor=`.
+
+> **Los tres índices del listado cierran con `createdAt: -1`**, que es como ordena la tabla, para
+> que Mongo resuelva filtro y orden con el mismo índice en vez de ordenar en memoria. El filtro
+> `?semaforo=` no lleva índice propio: no es un campo del lead, sino una etiqueta de la
+> conversación, y resuelve por `clienteId` — ya cubierto por el índice de arriba.
 
 > **Borrado duro, no archivado.** `DELETE /api/leads/:id?motivo=…` elimina el documento; no hay
 > `deletedAt` ni bandera de baja. La razón es el índice único de arriba: un lead marcado como
@@ -336,7 +398,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 // Índices: { tenantId: 1, campaignId: 1, estado: 1 }
 ```
 
-## flows  (constructor visual — Fase 3)
+## flows  (constructor visual — implementado en HU-FLOW-01-V2)
 ```js
 {
   _id: ObjectId,
@@ -344,20 +406,39 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   nombre: String,
   nodos: [ {
     id: String,
-    tipo: "mensaje" | "captura" | "condicion" | "espera" | "handoff" | "ia" | "api",
+    tipo: "mensaje" | "captura" | "condicion" | "intencion" | "kb" | "accion" | "handoff" | "espera" | "ia",
     posicion: { x: Number, y: Number },
-    config: Object                // específico por tipo de nodo (a definir en spec de M06)
+    config: Object                 // unión discriminada por `tipo`, ver detalle abajo
   } ],
   aristas: [ { id: String, from: String, to: String, condicion: String? } ],
+  entrada: String,                 // id del nodo por el que arranca la ejecución
   version: Number,
   estado: "borrador" | "publicado",
-  activo: Boolean,                // solo UNA versión activa por tenant en producción
+  activo: Boolean,                 // solo UNA versión activa por tenant (índice parcial único)
   createdAt, updatedAt
 }
-// Índices: { tenantId: 1, activo: 1 }
+// Índices: { tenantId: 1, activo: 1 } · { tenantId: 1 } único con partialFilterExpression: { activo: true }
 ```
 
-## flow_states  (estado de ejecución del runtime — Fase 3)
+`config` por tipo de nodo (validado por `flow.validation.ts` con `.strict()` en cada rama — una
+clave extra es un 400, no un campo ignorado):
+
+| `tipo` | `config` |
+|---|---|
+| `mensaje` | `{ texto?, templateId?, parametros? }` |
+| `captura` | `{ campo, descripcion, tipoDato: "texto"\|"numero"\|"fecha"\|"booleano", pregunta, reintentos }` |
+| `condicion` | `{ variable: "ultimo_mensaje"\|"var:<nombre>", ramas: [{ operador: "igual_a"\|"contiene"\|"opcion_elegida", valor, nodoDestino }], ramaPorDefecto }` |
+| `intencion` | `{ etiquetas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto }` |
+| `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
+| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
+| `handoff` | `{ motivo?, notificarAsesorId? }` |
+| `espera` | `{ minutos }` — job diferido, HU-FLOW-02 |
+| `ia` | `{ objetivo, salidas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto, maxTurnos, usarKb }` — conversa varios turnos con `AIService.extract()` (historial real, no solo el último mensaje) y retoma el flujo por la salida que la IA decide cumplida; `maxTurnos` (1-10) fuerza salida por `ramaPorDefecto` sin llamar de nuevo a la IA. HU-FLOW-03 |
+
+`tipo: "api"` queda **reservado** en el vocabulario del constructor pero no tiene rama en la unión:
+cualquier intento de guardarlo es un 400.
+
+## flow_states  (estado de ejecución del runtime — implementado en HU-FLOW-01-V2, HU-FLOW-02)
 ```js
 {
   _id: ObjectId,
@@ -365,10 +446,17 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   clienteId: ObjectId,
   flowId: ObjectId,
   nodoActualId: String,
-  variables: Object,              // contexto de la conversación
-  updatedAt: ISODate
+  variables: Object,               // contexto de la conversación
+  esperandoRespuesta: Boolean,      // true = el flujo está parado (respuesta del cliente o resolución async)
+  ultimoMetaMessageId: String?,     // idempotencia: no reavanza si se reprocesa el mismo mensaje
+  // HU-FLOW-02: token del job diferido pendiente de un nodo `espera`. Se regenera cada vez que se
+  // programa una espera y se limpia (`null`) en cualquier avance normal; al despertar, el job
+  // compara este valor con el que llevaba y se descarta si no coincide — resuelve la carrera entre
+  // "el cliente responde" y "el job diferido arranca" sin cancelar el job en BullMQ.
+  esperaToken: String?,
+  actualizadoAt: ISODate
 }
-// Índices: { tenantId: 1, clienteId: 1 } unique
+// Índices: { tenantId: 1, clienteId: 1 } único · { tenantId: 1, flowId: 1 }
 ```
 
 ## kb_documents  (base de conocimiento — RAG, HU-KB-01 · HU-KB-01-V2)
@@ -699,3 +787,27 @@ Plan 1──N Tenant            (Plan es catálogo GLOBAL, sin tenantId)
 Tenant 1──N TenantUsage     (uno por periodo YYYY-MM)
 User(superadmin) tenantId=null  (global)
 ```
+
+## `estados`
+
+Catálogo por tenant de las **etapas del pipeline de leads** (HU-CRM-03). Antes eran el enum fijo
+`ESTADOS_COMERCIALES`, igual para todas las empresas — el mismo supuesto de vertical que ya se sacó
+del modelo en `contact_options`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenantId` | ObjectId | Requerido e indexado. |
+| `key` | string (≤40) | Slug estable derivado del `label`. **Es lo que se graba en `Lead.estado`**, así que no cambia al renombrar. |
+| `label` | string (≤60) | Nombre visible, editable. |
+| `color` | string | `#RRGGBB` elegido por la empresa. La UI lo pasa por el helper de contraste, nunca lo pinta crudo. |
+| `orden` | number | Posición en el pipeline. El orden cuenta una historia; alfabético la rompe. |
+| `activo` | boolean | `false` = archivado: no se ofrece para filtrar, pero sigue resolviendo su etiqueta. |
+| `esDefecto` | boolean | Sembrado al crear el tenant. Informativo. |
+
+Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que los
+leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.
+
+> Las cinco claves sembradas (`nuevo`, `en_gestion`, `pago_pendiente`, `pagado`, `perdido`) son
+> **exactamente** los valores del enum anterior, así que el paso de enum a catálogo no necesita
+> migrar un solo documento. `Lead.estado` deja de tener `enum` en el schema: lo valida el service
+> contra el catálogo del tenant.
