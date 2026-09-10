@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { SlidersHorizontal } from 'lucide-react';
 import type { SemaforoSlug } from '../../tags/types.js';
 import { LeadDetailSheet } from '../components/LeadDetailSheet.js';
 import { LeadsFilters } from '../components/LeadsFilters.js';
 import { LeadsTable } from '../components/LeadsTable.js';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { PipelineBoard } from '../../pipeline/index.js';
@@ -193,12 +195,25 @@ export function LeadsPage(): React.ReactElement {
           </p>
         </div>
 
-        <Tabs value={vista} onValueChange={cambiarVista}>
-          <TabsList aria-label="Cómo ver los leads">
-            <TabsTrigger value="tabla">Tabla</TabsTrigger>
-            <TabsTrigger value="embudo">Embudo</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Solo en el embudo: la forma de las columnas es lo que se está mirando, y desde aquí es
+              donde surge la necesidad de cambiarla. En la tabla el enlace sería ruido. */}
+          {vista === 'embudo' && (
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/etapas">
+                <SlidersHorizontal className="h-4 w-4" />
+                Configurar etapas
+              </Link>
+            </Button>
+          )}
+
+          <Tabs value={vista} onValueChange={cambiarVista}>
+            <TabsList aria-label="Cómo ver los leads">
+              <TabsTrigger value="tabla">Tabla</TabsTrigger>
+              <TabsTrigger value="embudo">Embudo</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </header>
 
       <LeadsFilters filtros={filtros} onChange={aplicar} onClear={limpiar} />

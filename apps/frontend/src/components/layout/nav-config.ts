@@ -1,5 +1,6 @@
 import {
   BookText,
+  Columns3,
   Building2,
   CreditCard,
   FileStack,
@@ -73,6 +74,7 @@ export const navGroups: NavGroup[] = [
       },
       { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
       { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'] },
+      { label: 'Etapas del embudo', to: '/etapas', icon: Columns3, roles: ['admin'] },
       { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
       {
         label: 'Clientes',

@@ -41,6 +41,10 @@ const TagsPage = lazy(() =>
   import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
 );
 
+const EstadosPage = lazy(() =>
+  import('./features/estados/index.js').then((m) => ({ default: m.EstadosPage })),
+);
+
 const FlowsPage = lazy(() =>
   import('./features/flows/index.js').then((m) => ({ default: m.FlowsPage })),
 );
@@ -143,6 +147,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <LeadsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/etapas',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <EstadosPage />
                 </Suspense>
               </RequireRole>
             ),
