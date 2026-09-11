@@ -53,13 +53,65 @@
 
 ## 4. Captura por IA — datos genéricos vs. personalizados
 
-- **Core (todos los tenants):** `nombre`, `rolContacto` (`decisor | usuario | desconocido`),
-  `interesItemId` (producto/servicio del catálogo), `nivelInteres`, `objecionPrincipal`.
-- **Personalizados (por tenant):** `customFields` (mapa libre). Ejemplo Pre-ICFES: `colegio`,
-  `grado`, `acudienteContacto` viven aquí, no como columnas fijas.
+**Lo que la IA captura hoy (HU-IA-06)** son cuatro campos, en `Cliente.datosExtraidos`:
+`nombreCompleto`, `correo`, `telefono` e `interes`. Se guardan **aparte** de la ficha y siguen
+siendo una sugerencia hasta que alguien la confirma; confirmar nunca sobrescribe un dato que ya
+escribió una persona.
 
-> El motor de IA recibe del tenant la definición de qué `customFields` debe intentar capturar
-> (configuración por tenant), además del core fijo.
+> **El «interés» de IA-06 es texto libre**, no una referencia al catálogo: es el producto o servicio
+> concreto que el cliente pide, con sus palabras («curso pre-ICFES sabatino»). Al confirmarse aterriza
+> como **atributo** del contacto (`key: 'interes'`), el mecanismo de extensión de HU-CRM-02.
+>
+> **No confundir con `nivelInteres`**, que es la *temperatura* del prospecto (una clave del catálogo
+> `contact_options` del tenant) y la produce la semaforización de §5.
+
+- **Aspiracional, todavía sin implementar:** `rolContacto` (`decisor | usuario | desconocido`) e
+  `interesItemId` (producto/servicio del catálogo). `rolContacto` existe como campo y lo edita una
+  persona, pero **ninguna IA lo escribe**; `interesItemId` y su modelo `CatalogItem` están
+  especificados en `docs/data-model.md` y **no existen en el backend**. Ver
+  `docs/specs/HU-IA-06-extraccion-datos/spec.md` §«Qué es interés, y por qué».
+- **Personalizados (por tenant):** `atributos` (HU-CRM-02), que superan a `customFields` (mapa libre).
+  Ejemplo Pre-ICFES: `colegio`, `grado`, `acudienteContacto` viven aquí, no como columnas fijas.
+
+> Qué campos se piden al modelo lo fija el producto (`DATOS_CONTACTO_SLOTS`); lo que cada tenant sí
+> puede afinar es **el prompt**, vía su plantilla `extract`.
+
+## 4bis. Cuándo Sofi deja de responder (handoff — HU-IA-03 · HU-IA-07)
+
+Los disparadores se evalúan **en este orden, que es su prioridad**. Si en un mismo turno se cumplen
+varios, se ejecuta un solo handoff: el del primero de la lista.
+
+| # | Disparador | Motivo registrado | Cuándo se decide |
+|---|---|---|---|
+| 1 | Pide hablar con una persona | `explicit_request` | antes de generar |
+| 2 | Menciona una palabra clave | `keyword` | antes de generar |
+| 3 | **Condiciones propias del admin**, en el orden de su lista | `custom` | antes de generar |
+| 4 | Sofi no encuentra la respuesta | `low_confidence` | con la respuesta ya generada |
+| 5 | Muestra intención de compra | `intent_purchase` | con la respuesta ya generada |
+
+> **La prioridad entre los cuatro de fábrica la fija el producto, no cada empresa** — así dos tenants
+> con la misma configuración se comportan igual, y por eso no hay campo de orden configurable. Las
+> condiciones propias van **detrás de ellos** por esa misma razón, y **delante** de los dos últimos
+> porque son gratis: se deciden con el texto del cliente, sin llamar al modelo. Si la conversación se
+> va a una persona, pagar una generación para tirar la respuesta es gasto y latencia puros.
+
+> **Un solo motivo `custom` para todas las condiciones propias.** Cuál fue viaja aparte, en
+> `Cliente.handoffCondicion`, con **el nombre grabado**: si el admin la renombra o la borra, esa
+> conversación tiene que seguir diciendo por qué se transfirió entonces.
+
+### A quién le llega
+
+- `primero` — el primer admin activo por orden alfabético. Es el valor de fábrica, y significa que
+  **todo el volumen automático cae sobre la misma persona**.
+- `menor_carga` (HU-IA-07) — el admin activo con menos conversaciones **sin cerrar** (`estadoComercial`
+  distinto de `pagado` y `perdido`, es decir los tres primeros estados de §3). Cuenta también lo
+  asignado a mano: la carga de un asesor es la que tiene, venga de donde venga. **Ante un empate gana
+  el primero por nombre**, porque el reparto tiene que poder explicársele a quien pregunte.
+- `fijo` — un asesor concreto. Si dejó de ser asignable, se cae a `primero` en vez de dejar la
+  conversación sin dueño.
+
+> Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
+> que no tienen dueño.
 
 ## 5. Semaforización (HU-OMNI-04)
 
@@ -93,6 +145,37 @@ Reglas:
 Junto a ellas conviven las etiquetas libres que cada empresa cree (sin `semaforo`). El
 comportamiento es el mismo; la única diferencia es que las de semáforo llevan un slug estable y
 piden confirmación al borrarse.
+
+### Quién la mueve automáticamente (HU-IA-05)
+
+La IA clasifica la intención de compra al final de cada ciclo de auto-reply y traduce su resultado
+al semáforo con este mapa — **el nivel manda; la objeción solo desempata donde discrimina**:
+
+| `nivelInteres` | sin objeción | con objeción |
+|---|---|---|
+| `caliente` | `verde` | `verde` |
+| `tibio` | `naranja` | `naranja` |
+| `frio` | `azul` | `rojo` |
+
+Es la lectura literal de la tabla de arriba: azul es «sin intención comercial aún» —un frío que solo
+pregunta— y rojo es ese mismo frío cuando ya planteó una objeción. En caliente y tibio la objeción no
+cambia el color: quien pide comprar sigue avanzando aunque mencione el precio.
+
+Reglas de la escritura automática:
+
+- Solo escribe con **confianza ≥ `SEMAFORO_MIN_CONFIANZA`** y al menos
+  `SEMAFORO_MIN_TURNOS_CLIENTE` mensajes del cliente. Por debajo **propone**, y la bandeja ofrece
+  aplicarlo de un clic. `SEMAFORO_AUTO=off` lo desactiva entero.
+- **No pisa a una persona.** Si el semáforo vigente no es el que la propia IA aplicó
+  (`Cliente.semaforoIA.aplicado`), lo cambió alguien a mano y desde entonces la IA solo propone.
+  Una conversación etiquetada antes de HU-IA-05 no lleva ese rastro, así que cuenta como manual.
+- **Sustituye, no reemplaza.** Quita las etiquetas de semáforo y pone la nueva; las etiquetas libres
+  de la empresa no se tocan.
+- Cada cambio de slug queda en `audit_events` como `cliente.semaforo`, con actor de sistema, la
+  confianza y una justificación en una frase. Consultable en
+  `GET /api/conversations/:id/classifications`.
+- La clasificación corre dentro del ciclo de auto-reply, así que **solo con Sofi encendida**: tras un
+  handoff el semáforo vuelve a ser de la persona que tomó la conversación.
 
 ## 6. Invariantes de dominio
 

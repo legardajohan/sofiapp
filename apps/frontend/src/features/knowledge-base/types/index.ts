@@ -18,4 +18,5 @@ export type {
   UpdateFaqPayload,
   KbFaqsListResponse,
   FaqTestResult,
+  FaqTestSenales,
 } from './faq.js';

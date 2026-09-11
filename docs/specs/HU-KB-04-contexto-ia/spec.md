@@ -53,9 +53,11 @@ pendiente. Esta HU parte de `develop` en limpio.
 
 ### Fuera de alcance
 
-- **Conectar `searchKnowledge()` (RAG) dentro de `chat()`.** Sigue siendo Fase 3 (documentado
-  desde `HU-KB-02`/`HU-KB-03`). Esta HU deja el lugar donde los chunks se guardarían ya construido
-  y probado, pero `retrievedChunks` se persiste vacío hasta que Fase 3 conecte el retrieval real.
+- **Conectar `searchKnowledge()` (RAG) dentro de `chat()`.** Fase 3 (documentado desde
+  `HU-KB-02`/`HU-KB-03`). Esta HU deja el lugar donde los chunks se guardarían ya construido y
+  probado, pero `retrievedChunks` se persiste vacío.
+  > **Cerrado en HU-IA-01:** `retrievedChunks` ya llega poblado en la rama de generación real. En
+  > los hits de caché y de FAQ sigue vacío a propósito: ahí no hubo recuperación que auditar.
 - Vincular `AiUsageLog`/`AiResponseContext` a una conversación, lead o mensaje concreto — ese
   vínculo no existe hoy en el modelo y añadirlo es un cambio de esquema mayor fuera del pedido
   original (**parámetros a registrar: solo los que existen hoy**). La lista/detalle de esta HU es
@@ -116,9 +118,8 @@ pendiente. Esta HU parte de `develop` en limpio.
   contexto incluye el `kbVersion` que esa HU introdujo.
 - **HT-AI-01** (`AIService`, caché exacta de Redis, `PromptTemplate`) — base sobre la que se
   instrumenta `chat()`.
-- **Bloqueada por (no bloqueante para cerrar esta HU):** la HU de Fase 3 que conecte
-  `searchKnowledge()` dentro de `chat()` es la que hará que `retrievedChunks` deje de estar vacío
-  en producción.
+- **Completada por:** `HU-IA-01`, que conectó `searchKnowledge()` dentro de `chat()` y es la que
+  hizo que `retrievedChunks` dejara de estar vacío en producción.
 
 ## Definición de "hecho"
 

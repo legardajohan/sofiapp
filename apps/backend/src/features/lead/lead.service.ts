@@ -325,6 +325,7 @@ function toLeadListItemResponse(
   userMap: Map<string, IUserResponse>,
   clienteMap: Map<string, IClienteListSource>,
   tagMap: Map<string, ITagResponse>,
+  puedeVerSensibles: boolean,
 ): ILeadListItemResponse {
   const cliente = clienteMap.get(String(lead.clienteId));
 
@@ -350,7 +351,7 @@ function toLeadListItemResponse(
     responsable: toRef(lead.responsableId, userMap),
     conversacionId: String(lead.origen.conversacionId),
     semaforos,
-    resumen: cliente ? toResumenResponse(cliente) : null,
+    resumen: cliente ? toResumenResponse(cliente, puedeVerSensibles) : null,
     ultimoMensajeAt: cliente?.ultimoMensajeAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),
   };
@@ -407,6 +408,7 @@ export async function updateLeadEstado(
 export async function listLeads(
   tenantId: TenantId,
   query: ListLeadsQuery,
+  puedeVerSensibles = false,
 ): Promise<IPaginated<ILeadListItemResponse>> {
   const { page, limit } = query;
   const filter = buildLeadFilter(query);
@@ -456,7 +458,9 @@ export async function listLeads(
   ]);
 
   return {
-    data: leads.map((lead) => toLeadListItemResponse(lead, userMap, clienteMap, tagMap)),
+    data: leads.map((lead) =>
+      toLeadListItemResponse(lead, userMap, clienteMap, tagMap, puedeVerSensibles),
+    ),
     page,
     limit,
     total,

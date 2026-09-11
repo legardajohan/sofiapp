@@ -6,6 +6,7 @@ import {
   listLeads,
   updateLeadEstado,
 } from './lead.service.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
 import type { ListLeadsQuery } from './lead.types.js';
 import type { CreateLeadBody, DeleteLeadQuery, UpdateLeadBody } from './lead.validation.js';
 
@@ -38,7 +39,9 @@ export const listLeadsController: RequestHandler = async (req, res) => {
   // `validatedQuery`, no `req.query`: en Express 5 el getter re-parsea el query string crudo y
   // perdería los defaults y las coerciones de Zod (ver `validate.middleware.ts`).
   const query = req.validatedQuery as unknown as ListLeadsQuery;
-  res.status(200).json(await listLeads(tenantId, query));
+  // El `resumen` que pinta la tabla es un dato sensible (HU-IA-04): el permiso se resuelve aquí,
+  // no en el service, igual que en la bandeja.
+  res.status(200).json(await listLeads(tenantId, query, puedeVerDatosSensibles(req.user!)));
 };
 
 export const updateLeadController: RequestHandler = async (req, res) => {

@@ -26,9 +26,14 @@ export async function searchKnowledge(
   if (!queryVector) return [];
 
   const chunks = await vectorSearchScoped(tenantId, queryVector, k);
-  return chunks.map((c) => ({
-    texto: c.texto,
-    documentId: c.documentId.toString(),
-    ...(c.score !== undefined ? { score: c.score } : {}),
-  }));
+  // Descarta lo irrelevante (HU-IA-01): `$vectorSearch` devuelve siempre el top-k, aunque el mejor
+  // candidato no tenga nada que ver. Meter ruido en el contexto es justo lo que provoca respuestas
+  // inventadas, así que es preferible quedarse sin contexto y que el asistente lo admita.
+  return chunks
+    .filter((c) => (c.score ?? 0) >= env.KB_MIN_SCORE)
+    .map((c) => ({
+      texto: c.texto,
+      documentId: c.documentId.toString(),
+      ...(c.score !== undefined ? { score: c.score } : {}),
+    }));
 }

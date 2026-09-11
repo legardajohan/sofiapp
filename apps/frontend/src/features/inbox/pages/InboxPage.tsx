@@ -9,6 +9,7 @@ import { InboxError } from '../components/InboxError.js';
 import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
+import { HandoffBanner } from '../components/HandoffBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
 import { AssignMenu } from '../components/AssignMenu.js';
 import { InboxFilters } from '../components/InboxFilters.js';
@@ -18,11 +19,18 @@ import { ConvertToLeadDialog } from '@/features/leads/components/ConvertToLeadDi
 import { useCreateLead } from '@/features/leads/hooks/useCreateLead';
 import { leadIdEnConflicto } from '@/features/leads/lib/errors';
 import { useConversations } from '../hooks/useConversations.js';
-import { useContactHistory } from '../hooks/useContactHistory.js';
+import { useContactHistory, useGenerateSummary } from '../hooks/useContactHistory.js';
 import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
+import { useConversationOverview } from '../hooks/useConversationOverview.js';
+import { useAplicarSemaforo } from '../hooks/useAplicarSemaforo.js';
+import {
+  ConversationSummaryStrip,
+  ConversationSummaryStripSkeleton,
+} from '../components/ConversationSummaryStrip.js';
+import { IntentStrip } from '../components/IntentStrip.js';
 import { initials } from '../lib/format.js';
 import { errorMessage } from '../lib/errors.js';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
@@ -73,6 +81,8 @@ export function InboxPage(): React.ReactElement {
   const contactPanelOpen = useInboxStore((s) => s.contactPanelOpen);
   const setContactPanelOpen = useInboxStore((s) => s.setContactPanelOpen);
   const toggleContactPanel = useInboxStore((s) => s.toggleContactPanel);
+  const resumenExpandido = useInboxStore((s) => s.resumenExpandido);
+  const toggleResumen = useInboxStore((s) => s.toggleResumen);
 
   // Se aplica UNA vez por id: sin el guard, cerrar la conversación la volvería a abrir en cada
   // render mientras el parámetro siguiera en la URL, y el usuario no podría salir de ella.
@@ -126,6 +136,11 @@ export function InboxPage(): React.ReactElement {
   // que se pre-rellena el lead. Comparte `queryKey` con `ContactPanel`, así que si la ficha ya
   // estaba abierta esto no dispara una segunda petición, y con ambos cerrados no consulta nada.
   const ficha = useContactHistory(contactPanelOpen || leadDialogOpen ? activeId : null);
+  // Vista unificada (HU-IA-04): resumen y permisos de la conversación activa. Va aparte del hilo
+  // porque solo cambia cuando cambia la conversación, no con cada mensaje entrante.
+  const overview = useConversationOverview(activeId);
+  const generarResumen = useGenerateSummary(activeId);
+  const aplicarSemaforo = useAplicarSemaforo(activeId);
   const extraidos = ficha.data?.datosExtraidos ?? null;
 
   // Campo a campo: la extracción manda en lo que sí encontró y la conversación cubre el resto.
@@ -298,6 +313,31 @@ export function InboxPage(): React.ReactElement {
               </div>
             )}
 
+            {/* Resumen sobre el hilo (HU-IA-04). Se pinta aunque no haya etiquetas: es una de las
+                tres piezas que la vista tiene que mostrar, no un accesorio de las etiquetas. */}
+            {overview.isPending ? (
+              <ConversationSummaryStripSkeleton />
+            ) : overview.data ? (
+              <ConversationSummaryStrip
+                resumen={overview.data.resumen}
+                puedeVer={overview.data.permisos.verResumen}
+                puedeGenerar={overview.data.permisos.generarResumen}
+                expandido={!!resumenExpandido[active.id]}
+                onToggle={() => toggleResumen(active.id)}
+                pending={generarResumen.isPending}
+                onGenerate={() => generarResumen.mutate()}
+              />
+            ) : null}
+
+            {/* Intención de compra (HU-IA-05), bajo el resumen. No lleva skeleton propio: el de
+                arriba ya dice que el overview está cargando, y dos marcadores para una sola
+                petición serían ruido. Se pinta sola o no se pinta. */}
+            <IntentStrip
+              semaforoIA={overview.data?.semaforoIA ?? null}
+              pending={aplicarSemaforo.isPending}
+              onApply={() => aplicarSemaforo.mutate()}
+            />
+
             {threadIsError ? (
               <InboxError
                 message={errorMessage(threadError, 'No se pudo cargar la conversación.')}
@@ -307,6 +347,13 @@ export function InboxPage(): React.ReactElement {
               <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
             )}
 
+            {active.handoff && (
+              <HandoffBanner
+                motivo={active.handoff.motivo}
+                at={active.handoff.at}
+                condicion={active.handoff.condicion}
+              />
+            )}
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer
               disabled={!active.ventana24hAbierta}

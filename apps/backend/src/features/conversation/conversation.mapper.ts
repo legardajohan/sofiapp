@@ -3,6 +3,7 @@ import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/m
 import type { IUserResponse } from '../users/user.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import type { IAuditEventResponse } from '../audit/audit.types.js';
+import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
 import type {
   IAssignmentResponse,
   IConversationResponse,
@@ -22,6 +23,11 @@ export interface IConversationSource {
   ventana24hExpiraEn?: Date | null;
   estadoComercial: string;
   tagIds?: (Types.ObjectId | string)[] | null;
+  /** Handoff automático (HU-IA-03). Opcionales: los documentos anteriores no traen los campos. */
+  handoffAt?: Date | null;
+  handoffMotivo?: HandoffMotivo | null;
+  /** Condición propia que lo disparó (HU-IA-07). Ausente en las transferidas antes de existir. */
+  handoffCondicion?: IHandoffCondicionAplicada | null;
 }
 
 /** Forma mínima de un `Message` (lean) necesaria para proyectar un mensaje. */
@@ -67,6 +73,16 @@ export function toConversationResponse(
     estadoComercial: cliente.estadoComercial,
     tags,
     leadId: leadMap.get(String(cliente._id)) ?? null,
+    // Ambos campos van juntos o no van: sin `motivo` el aviso de la bandeja no podría decir por qué
+    // se transfirió, y una fecha suelta no es información accionable para el asesor.
+    handoff:
+      cliente.handoffAt && cliente.handoffMotivo
+        ? {
+            at: cliente.handoffAt.toISOString(),
+            motivo: cliente.handoffMotivo,
+            condicion: cliente.handoffCondicion ?? null,
+          }
+        : null,
   };
 }
 
@@ -85,7 +101,9 @@ export function toAssignmentResponse(
   return {
     id: evt.id,
     actorId: evt.actorId,
-    actorNombre: userMap.get(evt.actorId)?.nombre ?? null,
+    // Actor nulo = el sistema. Se muestra como "Sofi" y no como un hueco: el asesor que abre el
+    // historial tiene que poder distinguir "lo reasignó el bot" de "no sabemos quién fue".
+    actorNombre: evt.actorId ? (userMap.get(evt.actorId)?.nombre ?? null) : 'Sofi',
     de: personFromAuditValue(evt.antes['asignadoA'], userMap),
     a: personFromAuditValue(evt.despues['asignadoA'], userMap),
     createdAt: evt.createdAt,

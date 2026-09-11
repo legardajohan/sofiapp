@@ -48,8 +48,10 @@ la clave de caché exacta de Redis usada por `AIService`.
   producción (`TODO(Fase 3)`, documentado en `HU-KB-02-faqs-cache/spec.md`). Esta HU deja el
   mecanismo de invalidación correcto y probado a nivel de `AIService`; el impacto visible en
   conversaciones reales llega con la HU que haga ese enganche.
-- **Enganchar `searchKnowledge` (RAG) dentro de `AIService.chat()`.** Sigue siendo una pieza suelta
-  usada hoy solo por el script de smoke test (`kb-smoke-retrieval.ts`); no es parte de esta HU.
+- **Enganchar `searchKnowledge` (RAG) dentro de `AIService.chat()`.** No es parte de esta HU.
+  > **Cerrado en HU-IA-01:** `chat()` ya recupera contexto de la KB a través del puerto inyectado
+  > `KnowledgeRetriever`, así que la invalidación por `kbVersion` que introduce esta HU tiene desde
+  > entonces impacto visible en conversaciones reales.
 - Invalidar por `DEL` activo de claves Redis (`ai:{tenant}:chat:*`); se usa versionado de clave,
   igual que `template.version`.
 - Cambios al cortocircuito de FAQs (`kb-faq`) o a su propio matching — ese conocimiento no pasa

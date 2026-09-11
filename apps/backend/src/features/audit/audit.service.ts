@@ -3,6 +3,7 @@ import { createScoped, countScoped, findScoped } from '../../repositories/base.r
 import { logger } from '../../utils/logger.js';
 import { AuditEvent } from './audit.model.js';
 import type {
+  AuditAccion,
   AuditEntidad,
   IAuditEventDocument,
   IAuditEventResponse,
@@ -14,7 +15,7 @@ type TenantId = string | Types.ObjectId;
 function toAuditEventResponse(doc: IAuditEventDocument): IAuditEventResponse {
   return {
     id: doc._id.toString(),
-    actorId: doc.actorId.toString(),
+    actorId: doc.actorId?.toString() ?? null,
     accion: doc.accion,
     entidad: doc.entidad,
     entidadId: doc.entidadId.toString(),
@@ -47,12 +48,32 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
   }
 }
 
+/**
+ * Filtro por acción, opcional y aditivo: sin él, el comportamiento es el de siempre (todos los
+ * eventos de la entidad).
+ *
+ * Lo estrena HU-IA-05 por necesidad de las dos partes. Todos los eventos de una conversación
+ * comparten `entidad: 'cliente'`, así que sin filtro la bitácora de clasificaciones traería
+ * también las reasignaciones **y** —al revés— el historial de asignaciones empezaría a mostrar
+ * filas vacías por cada clasificación. Acepta una lista porque el historial de asignaciones son
+ * dos acciones: la manual y el handoff automático, que también cambia el responsable.
+ */
+function filtroAccion(accion?: AuditAccion | AuditAccion[]): Record<string, unknown> {
+  if (!accion) return {};
+  return { accion: Array.isArray(accion) ? { $in: accion } : accion };
+}
+
 export function listAuditEventsQuery(
   tenantId: TenantId,
   entidad: AuditEntidad,
   entidadId: string,
+  accion?: AuditAccion | AuditAccion[],
 ): Query<IAuditEventDocument[], IAuditEventDocument> {
-  return findScoped(AuditEvent, tenantId, { entidad, entidadId }).sort({ createdAt: -1 });
+  return findScoped(AuditEvent, tenantId, {
+    entidad,
+    entidadId,
+    ...filtroAccion(accion),
+  }).sort({ createdAt: -1 });
 }
 
 export async function listAuditEvents(
@@ -61,10 +82,13 @@ export async function listAuditEvents(
   entidadId: string,
   page: number,
   limit: number,
+  accion?: AuditAccion | AuditAccion[],
 ): Promise<{ data: IAuditEventResponse[]; page: number; limit: number; total: number }> {
-  const filter = { entidad, entidadId };
+  // El filtro del `count` tiene que ser el MISMO que el de la query, o el `total` no cuadra con las
+  // páginas que se devuelven.
+  const filter = { entidad, entidadId, ...filtroAccion(accion) };
   const [docs, total] = await Promise.all([
-    listAuditEventsQuery(tenantId, entidad, entidadId)
+    listAuditEventsQuery(tenantId, entidad, entidadId, accion)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean<IAuditEventDocument[]>(),

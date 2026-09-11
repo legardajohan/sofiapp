@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { FlaskConical, Loader2 } from 'lucide-react';
+import { Check, FlaskConical, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,9 @@ import { faqErrorMessage, testKbFaq } from '../../../api/kb-faqs.js';
 import type { FaqTestResult } from '../types/index.js';
 
 const pct = (v: number): number => Math.round(v * 100);
+
+/** El margen vive en un rango diez veces menor que las otras dos señales: 0% no lo describe. */
+const pctFino = (v: number): string => `${(v * 100).toFixed(1)}%`;
 
 /**
  * Medidor de similitud con la marca del umbral. Es el instrumento de calibración:
@@ -53,6 +56,44 @@ function ConfidenceMeter({ confianza, umbral, matched }: {
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * Una de las tres condiciones que deben cumplirse a la vez. No están numeradas a propósito:
+ * no son pasos de un proceso, son requisitos simultáneos.
+ *
+ * El peso visual va entero a la que bloqueó — es la única que responde la pregunta que trae
+ * el admin a esta pantalla. Las que pasan se leen de un vistazo y se quitan de en medio.
+ */
+function Senal({ etiqueta, valor, minimo, paso, detalle }: {
+  etiqueta: string;
+  valor: string;
+  minimo: string;
+  paso: boolean;
+  detalle?: string;
+}): React.ReactElement {
+  return (
+    <li className={`px-3 py-2.5 ${paso ? '' : 'bg-destructive-subtle'}`}>
+      <div className="flex items-center gap-2.5">
+        {paso ? (
+          <Check className="size-4 shrink-0 text-success" aria-hidden="true" />
+        ) : (
+          <X className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+        )}
+        <span
+          className={`min-w-0 flex-1 text-sm ${paso ? 'text-secondary-foreground' : 'font-medium text-foreground'}`}
+        >
+          {etiqueta}
+        </span>
+        <span className="shrink-0 text-sm tabular-nums text-foreground">{valor}</span>
+        <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+          mín. {minimo}
+        </span>
+        <span className="sr-only">{paso ? 'Cumple' : 'No cumple'}</span>
+      </div>
+      {detalle && <p className="mt-1 pl-6 text-xs text-muted-foreground">{detalle}</p>}
+    </li>
   );
 }
 
@@ -157,6 +198,43 @@ export function FaqTester(): React.ReactElement {
                 matched={resultado.matched}
               />
             </div>
+          )}
+
+          {resultado.senales && (
+            <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
+              <Senal
+                etiqueta="Se parece a la FAQ"
+                valor={`${pct(resultado.senales.score)}%`}
+                minimo={`${pct(resultado.umbral)}%`}
+                paso={resultado.senales.pasaUmbral}
+              />
+              <Senal
+                etiqueta="Le saca ventaja a la siguiente FAQ"
+                valor={
+                  resultado.senales.segundoScore === undefined
+                    ? '—'
+                    : pctFino(resultado.senales.margen)
+                }
+                minimo={pctFino(resultado.margenMinimo)}
+                paso={resultado.senales.pasaMargen}
+                detalle={
+                  resultado.segundaPregunta
+                    ? `Compite con «${resultado.segundaPregunta}»`
+                    : 'No hay otra FAQ con la que competir.'
+                }
+              />
+              <Senal
+                etiqueta="Comparten palabras"
+                valor={`${pct(resultado.senales.overlap)}%`}
+                minimo={`${pct(resultado.overlapMinimo)}%`}
+                paso={resultado.senales.pasaOverlap}
+                detalle={
+                  resultado.senales.pasaOverlap
+                    ? undefined
+                    : 'Dos preguntas pueden parecerse por tema y pedir cosas distintas. Sin palabras en común, Sofi prefiere no arriesgarse.'
+                }
+              />
+            </ul>
           )}
 
           {resultado.pregunta && (

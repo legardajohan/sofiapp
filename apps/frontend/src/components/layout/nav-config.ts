@@ -1,5 +1,7 @@
 import {
+  ArrowRightLeft,
   BookText,
+  Bot,
   Building2,
   CreditCard,
   FileStack,
@@ -121,6 +123,23 @@ export const navGroups: NavGroup[] = [
             label: 'Fuentes / Contexto',
             to: '/settings/knowledge/context',
             icon: ScanSearch,
+          },
+        ],
+      },
+      {
+        // Con hijos, como "Conocimiento": la transferencia a un asesor es comportamiento del
+        // asistente, no una sección aparte. Agruparla aquí evita que "Configuración" siga
+        // creciendo a lo ancho con conceptos que en la cabeza del admin son el mismo.
+        label: 'Asistente IA',
+        to: '/settings/assistant',
+        icon: Bot,
+        roles: ['admin'],
+        children: [
+          { label: 'Comportamiento', to: '/settings/assistant', icon: Bot },
+          {
+            label: 'Transferencia a un asesor',
+            to: '/settings/assistant/handoff',
+            icon: ArrowRightLeft,
           },
         ],
       },

@@ -141,8 +141,39 @@
     sensible: Boolean             // default false
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
+  // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
+  // la conversación, nadie filtra la bandeja por esto.
+  semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
+    slug: "azul" | "rojo" | "naranja" | "verde",   // semáforo que sugiere
+    confianza: Number,            // [0, 1] reportada por el modelo
+    motivo: String,               // justificación en una frase, <= 240 chars, SIN datos de contacto
+    nivelInteres: "frio" | "tibio" | "caliente",   // escala del LLM, NO el catálogo del tenant
+    objecion: "precio" | "tiempo" | "confianza" | "otra" | null,
+    at: ISODate,
+    aplicado: "azul" | "rojo" | "naranja" | "verde" | null   // null = solo se propuso
+  },
+  // Datos de contacto leídos de la conversación por la IA (HU-OMNI-03, ampliado por HU-IA-06).
+  // Viven APARTE de `nombre`/`telefono`/`correoEnc` a propósito: son una sugerencia hasta que una
+  // persona la confirma. Sin índice: se proyectan al abrir la ficha, nadie filtra por esto.
+  datosExtraidos: {               // subdoc con _id: false; ausente si nunca se extrajo
+    nombreCompleto: String?,
+    correo: String?,              // mismo gate por subrol que `correoEnc` al leerlo
+    telefono: String,             // NUNCA null: cae al número de WhatsApp del contacto
+    telefonoOrigen: "conversacion" | "whatsapp",
+    interes: String?,             // <= 120 chars, texto libre: QUÉ pide, no cuánto le interesa
+    confirmados: [String],        // campos ya APLICADOS a la ficha; [] = todo sugerido
+    confirmadoAt: ISODate?,       // última confirmación, no una por campo
+    confirmadoPor: ObjectId?,     // ref User
+    extraidoAt: ISODate,
+    modelo: String
+  },
   ultimoMensajeAt: ISODate?,      // para ordenar la bandeja
   // bandeja única (HU-OMNI-01)
+  // Handoff automático (HU-IA-03 · HU-IA-07). `handoffCondicion` solo viene cuando lo disparó una
+  // condición propia del admin (`handoffMotivo: "custom"`); es `null` para las cuatro de fábrica.
+  handoffAt: ISODate?,
+  handoffMotivo: "explicit_request" | "keyword" | "custom" | "low_confidence" | "intent_purchase" | null,
+  handoffCondicion: { key: String, nombre: String }? ,   // subdoc con _id: false
   noLeidos: Number,               // default 0; contador de no leídos, reseteado por PATCH /read
   iaHabilitada: Boolean,          // default true; toggle de Sofi (IA) por conversación
   // ventana de servicio de WhatsApp (HT-WA-01): se recalcula a `now + 24h` en cada inbound.
@@ -526,7 +557,26 @@ cualquier intento de guardarlo es un 400.
 > (cambios de `estadoComercial`, borrados, etc.).
 >
 > Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
-> `cliente.update` y `contact-note.create` (HU-CRM-02).
+> `cliente.update` y `contact-note.create` (HU-CRM-02); `conversation.handoff` (HU-IA-03);
+> `cliente.semaforo` (HU-IA-05); `cliente.extract` y `cliente.extract-confirm` (HU-IA-06).
+>
+> **`cliente.semaforo`** registra cada cambio del semáforo por clasificación de intención de compra:
+> `antes: { semaforo }`, `despues: { semaforo, aplicado, confianza, motivo, nivelInteres, objecion }`.
+> `actorId: null` cuando lo decidió el sistema; el id de quien pulsó cuando se aplicó una propuesta a
+> mano. Solo se escribe cuando el slug sugerido **difiere** del vigente: un evento por mensaje
+> inundaría la colección. El `motivo` viene recortado y la plantilla `classify` prohíbe que cite
+> datos de contacto, por la regla de abajo.
+>
+> **`conversation.handoff`** lleva desde HU-IA-07 el nombre de la condición propia que lo disparó en
+> `despues.condicion` (`null` para los cuatro disparadores de fábrica).
+>
+> **`cliente.extract`** registra que la IA escribió `datosExtraidos`: `antes`/`despues` con
+> `{ nombreCompleto, correo, telefono, interes }`. `actorId: null` cuando lo disparó el worker; el id
+> de quien pulsó «Extraer datos» cuando fue a mano. Solo se escribe cuando **algún valor cambia**:
+> con la extracción automática corriendo por ráfaga, un evento por pasada inundaría la colección.
+> **`cliente.extract-confirm`** registra el paso de esos datos a la ficha, con `aplicados` y
+> `omitidos` en el `despues` — un campo se omite cuando su destino ya tenía un dato guardado, que
+> nunca se sobrescribe. En las dos acciones el correo viaja como `[oculto]`, por la regla de abajo.
 >
 > En `lead.delete` el `antes` no es un snapshot parcial sino el lead **entero** — al ser borrado
 > duro, es la única copia que queda — y el `despues` lleva solo `{ motivo }`.
@@ -600,6 +650,73 @@ cualquier intento de guardarlo es un 400.
 > etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
 > pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
 
+## handoff_settings  (cuándo y a quién transfiere Sofi — HU-IA-03 · HU-IA-07)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required; índice ÚNICO: es configuración, no una colección
+  activo: Boolean,                // default false: no cambia el comportamiento de nadie hasta que un admin lo encienda
+  // A quién le llega la conversación (HU-IA-07). `asesorDestinoId` solo significa algo con "fijo".
+  estrategiaDestino: "primero" | "menor_carga" | "fijo",   // default "primero"
+  asesorDestinoId: ObjectId?,     // ref User (admin activo del tenant)
+  mensajeTransicion: String,      // lo que lee el cliente al ser transferido
+  reglas: {                       // los CUATRO disparadores de fábrica, objeto fijo
+    explicitRequest: { activa: Boolean, frases: [String] },
+    keyword:         { activa: Boolean, palabras: [String] },
+    lowConfidence:   { activa: Boolean, umbral: Number | null },   // >= KB_MIN_SCORE
+    intentPurchase:  { activa: Boolean, nivelMinimo: "tibio" | "caliente" }
+  },
+  // Condiciones que escribió el admin (HU-IA-07). Máx. 10; subdoc con _id: false.
+  condicionesExtras: [{
+    key: String,                  // slug derivado del nombre AL CREARLA; estable al renombrar
+    nombre: String,               // 2..40; es lo que la bandeja pinta al transferir
+    activa: Boolean,
+    palabras: [String]            // 1..30, cada una de 2..80 caracteres
+  }],
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1 } unique
+```
+> **Un documento por empresa, no una colección de reglas.** Los disparadores de fábrica son cuatro y
+> fijos, y su **orden es su prioridad** — la fija el producto, no cada empresa, para que dos tenants
+> con la misma configuración se comporten igual. Por eso no hay campo `orden`.
+>
+> **Las condiciones propias son una lista dentro del mismo documento.** Mismo `PUT`, sin colección ni
+> endpoints nuevos, y sin criterio de orden que inventar: el orden es el del array, que es el que ve
+> quien las configura. Se evalúan **después** de las dos reglas de texto de fábrica y **antes** de
+> `lowConfidence`/`intentPurchase`, porque son gratis: no llaman al modelo.
+>
+> **`estrategiaDestino` y `condicionesExtras` no necesitaron migración.** Los documentos guardados
+> antes de HU-IA-07 no los traen, y el servicio los deriva al leer (`asesorDestinoId ? "fijo" :
+> "primero"`, y `[]`). Un tenant que no abra esa pantalla se comporta exactamente igual que antes.
+
+## prompt_templates  (system prompt por método y empresa — HT-AI-01 · HU-IA-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId | null,       // null = plantilla GLOBAL de fábrica (fallback del producto)
+  method: "chat" | "extract" | "classify" | "summary",
+  version: String,                 // sube en cada guardado del admin; entra en la clave de caché
+  systemPrompt: String,            // qué debe y qué no debe hacer el asistente
+  tono: String | undefined,        // HU-IA-01 — opcional; undefined = tono por defecto del código
+  isActive: Boolean,
+  createdAt, updatedAt
+}
+// Índice: { tenantId: 1, method: 1, isActive: 1 }
+```
+> **`tenantId: null` es una excepción documentada** al aislamiento, análoga al login: es la
+> plantilla de fábrica del producto, no el dato de ninguna empresa. `AIService.resolveTemplate`
+> busca primero la del tenant (vía repositorio scoped) y solo cae a la global si no existe.
+>
+> **`tono` va separado de `systemPrompt` por una razón mecánica**, no estética: `generateReply`
+> compone `Tono: ${tono}. ${instrucciones}`, así que meter el tono dentro del prompt lo enviaría
+> dos veces y cobraría sus tokens dos veces.
+>
+> **Subir `version` en cada guardado es lo que invalida la caché** (la clave de IA es
+> `template.version:kbVersion`): sin ese bump, cambiar el prompt seguiría sirviendo respuestas
+> generadas con el anterior. Las globales `chat`, `summary` y `extract` las siembra
+> `seed-prompt-templates.ts` de forma idempotente; sin la de `chat`, el chatbot lanza `AppError(500)`.
+
 ## ai_usage_logs  (métricas de cada llamada a AIService — HT-AI-01)
 ```js
 {
@@ -634,7 +751,7 @@ cualquier intento de guardarlo es un 400.
     version: String,               // versión del PromptTemplate VIGENTE en el momento de generar
     systemPrompt: String,          // texto completo del prompt de sistema usado
   },
-  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // [] hasta Fase 3
+  retrievedChunks: [ { texto: String, documentId: String, score: Number } ],  // poblado desde HU-IA-01
   kbVersion: Number | null,        // Tenant.kbVersion en el momento de la llamada
   createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
 }
@@ -643,11 +760,12 @@ cualquier intento de guardarlo es un 400.
 // de una HU futura — ver docs/specs/HU-KB-04-contexto-ia/spec.md → Fuera de alcance.
 ```
 > Se escribe fire-and-forget desde `AIService.chat()` (los tres caminos: hit de caché exacta, hit
-> de FAQ y generación real), sin bloquear la respuesta al llamador. `retrievedChunks` se persiste
-> vacío hasta que una HU de Fase 3 conecte `searchKnowledge()` (RAG) dentro de `chat()`; el modelo
-> y el endpoint ya están listos para recibirlos sin cambios de esquema. `extract()`, `classify()`
-> y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas" auditables
-> en el sentido de esta HU.
+> de FAQ y generación real), sin bloquear la respuesta al llamador. Desde **HU-IA-01**,
+> `retrievedChunks` llega poblado en la rama de **generación real**: es el contexto que
+> `searchKnowledge()` (RAG) recuperó y que sustentó la respuesta. En los hits de caché y de FAQ
+> sigue persistiéndose vacío **a propósito**: ahí no hubo recuperación que auditar. `extract()`,
+> `classify()` y `summarize()` no escriben `AiResponseContext` — solo `chat()` produce "respuestas"
+> auditables en el sentido de esta HU.
 
 ---
 
