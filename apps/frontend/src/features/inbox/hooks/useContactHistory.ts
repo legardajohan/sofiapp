@@ -11,12 +11,19 @@ export function useContactHistory(clienteId: string | null) {
   });
 }
 
-/** Genera/actualiza el resumen y refresca la ficha para reflejar el nuevo texto y estado. */
+/**
+ * Genera/actualiza el resumen y refresca las DOS vistas que lo muestran: la ficha del contacto y
+ * la tira sobre el hilo (HU-IA-04). Sin la segunda invalidación, regenerar dejaba la tira
+ * enseñando el texto anterior.
+ */
 export function useGenerateSummary(clienteId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => generateSummary(clienteId as string),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] });
+      void qc.invalidateQueries({ queryKey: ['conversation-overview', clienteId] });
+    },
   });
 }
 

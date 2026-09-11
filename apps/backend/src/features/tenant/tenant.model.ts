@@ -12,6 +12,18 @@ const CampoCapturaSchema = new Schema(
   { _id: false }
 );
 
+// HU-FLOW-02 — política del tenant sobre TODAS sus conversaciones (no un paso de flujo). Arranca
+// `activo: false`: nadie empieza a enviar mensajes automáticos a sus clientes sin haberlo pedido.
+const RecordatorioSchema = new Schema(
+  {
+    activo: { type: Boolean, required: true, default: false },
+    antelacionMinutos: { type: Number, required: true, default: 120 },
+    texto: { type: String },
+    templateId: { type: Schema.Types.ObjectId, ref: 'WhatsAppTemplate' },
+  },
+  { _id: false },
+);
+
 const TenantSchema = new Schema<ITenantDocument>(
   {
     nombre: { type: String, required: true },
@@ -38,6 +50,7 @@ const TenantSchema = new Schema<ITenantDocument>(
     estadosSeeded: { type: Boolean, default: false },
     semaforosSeeded: { type: Boolean, default: false },
     kbVersion: { type: Number, default: 1 },
+    recordatorio: { type: RecordatorioSchema, default: () => ({}) },
   },
   { timestamps: true }
 );

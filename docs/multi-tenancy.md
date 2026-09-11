@@ -60,7 +60,20 @@ export function findOneAndDeleteScoped<T>(m: Model<T>, tenantId: TenantId, filte
 export function deleteOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: FilterQuery<T>) {
   return m.deleteOne({ ...filter, tenantId } as FilterQuery<T>);
 }
+// Agregacion (HU-IA-07). El `$match` del tenant va PRIMERO: un `$match` propio del llamador solo
+// puede reducir el conjunto, nunca ampliarlo.
+export function aggregateScoped<R>(m: Aggregable, tenantId: TenantId, pipeline: PipelineStage[] = []) {
+  const scoped = tenantId instanceof Types.ObjectId ? tenantId : new Types.ObjectId(tenantId);
+  return m.aggregate<R>([{ $match: { tenantId: scoped } }, ...pipeline]);
+}
 ```
+
+> **`aggregateScoped` castea el `tenantId` a `ObjectId`, y esa es su razon de existir.** `find`,
+> `countDocuments` y compania castean el filtro contra el schema, asi que un `tenantId` en forma de
+> string funciona. Un pipeline de agregacion **no se castea**: ese mismo string no encontraria nada y
+> devolveria `[]` sin lanzar. Falla cerrado, pero en silencio — el peor fallo de los dos posibles de
+> depurar. Concentrarlo aqui es lo que permite testear el invariante una vez, en
+> `base.repository.test.ts`, en vez de en cada llamador.
 
 ## 4. Reglas
 
@@ -69,6 +82,8 @@ export function deleteOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: Filt
 2. **Nunca crear sin forzar tenant.** Prohibido `Model.create({...})`. Usa `createScoped`.
 3. **Nunca actualizar/borrar sin tenant en el filtro.** Usa `findOneAndUpdateScoped` /
    `findOneAndDeleteScoped` / `deleteOneScoped`.
+3bis. **Nunca agregar sin tenant.** Prohibido `Model.aggregate` directo. Usa `aggregateScoped`, que
+   antepone el `$match` y castea el id.
 4. **El tenant siempre del token.** Nunca de `req.body/params/query`.
 5. **Todo modelo persistente lleva `tenantId`** (`required: true`, indexado).
 6. **`authenticateJWT → requireTenant`** en toda ruta tenant-aware, en ese orden.
@@ -87,6 +102,16 @@ propio código:
 3. **Superadmin** — opera **cross-tenant** por diseño. Sus rutas saltan `requireTenant` y usan
    funciones de repositorio NO scoped, restringidas por `authorize(['superadmin'])`. Las
    agregaciones globales se documentan como tales.
+4. **Barrido de recordatorios de inactividad (HU-FLOW-02)** — `flow.reminder.service.ts:buscarCandidatos`
+   consulta `Cliente.find({...})` sin `tenantId` en el filtro: el barrido periódico (job `sweep` de
+   la cola `flow-runtime`) es cross-tenant por naturaleza, una sola pasada para toda la plataforma.
+   Es el mismo patrón que la resolución de tenant del webhook: `buscarCandidatos` **solo devuelve
+   identificadores** (`{ tenantId, clienteId, ventana24hExpiraEn }`), nunca datos de un tenant
+   expuestos a otro. A partir de ahí, cada candidato se procesa con su propio `tenantId` y todo
+   vuelve a pasar por `*Scoped` (`enviarRecordatorio`, `Tenant.findById` por su propio `_id`). El
+   índice que sostiene esta consulta, `Cliente: { ventana24hExpiraEn: 1, iaHabilitada: 1 }`, es el
+   único del proyecto que no empieza por `tenantId` — documentado junto al índice en
+   `cliente.model.ts`. Test de aislamiento: `flow.reminder.isolation.test.ts`.
 
 ## 6. El Superadmin (User global)
 

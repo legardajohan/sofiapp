@@ -86,7 +86,13 @@ describe('cliente.service — getContactHistory', () => {
       ultimoMensajeAt: new Date(),
       resumenIA: { texto: 'R', generadoAt: past, mensajesHasta: past, modelo: 'gemini-2.5-flash' },
     });
-    const res = await getContactHistory(tenantId.toString(), id.toString(), { page: 1, limit: 50 });
+    // El resumen es un dato sensible desde HU-IA-04: sin el permiso sale `null`.
+    const res = await getContactHistory(
+      tenantId.toString(),
+      id.toString(),
+      { page: 1, limit: 50 },
+      true,
+    );
     expect(res.resumen?.desactualizado).toBe(true);
     expect(res.resumen?.texto).toBe('R');
   });
@@ -97,8 +103,47 @@ describe('cliente.service — getContactHistory', () => {
       ultimoMensajeAt: t,
       resumenIA: { texto: 'R', generadoAt: t, mensajesHasta: t, modelo: 'gemini-2.5-flash' },
     });
-    const res = await getContactHistory(tenantId.toString(), id.toString(), { page: 1, limit: 50 });
+    const res = await getContactHistory(
+      tenantId.toString(),
+      id.toString(),
+      { page: 1, limit: 50 },
+      true,
+    );
     expect(res.resumen?.desactualizado).toBe(false);
+  });
+
+  // ── HU-IA-04: el resumen es un dato sensible ───────────────────────────────────────────────
+  //
+  // Sin estos dos tests, la historia cerraría la puerta nueva (`/overview`) y dejaría abierta la
+  // vieja: bastaba pedir la ficha para leer el resumen que la tarjeta de contacto enmascara.
+
+  it('oculta el resumen a quien no puede ver datos sensibles', async () => {
+    const t = new Date();
+    const id = await seedCliente({
+      ultimoMensajeAt: t,
+      resumenIA: { texto: 'El cliente dejó su correo diego@empresa.com', generadoAt: t, mensajesHasta: t, modelo: 'gemini-3.6-flash' },
+    });
+
+    const res = await getContactHistory(tenantId.toString(), id.toString(), { page: 1, limit: 50 });
+
+    expect(res.resumen).toBeNull();
+  });
+
+  it('sigue devolviendo el resumen a quien sí puede', async () => {
+    const t = new Date();
+    const id = await seedCliente({
+      ultimoMensajeAt: t,
+      resumenIA: { texto: 'Resumen visible', generadoAt: t, mensajesHasta: t, modelo: 'gemini-3.6-flash' },
+    });
+
+    const res = await getContactHistory(
+      tenantId.toString(),
+      id.toString(),
+      { page: 1, limit: 50 },
+      true,
+    );
+
+    expect(res.resumen?.texto).toBe('Resumen visible');
   });
 
   it('cliente inexistente → 404', async () => {

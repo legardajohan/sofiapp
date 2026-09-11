@@ -1,5 +1,6 @@
 import { Types, type FilterQuery } from 'mongoose';
 import {
+  aggregateScoped,
   countScoped,
   findByIdScoped,
   findOneAndUpdateScoped,
@@ -16,7 +17,16 @@ import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
-import { assertTagsDelTenant, findTagsByIds } from '../tag/tag.service.js';
+import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
+import { toSemaforoIAResponse } from '../ai/ai-semaforo.types.js';
+import { toResumenResponse } from '../cliente/cliente.service.js';
+import { asesorConMenorCarga, primerAdminActivo } from '../ai/ai-handoff.service.js';
+import type {
+  EstrategiaDestino,
+  HandoffMotivo,
+  IHandoffCondicionAplicada,
+} from '../ai/ai-handoff.types.js';
+import { logger } from '../../utils/logger.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
@@ -32,6 +42,7 @@ import type {
   EstadoComercial,
   FiltroBandeja,
   IAssignmentResponse,
+  IConversationOverviewResponse,
   IConversationResponse,
   IMessageResponse,
   IPaginated,
@@ -106,6 +117,42 @@ async function resolveLeadMap(tenantId: string, clienteId: string): Promise<Map<
   return findLeadIdsByClientes(tenantId, [clienteId]);
 }
 
+/**
+ * Reproyecta la conversación y la publica por tiempo real (HU-IA-05).
+ *
+ * Existe para los escritores que viven fuera de este service —hoy la semaforización automática—,
+ * que necesitan emitir el mismo `conversation:updated` que emiten las mutaciones de aquí. Sin él,
+ * cada uno tendría que reconstruir `resolveAsignado`/`resolveTags`/`resolveLeadMap` por su cuenta y
+ * la bandeja acabaría recibiendo DTOs con forma distinta según quién escribiera.
+ *
+ * No lanza si la conversación desapareció entre la escritura y esta llamada: no hay nada que
+ * publicar y tampoco nada que arreglar.
+ */
+export async function publishConversationUpdated(
+  tenantId: string,
+  clienteId: string,
+): Promise<void> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) return;
+
+  const source = cliente as unknown as IConversationSource;
+  const conversation = toConversationResponse(
+    source,
+    null,
+    new Date(),
+    await resolveAsignado(tenantId, source.asesorId),
+    await resolveTags(tenantId, source),
+    await resolveLeadMap(tenantId, clienteId),
+  );
+
+  await publishRealtime({
+    type: 'conversation:updated',
+    tenantId,
+    conversationId: clienteId,
+    conversation,
+  });
+}
+
 export async function listConversations(
   tenantId: string,
   asesorId: string,
@@ -123,16 +170,19 @@ export async function listConversations(
 
   const ids = clientes.map((c) => c._id as Types.ObjectId);
 
-  // Preview = último mensaje por conversación. No hay helper de aggregate scoped, así que
-  // el `$match { tenantId }` va PRIMERO para preservar el aislamiento (excepción documentada
-  // en docs/multi-tenancy.md; ver también el guard de la skill multi-tenancy-guard).
-  const tenantOid = new Types.ObjectId(tenantId);
+  // Preview = último mensaje por conversación. Desde HU-IA-07 pasa por `aggregateScoped`, que
+  // antepone el `$match` del tenant y castea el id: era la única agregación cruda que quedaba en el
+  // proyecto, y existía solo porque el helper no estaba escrito.
   const previews = ids.length
-    ? await Message.aggregate<{ _id: Types.ObjectId; texto: string | null; tipo: string }>([
-        { $match: { tenantId: tenantOid, clienteId: { $in: ids } } },
-        { $sort: { createdAt: -1 } },
-        { $group: { _id: '$clienteId', texto: { $first: '$texto' }, tipo: { $first: '$tipo' } } },
-      ])
+    ? await aggregateScoped<{ _id: Types.ObjectId; texto: string | null; tipo: string }>(
+        Message,
+        tenantId,
+        [
+          { $match: { clienteId: { $in: ids } } },
+          { $sort: { createdAt: -1 } },
+          { $group: { _id: '$clienteId', texto: { $first: '$texto' }, tipo: { $first: '$tipo' } } },
+        ],
+      ).exec()
     : [];
 
   const previewMap = new Map<string, string | null>();
@@ -203,13 +253,20 @@ export async function getThread(
   return { data, page, limit, total };
 }
 
-export async function replyMessage(
+/**
+ * Envía un mensaje saliente y deja la bandeja consistente: refresca `ultimoMensajeAt` (que la
+ * reordena) y publica `message:new` para los demás asesores. Lo comparten la respuesta manual del
+ * asesor y la automática de Sofi; lo único que cambia entre ambas es el `sender`.
+ */
+async function enviarYNotificar(
   tenantId: string,
   clienteId: string,
   texto: string,
+  sender: 'agent' | 'bot',
 ): Promise<IMessageResponse> {
-  // sendMessage (HT-WA-01) valida pertenencia al tenant y la ventana de 24 h (AppError 422).
-  const msg = await sendMessage(tenantId, { clienteId, texto });
+  // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
+  // cuota mensual de mensajes.
+  const msg = await sendMessage(tenantId, { clienteId, texto, sender });
   const message = toMessageResponse(msg as unknown as IMessageSource);
 
   // La respuesta saliente reordena la bandeja y se notifica en vivo a los demás asesores.
@@ -235,6 +292,28 @@ export async function replyMessage(
   }
 
   return message;
+}
+
+/** Respuesta manual de un asesor desde la bandeja. */
+export async function replyMessage(
+  tenantId: string,
+  clienteId: string,
+  texto: string,
+): Promise<IMessageResponse> {
+  return enviarYNotificar(tenantId, clienteId, texto, 'agent');
+}
+
+/**
+ * Respuesta automática de Sofi (HU-IA-01). Idéntica a `replyMessage` salvo el `sender`: pasa por
+ * aquí, y no por `sendMessage` directo, para que la respuesta de la IA también aparezca en vivo en
+ * la bandeja y reordene la conversación.
+ */
+export async function replyFromIa(
+  tenantId: string,
+  clienteId: string,
+  texto: string,
+): Promise<IMessageResponse> {
+  return enviarYNotificar(tenantId, clienteId, texto, 'bot');
 }
 
 /**
@@ -300,6 +379,58 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
   return conversation;
 }
 
+/**
+ * Lectura única de la vista de conversación (HU-IA-04): cabecera, etiquetas, resumen y los permisos
+ * del usuario que pregunta.
+ *
+ * **No devuelve el hilo.** Los mensajes paginan por `getThread` y se refrescan solos con
+ * `message:new`; traerlos también aquí obligaría a reconciliar dos copias en cada entrante y a
+ * paginar dos veces la misma colección.
+ *
+ * `puedeVerSensibles` llega resuelto desde el controller y no se calcula aquí: el service no
+ * conoce `req`. Con `false` el resumen sale `null`, y `permisos.verResumen` es lo que le permite a
+ * la UI distinguir "no hay resumen" de "no puedes verlo".
+ */
+export async function getConversationOverview(
+  tenantId: string,
+  clienteId: string,
+  puedeVerSensibles: boolean,
+): Promise<IConversationOverviewResponse> {
+  // Misma guarda que `markRead` y `setIaHabilitada`: un cliente de otro tenant sencillamente no se
+  // encuentra, y de ahí sale el aislamiento sin una comprobación aparte.
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) throw new AppError('Conversación no encontrada.', 404);
+
+  const source = cliente as unknown as IConversationSource;
+  const conversation = toConversationResponse(
+    source,
+    null,
+    new Date(),
+    await resolveAsignado(tenantId, source.asesorId),
+    await resolveTags(tenantId, source),
+    await resolveLeadMap(tenantId, clienteId),
+  );
+
+  // La sugerencia de semáforo (HU-IA-05) viaja en el overview y NO en un endpoint propio: la tira
+  // que la muestra ya consume esta lectura, y abrir un `GET` aparte para tres campos costaría un
+  // segundo viaje por cada conversación abierta.
+  const tagsPorSlug = await findSemaforoTags(tenantId);
+
+  return {
+    conversation,
+    resumen: toResumenResponse(cliente, puedeVerSensibles),
+    // Sin gate por subrol, a diferencia del resumen (ADR-0006, enmienda de HU-IA-04): no es prosa
+    // libre sobre el transcript sino una frase acotada que la plantilla obliga a escribir sin datos
+    // de contacto. Si esa restricción se relajara, este campo tendría que entrar en el gate.
+    semaforoIA: toSemaforoIAResponse(cliente.semaforoIA, cliente.tagIds ?? [], tagsPorSlug),
+    permisos: {
+      verResumen: puedeVerSensibles,
+      generarResumen: puedeVerSensibles,
+      verSensibles: puedeVerSensibles,
+    },
+  };
+}
+
 export async function setIaHabilitada(
   tenantId: string,
   clienteId: string,
@@ -309,7 +440,15 @@ export async function setIaHabilitada(
     Cliente,
     tenantId,
     { _id: new Types.ObjectId(clienteId) },
-    { iaHabilitada: habilitada },
+    // Reactivar a Sofi cierra el handoff (HU-IA-03): si el asesor le devuelve el hilo al bot, la
+    // bandeja no puede seguir diciendo que está transferida. Apagarla a mano NO marca handoff — eso
+    // es una decisión del asesor, no una transferencia automática.
+    habilitada
+      ? {
+          $set: { iaHabilitada: true },
+          $unset: { handoffAt: '', handoffMotivo: '', handoffCondicion: '' },
+        }
+      : { $set: { iaHabilitada: false } },
     { new: true },
   ).lean();
   if (!cliente) throw new AppError('Conversación no encontrada.', 404);
@@ -448,11 +587,19 @@ export async function listAssignments(
   if (!cliente) throw new AppError('Conversación no encontrada.', 404);
 
   const { page, limit } = query;
-  const { data, total } = await listAuditEvents(tenantId, 'cliente', clienteId, page, limit);
+  // Las dos acciones que cambian el responsable: la reasignación manual y el handoff automático
+  // (HU-IA-03), que también asigna. El filtro lo añade HU-IA-05: sin él, esta lista se llenaría de
+  // filas vacías —una por clasificación— porque todos los eventos comparten `entidad: 'cliente'`.
+  const { data, total } = await listAuditEvents(tenantId, 'cliente', clienteId, page, limit, [
+    'conversation.assign',
+    'conversation.handoff',
+  ]);
 
   const userIds = new Set<string>();
   for (const evt of data) {
-    userIds.add(evt.actorId);
+    // Un actor nulo es el sistema (handoff automático, HU-IA-03): no hay `User` que resolver, y
+    // meterlo en el set haría que `findUsersByIds` recibiera un id inválido.
+    if (evt.actorId) userIds.add(evt.actorId);
     const de = evt.antes['asignadoA'];
     const a = evt.despues['asignadoA'];
     if (typeof de === 'string') userIds.add(de);
@@ -466,6 +613,176 @@ export async function listAssignments(
     limit,
     total,
   };
+}
+
+/**
+ * Sube la conversación a la bandeja como pendiente de una persona (HU-IA-02). Se usa cuando la IA
+ * no pudo responder: sin esto el fallo se queda en un log que nadie lee, el cliente espera una
+ * respuesta que no llega y ningún asesor se entera de que tiene que intervenir.
+ *
+ * NO apaga `iaHabilitada`: un 429 pasajero de Gemini no debe desactivar el asistente para siempre.
+ */
+export async function marcarParaAsesor(tenantId: string, clienteId: string): Promise<void> {
+  const cliente = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    { $inc: { noLeidos: 1 } },
+    { new: true },
+  ).lean();
+  // Mismo criterio que `notifyInboundMessage`: si la conversación ya no está, no hay nada que
+  // notificar y tampoco es un error que deba escalar.
+  if (!cliente) return;
+
+  const source = cliente as unknown as IConversationSource;
+  const asignado = await resolveAsignado(tenantId, source.asesorId);
+  const tagMap = await resolveTags(tenantId, source);
+  const leadMap = await resolveLeadMap(tenantId, clienteId);
+  await publishRealtime({
+    type: 'conversation:updated',
+    tenantId,
+    conversationId: clienteId,
+    conversation: toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap),
+  });
+}
+
+/**
+ * Transfiere la conversación a una persona y calla a Sofi en ese hilo (HU-IA-03).
+ *
+ * Va en UNA escritura, y no encadenando `assignConversation` + `setIaHabilitada` +
+ * `marcarParaAsesor`, por dos motivos concretos. Esa cadena publicaría **tres** eventos de tiempo
+ * real, y el intermedio dejaría la bandeja mostrando una conversación ya asignada con Sofi todavía
+ * encendida — un estado que nunca existió de verdad. Y `assignConversation` exige un `actorId` de
+ * un usuario real: lo resuelve con `findUsersByIds` y lo audita, y en un handoff automático no hay
+ * ninguna persona a la que atribuírselo.
+ *
+ * `asesorId` solo se fija si la conversación estaba SIN asignar: si ya la lleva alguien, el handoff
+ * no se la quita. Apaga la IA y avisa, que es lo que hacía falta.
+ */
+export async function handoffConversation(
+  tenantId: string,
+  clienteId: string,
+  motivo: HandoffMotivo,
+  asesorDestinoId: string | null,
+  /**
+   * Cómo se elige el destino (HU-IA-07). Omitirlo reproduce el comportamiento anterior a esa
+   * historia: se deriva de si hay asesor fijo, la misma regla que usa `toDTO` para los documentos
+   * guardados antes. Sin esta derivación, una llamada de cuatro argumentos ignoraría en silencio el
+   * asesor que le pasan.
+   */
+  estrategiaDestino?: EstrategiaDestino,
+  /** Qué condición propia del admin lo disparó, cuando el motivo es `custom` (HU-IA-07). */
+  condicion: IHandoffCondicionAplicada | null = null,
+): Promise<void> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  // Mismo criterio que `marcarParaAsesor`: una conversación borrada a mitad del job no es un error
+  // que deba tumbar el worker.
+  if (!cliente) return;
+
+  const source = cliente as unknown as IConversationSource;
+
+  // Idempotencia: con Sofi ya apagada, este hilo o bien ya se transfirió o bien lo tomó un asesor a
+  // mano. En ninguno de los dos casos hay que reasignar, auditar ni volver a avisar a nadie.
+  if (source.iaHabilitada === false) return;
+
+  const yaTeniaAsesor = !!source.asesorId;
+  const estrategia = estrategiaDestino ?? (asesorDestinoId ? 'fijo' : 'primero');
+  const destino = yaTeniaAsesor
+    ? String(source.asesorId)
+    : await resolverDestino(tenantId, estrategia, asesorDestinoId);
+
+  const updated = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    {
+      $set: {
+        iaHabilitada: false,
+        handoffAt: new Date(),
+        handoffMotivo: motivo,
+        handoffCondicion: condicion,
+        ...(yaTeniaAsesor || !destino ? {} : { asesorId: new Types.ObjectId(destino) }),
+      },
+      // La conversación tiene que aparecer como pendiente aunque el asesor la tuviera leída: a
+      // partir de ahora hay alguien esperando respuesta humana.
+      $inc: { noLeidos: 1 },
+    },
+    { new: true },
+  ).lean();
+  if (!updated) return;
+
+  await recordAuditEvent(tenantId, {
+    // El sistema, no una persona. Ver `IAuditEvent.actorId`.
+    actorId: null,
+    accion: 'conversation.handoff',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes: { iaHabilitada: true, asignadoA: yaTeniaAsesor ? String(source.asesorId) : null },
+    despues: { iaHabilitada: false, asignadoA: destino, motivo, condicion: condicion?.nombre ?? null },
+  });
+
+  const updatedSource = updated as unknown as IConversationSource;
+  const conversation = toConversationResponse(
+    updatedSource,
+    null,
+    new Date(),
+    await resolveAsignado(tenantId, updatedSource.asesorId),
+    await resolveTags(tenantId, updatedSource),
+    await resolveLeadMap(tenantId, clienteId),
+  );
+
+  // Un solo evento. `conversation:assigned` solo si hay un destinatario NUEVO al que avisar: si la
+  // conversación ya la llevaba alguien, o si no hay a quién asignársela, nadie estrena
+  // responsabilidad y el evento correcto es el de actualización.
+  await publishRealtime(
+    !yaTeniaAsesor && destino
+      ? {
+          type: 'conversation:assigned',
+          tenantId,
+          conversationId: clienteId,
+          conversation,
+          targetUserId: destino,
+          actor: { id: null, nombre: 'Sofi' },
+        }
+      : { type: 'conversation:updated', tenantId, conversationId: clienteId, conversation },
+  );
+}
+
+/**
+ * A quién se le pasa la conversación. El destino configurado manda, pero puede haber quedado
+ * obsoleto —el asesor se dio de baja o lo desactivaron— y entonces vale más asignarla a cualquiera
+ * activo que dejarla sin dueño.
+ */
+async function resolverDestino(
+  tenantId: string,
+  estrategia: EstrategiaDestino,
+  asesorDestinoId: string | null,
+): Promise<string | null> {
+  if (estrategia === 'fijo' && asesorDestinoId) {
+    try {
+      await assertAssignableAdmin(tenantId, asesorDestinoId);
+      return asesorDestinoId;
+    } catch {
+      logger.warn('Handoff: el asesor destino configurado ya no es asignable', {
+        tenantId,
+        asesorDestinoId,
+      });
+    }
+  }
+
+  if (estrategia === 'menor_carga') {
+    try {
+      const elegido = await asesorConMenorCarga(tenantId);
+      if (elegido) return elegido;
+    } catch (err: unknown) {
+      // No se propaga, y el fallback de abajo asigna igual: un handoff que no asigna deja a un
+      // cliente esperando, mientras que uno que asigna al primero en vez de al de menos carga es
+      // solo un reparto subóptimo. La diferencia de coste entre los dos errores no admite discusión.
+      logger.warn('Handoff: falló el reparto por carga', { tenantId, error: String(err) });
+    }
+  }
+
+  return primerAdminActivo(tenantId);
 }
 
 /**

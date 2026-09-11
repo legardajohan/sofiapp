@@ -19,7 +19,20 @@ export const verifyController: RequestHandler = (req, res) => {
 
 export const receiveController = async (req: Request, res: Response): Promise<void> => {
   const signature = (req.headers['x-hub-signature-256'] as string | undefined) ?? '';
-  const rawBody = req.body as Buffer;
+
+  // Si esto no es un Buffer, algún parser global se adelantó al `express.raw` del router y el
+  // cuerpo crudo se perdió: sin los bytes exactos no hay forma de validar la firma de Meta. Es la
+  // huella de HT-WA-02, así que el log lo dice con todas las letras — hacia fuera se responde
+  // igual que ante una firma inválida, porque a un tercero no se le explica por qué se le rechaza.
+  if (!Buffer.isBuffer(req.body)) {
+    logger.error(
+      'Webhook recibido con el cuerpo ya parseado: revisa el orden de middlewares en app.ts ' +
+        '(el webhook debe montarse ANTES de express.json())',
+    );
+    res.status(403).json({ message: 'Firma inválida.' });
+    return;
+  }
+  const rawBody: Buffer = req.body;
 
   logger.info('Webhook POST recibido', { hasSignature: !!signature, bytes: rawBody?.length ?? 0 });
 

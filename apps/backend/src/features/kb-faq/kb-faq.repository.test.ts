@@ -62,11 +62,19 @@ describe('buildFaqVectorSearchPipeline — aislamiento multi-tenant', () => {
     expect(pipeline[3].$project.embedding).toBe(0);
   });
 
-  it('pide un solo candidato usando el índice configurado por entorno', () => {
+  it('pide DOS candidatos usando el índice configurado por entorno', () => {
+    // HU-KB-02-V2: el segundo candidato es lo que permite medir el margen, y sin margen el
+    // matching confunde dos FAQs que solo comparten tema (horarios vs precios).
     const pipeline = build(new Types.ObjectId());
 
-    expect(pipeline[0].$vectorSearch.limit).toBe(1);
-    expect(pipeline[0].$vectorSearch.numCandidates).toBeGreaterThan(1);
+    expect(pipeline[0].$vectorSearch.limit).toBe(2);
     expect(pipeline[0].$vectorSearch.index).toBe(env.FAQ_VECTOR_INDEX);
+  });
+
+  it('explora un vecindario amplio para que el segundo candidato sea fiable', () => {
+    const pipeline = build(new Types.ObjectId());
+    const { limit, numCandidates } = pipeline[0].$vectorSearch;
+
+    expect(numCandidates).toBeGreaterThanOrEqual(limit * 10);
   });
 });

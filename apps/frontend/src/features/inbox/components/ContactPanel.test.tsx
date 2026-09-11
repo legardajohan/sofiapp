@@ -6,6 +6,7 @@ import { ContactPanel } from './ContactPanel.js';
 import { fetchContactHistory } from '../api.js';
 import { useInboxStore } from '../useInboxStore.js';
 import type { ContactHistoryDTO } from '../types.js';
+import { MOTIVO_DATOS_SENSIBLES } from '@/lib/roles';
 
 // Mockeamos la capa de API para no tocar red ni el apiClient real.
 vi.mock('../api.js', () => ({
@@ -137,5 +138,67 @@ describe('useInboxStore — el icono de persona alterna la ficha', () => {
 
     useInboxStore.getState().toggleContactPanel();
     expect(useInboxStore.getState().contactPanelOpen).toBe(false);
+  });
+});
+
+describe('ContactPanel — la vista unificada no duplica ni filtra de más (HU-IA-04)', () => {
+  it('NO repinta el hilo: la columna central ya lo muestra', async () => {
+    // Antes de HU-IA-04, con la ficha desplegada la misma conversación aparecía dos veces.
+    mockFetch.mockResolvedValue({
+      ...HISTORY,
+      mensajes: {
+        data: [
+          {
+            id: 'm-1',
+            direccion: 'inbound',
+            sender: 'user',
+            tipo: 'text',
+            texto: 'Hola, quisiera información del curso.',
+            attachmentUrl: null,
+            status: 'sent',
+            createdAt: '2026-07-27T12:00:00.000Z',
+          },
+        ],
+        page: 1,
+        limit: 50,
+        total: 1,
+      },
+    });
+
+    renderPanel(true);
+    await screen.findByText('Andrés Quintero');
+
+    expect(screen.queryByText('Hola, quisiera información del curso.')).not.toBeInTheDocument();
+  });
+
+  it('con permiso muestra el resumen en la ficha', async () => {
+    mockFetch.mockResolvedValue({
+      ...HISTORY,
+      resumen: {
+        texto: 'La clienta compara precios.',
+        generadoAt: '2026-07-27T12:00:00.000Z',
+        desactualizado: false,
+      },
+    });
+
+    renderPanel(true);
+
+    expect(await screen.findByText('La clienta compara precios.')).toBeInTheDocument();
+  });
+
+  it('SIN permiso la ficha explica el motivo y no ofrece generar', async () => {
+    // Si la ficha invitara a generar lo que la tira de arriba dice que no se puede ver, el asesor
+    // recibiría un 403 sin entender por qué.
+    mockFetch.mockResolvedValue({
+      ...HISTORY,
+      contacto: { ...HISTORY.contacto, puedeVerSensibles: false },
+      resumen: null,
+    });
+
+    renderPanel(true);
+    await screen.findByText('Andrés Quintero');
+
+    expect(screen.getByText(MOTIVO_DATOS_SENSIBLES)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /generar resumen/i })).not.toBeInTheDocument();
   });
 });

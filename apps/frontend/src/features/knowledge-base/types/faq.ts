@@ -22,14 +22,37 @@ export interface UpdateFaqPayload {
 
 export interface KbFaqsListResponse {
   data: IKbFaq[];
+  /** Coincidencias del filtro pedido: responde a `page`, `limit` y `activo`. */
   total: number;
   page: number;
   limit: number;
+  /**
+   * Activas del tenant completo, al margen de la página y del filtro. Es el número contra el que
+   * se compara `minimoActivas`.
+   */
+  activas: number;
+  /** Mínimo de activas que el servidor exige antes de dejar apagar o eliminar una. */
+  minimoActivas: number;
 }
 
 /**
- * Resultado del probador. Trae el mejor candidato aunque no supere el umbral,
- * para que el admin vea qué tan cerca quedó.
+ * Las tres señales que deciden el cortocircuito. Se cumplen todas o la pregunta va al
+ * modelo: el score por sí solo confunde FAQs que solo comparten tema.
+ */
+export interface FaqTestSenales {
+  score: number;
+  /** Score de la segunda FAQ. Ausente si no había otra con la que competir. */
+  segundoScore?: number;
+  margen: number;
+  overlap: number;
+  pasaUmbral: boolean;
+  pasaMargen: boolean;
+  pasaOverlap: boolean;
+}
+
+/**
+ * Resultado del probador. Trae el mejor candidato aunque no supere las señales,
+ * para que el admin vea qué tan cerca quedó y cuál lo bloqueó.
  */
 export interface FaqTestResult {
   matched: boolean;
@@ -39,7 +62,14 @@ export interface FaqTestResult {
   confianza?: number;
   /** Umbral vigente en el servidor, 0–1. */
   umbral: number;
+  /** Margen mínimo exigido sobre la segunda FAQ, 0–1. */
+  margenMinimo: number;
+  /** Coincidencia de palabras mínima exigida, 0–1. */
+  overlapMinimo: number;
   faqId?: string;
   /** Pregunta de la FAQ candidata (no la que escribió el admin). */
   pregunta?: string;
+  /** Pregunta de la segunda FAQ: es lo que explica un margen pequeño. */
+  segundaPregunta?: string;
+  senales?: FaqTestSenales;
 }

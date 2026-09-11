@@ -399,9 +399,12 @@ export async function listHistorialSemaforo(
     'lead.semaforo',
   );
 
+  // Un actor nulo es el sistema —la clasificación automática de HU-IA-05 no la dispara ninguna
+  // persona—, mismo criterio que el historial de asignaciones: no hay `User` que resolver, y
+  // colarlo en la lista le pasaría un id inválido a `findUsersByIds`.
   const userMap = await findUsersByIds(
     tenantId,
-    data.map((evt) => evt.actorId),
+    data.flatMap((evt) => (evt.actorId ? [evt.actorId] : [])),
   );
 
   return {
@@ -409,7 +412,7 @@ export async function listHistorialSemaforo(
       id: evt.id,
       de: leerSlug(evt.antes['semaforo']),
       a: leerSlug(evt.despues['semaforo']),
-      actor: toRef(new Types.ObjectId(evt.actorId), userMap),
+      actor: evt.actorId ? toRef(new Types.ObjectId(evt.actorId), userMap) : null,
       at: evt.createdAt,
     })),
     page,
@@ -469,6 +472,7 @@ function toLeadListItemResponse(
   userMap: Map<string, IUserResponse>,
   clienteMap: Map<string, IClienteListSource>,
   semaforoMap: Map<string, ISemaforoResponse>,
+  puedeVerSensibles: boolean,
 ): ILeadListItemResponse {
   const cliente = clienteMap.get(String(lead.clienteId));
 
@@ -481,7 +485,7 @@ function toLeadListItemResponse(
     semaforo: lead.semaforo ? (semaforoMap.get(lead.semaforo) ?? null) : null,
     responsable: toRef(lead.responsableId, userMap),
     conversacionId: String(lead.origen.conversacionId),
-    resumen: cliente ? toResumenResponse(cliente) : null,
+    resumen: cliente ? toResumenResponse(cliente, puedeVerSensibles) : null,
     ultimoMensajeAt: cliente?.ultimoMensajeAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),
   };
@@ -493,10 +497,15 @@ function toLeadListItemResponse(
  *
  * Las referencias se resuelven **en lote**: una consulta por colección y página, nunca N+1. No se
  * usa `populate`, que saltaría el repositorio scoped y con él la garantía de aislamiento.
+ *
+ * `puedeVerSensibles` viaja como parámetro y no se resuelve aquí: el permiso sale del token y lo
+ * decide el controller (HU-IA-04), igual que en la bandeja. Por defecto `false`, que es el lado
+ * seguro si una llamada nueva olvidara pasarlo.
  */
 export async function listLeads(
   tenantId: TenantId,
   query: ListLeadsQuery,
+  puedeVerSensibles = false,
 ): Promise<IPaginated<ILeadListItemResponse>> {
   const { page, limit } = query;
   const filter = buildLeadFilter(query);
@@ -545,7 +554,9 @@ export async function listLeads(
   ]);
 
   return {
-    data: leads.map((lead) => toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap)),
+    data: leads.map((lead) =>
+      toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, puedeVerSensibles),
+    ),
     page,
     limit,
     total,

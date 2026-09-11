@@ -1,7 +1,12 @@
 import type { RequestHandler } from 'express';
 import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
-import { extractContactData, getContactHistory, updateCliente } from './cliente.service.js';
-import type { UpdateClienteDTO } from './cliente.types.js';
+import {
+  confirmarDatosExtraidos,
+  extractContactData,
+  getContactHistory,
+  updateCliente,
+} from './cliente.service.js';
+import type { ConfirmarExtraccionDTO, UpdateClienteDTO } from './cliente.types.js';
 import type { HistoryQuery } from './cliente.validation.js';
 
 export const getContactHistoryController: RequestHandler = async (req, res) => {
@@ -21,8 +26,29 @@ export const getContactHistoryController: RequestHandler = async (req, res) => {
 export const extractContactDataController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
-  const datos = await extractContactData(tenantId, id, puedeVerDatosSensibles(req.user!));
+  const datos = await extractContactData(
+    tenantId,
+    id,
+    req.user!.sub,
+    puedeVerDatosSensibles(req.user!),
+  );
   res.status(200).json(datos);
+};
+
+export const confirmarExtraccionController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const { campos } = req.body as ConfirmarExtraccionDTO;
+  // Igual que el PATCH de la ficha: el permiso se resuelve aquí y el gate es **por campo** dentro
+  // del service, para que un `coordinator` conserve la confirmación de los campos no sensibles.
+  const resultado = await confirmarDatosExtraidos(
+    tenantId,
+    req.user!.sub,
+    id,
+    campos,
+    puedeVerDatosSensibles(req.user!),
+  );
+  res.status(200).json(resultado);
 };
 
 export const updateClienteController: RequestHandler = async (req, res) => {

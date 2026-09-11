@@ -64,3 +64,22 @@ export const assignPlanSchema = z.object({
 export const tenantIdParamSchema = z.object({
   params: z.object({ id: objectIdSchema }),
 });
+
+// HU-FLOW-02 — recordatorio de inactividad. Expuesto en `GET/PUT /api/flows/reminder`: el
+// `admin` configura el de SU PROPIO tenant, sin `params.id` — el `tenantId` nace del token.
+const empty = z.object({});
+
+export const getReminderSchema = z.object({ body: empty, params: empty, query: empty });
+
+export const updateReminderSchema = z.object({
+  params: empty,
+  query: empty,
+  body: z.object({
+    activo: z.boolean(),
+    // 15 min: menos no da margen al barrido periódico. 1440 min (24 h): más no tiene sentido
+    // contra una ventana de servicio que dura exactamente eso.
+    antelacionMinutos: z.number().int().min(15).max(1440),
+    texto: z.string().trim().max(4096),
+    templateId: objectIdSchema.optional(),
+  }),
+});

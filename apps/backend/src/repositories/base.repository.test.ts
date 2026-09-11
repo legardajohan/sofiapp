@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Schema, model, Types } from 'mongoose';
 import {
+  aggregateScoped,
   findScoped,
   findByIdScoped,
   createScoped,
@@ -97,5 +98,53 @@ describe('deleteOneScoped', () => {
 
     const sigue = await TestModel.findById(docA._id).exec();
     expect(sigue).not.toBeNull();
+  });
+});
+
+/**
+ * `aggregateScoped` es el único helper del repositorio cuya versión mal escrita **no lanza**: una
+ * agregación sin el `$match` del tenant devuelve datos de más, y una con el `tenantId` sin castear
+ * devuelve `[]`. Los dos fallos son silenciosos, así que los dos tienen test aquí y no en el
+ * llamador (HU-IA-07).
+ */
+describe('aggregateScoped', () => {
+  it('no deja que el pipeline del llamador se salte el filtro del tenant', async () => {
+    await createScoped(TestModel, tenantA, { telefono: '306-000-0001' });
+    await createScoped(TestModel, tenantB, { telefono: '306-000-0002' });
+
+    // Un `$match` propio que, por sí solo, alcanzaría documentos de las dos empresas.
+    const filas = await aggregateScoped<{ _id: null; total: number }>(TestModel, tenantA, [
+      { $match: { telefono: { $regex: '^306-' } } },
+      { $group: { _id: null, total: { $sum: 1 } } },
+    ]).exec();
+
+    expect(filas[0]?.total).toBe(1);
+  });
+
+  it('castea el tenantId: un string devuelve lo mismo que un ObjectId', async () => {
+    await createScoped(TestModel, tenantA, { telefono: '307-000-0001' });
+    await createScoped(TestModel, tenantA, { telefono: '307-000-0002' });
+
+    const pipeline = [{ $group: { _id: null, total: { $sum: 1 } } }];
+    const conObjectId = await aggregateScoped<{ total: number }>(TestModel, tenantA, pipeline).exec();
+    const conString = await aggregateScoped<{ total: number }>(
+      TestModel,
+      tenantA.toString(),
+      pipeline,
+    ).exec();
+
+    // Sin el casteo del helper, `conString` sería `[]` y este test lo caza.
+    expect(conString).toEqual(conObjectId);
+    expect(conString[0]?.total).toBe(2);
+  });
+
+  it('sin pipeline devuelve solo los documentos del tenant', async () => {
+    await createScoped(TestModel, tenantA, { telefono: '308-000-0001' });
+    await createScoped(TestModel, tenantB, { telefono: '308-000-0002' });
+
+    const filas = await aggregateScoped<{ telefono: string }>(TestModel, tenantA).exec();
+
+    expect(filas).toHaveLength(1);
+    expect(filas[0]?.telefono).toBe('308-000-0001');
   });
 });

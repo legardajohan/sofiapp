@@ -11,6 +11,13 @@ type ProjectStage = { $project: Record<string, 0 | 1> };
 
 const QUERY_VECTOR = [0.1, 0.2, 0.3];
 
+/**
+ * El aislamiento se verifica sobre el PIPELINE CONSTRUIDO, no ejecutándolo: `$vectorSearch` es un
+ * stage exclusivo de Atlas y `mongodb-memory-server` no lo implementa, así que un test de
+ * integración del tipo "buscar con tenantB no devuelve chunks de tenantA" no es escribible aquí.
+ * Lo que sí se puede garantizar —y es donde vive el riesgo real— es que el `tenantId` del filtro
+ * y el del `$match` nacen siempre del argumento y nunca del llamador.
+ */
 describe('buildVectorSearchPipeline — aislamiento multi-tenant', () => {
   it('inyecta el tenantId del argumento en el filtro del $vectorSearch', () => {
     const tenantId = new Types.ObjectId();

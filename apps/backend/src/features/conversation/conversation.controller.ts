@@ -1,7 +1,13 @@
 import type { RequestHandler } from 'express';
 import {
+  aplicarSemaforoSugerido,
+  listClasificaciones,
+} from '../ai/ai-semaforo.service.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
+import {
   assignConversation,
   generateConversationSummary,
+  getConversationOverview,
   getThread,
   listAssignments,
   listConversations,
@@ -13,6 +19,7 @@ import {
 import type {
   AssignBody,
   AssignmentsQuery,
+  ClassificationsQuery,
   IaBody,
   ListConversationsQuery,
   ReplyBody,
@@ -36,6 +43,17 @@ export const getThreadController: RequestHandler = async (req, res) => {
   const id = req.params['id'] as string;
   const result = await getThread(tenantId, id, req.validatedQuery as unknown as ThreadQuery);
   res.status(200).json(result);
+};
+
+/**
+ * Vista unificada de la conversación (HU-IA-04). El permiso se resuelve AQUÍ, del token, y se pasa
+ * al service: el service no conoce `req`, y el subrol no puede llegar del cliente.
+ */
+export const getOverviewController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const overview = await getConversationOverview(tenantId, id, puedeVerDatosSensibles(req.user!));
+  res.status(200).json(overview);
 };
 
 export const replyController: RequestHandler = async (req, res) => {
@@ -94,4 +112,23 @@ export const listAssignmentsController: RequestHandler = async (req, res) => {
     req.validatedQuery as unknown as AssignmentsQuery,
   );
   res.status(200).json(result);
+};
+
+/**
+ * Aplica la sugerencia de semáforo que dejó la IA (HU-IA-05). El `actorId` sale del token: la
+ * bitácora tiene que registrar a quien pulsó, no al sistema.
+ */
+export const aplicarSemaforoController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const actorId = req.user!.sub;
+  const id = req.params['id'] as string;
+  await aplicarSemaforoSugerido(tenantId, id, actorId);
+  res.status(200).json(await getConversationOverview(tenantId, id, puedeVerDatosSensibles(req.user!)));
+};
+
+export const listClassificationsController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const { page, limit } = req.validatedQuery as unknown as ClassificationsQuery;
+  res.status(200).json(await listClasificaciones(tenantId, id, page, limit));
 };

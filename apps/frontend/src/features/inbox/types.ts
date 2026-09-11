@@ -1,5 +1,6 @@
+import type { CondicionExtra, HandoffMotivo } from '../handoff/types.js';
 import type { AdminSubrol } from '@/stores/authStore';
-import type { TagDTO } from '@/features/tags/types';
+import type { SemaforoSlug, TagDTO } from '@/features/tags/types';
 
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
 
@@ -33,6 +34,16 @@ export interface ConversationDTO {
    * cabecera muestre el estado en vez de ofrecer una conversión que fallaría con 409.
    */
   leadId: string | null;
+  /**
+   * Sofi transfirió esta conversación a una persona (HU-IA-03). `null` mientras no haya pasado, y
+   * vuelve a `null` cuando alguien reactiva a Sofi en el hilo.
+   */
+  handoff: {
+    at: string;
+    motivo: HandoffMotivo;
+    /** La condición propia que lo disparó (HU-IA-07); `null` para las cuatro de fábrica. */
+    condicion: Pick<CondicionExtra, 'key' | 'nombre'> | null;
+  } | null;
 }
 
 /** Filtros combinables de la bandeja, reflejados en los query params de `/inbox`. */
@@ -116,16 +127,75 @@ export interface AtributoDTO {
 /** `conversacion` = el cliente lo dictó en un mensaje; `whatsapp` = es el número desde el que escribe. */
 export type TelefonoOrigen = 'conversacion' | 'whatsapp';
 
+/** Los cuatro campos que la IA extrae (HU-IA-06). El orden es el de la tarjeta. */
+export const CAMPOS_EXTRAIDOS = ['nombreCompleto', 'correo', 'telefono', 'interes'] as const;
+
+export type CampoExtraido = (typeof CAMPOS_EXTRAIDOS)[number];
+
 /**
- * Datos de contacto extraídos por IA. `nombreCompleto` y `correo` son `null` si la conversación
- * no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del contacto).
+ * Datos de contacto extraídos por IA. `nombreCompleto`, `correo` e `interes` son `null` si la
+ * conversación no los menciona; `telefono` siempre trae valor (cae al número de WhatsApp del
+ * contacto).
  */
 export interface DatosExtraidosDTO {
   nombreCompleto: string | null;
   correo: string | null;
   telefono: string;
   telefonoOrigen: TelefonoOrigen;
+  /** Qué pide el cliente, con sus palabras. NO es el nivel de interés: eso es `semaforoIA`. */
+  interes: string | null;
+  /** Campos ya aplicados a la ficha. Lo que tiene valor y no está aquí, está solo sugerido. */
+  confirmados: CampoExtraido[];
   extraidoAt: string;
+}
+
+/** Respuesta de confirmar: qué entró en la ficha y qué se dejó como estaba (HU-IA-06). */
+export interface ConfirmarExtraccionDTO {
+  contacto: ContactCardDTO;
+  datosExtraidos: DatosExtraidosDTO;
+  aplicados: CampoExtraido[];
+  omitidos: CampoExtraido[];
+}
+
+/**
+ * Qué puede hacer el usuario que pregunta, resuelto en el servidor (HU-IA-04). La UI **oculta** lo
+ * que el backend **decide**: se lee de aquí y no de una comprobación de rol hecha en el navegador.
+ */
+export interface PermisosConversacionDTO {
+  verResumen: boolean;
+  generarResumen: boolean;
+  verSensibles: boolean;
+}
+
+/** Vista unificada de la conversación: cabecera, etiquetas, resumen y permisos. Sin el hilo. */
+/** Escala con la que el modelo clasifica la intención de compra (HU-IA-05). */
+export type NivelInteresIA = 'frio' | 'tibio' | 'caliente';
+
+/** Última clasificación de intención de compra de la conversación (HU-IA-05). */
+export interface SemaforoIADTO {
+  slug: SemaforoSlug;
+  /** `[0, 1]`. No se pinta como porcentaje: va en el `title` y en la bitácora. */
+  confianza: number;
+  /** La justificación en una frase. Es lo que la franja muestra al lado del chip. */
+  motivo: string;
+  nivelInteres: NivelInteresIA;
+  objecion: string | null;
+  at: string;
+  /** `null` = la IA solo lo propuso. */
+  aplicado: SemaforoSlug | null;
+  /** La etiqueta del tenant ya hidratada, o `null` si el admin la borró. */
+  tag: TagDTO | null;
+  /** Hay una sugerencia sin aplicar y su etiqueta todavía existe. Lo decide el servidor. */
+  pendiente: boolean;
+}
+
+export interface ConversationOverviewDTO {
+  conversation: ConversationDTO;
+  /** `null` si no se ha generado nunca **o** si no se puede ver (mira `permisos.verResumen`). */
+  resumen: ResumenDTO | null;
+  /** `null` si la IA nunca clasificó esta conversación (HU-IA-05). */
+  semaforoIA: SemaforoIADTO | null;
+  permisos: PermisosConversacionDTO;
 }
 
 export interface ContactHistoryDTO {
@@ -154,5 +224,6 @@ export interface RealtimeAssignedEvent {
   conversationId: string;
   conversation: ConversationDTO;
   targetUserId: string | null;
-  actor: { id: string; nombre: string | null };
+  /** `id: null` es Sofi: el handoff automático no lo dispara ninguna persona (HU-IA-03). */
+  actor: { id: string | null; nombre: string | null };
 }

@@ -17,8 +17,10 @@ import type {
   CreateTenantDTO,
   UpdateTenantDTO,
   UpdateTenantStatusDTO,
+  UpdateReminderDTO,
   ITenantResponse,
   ITenantDocument,
+  IReminderResponse,
   ListTenantsQuery,
   TenantsListResponse,
 } from './tenant.types.js';
@@ -210,6 +212,58 @@ export async function assignPlanToTenant(id: string, planId: string): Promise<IT
 
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
   return mapTenantToResponse(tenant);
+}
+
+function mapReminderToResponse(tenant: ITenantDocument): IReminderResponse {
+  const recordatorio = tenant.recordatorio;
+  return {
+    activo: recordatorio?.activo ?? false,
+    antelacionMinutos: recordatorio?.antelacionMinutos ?? 120,
+    texto: recordatorio?.texto ?? '',
+    templateId: recordatorio?.templateId ? recordatorio.templateId.toString() : null,
+  };
+}
+
+/**
+ * Lee y escribe el recordatorio de inactividad del **propio** tenant (HU-FLOW-02). `Tenant` no
+ * lleva `tenantId` — el documento ES el tenant — así que `tenantId` aquí es directamente su
+ * `_id`, resuelto siempre por el caller desde `req.user!.tenantId` (nunca de params): es la misma
+ * garantía que el resto del proyecto expresa con `*Scoped`, adaptada a que este modelo no tiene
+ * ese campo.
+ */
+export async function getReminderConfig(tenantId: string): Promise<IReminderResponse> {
+  const tenant = await Tenant.findById(tenantId).lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return mapReminderToResponse(tenant);
+}
+
+export async function updateReminderConfig(
+  tenantId: string,
+  dto: UpdateReminderDTO,
+): Promise<IReminderResponse> {
+  // Regla de coherencia (no expresable solo en Zod): no se puede dejar el recordatorio activo sin
+  // un texto que enviar.
+  if (dto.activo && !dto.texto.trim()) {
+    throw new AppError('El recordatorio necesita un texto para poder activarse.', 422);
+  }
+
+  const tenant = await Tenant.findByIdAndUpdate(
+    tenantId,
+    {
+      $set: {
+        recordatorio: {
+          activo: dto.activo,
+          antelacionMinutos: dto.antelacionMinutos,
+          texto: dto.texto,
+          templateId: dto.templateId,
+        },
+      },
+    },
+    { new: true, runValidators: true },
+  ).lean<ITenantDocument>();
+
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return mapReminderToResponse(tenant);
 }
 
 /**

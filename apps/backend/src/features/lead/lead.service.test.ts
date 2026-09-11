@@ -657,7 +657,8 @@ describe('HU-CRM-03 — listado de leads', () => {
       createdAt: new Date('2026-08-01T10:00:00Z'),
     });
 
-    const res = await listLeads(tenantStr, listQuery);
+    // El resumen es un dato sensible (HU-IA-04): sin el permiso no se hidrata ninguno.
+    const res = await listLeads(tenantStr, listQuery, true);
     const alDia = res.data.find((l) => l.nombre === 'Al día');
     const desfasado = res.data.find((l) => l.nombre === 'Desfasado');
 
@@ -666,6 +667,25 @@ describe('HU-CRM-03 — listado de leads', () => {
       desactualizado: false,
     });
     expect(desfasado?.resumen?.desactualizado).toBe(true);
+  });
+
+  it('sin permiso de datos sensibles el resumen llega en null, aunque exista (HU-IA-04)', async () => {
+    // El resumen lo escribe el modelo sobre el transcript entero, así que puede citar en claro el
+    // correo o el documento que la ficha enmascara. La tabla de leads lo proyecta igual que la
+    // bandeja, y por tanto se calla igual.
+    const generadoAt = new Date('2026-08-01T10:00:00Z');
+    await sembrarLead({
+      nombre: 'Con resumen',
+      telefono: '573000000102',
+      metaUserId: 'wa_r4',
+      responsableId: carolina,
+      resumen: { texto: 'Quiere el plan anual.', generadoAt, mensajesHasta: generadoAt },
+      ultimoMensajeAt: generadoAt,
+    });
+
+    const [lead] = (await listLeads(tenantStr, listQuery, false)).data;
+
+    expect(lead?.resumen).toBeNull();
   });
 
   it('una conversación sin resumen devuelve `resumen: null` sin romper la fila', async () => {

@@ -15,7 +15,7 @@ type TenantId = string | Types.ObjectId;
 function toAuditEventResponse(doc: IAuditEventDocument): IAuditEventResponse {
   return {
     id: doc._id.toString(),
-    actorId: doc.actorId.toString(),
+    actorId: doc.actorId?.toString() ?? null,
     accion: doc.accion,
     entidad: doc.entidad,
     entidadId: doc.entidadId.toString(),
@@ -49,29 +49,38 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
 }
 
 /**
- * `accion` es opcional y acota la bitacora a un solo tipo de evento. Lo necesita el historial de
- * semaforo del lead (HU-CRM-04): la entidad `lead` acumula tambien `lead.create`, `lead.update` y
- * `lead.delete`, y filtrarlos DESPUES de paginar daria un `total` que no corresponde con las filas
- * devueltas y paginas de tamano irregular. Por eso el filtro va en la consulta.
+ * Filtro de la bitácora, **compartido por la página y por el conteo**: si divergen, el `total`
+ * miente — contaría eventos que la página nunca devuelve. Filtrar *después* de paginar rompería
+ * el conteo igual, y además daría páginas de tamaño irregular; por eso va en la consulta.
+ *
+ * `accion` es opcional y aditivo: sin él, el comportamiento es el de siempre (todos los eventos de
+ * la entidad). Hace falta porque varias bitácoras comparten `entidad`: la de `lead` acumula
+ * también `lead.create`, `lead.update` y `lead.delete` (HU-CRM-04), y sin filtro la bitácora de
+ * clasificaciones de HU-IA-05 traería además las reasignaciones —y, al revés, el historial de
+ * asignaciones mostraría filas vacías por cada clasificación.
+ *
+ * Acepta una lista porque un mismo eje puede registrarse con más de una acción: el historial de
+ * asignaciones son dos (la manual y el handoff automático, que también cambia el responsable).
  */
+function buildAuditFilter(
+  entidad: AuditEntidad,
+  entidadId: string,
+  accion?: AuditAccion | AuditAccion[],
+): Record<string, unknown> {
+  const filter: Record<string, unknown> = { entidad, entidadId };
+  if (accion) filter['accion'] = Array.isArray(accion) ? { $in: accion } : accion;
+  return filter;
+}
+
 export function listAuditEventsQuery(
   tenantId: TenantId,
   entidad: AuditEntidad,
   entidadId: string,
-  accion?: AuditAccion,
+  accion?: AuditAccion | AuditAccion[],
 ): Query<IAuditEventDocument[], IAuditEventDocument> {
   return findScoped(AuditEvent, tenantId, buildAuditFilter(entidad, entidadId, accion)).sort({
     createdAt: -1,
   });
-}
-
-/** El filtro que comparten la pagina y el conteo: si divergen, el `total` miente. */
-function buildAuditFilter(
-  entidad: AuditEntidad,
-  entidadId: string,
-  accion?: AuditAccion,
-): Record<string, unknown> {
-  return accion ? { entidad, entidadId, accion } : { entidad, entidadId };
 }
 
 export async function listAuditEvents(
@@ -80,8 +89,10 @@ export async function listAuditEvents(
   entidadId: string,
   page: number,
   limit: number,
-  accion?: AuditAccion,
+  accion?: AuditAccion | AuditAccion[],
 ): Promise<{ data: IAuditEventResponse[]; page: number; limit: number; total: number }> {
+  // El filtro del `count` tiene que ser el MISMO que el de la query, o el `total` no cuadra con las
+  // páginas que se devuelven.
   const filter = buildAuditFilter(entidad, entidadId, accion);
   const [docs, total] = await Promise.all([
     listAuditEventsQuery(tenantId, entidad, entidadId, accion)

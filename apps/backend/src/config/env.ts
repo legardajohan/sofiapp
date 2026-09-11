@@ -49,6 +49,39 @@ const EnvSchema = z.object({
   LLM_TIMEOUT_MS: z.coerce.number().positive().default(45000),
   AI_CACHE_TTL_CHAT_S: z.coerce.number().positive().default(3600),
   AI_CACHE_TTL_CLASSIFY_S: z.coerce.number().positive().default(7200),
+  // Ventana de agrupación del auto-reply (HU-IA-02). Los mensajes de un mismo cliente que caen en
+  // la misma ventana producen UNA sola respuesta, en vez de una por mensaje: escribir en tres
+  // mensajes seguidos es lo normal en WhatsApp, y contestarlos por separado es ruido.
+  // Es también latencia deliberada que el cliente percibe, así que súbela con cuidado: 8 s cubren
+  // el tecleo de una ráfaga sin que la respuesta deje de sentirse inmediata.
+  AI_REPLY_WINDOW_MS: z.coerce.number().positive().default(8000),
+
+  // Semaforización automática por intención de compra (HU-IA-05).
+  // Interruptor como enum y NO como booleano: `z.coerce.boolean()` convierte la cadena "false" en
+  // `true` (toda cadena no vacía es truthy), que es justo el fallo que un kill-switch no se puede
+  // permitir. No hay ningún booleano en este archivo; esto no abre el precedente.
+  SEMAFORO_AUTO: z.enum(['on', 'off']).default('on'),
+  // Confianza mínima para que la IA ESCRIBA el semáforo. Por debajo solo propone, y la franja de la
+  // bandeja ofrece aplicarlo a mano.
+  // OJO: escala propia del modelo (él mismo la reporta), SIN relación con KB_MIN_SCORE ni con
+  // FAQ_MATCH_THRESHOLD, que son similitudes de coseno normalizadas. Calibrar mirando la bitácora
+  // de GET /api/conversations/:id/classifications, nunca a ojo.
+  SEMAFORO_MIN_CONFIANZA: z.coerce.number().min(0).max(1).default(0.7),
+  // Turnos del CLIENTE que tiene que haber antes de tocar el semáforo. Con 1, un "hola" suelto
+  // clasifica como frío y pintaría de azul cada conversación nueva: ruido en toda la bandeja.
+  SEMAFORO_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
+
+  // Extracción automática de datos de contacto (HU-IA-06).
+  // Enum y no booleano, por el mismo motivo que SEMAFORO_AUTO: "false" coaccionado a booleano da
+  // `true` y el kill-switch dejaría de existir justo cuando hace falta.
+  EXTRACT_AUTO: z.enum(['on', 'off']).default('on'),
+  // Turnos del CLIENTE antes de extraer sola. Con 1, un "hola" suelto dispara una llamada al modelo
+  // que no puede encontrar nada: se paga y se tira.
+  EXTRACT_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
+  // Techo del transcript que se le manda al modelo al extraer. Bastante más que los 10 del
+  // auto-reply —aquí importa no perder un correo dictado al principio del hilo— y bastante menos
+  // que una conversación real de meses, que no cabe en la ventana ni sale a cuenta.
+  EXTRACT_MAX_MENSAJES: z.coerce.number().int().positive().default(60),
 
   // TRM oficial USD/COP — Superintendencia Financiera vía datos.gov.co (recurso 32sa-8pi3, SODA API).
   TRM_DATASET_URL: z
@@ -64,12 +97,49 @@ const EnvSchema = z.object({
   KB_CHUNK_OVERLAP: z.coerce.number().nonnegative().default(150),
   KB_VECTOR_INDEX: z.string().default('kb_chunks_vector'),
   KB_RETRIEVAL_K: z.coerce.number().positive().default(5),
+  // Umbral de relevancia del RAG (HU-IA-01). MISMA ESCALA que FAQ_MATCH_THRESHOLD: Atlas normaliza
+  // el coseno a (1 + cos) / 2, así que 0.75 ≈ coseno 0.50. A propósito más laxo que el 0.85 de FAQ:
+  // allí un match dispara una respuesta literal (caro equivocarse), aquí un chunk solo entra en el
+  // contexto y el system prompt ya obliga a decir "no tengo información" si no alcanza.
+  // Calibrar con src/scripts/kb-smoke-retrieval.ts, nunca a ojo.
+  KB_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.75),
 
   // FAQ semántica (HU-KB-02) — cortocircuito del LLM por coincidencia de preguntas frecuentes.
   // OJO con la escala: Atlas normaliza el coseno a (1 + cos) / 2, así que 0.85 ≈ coseno 0.70.
   // Calibrar con POST /api/kb/faqs/test, nunca a ojo.
   FAQ_VECTOR_INDEX: z.string().default('kb_faqs_vector'),
   FAQ_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  // Margen mínimo del mejor candidato sobre el segundo (HU-KB-02-V2). MISMA escala normalizada que
+  // FAQ_MATCH_THRESHOLD, así que 0.02 aquí ≈ 0.04 de coseno crudo. El embedding mide cercanía
+  // TEMÁTICA, no intención: cuando dos FAQs de temas distintos compiten por la misma pregunta
+  // ("¿a qué hora abren?" contra horarios Y contra precios) quedan empatadas dentro de esa franja,
+  // y responder literal ahí es apostar. Sin segundo candidato (tenant con una sola FAQ activa) la
+  // señal PASA: no hay ambigüedad que medir. Calibrar con POST /api/kb/faqs/test, nunca a ojo.
+  FAQ_MATCH_MIN_MARGIN: z.coerce.number().min(0).max(1).default(0.02),
+  // Coincidencia léxica mínima entre la pregunta entrante y la de la FAQ, medida sobre el conjunto
+  // MÁS PEQUEÑO de tokens significativos (sin tildes, sin palabras vacías, con el plural recortado).
+  // 0.2 ≈ "al menos una palabra clave de cada cinco". Escala propia, SIN relación con las dos de
+  // arriba. No cuesta ni una llamada a Gemini: es texto→tokens. Deliberadamente severo, porque los
+  // dos errores no cuestan igual — un falso negativo solo manda la pregunta al LLM, que la responde
+  // igual pagando tokens; un falso positivo manda al prospecto una respuesta literal equivocada con
+  // la firma de la empresa. Súbelo si aún se cuelan confusiones; bájalo si se pierden paráfrasis
+  // legítimas ("¿cuánto vale?" contra la FAQ "¿Cuál es el precio del curso?", que no comparten
+  // ninguna palabra). Con 0 en ambos, el matching vuelve exactamente al comportamiento anterior.
+  FAQ_MATCH_MIN_OVERLAP: z.coerce.number().min(0).max(1).default(0.2),
+  // Preguntas frecuentes ACTIVAS que un tenant debe sostener (HU-KB-02-V3). El cortocircuito de FAQ
+  // existe para no pagar tokens en lo que más preguntan; con la lista vacía no ahorra nada, así que
+  // esto es un piso y no una sugerencia. Se comprueba ANTES de desactivar o eliminar una FAQ activa,
+  // nunca al crear ni al editar: al mínimo se sube escribiendo, no borrando. Un tenant por debajo
+  // (datos previos) puede crear y editar sin límite, pero no bajar más — y como editar el texto
+  // nunca se bloquea, una FAQ equivocada se corrige en el sitio sin tener que borrarla.
+  // Con 0 la regla queda desactivada por completo, sin desplegar código.
+  FAQ_MIN_ACTIVAS: z.coerce.number().int().nonnegative().default(5),
+
+  // HU-FLOW-02 — recordatorios de inactividad. La cadencia del barrido debe quedar bastante por
+  // debajo de la antelación por defecto del recordatorio (120 min) para que la franja no se
+  // escape entre dos pasadas.
+  REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().positive().default(600_000),
+  REMINDER_SWEEP_BATCH: z.coerce.number().positive().default(200),
 
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),

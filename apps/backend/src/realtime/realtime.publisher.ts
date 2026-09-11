@@ -13,9 +13,24 @@ import { REALTIME_CHANNEL, type RealtimeEvent } from './realtime.types.js';
 
 let publisher: Redis | null = null;
 
+/**
+ * Cuántos reintentos espera un `publish` con la conexión caída antes de rendirse.
+ *
+ * **No puede ser `null` aquí.** `null` significa "reintentar indefinidamente" y es lo que exigen
+ * las conexiones bloqueantes de BullMQ, pero en este publicador convierte a `publishRealtime` en
+ * una espera infinita: el comando se queda en la cola offline de ioredis, nunca rechaza, y el
+ * `catch` de abajo —que promete fallar suave— no llega a ejecutarse nunca. Con Redis caído eso
+ * cuelga para siempre a TODO el que publique: `setIaHabilitada`, `replyMessage`, `assign`, las
+ * etiquetas... es decir, peticiones HTTP que nunca responden por un evento que solo es un aviso.
+ *
+ * Con un tope bajo se conserva lo útil de la cola offline (un corte de un instante se absorbe y el
+ * evento sale igual) y se acota lo dañino (con Redis realmente caído rechaza en decenas de ms).
+ */
+const MAX_REINTENTOS_PUBLISH = 2;
+
 function getPublisher(): Redis {
   if (!publisher) {
-    publisher = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+    publisher = new Redis(env.REDIS_URL, { maxRetriesPerRequest: MAX_REINTENTOS_PUBLISH });
     publisher.on('error', (err) => logger.error('Redis publisher error', { error: String(err) }));
   }
   return publisher;

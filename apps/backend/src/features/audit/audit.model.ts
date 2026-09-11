@@ -5,7 +5,9 @@ import type { IAuditEventDocument } from './audit.types.js';
 const AuditEventSchema = new Schema<IAuditEventDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
-    actorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    // `null` = el sistema (HU-IA-03: el handoff automático dispara sin actor humano). Dejó de ser
+    // `required` por eso; los documentos ya escritos no se tocan, todos llevan un actor real.
+    actorId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     accion: { type: String, required: true },
     entidad: { type: String, required: true },
     entidadId: { type: Schema.Types.ObjectId, required: true },
