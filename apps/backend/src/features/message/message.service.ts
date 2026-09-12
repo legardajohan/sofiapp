@@ -134,7 +134,10 @@ export async function sendMessage(
   tenantId: TenantId,
   dto: ISendMessageDto,
 ): Promise<IMessageDocument> {
-  return sendOutbound(tenantId, dto.clienteId, { modo: 'texto', texto: dto.texto });
+  // `dto.sender` se propaga a propósito: es lo que distingue la respuesta automática de Sofi
+  // (`'bot'`) de la de un asesor (`'agent'`, el default de `sendOutbound`). Perderlo aquí guarda
+  // todo como 'agent' y rompe HU-IA-01 en la bandeja, la auditoría y el transcript del resumen.
+  return sendOutbound(tenantId, dto.clienteId, { modo: 'texto', texto: dto.texto }, dto.sender);
 }
 
 export async function updateDeliveryStatus(

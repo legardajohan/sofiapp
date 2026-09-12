@@ -7,6 +7,7 @@ import { Estado } from '../estado/estado.model.js';
 import { Tag } from '../tag/tag.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
 import { seedEstados } from '../../seed/seed-estados.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 import { Lead } from '../lead/lead.model.js';
 import { getPipeline } from './pipeline.service.js';
 import { PIPELINE_LIMIT_DEFECTO } from './pipeline.types.js';
@@ -37,7 +38,7 @@ async function sembrarLead(opts: {
   estado: string;
   responsableId: string;
   createdAt?: Date;
-  tagIds?: Types.ObjectId[];
+  semaforo?: string;
 }): Promise<string> {
   contador += 1;
   const cliente = await createScoped(Cliente, tenant, {
@@ -46,7 +47,7 @@ async function sembrarLead(opts: {
     canalOrigen: 'whatsapp',
     estadoComercial: 'nuevo',
     customFields: {},
-    tagIds: opts.tagIds ?? [],
+    tagIds: [],
   });
 
   const lead = await createScoped(Lead, tenant, {
@@ -54,6 +55,7 @@ async function sembrarLead(opts: {
     telefono: `5730011122${String(contador).padStart(2, '0')}`,
     clienteId: cliente._id,
     estado: opts.estado,
+    semaforo: opts.semaforo ?? null,
     responsableId: new Types.ObjectId(opts.responsableId),
     origen: {
       tipo: 'conversacion',
@@ -223,22 +225,18 @@ describe('HU-PIPE-01 — el embudo agrupado por etapa', () => {
   it('un `semaforo` que no casa con nada deja las columnas vacías pero PRESENTES', async () => {
     await sembrarLead({ estado: 'nuevo', responsableId: asesorA });
 
-    // Sin etiqueta sembrada, el filtro no puede casar con nada. El usuario pidió acotar: debe ver
-    // el embudo vacío, no el embudo sin filtrar ni una pantalla en blanco.
-    const { columnas } = await getPipeline(tenantStr, { ...query, semaforo: 'verde' });
+    // Una clave que no está en el catálogo del tenant no puede casar con nada. El usuario pidió
+    // acotar: debe ver el embudo vacío, no el embudo sin filtrar ni una pantalla en blanco.
+    const { columnas } = await getPipeline(tenantStr, { ...query, semaforo: 'inexistente' });
 
     expect(columnas).toHaveLength(6);
     expect(columnas.every((c) => c.total === 0 && c.leads.length === 0)).toBe(true);
   });
 
-  it('`semaforo` filtra por la etiqueta de la conversación del lead', async () => {
-    const verde = await createScoped(Tag, tenant, {
-      nombre: 'Avanza',
-      color: '#16A34A',
-      semaforo: 'verde',
-    });
+  it('`semaforo` filtra por el campo del lead', async () => {
+    await seedSemaforos(tenant);
 
-    await sembrarLead({ estado: 'nuevo', responsableId: asesorA, tagIds: [verde._id] });
+    await sembrarLead({ estado: 'nuevo', responsableId: asesorA, semaforo: 'verde' });
     await sembrarLead({ estado: 'nuevo', responsableId: asesorA });
 
     const { columnas } = await getPipeline(tenantStr, { ...query, semaforo: 'verde' });

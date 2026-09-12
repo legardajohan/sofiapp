@@ -85,6 +85,8 @@ function extraidos(over: Partial<DatosExtraidosDTO> = {}): DatosExtraidosDTO {
     correo: 'andres@empresa.com',
     telefono: '573006667788',
     telefonoOrigen: 'conversacion',
+    interes: 'curso pre-ICFES sabatino',
+    confirmados: [],
     extraidoAt: '2026-07-28T12:00:00.000Z',
     ...over,
   };

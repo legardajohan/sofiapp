@@ -130,6 +130,15 @@ Fuera de alcance (otros features / fases):
 13. `pnpm --filter @sofiapp/api typecheck` y `test` en verde; `pnpm --filter @sofiapp/web build`,
     `lint` y `test` sin errores.
 
+## Nota: HU-CRM-04 supersede la parte del semáforo
+
+Los criterios **2, 4 y 6** de arriba describen el semáforo como una etiqueta de la
+**conversación** (`Cliente.tagIds`), hidratada en lote con `findTagsByIds` y filtrada pasando
+por el cliente. **HU-CRM-04 lo cambió**: el semáforo pasó a ser un campo del lead
+(`Lead.semaforo`) resuelto contra un catálogo por tenant (`semaforos`), el listado devuelve
+`semaforo` (uno) en lugar de `semaforos` (varios), y `?semaforo=` filtra por un campo indexado
+en vez de por dos consultas encadenadas. Lo demás de esta spec sigue vigente.
+
 ## Nota sobre la proyección de listado
 
 Se añade `ILeadListItemResponse` en vez de reutilizar el `ILeadResponse` de HU-CRM-01. No es

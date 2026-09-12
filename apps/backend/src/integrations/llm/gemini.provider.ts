@@ -9,6 +9,7 @@ import { env } from '../../config/env.js';
 import type {
   ILlmProvider,
   ChatTurn,
+  ClassifyLeadOutput,
   SlotSpec,
   SlotResult,
   NivelInteres,
@@ -90,8 +91,12 @@ const CLASSIFY_SCHEMA: Schema = {
       nullable: true,
       enum: ['precio', 'tiempo', 'confianza', 'otra'],
     },
+    // HU-IA-05. Sin `format: 'enum'`: son número y prosa libre, no una unión cerrada.
+    confianza: { type: SchemaType.NUMBER },
+    motivo: { type: SchemaType.STRING },
   },
-  required: ['nivelInteres'],
+  // `objecion` sigue fuera de `required` porque su ausencia ES la respuesta "no planteó ninguna".
+  required: ['nivelInteres', 'confianza', 'motivo'],
 };
 
 export class GeminiProvider implements ILlmProvider {
@@ -122,11 +127,15 @@ export class GeminiProvider implements ILlmProvider {
   async extractSlots(input: {
     historial: ChatTurn[];
     camposObjetivo: SlotSpec[];
+    instrucciones: string;
   }): Promise<LlmCallResult<SlotResult>> {
     return this.callWithRetry(async (signal) => {
       const schema = slotSpecToSchema(input.camposObjetivo);
       const model = this.genAI.getGenerativeModel({
         model: env.GEMINI_MODEL,
+        // HU-IA-06: hasta ahora la plantilla `extract` no llegaba al modelo y el único criterio de
+        // extracción eran las descripciones de los slots. Mismo patrón que `classifyLead`.
+        systemInstruction: input.instrucciones,
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema },
       });
       const result = await model.generateContent(
@@ -146,22 +155,37 @@ export class GeminiProvider implements ILlmProvider {
 
   async classifyLead(input: {
     historial: ChatTurn[];
-  }): Promise<LlmCallResult<{ nivelInteres: NivelInteres; objecion: Objecion | null }>> {
+    instrucciones: string;
+  }): Promise<LlmCallResult<ClassifyLeadOutput>> {
     return this.callWithRetry(async (signal) => {
       const model = this.genAI.getGenerativeModel({
         model: env.GEMINI_MODEL,
         generationConfig: { responseMimeType: 'application/json', responseSchema: CLASSIFY_SCHEMA },
       });
       const result = await model.generateContent(
-        { contents: chatTurnsToContents(input.historial) },
+        {
+          contents: chatTurnsToContents(input.historial),
+          // HU-IA-05: hasta ahora faltaba, y la plantilla `classify` que el servicio resolvía no
+          // llegaba nunca al modelo. Mismo sitio que en `generateReply`.
+          systemInstruction: input.instrucciones,
+        },
         { signal },
       );
       const raw = JSON.parse(result.response.text()) as {
         nivelInteres: NivelInteres;
         objecion?: Objecion | null;
+        confianza?: number;
+        motivo?: string;
       };
+      // Se devuelve tal cual viene: el saneado (recorte de `confianza` a [0,1] y de `motivo` a su
+      // longitud máxima) vive en `AIService.classify`, para que valga igual con otro proveedor.
       return {
-        result: { nivelInteres: raw.nivelInteres, objecion: raw.objecion ?? null },
+        result: {
+          nivelInteres: raw.nivelInteres,
+          objecion: raw.objecion ?? null,
+          confianza: raw.confianza ?? 0,
+          motivo: raw.motivo ?? '',
+        },
         usage: usageFromResponse(result.response),
       };
     });

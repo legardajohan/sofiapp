@@ -10,13 +10,13 @@ import {
   findScoped,
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
+import { logger } from '../../utils/logger.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { toResumenResponse } from '../cliente/cliente.mapper.js';
 import type { ICliente, IResumenIA } from '../cliente/cliente.types.js';
 import type { IPaginated } from '../conversation/conversation.types.js';
-import { findTagsByIds } from '../tag/tag.service.js';
 import { Tag } from '../tag/tag.model.js';
-import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
+import { SEMAFORO_SLUGS, type SemaforoSlug } from '../tag/tag.types.js';
 import { findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
@@ -25,9 +25,16 @@ import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { Lead } from './lead.model.js';
 import { existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
 import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
+import {
+  existeSemaforo,
+  findSemaforoByKey,
+  mapaSemaforos,
+} from '../semaforo/semaforo.service.js';
+import type { ISemaforoResponse } from '../semaforo/semaforo.types.js';
 import type {
   CreateLeadDTO,
   IHistorialEstadoResponse,
+  IHistorialSemaforoResponse,
   ILeadDocument,
   ILeadLean,
   ILeadListItemResponse,
@@ -63,6 +70,7 @@ function toLeadResponse(
   lead: ILeadLean,
   contacto: IContactoLean,
   userMap: Map<string, IUserResponse>,
+  semaforo: ISemaforoResponse | null,
 ): ILeadResponse {
   return {
     id: String(lead._id),
@@ -70,6 +78,7 @@ function toLeadResponse(
     telefono: lead.telefono,
     correo: lead.correo ?? null,
     estado: lead.estado,
+    semaforo,
     contacto: {
       id: String(contacto._id),
       nombre: contacto.nombre ?? null,
@@ -144,6 +153,9 @@ export async function createLeadFromConversation(
       correo: dto.correo,
       clienteId: conversacionOid,
       estado: KEY_ESTADO_ENTRADA,
+      // Un lead nace sin clasificar: poner un semáforo es una decisión del asesor, y arrancarlo en
+      // "frío" sería afirmar algo que nadie ha mirado todavía.
+      semaforo: null,
       responsableId: actorOid,
       origen: {
         tipo: 'conversacion',
@@ -174,7 +186,8 @@ export async function createLeadFromConversation(
     despues: { clienteId: dto.clienteId, telefono },
   });
 
-  return toLeadResponse(lead, contacto, await resolveUsuarios(tenantId, lead));
+  // Recién creado: `semaforo` es `null`, así que no hay nada que resolver contra el catálogo.
+  return toLeadResponse(lead, contacto, await resolveUsuarios(tenantId, lead), null);
 }
 
 export async function getLeadById(tenantId: TenantId, leadId: string): Promise<ILeadResponse> {
@@ -195,7 +208,12 @@ export async function getLeadById(tenantId: TenantId, leadId: string): Promise<I
     telefono: lead.telefono,
   };
 
-  return toLeadResponse(lead, contactoSeguro, await resolveUsuarios(tenantId, lead));
+  const [userMap, semaforo] = await Promise.all([
+    resolveUsuarios(tenantId, lead),
+    findSemaforoByKey(tenantId, lead.semaforo),
+  ]);
+
+  return toLeadResponse(lead, contactoSeguro, userMap, semaforo);
 }
 
 /**
@@ -235,6 +253,7 @@ export async function deleteLead(
       telefono: lead.telefono,
       correo: lead.correo ?? null,
       estado: lead.estado,
+      semaforo: lead.semaforo ?? null,
       clienteId: String(lead.clienteId),
       responsableId: String(lead.responsableId),
       origen: {
@@ -249,12 +268,173 @@ export async function deleteLead(
   });
 }
 
+// ─── Semaforización (HU-CRM-04) ─────────────────────────────────────────────────
+
+/** Los cuatro slugs sembrados tienen etiqueta equivalente en la bandeja; los propios del tenant no. */
+function esSlugDeBandeja(key: string | null): key is SemaforoSlug {
+  return key !== null && (SEMAFORO_SLUGS as readonly string[]).includes(key);
+}
+
+/**
+ * Alinea la etiqueta de semáforo de la **conversación** con el semáforo del lead (HU-OMNI-04).
+ *
+ * Va en **un solo sentido**: el lead manda, la bandeja refleja. Sincronizar en ambos exigiría un
+ * candado que hoy no existe y abriría carreras entre dos pantallas que se usan a la vez.
+ *
+ * Es **best-effort** por diseño: el semáforo del lead ya está guardado cuando esto corre, y la
+ * etiqueta es un reflejo. Que el administrador la haya borrado —`docs/domain.md` §5 lo permite
+ * explícitamente— o que el lead lleve un semáforo propio del tenant, que no tiene etiqueta
+ * equivalente, no son errores: la conversación se queda sin chip y ya está.
+ */
+async function sincronizarTagSemaforo(
+  tenantId: TenantId,
+  clienteId: Types.ObjectId,
+  key: string | null,
+): Promise<void> {
+  try {
+    // Por slug y NUNCA por nombre: el administrador puede renombrar las etiquetas.
+    const tags = await findScoped(Tag, tenantId, { semaforo: { $exists: true } })
+      .select({ _id: 1, semaforo: 1 })
+      .lean<{ _id: Types.ObjectId; semaforo: SemaforoSlug }[]>();
+
+    const destino = esSlugDeBandeja(key) ? tags.find((t) => t.semaforo === key) : undefined;
+    const sobrantes = tags.filter((t) => !destino || !t._id.equals(destino._id)).map((t) => t._id);
+
+    // El filtro `semaforo: { $exists: true }` es lo que protege las etiquetas LIBRES del tenant:
+    // solo se retiran las de semáforo, nunca las que el administrador creó para otra cosa.
+    if (sobrantes.length > 0) {
+      await findOneAndUpdateScoped(
+        Cliente,
+        tenantId,
+        { _id: clienteId },
+        { $pull: { tagIds: { $in: sobrantes } } },
+      );
+    }
+
+    if (destino) {
+      await findOneAndUpdateScoped(
+        Cliente,
+        tenantId,
+        { _id: clienteId },
+        { $addToSet: { tagIds: destino._id } },
+      );
+    }
+  } catch (err) {
+    logger.error('No se pudo sincronizar la etiqueta de semáforo de la conversación', {
+      clienteId: String(clienteId),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Cambia el semáforo comercial de un lead (HU-CRM-04).
+ *
+ * El `semaforo` se valida contra el **catálogo del tenant**, no contra un enum: desde que el
+ * catálogo es un CRUD, los colores son datos de cada empresa. Una clave que no existe es un `400`
+ * y no un guardado silencioso — a diferencia del filtro del listado, donde una clave desconocida
+ * solo significa "no hay nada que mostrar", aquí escribiría en el lead un semáforo que nadie puede
+ * resolver.
+ *
+ * El orden de las operaciones es lo que sostiene la garantía: primero se escribe el dato
+ * autoritativo, y solo después la auditoría y el reflejo en la bandeja, ninguno de los cuales puede
+ * tumbar un cambio que el usuario ya dio por hecho.
+ */
+export async function updateLeadSemaforo(
+  tenantId: TenantId,
+  actorId: string,
+  leadId: string,
+  semaforo: string | null,
+): Promise<ILeadResponse> {
+  // Mismo criterio que `getLeadById`: un id de otro tenant es indistinguible de uno inexistente.
+  const lead = await findByIdScoped(Lead, tenantId, leadId).lean<ILeadLean>();
+  if (!lead) throw new AppError('Lead no encontrado.', 404);
+
+  if (semaforo !== null && !(await existeSemaforo(tenantId, semaforo))) {
+    throw new AppError('Ese semáforo no existe en el catálogo de la empresa.', 400);
+  }
+
+  // Poner el que ya tiene no es un error, pero tampoco merece auditoría ni escritura: llenaría el
+  // historial de entradas que no cuentan ningún cambio.
+  const actual = lead.semaforo ?? null;
+  if (actual === semaforo) return getLeadById(tenantId, leadId);
+
+  await findOneAndUpdateScoped(Lead, tenantId, { _id: lead._id }, { $set: { semaforo } });
+
+  // Quién movió un lead a "venta concretada" —y cuándo— es justo lo que se pregunta cuando las
+  // cuentas no cuadran. `recordAuditEvent` no lanza: un fallo aquí no le cuesta el cambio al asesor.
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'lead.semaforo',
+    entidad: 'lead',
+    entidadId: String(lead._id),
+    antes: { semaforo: actual },
+    despues: { semaforo },
+  });
+
+  await sincronizarTagSemaforo(tenantId, lead.clienteId, semaforo);
+
+  return getLeadById(tenantId, leadId);
+}
+
+/**
+ * Historial de cambios de semáforo de un lead (HU-CRM-04). Réplica del patrón de `listAssignments`
+ * (HU-OMNI-02): valida la propiedad del recurso, lee la bitácora y resuelve los actores en lote.
+ *
+ * El filtro por `accion` va **en la consulta**, no después: la entidad `lead` acumula también
+ * `lead.create`, `lead.update` y `lead.delete`, y descartarlos tras paginar daría un `total` que no
+ * corresponde con las filas devueltas.
+ */
+export async function listHistorialSemaforo(
+  tenantId: TenantId,
+  leadId: string,
+  page: number,
+  limit: number,
+): Promise<IPaginated<IHistorialSemaforoResponse>> {
+  const lead = await findByIdScoped(Lead, tenantId, leadId).select({ _id: 1 }).lean();
+  if (!lead) throw new AppError('Lead no encontrado.', 404);
+
+  const { data, total } = await listAuditEvents(
+    tenantId,
+    'lead',
+    leadId,
+    page,
+    limit,
+    'lead.semaforo',
+  );
+
+  // Un actor nulo es el sistema —la clasificación automática de HU-IA-05 no la dispara ninguna
+  // persona—, mismo criterio que el historial de asignaciones: no hay `User` que resolver, y
+  // colarlo en la lista le pasaría un id inválido a `findUsersByIds`.
+  const userMap = await findUsersByIds(
+    tenantId,
+    data.flatMap((evt) => (evt.actorId ? [evt.actorId] : [])),
+  );
+
+  return {
+    data: data.map((evt) => ({
+      id: evt.id,
+      de: leerSlug(evt.antes['semaforo']),
+      a: leerSlug(evt.despues['semaforo']),
+      actor: evt.actorId ? toRef(new Types.ObjectId(evt.actorId), userMap) : null,
+      at: evt.createdAt,
+    })),
+    page,
+    limit,
+    total,
+  };
+}
+
+/** `antes`/`despues` son `Mixed`: lo que no sea una cadena se lee como "sin clasificar". */
+function leerSlug(valor: unknown): string | null {
+  return typeof valor === 'string' ? valor : null;
+}
+
 // ─── Listado (HU-CRM-03) ────────────────────────────────────────────────────────
 
-/** Proyección de `Cliente` que el listado necesita para hidratar semáforo y resumen. */
+/** Proyección de `Cliente` que el listado necesita para hidratar el resumen. */
 interface IClienteListSource {
   _id: Types.ObjectId;
-  tagIds?: Types.ObjectId[];
   resumenIA?: IResumenIA;
   ultimoMensajeAt?: Date;
 }
@@ -281,6 +461,10 @@ export function buildLeadFilter(query: ListLeadsQuery): FilterQuery<ILeadDocumen
   if (query.estado) filter.estado = query.estado;
   // `asesor` es un userId contra `responsableId`: no existe el rol "Asesor" (AUTH-02).
   if (query.asesor) filter.responsableId = new Types.ObjectId(query.asesor);
+  // Desde HU-CRM-04 el semáforo es un campo del lead: un match directo cubierto por el índice
+  // `{ tenantId, semaforo, createdAt }`, en vez de las dos consultas que costaba resolverlo a
+  // través de las etiquetas de la conversación.
+  if (query.semaforo) filter.semaforo = query.semaforo;
 
   if (query.desde || query.hasta) {
     const rango: { $gte?: Date; $lte?: Date } = {};
@@ -292,63 +476,14 @@ export function buildLeadFilter(query: ListLeadsQuery): FilterQuery<ILeadDocumen
   return filter;
 }
 
-/**
- * Acota el filtro a los leads cuya **conversación** lleva la etiqueta de semáforo pedida.
- *
- * El semáforo no es un campo del lead: son cuatro etiquetas de sistema aplicadas a `Cliente.tagIds`
- * (`docs/domain.md` §5). Por eso hay que pasar por el cliente. Ambas consultas van por el
- * repositorio scoped, así que el `$in` resultante solo puede contener clientes del propio tenant —
- * es lo que sostiene el aislamiento de este filtro.
- *
- * Devuelve `false` cuando el filtro no puede casar con nada (la etiqueta no existe porque el
- * administrador la borró, o ninguna conversación la lleva). Responder el listado **sin filtrar** en
- * ese caso sería peor que devolver vacío: el usuario pidió acotar y recibiría todo.
- */
-export async function aplicarFiltroSemaforo(
-  tenantId: TenantId,
-  filter: FilterQuery<ILeadDocument>,
-  semaforo: NonNullable<ListLeadsQuery['semaforo']>,
-): Promise<boolean> {
-  // Por slug, nunca por nombre: el nombre es editable por el administrador.
-  const tag = await findOneScoped(Tag, tenantId, { semaforo })
-    .select({ _id: 1 })
-    .lean<{ _id: Types.ObjectId }>();
-  if (!tag) return false;
-
-  // Un ObjectId suelto contra un campo array significa "contiene" en Mongo; cubierto por el
-  // índice { tenantId, tagIds }.
-  const clientes = await findScoped(Cliente, tenantId, { tagIds: tag._id })
-    .select({ _id: 1 })
-    .lean<{ _id: Types.ObjectId }[]>();
-  if (clientes.length === 0) return false;
-
-  filter.clienteId = { $in: clientes.map((c) => c._id) };
-  return true;
-}
-
-/** `ITagResponse` ya estrechada a etiqueta de semáforo: evita un `!` al ordenar por slug. */
-type ITagSemaforoResponse = ITagResponse & { semaforo: SemaforoSlug };
-
 function toLeadListItemResponse(
   lead: ILeadLean,
   userMap: Map<string, IUserResponse>,
   clienteMap: Map<string, IClienteListSource>,
-  tagMap: Map<string, ITagResponse>,
+  semaforoMap: Map<string, ISemaforoResponse>,
+  puedeVerSensibles: boolean,
 ): ILeadListItemResponse {
   const cliente = clienteMap.get(String(lead.clienteId));
-
-  // TODAS las etiquetas de semáforo de la conversación, no solo una: que las cuatro se usen como
-  // excluyentes es una convención, no algo que el modelo imponga, y quedarse con la primera
-  // escondía en silencio las demás. Las etiquetas libres (sin slug) no participan.
-  //
-  // Orden: la aplicada más recientemente PRIMERO, que es la que la tabla pinta como principal.
-  // Se deriva del orden de `Cliente.tagIds` (la última del array es la última puesta), por eso se
-  // invierte. Salvedad honesta: `setConversationTags` reemplaza el conjunto entero, así que ese
-  // orden es el que mandó la UI, no un histórico real de cuándo se aplicó cada una.
-  const semaforos = (cliente?.tagIds ?? [])
-    .map((id) => tagMap.get(String(id)))
-    .filter((tag): tag is ITagSemaforoResponse => !!tag && tag.semaforo !== null)
-    .reverse();
 
   return {
     id: String(lead._id),
@@ -356,10 +491,10 @@ function toLeadListItemResponse(
     telefono: lead.telefono,
     correo: lead.correo ?? null,
     estado: lead.estado,
+    semaforo: lead.semaforo ? (semaforoMap.get(lead.semaforo) ?? null) : null,
     responsable: toRef(lead.responsableId, userMap),
     conversacionId: String(lead.origen.conversacionId),
-    semaforos,
-    resumen: cliente ? toResumenResponse(cliente) : null,
+    resumen: cliente ? toResumenResponse(cliente, puedeVerSensibles) : null,
     ultimoMensajeAt: cliente?.ultimoMensajeAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),
   };
@@ -367,43 +502,47 @@ function toLeadListItemResponse(
 
 /**
  * Hidrata un conjunto de leads a la proyección de listado, resolviendo contacto, responsable y
- * etiquetas **en lote**: una consulta por colección para todos ellos, nunca N+1.
+ * semáforo **en lote**: una consulta por colección para todos ellos, nunca N+1.
  *
  * Está extraída de `listLeads` para que el tablero del embudo (HU-PIPE-01) la reutilice en vez de
  * escribir una proyección paralela: una tarjeta y una fila que se construyeran por separado
  * divergirían en la primera modificación del listado. El tablero la llama **una sola vez con los
  * leads de todas las columnas**, así que resolver diez columnas cuesta lo mismo que resolver una
  * página de la tabla.
+ *
+ * `puedeVerSensibles` viaja como parámetro y no se resuelve aquí: el permiso sale del token y lo
+ * decide el controller (HU-IA-04), igual que en la tabla y en la bandeja. Por defecto `false`, que
+ * es el lado seguro si una llamada nueva olvidara pasarlo.
  */
 export async function hidratarLeadsParaListado(
   tenantId: TenantId,
   leads: ILeadLean[],
+  puedeVerSensibles = false,
 ): Promise<ILeadListItemResponse[]> {
   if (leads.length === 0) return [];
 
-  // Los clientes de la página, con SOLO lo que la tabla pinta: semáforo, resumen y último mensaje.
+  // Los clientes del conjunto, con SOLO lo que la tabla pinta: resumen y último mensaje. El
+  // semáforo ya no sale de aquí (es campo del lead, HU-CRM-04), así que `tagIds` dejó de hacer falta.
   const clientes = await findScoped(Cliente, tenantId, {
     _id: { $in: leads.map((l) => l.clienteId) },
   })
-    .select({ _id: 1, tagIds: 1, resumenIA: 1, ultimoMensajeAt: 1 })
+    .select({ _id: 1, resumenIA: 1, ultimoMensajeAt: 1 })
     .lean<IClienteListSource[]>();
 
   const clienteMap = new Map(clientes.map((c) => [String(c._id), c]));
 
-  // Responsables y etiquetas de todo el conjunto, una consulta cada uno (mismos helpers en lote
-  // que usa la bandeja).
-  const [userMap, tagMap] = await Promise.all([
+  // Responsables y catálogo de semáforos de todo el conjunto, una consulta cada uno.
+  const [userMap, semaforoMap] = await Promise.all([
     findUsersByIds(
       tenantId,
       leads.map((l) => String(l.responsableId)),
     ),
-    findTagsByIds(
-      tenantId,
-      clientes.flatMap((c) => (c.tagIds ?? []).map((id) => String(id))),
-    ),
+    mapaSemaforos(tenantId),
   ]);
 
-  return leads.map((lead) => toLeadListItemResponse(lead, userMap, clienteMap, tagMap));
+  return leads.map((lead) =>
+    toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, puedeVerSensibles),
+  );
 }
 
 /**
@@ -509,9 +648,11 @@ export async function listHistorialEstado(
     ACCIONES_DE_ETAPA,
   );
 
+  // Un actor nulo es el sistema (mismo criterio que el historial de asignaciones): no hay `User`
+  // que resolver, y colarlo en la lista le pasaría un id inválido a `findUsersByIds`.
   const userMap = await findUsersByIds(
     tenantId,
-    data.map((e) => e.actorId),
+    data.flatMap((e) => (e.actorId ? [e.actorId] : [])),
   );
 
   return {
@@ -519,10 +660,9 @@ export async function listHistorialEstado(
       id: evento.id,
       de: typeof evento.antes['estado'] === 'string' ? evento.antes['estado'] : null,
       a: typeof evento.despues['estado'] === 'string' ? evento.despues['estado'] : null,
-      actor: {
-        id: evento.actorId,
-        nombre: userMap.get(evento.actorId)?.nombre ?? null,
-      },
+      actor: evento.actorId
+        ? { id: evento.actorId, nombre: userMap.get(evento.actorId)?.nombre ?? null }
+        : null,
       at: evento.createdAt,
     })),
     page,
@@ -537,22 +677,28 @@ export async function listHistorialEstado(
  *
  * Las referencias se resuelven **en lote**: una consulta por colección y página, nunca N+1. No se
  * usa `populate`, que saltaría el repositorio scoped y con él la garantía de aislamiento.
+ *
+ * `puedeVerSensibles` viaja como parámetro y no se resuelve aquí: el permiso sale del token y lo
+ * decide el controller (HU-IA-04), igual que en la bandeja.
  */
 export async function listLeads(
   tenantId: TenantId,
   query: ListLeadsQuery,
+  puedeVerSensibles = false,
 ): Promise<IPaginated<ILeadListItemResponse>> {
   const { page, limit } = query;
   const filter = buildLeadFilter(query);
 
   // Un `?estado=` que no está en el catálogo de ESTE tenant devuelve página vacía, no un listado
-  // sin filtrar: mismo criterio que el semáforo cuya etiqueta se borró. Cubre además el caso de
-  // colar la clave de otra empresa, que nunca puede traer datos ajenos.
+  // sin filtrar. Cubre además el caso de colar la clave de otra empresa, que nunca puede traer
+  // datos ajenos.
   if (query.estado && !(await existeEstado(tenantId, query.estado))) {
     return { data: [], page, limit, total: 0 };
   }
 
-  if (query.semaforo && !(await aplicarFiltroSemaforo(tenantId, filter, query.semaforo))) {
+  // Mismo criterio para el semáforo: el usuario pidió acotar, y responder el listado entero sería
+  // peor que devolver vacío.
+  if (query.semaforo && !(await existeSemaforo(tenantId, query.semaforo))) {
     return { data: [], page, limit, total: 0 };
   }
 
@@ -567,7 +713,12 @@ export async function listLeads(
 
   if (leads.length === 0) return { data: [], page, limit, total };
 
-  return { data: await hidratarLeadsParaListado(tenantId, leads), page, limit, total };
+  return {
+    data: await hidratarLeadsParaListado(tenantId, leads, puedeVerSensibles),
+    page,
+    limit,
+    total,
+  };
 }
 
 /**

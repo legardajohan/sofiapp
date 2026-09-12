@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { createKbFaq, faqErrorMessage, updateKbFaq } from '../../../api/kb-faqs.js';
+import { estadoMinimo, useKbFaqs } from '../hooks/useKbFaqs.js';
 import type { IKbFaq } from '../types/index.js';
 
 const MAX_PREGUNTA = 300;
@@ -31,6 +32,11 @@ interface Props {
 export function FaqFormDialog({ faq, open, onOpenChange }: Props): React.ReactElement {
   const isEdit = Boolean(faq);
   const queryClient = useQueryClient();
+  const { data } = useKbFaqs();
+  const { minimo, puedeReducir } = estadoMinimo(data);
+  // Solo al editar una que ya está activa: crear nunca se limita, y sobre una apagada no hay
+  // conteo que proteger (HU-KB-02-V3).
+  const bloqueaApagar = Boolean(faq?.activo) && !puedeReducir;
 
   const [pregunta, setPregunta] = useState('');
   const [respuesta, setRespuesta] = useState('');
@@ -127,10 +133,17 @@ export function FaqFormDialog({ faq, open, onOpenChange }: Props): React.ReactEl
                 Activa
               </Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Si la desactivas, Sofi deja de usarla y esa consulta vuelve al modelo.
+                {bloqueaApagar
+                  ? `Sofi necesita al menos ${minimo} preguntas activas. Activa otra antes de apagar esta.`
+                  : 'Si la desactivas, Sofi deja de usarla y esa consulta vuelve al modelo.'}
               </p>
             </div>
-            <Switch id="faq-activo" checked={activo} onCheckedChange={setActivo} />
+            <Switch
+              id="faq-activo"
+              checked={activo}
+              disabled={bloqueaApagar}
+              onCheckedChange={setActivo}
+            />
           </div>
 
           {error && (

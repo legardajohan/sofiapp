@@ -514,6 +514,10 @@ function construirDocs(
       ultimoMensajeAt,
       noLeidos: conv.noLeidos,
       iaHabilitada: conv.iaHabilitada,
+      // Ninguna conversación de demo nace transferida por Sofi (HU-IA-03): el seed retrata la
+      // bandeja en su estado normal, y un handoff es un evento, no un punto de partida.
+      handoffAt: null,
+      handoffMotivo: null,
       customFields: {},
       atributos: [],
       tagIds: conv.tags

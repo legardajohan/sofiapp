@@ -82,3 +82,40 @@ contacto.** AUTH-02 sigue vigente para todo lo demás.
   el mecanismo independiente y sigue siendo el único que decide quién ve el dato. Lo que se pierde
   es la defensa ante un volcado de la base o un backup extraviado; reactivarlo es un cambio de un
   solo archivo y el camino de lectura ya entiende los valores `enc:v1:` heredados.
+
+## Enmienda (HU-IA-04, 2026-08-25)
+
+El **resumen por IA de la conversación** (`Cliente.resumenIA`) se suma al conjunto que gobierna el
+`subrol`. La decisión de esta ADR no cambia: se amplía dentro del mismo dominio —los datos
+personales del contacto— y con el mismo argumento.
+
+**Motivo.** El resumen lo escribe el modelo sobre el transcript **completo**, así que puede citar en
+claro el correo o el documento que `toContactCard` enmascara dos tarjetas más arriba. Un
+`coordinator` veía `d••••@empresa.com` en la ficha y podía leer *"el cliente dejó su correo
+diego@empresa.com"* en el resumen de al lado. Es exactamente la forma de dato que §3 ya cerró para
+las notas —*"prosa libre donde acaba cualquier cosa y no hay forma de enmascararla
+selectivamente"*—, aplicada a un texto que además nadie escribió a mano.
+
+**Granularidad**, siguiendo el criterio de §3:
+
+- **Por campo, en el service.** `toResumenResponse(c, puedeVerSensibles = false)` devuelve `null` sin
+  permiso, y tanto `GET /clientes/:id/history` como `GET /conversations/:id/overview` se lo pasan. El
+  gate vive en el mapper y no en cada ruta a propósito: cerrar solo la ruta nueva habría dejado
+  abierta la vieja.
+- **Por ruta, en la generación.** `POST /conversations/:id/summary` gana
+  `authorizeSubrol(SUBROLES_DATOS_SENSIBLES)`: no hay respuesta parcial que devolver, y cada llamada
+  paga entre 7 y 26 s de modelo. Quien no puede leer el resumen tampoco puede pagarlo.
+
+**Lo que NO se cierra.** `GET /conversations/:id/overview` sigue abierto a cualquier `admin`. La
+vista de la conversación contiene también la cabecera y las etiquetas, que sí corresponden a
+`coordinator` y `secretary`; cerrar la ruta entera les quitaría su trabajo diario, que es la misma
+pérdida que esta ADR ya lamentó con las notas. El resumen sale `null` y el bloque `permisos` de la
+respuesta explica por qué, para que la UI muestre el motivo en vez de un hueco (§4).
+
+**Lo que sigue igual.** Un `admin` sin `subrol` conserva acceso total (§2), y el CRUD para asignar
+subroles sigue pendiente desde AUTH-02: en producción este gate no se activa hasta que exista. Los
+tests lo siembran a mano.
+
+**Alcance no ampliado.** Las acciones operativas de la bandeja —responder, etiquetar, el toggle de
+Sofi, reasignar, convertir en lead— **no** pasan a depender del `subrol`. Se consideró y se descartó
+por el mismo motivo del párrafo anterior.

@@ -9,8 +9,10 @@ import {
   deleteLeadSchema,
   getLeadSchema,
   historialEstadoSchema,
+  historialSemaforoSchema,
   listLeadsSchema,
   updateLeadSchema,
+  updateLeadSemaforoSchema,
   updateLeadStageSchema,
 } from './lead.validation.js';
 import {
@@ -18,8 +20,10 @@ import {
   deleteLeadController,
   getLeadController,
   historialEstadoController,
+  historialSemaforoController,
   listLeadsController,
   updateLeadController,
+  updateLeadSemaforoController,
   updateLeadStageController,
 } from './lead.controller.js';
 
@@ -47,8 +51,9 @@ router.post(
   asyncHandler(createLeadController),
 );
 
-// Embudo (HU-PIPE-01). Van ANTES de las rutas `/:id` genericas por la misma higiene de orden que
-// el listado: la ruta mas concreta primero. Si no, `/:id` capturaria `stage` como si fuera un id.
+// Embudo (HU-PIPE-01) y semaforización (HU-CRM-04). Van ANTES de las rutas `/:id` genéricas por la
+// misma higiene de orden que el listado: la ruta más concreta primero. Si no, `/:id` capturaría
+// `stage` o `status` como si fueran un id.
 router.patch(
   '/:id/stage',
   authenticateJWT,
@@ -65,6 +70,24 @@ router.get(
   leadRoles,
   validate(historialEstadoSchema),
   asyncHandler(historialEstadoController),
+);
+
+router.patch(
+  '/:id/status',
+  authenticateJWT,
+  requireTenant,
+  leadRoles,
+  validate(updateLeadSemaforoSchema),
+  asyncHandler(updateLeadSemaforoController),
+);
+
+router.get(
+  '/:id/historial',
+  authenticateJWT,
+  requireTenant,
+  leadRoles,
+  validate(historialSemaforoSchema),
+  asyncHandler(historialSemaforoController),
 );
 
 router.get(

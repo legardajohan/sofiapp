@@ -1,6 +1,5 @@
 import type { IEstadoResponse } from '../estado/estado.types.js';
 import type { ILeadListItemResponse } from '../lead/lead.types.js';
-import type { SemaforoSlug } from '../tag/tag.types.js';
 
 /**
  * El embudo de leads agrupado por etapa (HU-PIPE-01).
@@ -44,7 +43,7 @@ export interface IPipelineResponse {
 export interface PipelineQuery {
   limit: number;
   asesor?: string;
-  semaforo?: SemaforoSlug;
+  semaforo?: string;
   desde?: Date;
   hasta?: Date;
 }

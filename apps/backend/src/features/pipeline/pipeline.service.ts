@@ -2,11 +2,8 @@ import type { FilterQuery, Types } from 'mongoose';
 import { countScoped, findScoped } from '../../repositories/base.repository.js';
 import { listEstados } from '../estado/estado.service.js';
 import { Lead } from '../lead/lead.model.js';
-import {
-  aplicarFiltroSemaforo,
-  buildLeadFilter,
-  hidratarLeadsParaListado,
-} from '../lead/lead.service.js';
+import { buildLeadFilter, hidratarLeadsParaListado } from '../lead/lead.service.js';
+import { existeSemaforo } from '../semaforo/semaforo.service.js';
 import type { ILeadDocument, ILeadLean, ILeadListItemResponse } from '../lead/lead.types.js';
 import type {
   IPipelineColumnResponse,
@@ -38,6 +35,7 @@ type TenantId = string | Types.ObjectId;
 export async function getPipeline(
   tenantId: TenantId,
   query: PipelineQuery,
+  puedeVerSensibles = false,
 ): Promise<IPipelineResponse> {
   const { limit } = query;
 
@@ -57,11 +55,12 @@ export async function getPipeline(
     hasta: query.hasta,
   });
 
-  // El semáforo no es un campo del lead: vive como etiqueta de la conversación y hay que traducirlo
-  // a un `$in` de clientes. Cuando no puede casar con nada, el tablero sale con todas sus columnas
-  // **vacías pero presentes**: el usuario pidió acotar y debe ver que no hay nada, no el embudo sin
-  // filtrar ni una pantalla en blanco que no explica por qué.
-  if (query.semaforo && !(await aplicarFiltroSemaforo(tenantId, filtroComun, query.semaforo))) {
+  // Desde HU-CRM-04 el semáforo es un campo del lead, así que `buildLeadFilter` ya lo dejó puesto
+  // en `filtroComun`; aquí solo queda descartar una clave que no exista en el catálogo de ESTE
+  // tenant. En ese caso el tablero sale con todas sus columnas **vacías pero presentes**: el
+  // usuario pidió acotar y debe ver que no hay nada, no el embudo sin filtrar ni una pantalla en
+  // blanco que no explica por qué.
+  if (query.semaforo && !(await existeSemaforo(tenantId, query.semaforo))) {
     return {
       columnas: etapas.map((etapa) => ({ etapa, total: 0, leads: [] })),
       limit,
@@ -85,6 +84,7 @@ export async function getPipeline(
   const hidratados = await hidratarLeadsParaListado(
     tenantId,
     columnas.flatMap((c) => c.leads),
+    puedeVerSensibles,
   );
   const porId = new Map(hidratados.map((lead) => [lead.id, lead]));
 

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { PipelineBoard } from '../../pipeline/index.js';
 import { useLeads } from '../hooks/useLeads.js';
 import { useEstados } from '../../estados/hooks/useEstados.js';
+import { useSemaforos } from '../../semaforos/hooks/useSemaforos.js';
 import { useLeadsStore } from '../useLeadsStore.js';
 import type { LeadListItemDTO, LeadsFiltros } from '../types.js';
 
@@ -67,6 +68,7 @@ export function LeadsPage(): React.ReactElement {
 
   const { data, isLoading, isError, refetch } = useLeads(filtros, vista === 'tabla');
   const estados = useEstados();
+  const semaforos = useSemaforos();
   const selectedId = useLeadsStore((s) => s.selectedId);
   const select = useLeadsStore((s) => s.select);
 
@@ -243,6 +245,7 @@ export function LeadsPage(): React.ReactElement {
         lead={seleccionado}
         onClose={cerrarDetalle}
         estados={estados.data ?? []}
+        semaforos={semaforos.data ?? []}
       />
     </div>
   );

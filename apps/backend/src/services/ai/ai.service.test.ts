@@ -9,7 +9,7 @@ import { AiUsageLogModel, type IAiUsageLog } from './ai-usage-log.model.js';
 import { AiResponseContextModel, type IAiResponseContext } from './ai-response-context.model.js';
 import { Tenant } from '../../features/tenant/tenant.model.js';
 import { findScoped, findOneScoped } from '../../repositories/base.repository.js';
-import type { FaqMatcher } from './ai-service.types.js';
+import type { FaqMatcher, KnowledgeRetriever, RetrievedChunk } from './ai-service.types.js';
 
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
 
@@ -42,9 +42,10 @@ function makeProvider(): ILlmProvider {
     extractSlots: vi
       .fn()
       .mockResolvedValue({ result: { slots: { nombre: 'Juan' }, incompletos: [] }, usage: USAGE }),
-    classifyLead: vi
-      .fn()
-      .mockResolvedValue({ result: { nivelInteres: 'tibio', objecion: 'precio' }, usage: USAGE }),
+    classifyLead: vi.fn().mockResolvedValue({
+      result: { nivelInteres: 'tibio', objecion: 'precio', confianza: 0.8, motivo: 'compara precios' },
+      usage: USAGE,
+    }),
     embedTexts: vi
       .fn()
       .mockResolvedValue({ result: [[0.1, 0.2, 0.3]], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }),
@@ -302,6 +303,181 @@ describe('AIService.chat() — invalidación por Tenant.kbVersion (HU-KB-03)', (
   });
 });
 
+// ─── chat() · RAG sobre la KB (HU-IA-01) ──────────────────────────────────────
+describe('AIService.chat() — RAG sobre la KB (HU-IA-01)', () => {
+  let tenantId: Types.ObjectId;
+  beforeEach(() => { tenantId = new Types.ObjectId(); });
+
+  /** Matcher explícito "sin match" para llegar al 4º parámetro del constructor. */
+  const noopMatcher: FaqMatcher = async () => ({ matched: false });
+
+  /** `writeResponseContext` es fire-and-forget: hay que darle un tick antes de leer Mongo. */
+  const esperarEscrituraDiferida = (): Promise<unknown> =>
+    new Promise((r) => setTimeout(r, 50));
+
+  const CHUNKS: RetrievedChunk[] = [
+    { texto: 'El horario de atención es de 8:00 a 18:00.', documentId: 'doc-1', score: 0.91 },
+    { texto: 'Los domingos permanecemos cerrados.', documentId: 'doc-1', score: 0.83 },
+  ];
+
+  /** Último `instrucciones` con el que se invocó a `generateReply`. */
+  function instruccionesDe(provider: ILlmProvider): string {
+    const mock = provider.generateReply as unknown as { mock: { calls: Array<[{ instrucciones: string }]> } };
+    return mock.mock.calls[0]![0].instrucciones;
+  }
+
+  function tonoDe(provider: ILlmProvider): string {
+    const mock = provider.generateReply as unknown as { mock: { calls: Array<[{ tono: string }]> } };
+    return mock.mock.calls[0]![0].tono;
+  }
+
+  it('con chunks recuperados: el contexto llega en `instrucciones`', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    const instrucciones = instruccionesDe(provider);
+    expect(instrucciones).toContain('El horario de atención es de 8:00 a 18:00.');
+    expect(instrucciones).toContain('Los domingos permanecemos cerrados.');
+    expect(instrucciones).toContain('--- CONTEXTO ---');
+  });
+
+  it('recibe la última pregunta del cliente como consulta de recuperación', async () => {
+    await seedGlobalTemplate('chat');
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const service = new AIService(makeProvider(), makeRedisMock(), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(retriever).toHaveBeenCalledWith(tenantId, '¿Cuánto cuesta?');
+  });
+
+  it('sin chunks: marca el contexto como vacío en vez de omitir el bloque', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue([]);
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    const instrucciones = instruccionesDe(provider);
+    expect(instrucciones).toContain('--- CONTEXTO ---');
+    expect(instrucciones).toContain('sin información en la base de conocimiento');
+  });
+
+  it('el contexto NO se duplica en `tono`: generateReply compone `Tono: X. Y`', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    const tono = tonoDe(provider);
+    expect(tono).not.toContain('--- CONTEXTO ---');
+    expect(tono).not.toContain('El horario de atención es de 8:00 a 18:00.');
+    // Y tampoco el system prompt, que es lo que duplicaba el bug previo a HU-IA-01.
+    expect(tono).not.toContain('Plantilla global de prueba para chat');
+  });
+
+  it('usa el `tono` de la plantilla del tenant cuando lo define', async () => {
+    await PromptTemplateModel.create({
+      tenantId,
+      method: 'chat',
+      version: '2.0.0',
+      isActive: true,
+      systemPrompt: 'Instrucciones propias del tenant',
+      tono: 'informal y juvenil',
+    });
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, async () => []);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(tonoDe(provider)).toBe('informal y juvenil');
+  });
+
+  it('sin `tono` en la plantilla, cae al tono por defecto del código', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, async () => []);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(tonoDe(provider)).toBe('profesional, claro y cercano');
+  });
+
+  it('cache hit: no se recupera nada (el RAG va después de la caché)', async () => {
+    await seedGlobalTemplate('chat');
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const redisCache = new Map<string, string>();
+    const service = new AIService(makeProvider(), makeRedisMock(redisCache), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    const segunda = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(segunda.cacheHit).toBe(true);
+    expect(retriever).toHaveBeenCalledTimes(1); // solo la primera, la que sí generó
+    expect(segunda.retrievedChunks).toEqual([]);
+  });
+
+  it('match de FAQ: no se recupera nada (el RAG va después del cortocircuito)', async () => {
+    await seedGlobalTemplate('chat');
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const matcher: FaqMatcher = async () => ({ matched: true, respuesta: 'Respuesta literal de FAQ' });
+    const service = new AIService(makeProvider(), makeRedisMock(), matcher, retriever);
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(result.fromFaq).toBe(true);
+    expect(retriever).not.toHaveBeenCalled();
+    expect(result.retrievedChunks).toEqual([]);
+  });
+
+  it('si la recuperación falla, responde igual con contexto vacío en vez de romper el chat', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const retriever: KnowledgeRetriever = vi.fn().mockRejectedValue(new Error('Atlas caído'));
+    const service = new AIService(provider, makeRedisMock(), noopMatcher, retriever);
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(result.data).toBe('Respuesta del modelo');
+    expect(result.retrievedChunks).toEqual([]);
+    expect(instruccionesDe(provider)).toContain('sin información en la base de conocimiento');
+  });
+
+  it('sin retriever cableado, el comportamiento previo a HU-IA-01 se mantiene', async () => {
+    await seedGlobalTemplate('chat');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    const result = await service.chat({ tenantId, historial: HISTORIAL });
+
+    expect(result.data).toBe('Respuesta del modelo');
+    expect(result.retrievedChunks).toEqual([]);
+  });
+
+  it('los chunks usados quedan auditados en AiResponseContext', async () => {
+    await seedGlobalTemplate('chat');
+    const retriever: KnowledgeRetriever = vi.fn().mockResolvedValue(CHUNKS);
+    const service = new AIService(makeProvider(), makeRedisMock(), noopMatcher, retriever);
+
+    await service.chat({ tenantId, historial: HISTORIAL });
+    await esperarEscrituraDiferida();
+
+    const ctx = await findOneScoped(AiResponseContextModel, tenantId, {})
+      .lean<IAiResponseContext>()
+      .exec();
+    expect(ctx?.retrievedChunks).toHaveLength(2);
+    expect(ctx?.retrievedChunks[0]?.texto).toBe('El horario de atención es de 8:00 a 18:00.');
+    expect(ctx?.retrievedChunks[0]?.documentId).toBe('doc-1');
+  });
+});
+
 // ─── chat() · AiResponseContext (HU-KB-04) ────────────────────────────────────
 describe('AIService.chat() — AiResponseContext (HU-KB-04)', () => {
   let tenantId: Types.ObjectId;
@@ -398,6 +574,67 @@ describe('AIService.classify()', () => {
     expect(r2.cacheHit).toBe(true);
     expect(provider.classifyLead).toHaveBeenCalledTimes(1);
   });
+
+  // HU-IA-05. Hasta entonces `classify()` resolvía la plantilla solo para versionar la clave de
+  // caché y el `systemPrompt` no llegaba nunca al modelo: era texto muerto.
+  it('pasa el systemPrompt de la plantilla como instrucciones (AC2)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(provider.classifyLead).toHaveBeenCalledWith({
+      historial: HISTORIAL,
+      instrucciones: 'Plantilla global de prueba para classify',
+    });
+  });
+
+  it('propaga confianza y motivo (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(0.8);
+    expect(data.motivo).toBe('compara precios');
+  });
+
+  it('sanea una salida fuera de rango en vez de romper (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    // Confianza imposible y motivo larguísimo: lo que devuelve el modelo es una sugerencia, no una
+    // promesa. `confianza` ausente cuenta como 0 y por tanto nunca alcanza el umbral.
+    (provider.classifyLead as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { nivelInteres: 'frio', objecion: null, confianza: 1.4, motivo: 'x'.repeat(500) },
+      usage: USAGE,
+    });
+    const service = new AIService(provider, makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(1);
+    expect(data.motivo).toHaveLength(240);
+  });
+
+  it('confianza ausente o no numérica → 0, que no alcanza ningún umbral (AC1)', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('classify');
+    const provider = makeProvider();
+    (provider.classifyLead as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { nivelInteres: 'caliente', objecion: null },
+      usage: USAGE,
+    });
+    const service = new AIService(provider, makeRedisMock());
+
+    const { data } = await service.classify({ tenantId, historial: HISTORIAL });
+
+    expect(data.confianza).toBe(0);
+    expect(data.motivo).toBe('');
+  });
 });
 
 // ─── extract() ────────────────────────────────────────────────────────────────
@@ -429,6 +666,44 @@ describe('AIService.extract()', () => {
     await expect(
       service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] }),
     ).rejects.toThrow();
+  });
+
+  // HU-IA-06 (AC3). Hasta esta historia `extract()` resolvía la plantilla y descartaba el resultado:
+  // el `systemPrompt` sembrado era texto muerto y ningún tenant podía afinar su extracción. Es el
+  // mismo agujero que HU-IA-05 cerró en `classify()`.
+  it('pasa el systemPrompt de la plantilla resuelta como instrucciones', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('extract');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+    const schema = z.object({ nombre: z.string() });
+
+    await service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] });
+
+    expect(provider.extractSlots).toHaveBeenCalledWith(
+      expect.objectContaining({ instrucciones: 'Plantilla global de prueba para extract' }),
+    );
+  });
+
+  it('prefiere la plantilla del tenant sobre la global', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('extract');
+    await PromptTemplateModel.create({
+      tenantId,
+      method: 'extract',
+      version: '2.0.0',
+      isActive: true,
+      systemPrompt: 'La que escribió la empresa.',
+    });
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+    const schema = z.object({ nombre: z.string() });
+
+    await service.extract({ tenantId, historial: HISTORIAL, schema, camposObjetivo: [] });
+
+    expect(provider.extractSlots).toHaveBeenCalledWith(
+      expect.objectContaining({ instrucciones: 'La que escribió la empresa.' }),
+    );
   });
 });
 

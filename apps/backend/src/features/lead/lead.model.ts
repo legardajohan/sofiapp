@@ -26,6 +26,9 @@ const LeadSchema = new Schema<ILeadDocument>(
     // Aquí se graba el `key` del estado; quién valida que exista es el service, contra el catálogo
     // del tenant. Los leads sembrados con los 5 valores de fábrica siguen siendo válidos tal cual.
     estado: { type: String, required: true, default: KEY_ESTADO_ENTRADA, trim: true },
+    // Sin `enum` por el mismo motivo que `estado`: los semáforos son un catálogo por tenant
+    // (`semaforos`, HU-CRM-04), no estructura. Lo valida el service contra el catálogo.
+    semaforo: { type: String, default: null, trim: true },
   },
   { timestamps: true },
 );
@@ -45,5 +48,8 @@ LeadSchema.index({ tenantId: 1, clienteId: 1 });
 LeadSchema.index({ tenantId: 1, createdAt: -1 });
 LeadSchema.index({ tenantId: 1, estado: 1, createdAt: -1 });
 LeadSchema.index({ tenantId: 1, responsableId: 1, createdAt: -1 });
+// Cierra en `createdAt: -1` como los tres de arriba, para que `?semaforo=` resuelva filtro y orden
+// con el mismo indice en vez de ordenar en memoria (HU-CRM-04).
+LeadSchema.index({ tenantId: 1, semaforo: 1, createdAt: -1 });
 
 export const Lead = model<ILeadDocument>('Lead', LeadSchema);

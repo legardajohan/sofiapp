@@ -29,6 +29,13 @@ const AiContextPage = lazy(() =>
   import('./features/ai-context/index.js').then((m) => ({ default: m.AiContextPage })),
 );
 
+const AssistantConfigPage = lazy(() =>
+  import('./features/ai-assistant/index.js').then((m) => ({ default: m.AssistantConfigPage })),
+);
+const HandoffSettingsPage = lazy(() =>
+  import('./features/handoff/index.js').then((m) => ({ default: m.HandoffSettingsPage })),
+);
+
 const InboxPage = lazy(() =>
   import('./features/inbox/index.js').then((m) => ({ default: m.InboxPage })),
 );
@@ -127,6 +134,26 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <AiContextPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/assistant',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <AssistantConfigPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/assistant/handoff',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <HandoffSettingsPage />
                 </Suspense>
               </RequireRole>
             ),

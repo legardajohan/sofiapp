@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Sparkles } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { shortTime } from '../lib/format.js';
@@ -35,6 +36,9 @@ export function ConversationThread({ messages, isLoading }: Props): React.ReactE
       <div className="mx-auto flex max-w-2xl flex-col gap-2">
         {messages.map((m) => {
           const outbound = m.direccion === 'outbound';
+          // Saber si respondió Sofi o una persona cambia cómo se lee el hilo: sin esta marca, el
+          // asesor no distingue lo que él escribió de lo que contestó la IA por él (HU-IA-01).
+          const deSofi = outbound && m.sender === 'bot';
           return (
             <div key={m.id} className={cn('flex', outbound ? 'justify-end' : 'justify-start')}>
               <div
@@ -56,6 +60,12 @@ export function ConversationThread({ messages, isLoading }: Props): React.ReactE
                     outbound ? 'text-primary-foreground/80' : 'text-muted-foreground',
                   )}
                 >
+                  {deSofi && (
+                    <span className="mr-auto flex items-center gap-1 font-medium">
+                      <Sparkles className="size-2.5" aria-hidden="true" />
+                      Sofi
+                    </span>
+                  )}
                   <span>{shortTime(m.createdAt)}</span>
                   {outbound && <MessageStatus status={m.status} />}
                 </div>

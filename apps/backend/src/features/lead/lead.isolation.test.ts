@@ -12,6 +12,8 @@ import { Types } from 'mongoose';
 import { countScoped, createScoped, findByIdScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Tag } from '../tag/tag.model.js';
+import { Semaforo } from '../semaforo/semaforo.model.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 import { User } from '../users/user.model.js';
 import { listConversations } from '../conversation/conversation.service.js';
 import { Estado } from '../estado/estado.model.js';
@@ -23,8 +25,10 @@ import {
   findLeadIdsByClientes,
   getLeadById,
   listHistorialEstado,
+  listHistorialSemaforo,
   listLeads,
   updateLeadEstado,
+  updateLeadSemaforo,
 } from './lead.service.js';
 import type { ILeadLean } from './lead.types.js';
 
@@ -175,7 +179,12 @@ describe('HU-CRM-03 — aislamiento multi-tenant del listado de leads', () => {
     await Cliente.deleteMany({});
     await User.deleteMany({});
     await Tag.deleteMany({});
+    await Semaforo.deleteMany({});
     await Lead.syncIndexes();
+
+    // Cada empresa tiene SU propio catálogo de semáforos: mismas claves, documentos distintos.
+    await seedSemaforos(tenantA);
+    await seedSemaforos(tenantB);
 
     clienteA = await crearCliente(tenantA, 'wa_list_a');
     asesorA = await crearAsesor(tenantA, 'a@list-a.test');
@@ -197,6 +206,8 @@ describe('HU-CRM-03 — aislamiento multi-tenant del listado de leads', () => {
       clienteId: clienteA,
     });
     leadA = lead.id;
+
+    await updateLeadSemaforo(tenantA.toString(), asesorA, leadA, 'verde');
   });
 
   it('el listado del tenantB no devuelve NI CUENTA los leads del tenantA', async () => {
@@ -228,16 +239,40 @@ describe('HU-CRM-03 — aislamiento multi-tenant del listado de leads', () => {
     expect(listadoA.data.map((l) => l.id)).toEqual([leadA]);
   });
 
-  it('`?semaforo=` del tenantB no arrastra clientes del tenantA al resolver la etiqueta', async () => {
-    // Ambas empresas tienen una etiqueta `verde`, y la conversación etiquetada es la de A.
-    // Si la resolución del slug o del `$in` se saliera del tenant, el lead de A aparecería aquí.
+  it('`?semaforo=` del tenantB no arrastra ni cuenta leads del tenantA', async () => {
+    // Ambas empresas tienen la clave `verde` en su catálogo, y el lead clasificado es el de A.
+    // Si el filtro se saliera del tenant, el lead de A aparecería aquí.
     const listadoB = await listLeads(tenantB.toString(), { ...listQuery, semaforo: 'verde' });
     expect(listadoB.data).toHaveLength(0);
     expect(listadoB.total).toBe(0);
 
+    // El mismo filtro en su propia empresa sí encuentra el lead: el vacío de arriba es
+    // aislamiento, no un filtro roto.
     const listadoA = await listLeads(tenantA.toString(), { ...listQuery, semaforo: 'verde' });
     expect(listadoA.data.map((l) => l.id)).toEqual([leadA]);
-    expect(listadoA.data[0]?.semaforos[0]?.semaforo).toBe('verde');
+    expect(listadoA.data[0]?.semaforo?.key).toBe('verde');
+  });
+
+  it('el tenantB no le cambia el semáforo a un lead del tenantA → 404 y NO lo toca', async () => {
+    await expect(
+      updateLeadSemaforo(tenantB.toString(), asesorB, leadA, 'rojo'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    // El 404 no basta: hay que probar que no escribió. Un 403 tampoco valdría — confirmaría
+    // que el lead existe en otra empresa.
+    const intacto = await findByIdScoped(Lead, tenantA, leadA).lean<ILeadLean>();
+    expect(intacto?.semaforo).toBe('verde');
+  });
+
+  it('el tenantB no lee el historial de semáforo de un lead del tenantA', async () => {
+    await expect(
+      listHistorialSemaforo(tenantB.toString(), leadA, 1, 20),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    // Su dueño sí lo ve, con el cambio que hizo el `beforeEach`.
+    const historialA = await listHistorialSemaforo(tenantA.toString(), leadA, 1, 20);
+    expect(historialA.total).toBe(1);
+    expect(historialA.data[0]).toMatchObject({ de: null, a: 'verde' });
   });
 
   it('el listado del tenantB no filtra el asesor del tenantA ni por la hidratación en lote', async () => {

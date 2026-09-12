@@ -60,7 +60,20 @@ export function findOneAndDeleteScoped<T>(m: Model<T>, tenantId: TenantId, filte
 export function deleteOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: FilterQuery<T>) {
   return m.deleteOne({ ...filter, tenantId } as FilterQuery<T>);
 }
+// Agregacion (HU-IA-07). El `$match` del tenant va PRIMERO: un `$match` propio del llamador solo
+// puede reducir el conjunto, nunca ampliarlo.
+export function aggregateScoped<R>(m: Aggregable, tenantId: TenantId, pipeline: PipelineStage[] = []) {
+  const scoped = tenantId instanceof Types.ObjectId ? tenantId : new Types.ObjectId(tenantId);
+  return m.aggregate<R>([{ $match: { tenantId: scoped } }, ...pipeline]);
+}
 ```
+
+> **`aggregateScoped` castea el `tenantId` a `ObjectId`, y esa es su razon de existir.** `find`,
+> `countDocuments` y compania castean el filtro contra el schema, asi que un `tenantId` en forma de
+> string funciona. Un pipeline de agregacion **no se castea**: ese mismo string no encontraria nada y
+> devolveria `[]` sin lanzar. Falla cerrado, pero en silencio — el peor fallo de los dos posibles de
+> depurar. Concentrarlo aqui es lo que permite testear el invariante una vez, en
+> `base.repository.test.ts`, en vez de en cada llamador.
 
 ## 4. Reglas
 
@@ -69,6 +82,8 @@ export function deleteOneScoped<T>(m: Model<T>, tenantId: TenantId, filter: Filt
 2. **Nunca crear sin forzar tenant.** Prohibido `Model.create({...})`. Usa `createScoped`.
 3. **Nunca actualizar/borrar sin tenant en el filtro.** Usa `findOneAndUpdateScoped` /
    `findOneAndDeleteScoped` / `deleteOneScoped`.
+3bis. **Nunca agregar sin tenant.** Prohibido `Model.aggregate` directo. Usa `aggregateScoped`, que
+   antepone el `$match` y castea el id.
 4. **El tenant siempre del token.** Nunca de `req.body/params/query`.
 5. **Todo modelo persistente lleva `tenantId`** (`required: true`, indexado).
 6. **`authenticateJWT → requireTenant`** en toda ruta tenant-aware, en ese orden.

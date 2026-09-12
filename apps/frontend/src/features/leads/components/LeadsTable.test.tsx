@@ -14,7 +14,7 @@ function lead(over: Partial<LeadListItemDTO> = {}): LeadListItemDTO {
     estado: 'nuevo',
     responsable: { id: 'u1', nombre: 'Carolina' },
     conversacionId: 'c1',
-    semaforos: [],
+    semaforo: null,
     resumen: null,
     ultimoMensajeAt: null,
     createdAt: '2026-08-01T10:00:00.000Z',
@@ -82,73 +82,35 @@ describe('LeadsTable', () => {
   });
 
   it('pinta los datos clave de cada lead y el conteo', () => {
-    render(
-      <LeadsTable
-        {...props}
-        datos={pagina([
-          lead({
-            semaforos: [{ id: 't1', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' }],
-          }),
-        ])}
-      />,
-    );
+    render(<LeadsTable {...props} datos={pagina([lead({ semaforo: { id: 's1', key: 'verde', label: 'Venta concretada', color: '#16A34A', orden: 2, activo: true, esDefecto: true } })])} />);
 
     expect(screen.getByText('Ana Pérez')).toBeInTheDocument();
     expect(screen.getByText('573001112233')).toBeInTheDocument();
     expect(screen.getByText('Nuevo')).toBeInTheDocument();
-    expect(screen.getByText('Avanza')).toBeInTheDocument();
+    expect(screen.getByText('Venta concretada')).toBeInTheDocument();
     expect(screen.getByText('Carolina')).toBeInTheDocument();
     expect(screen.getByText('1 lead')).toBeInTheDocument();
   });
 
-  it('pinta la etiqueta principal y esconde el resto tras un +N', async () => {
+  it('muestra la etiqueta del semáforo del tenant, no su clave', () => {
+    // El administrador renombra los semáforos; la tabla tiene que hablar su idioma.
     render(
       <LeadsTable
         {...props}
         datos={pagina([
           lead({
-            semaforos: [
-              { id: 't1', nombre: 'En riesgo', color: '#DC2626', semaforo: 'rojo' },
-              { id: 't2', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' },
-            ],
+            semaforo: { ...{ id: 's2', key: 'rojo', label: 'Descartado', color: '#DC2626', orden: 3, activo: true, esDefecto: true }, label: 'Perdido sin remedio' },
           }),
         ])}
       />,
     );
 
-    // La primera que manda la API es la aplicada más recientemente: esa es la visible.
-    expect(screen.getByText('En riesgo')).toBeInTheDocument();
-    expect(screen.queryByText('Avanza')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /otras 1 etiquetas/i }));
-
-    expect(await screen.findByText('Avanza')).toBeInTheDocument();
-  });
-
-  it('abrir el +N no abre además el detalle del lead', async () => {
-    const onSelect = vi.fn();
-    render(
-      <LeadsTable
-        {...props}
-        onSelect={onSelect}
-        datos={pagina([
-          lead({
-            semaforos: [
-              { id: 't1', nombre: 'En riesgo', color: '#DC2626', semaforo: 'rojo' },
-              { id: 't2', nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' },
-            ],
-          }),
-        ])}
-      />,
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: /otras 1 etiquetas/i }));
-
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByText('Perdido sin remedio')).toBeInTheDocument();
+    expect(screen.queryByText('rojo')).not.toBeInTheDocument();
   });
 
   it('un lead sin semáforo muestra un guion, no una celda vacía', () => {
-    render(<LeadsTable {...props} datos={pagina([lead({ semaforos: [] })])} />);
+    render(<LeadsTable {...props} datos={pagina([lead({ semaforo: null })])} />);
 
     expect(screen.getByText('—')).toBeInTheDocument();
   });

@@ -13,15 +13,9 @@ import {
 import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
 import { useEstados } from '../../estados/hooks/useEstados.js';
 import { NuevoEstadoDialog } from './NuevoEstadoDialog.js';
-import type { SemaforoSlug } from '../../tags/types.js';
-import { useTags } from '../../tags/hooks/useTags.js';
-import {
-  RANGOS,
-  SEMAFORO_LABEL,
-  fechasARango,
-  rangoAFechas,
-  type RangoKey,
-} from '../lib/format.js';
+import { SemaforosDialog } from './SemaforosDialog.js';
+import { useSemaforos } from '../../semaforos/hooks/useSemaforos.js';
+import { RANGOS, fechasARango, rangoAFechas, type RangoKey } from '../lib/format.js';
 import type { LeadsFiltros } from '../types.js';
 
 /**
@@ -29,8 +23,6 @@ import type { LeadsFiltros } from '../types.js';
  * necesita un valor propio que nunca colisione con un id ni con un slug.
  */
 const TODOS = '__todos__';
-
-const SEMAFOROS: SemaforoSlug[] = ['verde', 'naranja', 'rojo', 'azul'];
 
 interface Props {
   filtros: LeadsFiltros;
@@ -61,7 +53,7 @@ function Campo({
 export function LeadsFilters({ filtros, onChange, onClear }: Props): React.ReactElement {
   const usuarios = useTenantUsers();
   const estados = useEstados();
-  const tags = useTags();
+  const semaforos = useSemaforos();
 
   /**
    * "Personalizado" no se deduce de las fechas: sin fechas puestas, `fechasARango` devolvería
@@ -74,11 +66,6 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
   const hayFiltros = Boolean(
     filtros.estado ?? filtros.asesor ?? filtros.semaforo ?? filtros.desde ?? filtros.hasta,
   );
-
-  /** El color y el nombre reales los pone el tenant: puede haberlas renombrado o recoloreado. */
-  function tagDe(slug: SemaforoSlug) {
-    return tags.data?.find((t) => t.semaforo === slug);
-  }
 
   function cambiarRango(key: RangoKey): void {
     setPersonalizado(key === 'personalizado');
@@ -119,30 +106,29 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
       <Campo label="Semáforo" htmlFor="filtro-semaforo">
         <Select
           value={filtros.semaforo ?? TODOS}
-          onValueChange={(v) =>
-            onChange({ semaforo: v === TODOS ? undefined : (v as SemaforoSlug) })
-          }
+          onValueChange={(v) => onChange({ semaforo: v === TODOS ? undefined : v })}
         >
           <SelectTrigger id="filtro-semaforo" className="h-9 w-48">
             <SelectValue placeholder="Semáforo" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={TODOS}>Cualquier semáforo</SelectItem>
-            {SEMAFOROS.map((slug) => {
-              const tag = tagDe(slug);
-              return (
-                <SelectItem key={slug} value={slug}>
+            {/* Del catálogo del tenant, no de una constante: cada empresa define los suyos.
+                Los archivados no se ofrecen, aunque sigan resolviendo su etiqueta. */}
+            {(semaforos.data ?? [])
+              .filter((s) => s.activo)
+              .map((semaforo) => (
+                <SelectItem key={semaforo.key} value={semaforo.key}>
                   <span className="flex items-center gap-2">
                     <span
                       aria-hidden="true"
                       className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: tag?.color ?? 'currentColor' }}
+                      style={{ backgroundColor: semaforo.color }}
                     />
-                    {tag?.nombre ?? SEMAFORO_LABEL[slug]}
+                    {semaforo.label}
                   </span>
                 </SelectItem>
-              );
-            })}
+              ))}
           </SelectContent>
         </Select>
       </Campo>
@@ -207,6 +193,7 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
       )}
 
       <NuevoEstadoDialog />
+      <SemaforosDialog />
 
       {hayFiltros && (
         <Button

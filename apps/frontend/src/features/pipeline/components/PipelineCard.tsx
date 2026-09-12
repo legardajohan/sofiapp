@@ -32,7 +32,7 @@ function Punto({ color }: { color: string }): React.ReactElement {
  * lleva peso; todo lo demás baja a `text-xs` y a `muted-foreground` para no competir con él.
  */
 function Contenido({ lead }: { lead: LeadListItemDTO }): React.ReactElement {
-  const semaforo = lead.semaforos[0];
+  const semaforo = lead.semaforo;
   const responsable = lead.responsable?.nombre;
 
   return (
@@ -67,7 +67,7 @@ function Contenido({ lead }: { lead: LeadListItemDTO }): React.ReactElement {
         {semaforo && (
           <span className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5">
             <Punto color={semaforo.color} />
-            <span className="truncate">{semaforo.nombre}</span>
+            <span className="truncate">{semaforo.label}</span>
           </span>
         )}
       </div>

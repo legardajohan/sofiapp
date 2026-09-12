@@ -55,12 +55,16 @@ El nodo `ia` del constructor visual (`docs/data-model.md` → `flows`) es el ún
 
 ## 2. Slot filling (datos de alto valor)
 
-- **Core (todos los tenants):** `nombre`, `rolContacto` (`decisor|usuario|desconocido`),
-  `interesItemId` (mapeado al catálogo del tenant).
-- **Personalizados:** según `tenant.camposCaptura` (ej. Pre-ICFES: colegio, grado, acudiente) →
-  se guardan en `cliente.customFields`.
-- Persistencia con **merge parcial** que NO sobrescribe campos ya completados:
-  `mergeClienteSlots()` con `findOneAndUpdateScoped` + `$set` parcial, tipado `Partial<ICliente>`.
+- **Lo implementado (HU-IA-06):** `DATOS_CONTACTO_SLOTS` en `cliente.service.ts` pide cuatro campos
+  —`nombreCompleto`, `correo`, `telefono`, `interes`— y `AIService.extract()` inyecta el
+  `systemPrompt` de la plantilla `extract` del tenant como `systemInstruction`. `interes` es texto
+  libre (qué producto pide), **no** una referencia al catálogo.
+- **Aspiracional:** `rolContacto` e `interesItemId` mapeado al catálogo del tenant. El modelo
+  `CatalogItem` no existe en el backend, así que no hay contra qué mapear.
+- Persistencia en `Cliente.datosExtraidos` con **merge** que no borra lo que una pasada anterior
+  encontró ni lo que ya se confirmó. **`mergeClienteSlots()` nunca existió**: lo que pasa esos datos
+  a la ficha es `confirmarDatosExtraidos()`, y es **explícito** —lo dispara una persona desde la
+  tarjeta de la ficha—, no automático. Escribe solo donde el destino está vacío.
 
 ## 3. Lead scoring y objeción
 

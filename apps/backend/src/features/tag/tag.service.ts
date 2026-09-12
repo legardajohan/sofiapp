@@ -10,7 +10,13 @@ import {
 import { AppError } from '../../utils/AppError.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Tag } from './tag.model.js';
-import type { CreateTagDTO, ITag, ITagResponse, UpdateTagDTO } from './tag.types.js';
+import type {
+  CreateTagDTO,
+  ITag,
+  ITagResponse,
+  SemaforoSlug,
+  UpdateTagDTO,
+} from './tag.types.js';
 
 type TenantId = string | Types.ObjectId;
 
@@ -59,6 +65,29 @@ export async function findTagsByIds(
 
   const map = new Map<string, ITagResponse>();
   for (const doc of docs) map.set(String(doc._id), toTagResponse(doc));
+  return map;
+}
+
+/**
+ * Las etiquetas de semaforización que EXISTEN en el tenant, indexadas por su slug (HU-IA-05).
+ *
+ * Devuelve un mapa y no las cuatro a la fuerza: el administrador puede borrarlas
+ * (`docs/domain.md` §5), así que quien consuma pregunta por la que necesita y acepta `undefined`.
+ * Resolver por `semaforo` y nunca por nombre es la regla del dominio — el nombre es editable.
+ *
+ * Una sola consulta, cubierta por el índice `{ tenantId, semaforo }` que ya existe.
+ */
+export async function findSemaforoTags(
+  tenantId: TenantId,
+): Promise<Map<SemaforoSlug, ITagResponse>> {
+  const docs = await findScoped(Tag, tenantId, {
+    semaforo: { $exists: true },
+  }).lean<ITagLean[]>();
+
+  const map = new Map<SemaforoSlug, ITagResponse>();
+  for (const doc of docs) {
+    if (doc.semaforo) map.set(doc.semaforo, toTagResponse(doc));
+  }
   return map;
 }
 

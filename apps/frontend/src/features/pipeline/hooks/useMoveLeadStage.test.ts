@@ -12,7 +12,7 @@ function lead(id: string, estado: string): LeadListItemDTO {
     estado,
     responsable: null,
     conversacionId: 'c1',
-    semaforos: [],
+    semaforo: null,
     resumen: null,
     ultimoMensajeAt: null,
     createdAt: '2026-08-01T10:00:00.000Z',

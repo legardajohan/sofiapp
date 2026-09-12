@@ -15,7 +15,7 @@ type TenantId = string | Types.ObjectId;
 function toAuditEventResponse(doc: IAuditEventDocument): IAuditEventResponse {
   return {
     id: doc._id.toString(),
-    actorId: doc.actorId.toString(),
+    actorId: doc.actorId?.toString() ?? null,
     accion: doc.accion,
     entidad: doc.entidad,
     entidadId: doc.entidadId.toString(),
@@ -49,15 +49,19 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
 }
 
 /**
- * Filtro de la bitácora, **compartido por la página y por el conteo**.
+ * Filtro de la bitácora, **compartido por la página y por el conteo**: si divergen, el `total`
+ * miente — contaría eventos que la página nunca devuelve. Filtrar *después* de paginar rompería
+ * el conteo igual, y además daría páginas de tamaño irregular; por eso va en la consulta.
  *
- * Que sea uno solo no es estética: si la consulta paginada filtrara por acción y el `countScoped`
- * no, el `total` contaría eventos que la página nunca devuelve. Y filtrar *después* de paginar
- * —quedándose con las filas que interesan de las 20 traídas— rompería el conteo igual.
+ * `accion` es opcional y aditivo: sin él, el comportamiento es el de siempre (todos los eventos de
+ * la entidad). Hace falta porque varias bitácoras comparten `entidad`: la de `lead` acumula
+ * también `lead.create`, `lead.update` y `lead.delete` (HU-PIPE-01, HU-CRM-04), y sin filtro la
+ * bitácora de clasificaciones de HU-IA-05 traería además las reasignaciones —y, al revés, el
+ * historial de asignaciones mostraría filas vacías por cada clasificación.
  *
- * `accion` admite un array porque un mismo eje puede haberse registrado con más de un nombre a lo
- * largo del tiempo: el historial de etapa consulta `lead.estado` y el `lead.update` con el que se
- * grabó antes de HU-PIPE-01.
+ * Acepta una lista porque un mismo eje puede registrarse con más de una acción: el historial de
+ * asignaciones son dos (la manual y el handoff automático), y el de etapa consulta `lead.estado`
+ * junto al `lead.update` con el que se grabó antes de HU-PIPE-01.
  */
 function buildAuditFilter(
   entidad: AuditEntidad,
@@ -88,6 +92,8 @@ export async function listAuditEvents(
   limit: number,
   accion?: AuditAccion | AuditAccion[],
 ): Promise<{ data: IAuditEventResponse[]; page: number; limit: number; total: number }> {
+  // El filtro del `count` tiene que ser el MISMO que el de la query, o el `total` no cuadra con las
+  // páginas que se devuelven.
   const filter = buildAuditFilter(entidad, entidadId, accion);
   const [docs, total] = await Promise.all([
     listAuditEventsQuery(tenantId, entidad, entidadId, accion)

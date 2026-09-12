@@ -19,8 +19,12 @@ export function verifyChallenge(query: Record<string, string>): string {
 
 export function validateHmacSignature(rawBody: Buffer, signature: string): boolean {
   if (!env.META_APP_SECRET) return false;
-  const expected = `sha256=${createHmac('sha256', env.META_APP_SECRET).update(rawBody).digest('hex')}`;
   try {
+    // El `createHmac` va DENTRO del try: si `rawBody` no es un Buffer —el escenario de HT-WA-02,
+    // cuando un parser global se adelantaba y dejaba un objeto— `update()` lanza
+    // ERR_INVALID_ARG_TYPE. Dejarlo propagar es lo que colgaba la petición y dejaba a Meta sin
+    // respuesta. Un cuerpo que no se puede firmar no es una firma válida: se devuelve `false`.
+    const expected = `sha256=${createHmac('sha256', env.META_APP_SECRET).update(rawBody).digest('hex')}`;
     return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
   } catch {
     return false;

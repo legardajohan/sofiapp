@@ -1,12 +1,10 @@
 import { z } from 'zod';
-import type { SemaforoSlug } from '../tag/tag.types.js';
 import { PIPELINE_LIMIT_DEFECTO, PIPELINE_LIMIT_MAXIMO } from './pipeline.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
 
 /** Misma tupla local que el listado: Zod 3 exige `[string, ...string[]]` para `z.enum`. */
-const SEMAFOROS = ['azul', 'rojo', 'naranja', 'verde'] as const satisfies readonly SemaforoSlug[];
 
 /**
  * Filtros del tablero: los mismos que el listado **menos `page` y `estado`**.
@@ -32,7 +30,10 @@ export const getPipelineSchema = z.object({
         .default(PIPELINE_LIMIT_DEFECTO),
       // Es un userId (`Lead.responsableId`). No hay rol "Asesor": ver AUTH-02.
       asesor: objectId.optional(),
-      semaforo: z.enum(SEMAFOROS).optional(),
+      // Ya no es un enum cerrado: los semáforos son un catálogo por tenant (HU-CRM-04). Zod solo
+      // comprueba la forma; que la clave exista en ESTE tenant lo valida el service, igual que en
+      // `GET /api/leads`.
+      semaforo: z.string().trim().min(1).max(40).optional(),
       desde: z.coerce.date({ invalid_type_error: 'Fecha «desde» inválida.' }).optional(),
       hasta: z.coerce.date({ invalid_type_error: 'Fecha «hasta» inválida.' }).optional(),
     })

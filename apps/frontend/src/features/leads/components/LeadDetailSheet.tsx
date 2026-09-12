@@ -11,6 +11,8 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { useUpdateLeadEstado } from '../hooks/useUpdateLeadEstado.js';
+import { SemaforoSelect } from './SemaforoSelect.js';
+import { LeadHistorialSemaforo } from './LeadHistorialSemaforo.js';
 import { useDeleteLead } from '../hooks/useDeleteLead.js';
 import { DeleteLeadDialog } from './DeleteLeadDialog.js';
 import {
@@ -22,6 +24,7 @@ import {
 } from '@/components/ui/sheet';
 import { COLOR_ESTADO_DESCONOCIDO, fechaLarga, haceCuanto } from '../lib/format.js';
 import type { EstadoDTO } from '../../estados/types.js';
+import type { SemaforoDTO } from '../../semaforos/types.js';
 import type { LeadListItemDTO } from '../types.js';
 
 interface Props {
@@ -29,6 +32,8 @@ interface Props {
   onClose: () => void;
   /** Catálogo del tenant para resolver etiqueta y color del estado. */
   estados: EstadoDTO[];
+  /** Catálogo de semaforización comercial del tenant (HU-CRM-04). */
+  semaforos: SemaforoDTO[];
 }
 
 /**
@@ -107,7 +112,12 @@ function Dato({
   );
 }
 
-export function LeadDetailSheet({ lead, onClose, estados }: Props): React.ReactElement {
+export function LeadDetailSheet({
+  lead,
+  onClose,
+  estados,
+  semaforos,
+}: Props): React.ReactElement {
   const [confirmando, setConfirmando] = useState(false);
   const borrar = useDeleteLead(lead?.id ?? '', lead?.conversacionId ?? null);
 
@@ -130,23 +140,11 @@ export function LeadDetailSheet({ lead, onClose, estados }: Props): React.ReactE
               <SheetDescription>{lead.telefono}</SheetDescription>
             </SheetHeader>
 
+            {/* Etapa del pipeline y semáforo comercial: dos ejes del mismo lead, dos
+                controles con la misma forma para que se lean como lo que son. */}
             <div className="mt-6 flex flex-wrap items-center gap-2">
               <EstadoSelect lead={lead} estados={estados} />
-              {/* Todas las de semáforo, no solo la primera: si la conversación lleva varias, la
-                  ficha las muestra en vez de esconder las demás. */}
-              {lead.semaforos.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="flex items-center gap-2 text-sm text-secondary-foreground"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: tag.color }}
-                  />
-                  {tag.nombre}
-                </span>
-              ))}
+              <SemaforoSelect lead={lead} semaforos={semaforos} />
             </div>
 
             <dl className="mt-6 grid grid-cols-2 gap-4">
@@ -197,6 +195,10 @@ export function LeadDetailSheet({ lead, onClose, estados }: Props): React.ReactE
                 Abrir conversación
               </Link>
             </Button>
+
+            <Separator className="my-6" />
+
+            <LeadHistorialSemaforo leadId={lead.id} semaforos={semaforos} />
 
             <Separator className="my-6" />
 

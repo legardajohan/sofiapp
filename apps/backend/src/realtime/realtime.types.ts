@@ -29,7 +29,11 @@ export type RealtimeEvent =
       conversation: IConversationResponse;
       /** `null` cuando el cambio fue una desasignación (no hay a quién notificar). */
       targetUserId: string | null;
-      actor: { id: string; nombre: string | null };
+      /**
+       * Quién reasignó. `id: null` es **Sofi**: el handoff automático de HU-IA-03 no lo dispara
+       * ninguna persona, y no hay un `User` que ponerle.
+       */
+      actor: { id: string | null; nombre: string | null };
     }
   | {
       /**

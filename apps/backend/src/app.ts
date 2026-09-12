@@ -14,11 +14,13 @@ import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
 import { backfillContactOptions } from './seed/seed-contact-options.js';
 import { backfillEstadoDeclinado, backfillEstados } from './seed/seed-estados.js';
+import { backfillSemaforos } from './seed/seed-semaforos.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
 import estadoRoutes from './features/estado/estado.routes.js';
 import pipelineRoutes from './features/pipeline/pipeline.routes.js';
+import semaforoRoutes from './features/semaforo/semaforo.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
@@ -38,16 +40,25 @@ import conversationRoutes from './features/conversation/conversation.routes.js';
 import adminProfileRoutes from './features/admin-profile/admin-profile.routes.js';
 import userRoutes from './features/users/user.routes.js';
 import aiRoutes from './features/ai/ai.routes.js';
+import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
+import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
 import flowRoutes from './features/flow/flow.routes.js';
 
 const app = express();
 
 app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 
-// Meta firma el HMAC sobre los bytes exactos del cuerpo. Este router usa `express.raw` y por eso
-// se monta ANTES de `express.json()`: si el parser global corre primero, body-parser consume el
-// stream y `req.body` llega como objeto, la firma no se puede recalcular y TODO webhook real
-// falla (regresión cubierta por `webhook.routes.test.ts`).
+// ⚠️ ANTES de `express.json()`, y no abajo con el resto de rutas.
+//
+// Meta firma el cuerpo del webhook con HMAC-SHA256, y esa firma solo se puede validar sobre los
+// BYTES EXACTOS que envió. Un parser global por delante consume el stream y deja `req.body` como
+// objeto: el `express.raw` que declara `webhook.routes.ts` ya no puede hacer nada, el HMAC recibe
+// un objeto y revienta. Eso es HT-WA-02, y tuvo al inbound de WhatsApp caído por completo.
+//
+// No mover nada por encima de esta línea. `csrfGuard` ya exime `/api/webhooks/` y el webhook no
+// usa cookies, así que no pierde nada por ir delante de ellos.
+// Lo que sostiene esta regla no es este comentario: es `webhook.routes.test.ts`, que falla en el
+// acto si el orden se rompe.
 app.use('/api/webhooks/whatsapp', webhookRoutes);
 
 app.use(express.json());
@@ -72,6 +83,8 @@ app.use('/api/admin/cost-items', costCatalogRoutes);
 app.use('/api/channels/whatsapp', channelRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/templates', whatsappTemplateRoutes);
+// `/api/webhooks/whatsapp` NO va aquí: necesita el cuerpo crudo y se monta arriba, antes de
+// `express.json()`.
 // La ruta más específica primero, igual que `/api/kb/faqs` antes de `/api/kb`.
 app.use('/api/clientes/:clienteId/notas', contactNoteRoutes);
 app.use('/api/clientes', clienteRoutes);
@@ -83,9 +96,14 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/estados', estadoRoutes);
 app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/semaforos', semaforoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai/responses', aiRoutes);
+app.use('/api/ai/handoff-rules', aiHandoffRoutes);
+// Va DESPUÉS de `/api/ai/responses` y `/api/ai/handoff-rules`: el prefijo más específico tiene que
+// resolverse primero, o el genérico se los come.
+app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
 
 app.use(errorHandler);
@@ -95,6 +113,17 @@ export const server = http.createServer(app);
 export const io = createSocketGateway(server);
 
 if (env.NODE_ENV !== 'test') {
+  // `META_APP_SECRET` es opcional a propósito —hay despliegues sin WhatsApp— pero sin ella
+  // `validateHmacSignature` devuelve `false` de entrada y TODO webhook entrante recibe un 403.
+  // El síntoma es idéntico al de HT-WA-02 (no llega nada a la bandeja) y la causa es otra, así que
+  // se avisa alto en vez de dejar que se descubra depurando.
+  if (!env.META_APP_SECRET) {
+    logger.warn(
+      'META_APP_SECRET sin configurar: el webhook de WhatsApp rechazará (403) todo evento ' +
+        'entrante y el inbound no funcionará. Configúrala con el App Secret de la app de Meta.',
+    );
+  }
+
   // El puente Redis solo se conecta fuera de los tests (evita handles abiertos sin Redis).
   subscribeRealtime(io);
   mongoose
@@ -108,6 +137,7 @@ if (env.NODE_ENV !== 'test') {
       await backfillContactOptions();
       await backfillEstados();
       await backfillEstadoDeclinado();
+      await backfillSemaforos();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);
       });

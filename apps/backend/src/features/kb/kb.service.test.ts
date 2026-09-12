@@ -7,7 +7,10 @@ vi.mock('../../config/queues.js', () => ({
   KB_INDEX_QUEUE_NAME: 'kb-index',
   KB_INDEX_JOB_NAME: 'index-document',
   INBOUND_QUEUE_NAME: 'inbound-messages',
+  AI_REPLY_QUEUE_NAME: 'ai-reply',
+  AI_REPLY_JOB_NAME: 'auto-reply',
   inboundQueue: { add: vi.fn() },
+  aiReplyQueue: { add: vi.fn().mockResolvedValue(undefined) },
   kbIndexQueue: { add: mockAdd },
 }));
 

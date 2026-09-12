@@ -8,6 +8,7 @@ import { Tag } from '../tag/tag.model.js';
 import { seedEstados } from '../../seed/seed-estados.js';
 import { createEstado } from '../estado/estado.service.js';
 import { Lead } from '../lead/lead.model.js';
+import { seedSemaforos } from '../../seed/seed-semaforos.js';
 import { getPipeline } from './pipeline.service.js';
 import { PIPELINE_LIMIT_DEFECTO } from './pipeline.types.js';
 
@@ -122,17 +123,17 @@ describe('HU-PIPE-01 — aislamiento multi-tenant del embudo', () => {
     expect(pipelineB.columnas.every((c) => c.total === 0 && c.leads.length === 0)).toBe(true);
   });
 
-  it('el mismo slug de semáforo en los dos tenants no cruza leads', async () => {
-    const verdeA = await createScoped(Tag, tenantA, {
-      nombre: 'Avanza',
-      color: '#16A34A',
-      semaforo: 'verde',
-    });
-    await createScoped(Tag, tenantB, { nombre: 'Avanza', color: '#16A34A', semaforo: 'verde' });
+  it('la misma `key` de semáforo en los dos tenants no cruza leads', async () => {
+    // Los dos catálogos traen la MISMA clave `verde` (son los cuatro de fábrica): es justo el caso
+    // en que un filtro mal aislado cruzaría leads, porque la clave por sí sola no distingue tenant.
+    await seedSemaforos(tenantA);
+    await seedSemaforos(tenantB);
 
-    // La conversación del lead de A lleva la etiqueta verde de A.
-    const leadA = await Lead.findOne({ tenantId: tenantA, nombre: 'Solo de A' }).lean();
-    await Cliente.updateOne({ _id: leadA?.clienteId }, { $set: { tagIds: [verdeA._id] } });
+    // Solo el lead de A queda clasificado en verde.
+    await Lead.updateOne(
+      { tenantId: tenantA, nombre: 'Solo de A' },
+      { $set: { semaforo: 'verde' } },
+    );
 
     const pipelineB = await getPipeline(tenantB.toString(), { ...query, semaforo: 'verde' });
     expect(pipelineB.columnas.every((c) => c.total === 0)).toBe(true);

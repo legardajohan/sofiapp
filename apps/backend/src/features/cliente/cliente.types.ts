@@ -1,6 +1,8 @@
 import { Document, Types } from 'mongoose';
 import type { IMessageResponse, IPaginated } from '../conversation/conversation.types.js';
-import type { ITagResponse } from '../tag/tag.types.js';
+import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
+import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
+import type { NivelInteres, Objecion } from '../../integrations/llm/llm-provider.types.js';
 
 export type CanalOrigen = 'whatsapp' | 'instagram' | 'messenger' | 'formulario' | 'web';
 
@@ -19,7 +21,14 @@ export const ESTADOS_COMERCIALES = [
 export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
 
 /**
- * Datos de contacto extraídos por IA desde la conversación, bajo demanda (HU-OMNI-03).
+ * Los cuatro campos que la IA extrae de la conversación (HU-IA-06). El orden es el de la tarjeta.
+ */
+export const CAMPOS_EXTRAIDOS = ['nombreCompleto', 'correo', 'telefono', 'interes'] as const;
+
+export type CampoExtraido = (typeof CAMPOS_EXTRAIDOS)[number];
+
+/**
+ * Datos de contacto extraídos por IA desde la conversación (HU-OMNI-03, ampliado por HU-IA-06).
  * Se guardan aparte de `nombre`/`telefono` a propósito: esos campos son la identidad real que
  * llega por WhatsApp y no deben pisarse con una inferencia del modelo. Cada campo es `null`
  * cuando la conversación no lo menciona.
@@ -31,6 +40,28 @@ export interface IDatosExtraidos {
   telefono: string;
   /** De dónde salió `telefono`. Opcional por extracciones guardadas antes de existir este campo. */
   telefonoOrigen?: TelefonoOrigen;
+  /**
+   * Qué pide el cliente, con sus palabras («curso pre-ICFES sabatino»). Texto libre de <= 120
+   * caracteres. **No** es el nivel de interés: eso es `semaforoIA.nivelInteres` (HU-IA-05) y es una
+   * escala cerrada del modelo, no lo que el cliente quiere comprar.
+   *
+   * Opcional en lectura por las extracciones guardadas antes de existir este campo.
+   */
+  interes?: string | null;
+  /**
+   * Campos ya aplicados a la ficha (HU-IA-06). Vacío o ausente = todo sugerido. Un campo que esté
+   * aquí no vuelve a proponerse ni se pisa en la siguiente extracción.
+   *
+   * Es una lista y no un booleano por campo: cuatro banderas serían cuatro campos nuevos en el
+   * subdocumento y cuatro en el DTO, y no escalarían a un quinto campo extraído.
+   */
+  confirmados?: CampoExtraido[];
+  /**
+   * Última confirmación, no una por campo: el detalle campo a campo ya queda en `audit_events`,
+   * que es donde se consulta un histórico. Duplicarlo aquí sería una segunda bitácora, peor.
+   */
+  confirmadoAt?: Date | null;
+  confirmadoPor?: Types.ObjectId | null;
   extraidoAt: Date;
   modelo: string;
 }
@@ -76,6 +107,35 @@ export interface IResumenIA {
   modelo: string;
 }
 
+/**
+ * Última clasificación de intención de compra hecha por la IA (HU-IA-05).
+ *
+ * Guarda lo que el modelo dijo **aunque no se haya aplicado**: la franja de la bandeja necesita
+ * mostrar la sugerencia con su justificación, y el asesor decide. Los valores crudos
+ * (`nivelInteres`, `objecion`) viven aquí y NO en `Cliente.nivelInteres`/`objecionPrincipal`, que
+ * son claves del catálogo del tenant que edita una persona (ver `OpcionContactoKey`): un worker
+ * que corre en cada mensaje no puede revertir lo que un asesor escribió a mano.
+ */
+export interface ISemaforoIA {
+  /** Slug de semáforo que la clasificación sugiere. */
+  slug: SemaforoSlug;
+  /** Seguridad del modelo, en `[0, 1]`. Bajo `SEMAFORO_MIN_CONFIANZA` no se aplica, solo se propone. */
+  confianza: number;
+  /** Justificación en una frase. Se muestra en la bandeja y se copia a la bitácora. */
+  motivo: string;
+  nivelInteres: NivelInteres;
+  objecion: Objecion | null;
+  at: Date;
+  /**
+   * Slug que la IA llegó a escribir en `tagIds`. `null` = solo se propuso.
+   *
+   * Es además el detector de intervención humana: si el semáforo vigente de la conversación no
+   * coincide con este, lo cambió una persona, y desde entonces la IA solo propone. Sin este campo
+   * habría que consultar `audit_events` en cada mensaje para saberlo.
+   */
+  aplicado: SemaforoSlug | null;
+}
+
 export interface ICliente {
   tenantId: Types.ObjectId;
   metaUserId: string;
@@ -90,6 +150,20 @@ export interface ICliente {
   noLeidos: number;
   iaHabilitada: boolean;
   asesorId?: Types.ObjectId;
+  /**
+   * Cuándo y por qué Sofi transfirió la conversación a una persona (HU-IA-03). `null` mientras no
+   * haya pasado; vuelven a `null` cuando un asesor reactiva a Sofi en el hilo, porque entonces la
+   * bandeja no puede seguir diciendo que está transferida.
+   */
+  handoffAt: Date | null;
+  handoffMotivo: HandoffMotivo | null;
+  /**
+   * Qué condición propia del admin disparó la transferencia (HU-IA-07). `null` para las cuatro de
+   * fábrica. Guarda el **nombre** además de la clave: el banner de la bandeja no puede leer la
+   * configuración de handoff para pintar una línea, y si el admin renombra o borra la condición,
+   * esta conversación debe seguir diciendo por qué se transfirió **entonces**.
+   */
+  handoffCondicion?: IHandoffCondicionAplicada | null;
   customFields: Record<string, unknown>;
   /** Etiquetas de empresa aplicadas a la conversación (HU-OMNI-04). */
   tagIds: Types.ObjectId[];
@@ -98,6 +172,8 @@ export interface ICliente {
   rolContacto?: OpcionContactoKey;
   interesItemId?: Types.ObjectId;
   resumenIA?: IResumenIA;
+  /** Última clasificación de intención de compra (HU-IA-05). */
+  semaforoIA?: ISemaforoIA;
   datosExtraidos?: IDatosExtraidos;
   // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por subrol al leerlos ───
   /**
@@ -189,7 +265,27 @@ export interface IDatosExtraidosResponse {
   correo: string | null;
   telefono: string;
   telefonoOrigen: TelefonoOrigen;
+  interes: string | null;
+  /** Campos ya aplicados a la ficha. Lo que no está aquí y tiene valor está solo sugerido. */
+  confirmados: CampoExtraido[];
   extraidoAt: string;
+}
+
+/**
+ * Resultado de confirmar datos extraídos (HU-IA-06): qué se escribió en la ficha y qué se dejó
+ * como estaba porque ya había un dato guardado. La UI necesita las dos listas para poder explicar
+ * una omisión en vez de mentir con un éxito silencioso.
+ */
+export interface IConfirmarExtraccionResponse {
+  contacto: IContactCardResponse;
+  datosExtraidos: IDatosExtraidosResponse;
+  aplicados: CampoExtraido[];
+  omitidos: CampoExtraido[];
+}
+
+/** Cuerpo de `POST /api/clientes/:id/extract/confirm`. */
+export interface ConfirmarExtraccionDTO {
+  campos: CampoExtraido[];
 }
 
 /** Historial completo del contacto: ficha + resumen + datos extraídos + mensajes paginados. */

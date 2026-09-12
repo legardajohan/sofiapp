@@ -2,6 +2,7 @@ import { apiClient } from '../../api/apiClient.js';
 import type { Paginated } from '../inbox/types.js';
 import type {
   CreateLeadPayload,
+  HistorialSemaforoDTO,
   LeadDTO,
   LeadListItemDTO,
   LeadsFiltros,
@@ -34,5 +35,22 @@ export async function fetchLeads(filtros: LeadsFiltros): Promise<Paginated<LeadL
 /** Cambia la etapa de un lead. El backend valida la clave contra el catálogo del tenant. */
 export async function updateLeadEstado(id: string, estado: string): Promise<LeadDTO> {
   const { data } = await apiClient.patch<LeadDTO>(`/leads/${id}`, { estado });
+  return data;
+}
+
+/** Cambia el semáforo comercial del lead. `null` retira la clasificación (HU-CRM-04). */
+export async function updateLeadSemaforo(id: string, semaforo: string | null): Promise<LeadDTO> {
+  const { data } = await apiClient.patch<LeadDTO>(`/leads/${id}/status`, { semaforo });
+  return data;
+}
+
+export async function fetchHistorialSemaforo(
+  id: string,
+  page = 1,
+): Promise<Paginated<HistorialSemaforoDTO>> {
+  const { data } = await apiClient.get<Paginated<HistorialSemaforoDTO>>(
+    `/leads/${id}/historial`,
+    { params: { page } },
+  );
   return data;
 }
