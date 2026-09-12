@@ -61,7 +61,7 @@ Variables que necesitas en `apps/backend/.env` (ver [`.env.example`](apps/backen
   en una única capa (tenant-safe repository).
 - **IA para prospectos** — *slot filling* de datos, *lead scoring* (frío/tibio/caliente) y
   detección de objeciones con **Gemini 1.5 Flash** (proveedor intercambiable).
-- **Gestión por estados** — pipeline comercial basado en `estadoComercial` (sin Kanban).
+- **Gestión por estados** — pipeline comercial basado en `estadoComercial` (tabla + embudo Kanban, ver ADR 0007).
 - **Campañas de remarketing** — segmentación dinámica + envío masivo con rate limiting de Meta.
 - **Panel Superadmin** — alta/suspensión de empresas, activación manual de planes y métricas
   globales cross-tenant.

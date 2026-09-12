@@ -33,8 +33,13 @@ export interface ILead {
   origen: IOrigenLead;
   responsableId: Types.ObjectId;
   /**
-   * Reutiliza la unión de `Cliente`: el lead NO introduce un pipeline propio ni etapas nuevas
-   * (`docs/product.md` §5 descarta Kanban). Ver la nota de producto en la spec de HU-CRM-01.
+   * `key` de una etapa del catálogo `estados` del tenant (HU-CRM-03), no un enum: cada empresa
+   * define las suyas. El tipo sigue apuntando a la unión de `Cliente` porque las cinco claves de
+   * fábrica coinciden con ella y los leads anteriores no necesitaron migración.
+   *
+   * El lead sigue sin introducir un pipeline propio: el embudo de HU-PIPE-01 se dibuja sobre este
+   * campo y sobre `estados`. Lo que ya NO vale es la razón que había aquí escrita —que producto
+   * descartaba el Kanban—: se revirtió en `docs/adr/0007-tablero-kanban-pipeline.md`.
    */
   estado: EstadoComercial;
   /**
@@ -162,12 +167,25 @@ export interface ILeadListItemResponse {
 }
 
 /**
- * Una entrada del historial de semaforo (HU-CRM-04). Sale de `audit_events`, no de una coleccion
- * propia: es exactamente el uso para el que esa bitacora se creo.
+ * Una entrada del historial de etapa (HU-PIPE-01). Sale de `audit_events`, no de una colección
+ * propia: es exactamente el uso para el que esa bitácora se creó.
+ */
+export interface IHistorialEstadoResponse {
+  id: string;
+  /** `key` de la etapa anterior. `null` solo si el evento antiguo no la registró. */
+  de: string | null;
+  a: string | null;
+  actor: IRefResponse | null;
+  at: string;
+}
+
+/**
+ * Una entrada del historial de semáforo (HU-CRM-04). Mismo origen y misma forma que el de etapa
+ * —`audit_events`, filtrado por su acción—, pero otro eje: aquí `de`/`a` son `key` de semáforo.
  */
 export interface IHistorialSemaforoResponse {
   id: string;
-  /** `key` del semaforo anterior. `null` = el lead no estaba clasificado. */
+  /** `key` del semáforo anterior. `null` = el lead no estaba clasificado. */
   de: string | null;
   a: string | null;
   actor: IRefResponse | null;

@@ -51,6 +51,30 @@
 - Transiciones permitidas: ver diagrama. Una transición no permitida lanza `AppError(400)`.
 - `perdido` es alcanzable desde cualquier estado activo.
 
+### Etapas del lead: transiciones libres y etapas de salida (HU-PIPE-01)
+
+El diagrama de arriba describe `Cliente.estadoComercial`. La **etapa del lead** (`Lead.estado`) es
+otra cosa desde HU-CRM-03: un catálogo **por tenant** (`estados`), no un enum, y por tanto no puede
+tener un grafo de transiciones fijo — el `orden` que cada empresa le da a sus etapas es una
+narrativa, no una lista de permisos.
+
+Sus reglas son deliberadamente más simples:
+
+- **Entre etapas activas, cualquier movimiento es válido**, incluido retroceder. Corregir un
+  arrastre equivocado es una necesidad real; bloquearlo obligaría a tocar la base de datos a mano.
+- **Mover a una etapa archivada (`activo: false`) es `400`.** El tablero solo pinta las activas: la
+  tarjeta desaparecería sin que nadie pudiera explicar dónde fue a parar. Leer sí las admite —un
+  lead puede llevar grabada una etapa que ya no se ofrece—, así que **escribir es más estricto que
+  leer**.
+- **`Estado.esSalida` marca las etapas terminales.** De fábrica lo son dos, y la distinción entre
+  ellas es la que hace accionable un embudo:
+  - **`perdido`** — la oportunidad se enfrió: dejó de responder, se agotó el plazo. Se reintenta en
+    la siguiente campaña.
+  - **`declinado`** — dijo que no. No se reintenta.
+
+  El campo es **descriptivo, no restrictivo**: señala qué columnas cierran el recorrido, pero no
+  impide sacar un lead de ellas. Reabrir una oportunidad es una decisión legítima del asesor.
+
 ## 4. Captura por IA — datos genéricos vs. personalizados
 
 **Lo que la IA captura hoy (HU-IA-06)** son cuatro campos, en `Cliente.datosExtraidos`:

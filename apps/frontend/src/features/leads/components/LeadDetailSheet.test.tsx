@@ -42,9 +42,9 @@ const SEMAFOROS_CAT = [
 ];
 
 const ESTADOS_CAT = [
-  { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true },
-  { id: 'e2', key: 'en_gestion', label: 'En gestión', color: '#2563EB', orden: 1, activo: true, esDefecto: true },
-  { id: 'e3', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true },
+  { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true, esSalida: false },
+  { id: 'e2', key: 'en_gestion', label: 'En gestión', color: '#2563EB', orden: 1, activo: true, esDefecto: true, esSalida: false },
+  { id: 'e3', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true, esSalida: false },
 ];
 
 function renderSheet(l: LeadListItemDTO | null) {
