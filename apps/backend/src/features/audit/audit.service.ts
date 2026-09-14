@@ -55,12 +55,13 @@ export async function recordAuditEvent(tenantId: TenantId, input: RecordAuditInp
  *
  * `accion` es opcional y aditivo: sin él, el comportamiento es el de siempre (todos los eventos de
  * la entidad). Hace falta porque varias bitácoras comparten `entidad`: la de `lead` acumula
- * también `lead.create`, `lead.update` y `lead.delete` (HU-CRM-04), y sin filtro la bitácora de
- * clasificaciones de HU-IA-05 traería además las reasignaciones —y, al revés, el historial de
- * asignaciones mostraría filas vacías por cada clasificación.
+ * también `lead.create`, `lead.update` y `lead.delete` (HU-PIPE-01, HU-CRM-04), y sin filtro la
+ * bitácora de clasificaciones de HU-IA-05 traería además las reasignaciones —y, al revés, el
+ * historial de asignaciones mostraría filas vacías por cada clasificación.
  *
  * Acepta una lista porque un mismo eje puede registrarse con más de una acción: el historial de
- * asignaciones son dos (la manual y el handoff automático, que también cambia el responsable).
+ * asignaciones son dos (la manual y el handoff automático), y el de etapa consulta `lead.estado`
+ * junto al `lead.update` con el que se grabó antes de HU-PIPE-01.
  */
 function buildAuditFilter(
   entidad: AuditEntidad,

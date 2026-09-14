@@ -1,4 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// El cambio de etapa publica un evento de tiempo real (HU-PIPE-01). Sin este mock, `publishRealtime`
+// abre una conexion Redis real que, con `maxRetriesPerRequest: null`, encola el comando para
+// siempre en vez de fallar: el test se queda colgado hasta el timeout. Mismo mock que usan los
+// tests de `conversation`.
+vi.mock('../../realtime/realtime.publisher.js', () => ({
+  publishRealtime: vi.fn(),
+  subscribeRealtime: vi.fn(),
+}));
 import { Types } from 'mongoose';
 import { countScoped, createScoped, findByIdScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';

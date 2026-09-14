@@ -67,7 +67,7 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 | **AUTH — Autenticación y RBAC** | MVP | JWT con alcance de tenant, motor RBAC (2 roles: `superadmin`/`admin`, con subroles internos de `admin` como metadata), gestión de usuarios internos. |
 | **SAAS — Panel Superadmin** | MVP | CRUD de empresas, **activación manual de planes**, métricas globales cross-tenant. |
 | **M01 — Bandeja Omnicanal (Meta)** | MVP | Webhook multi-tenant, Embedded Signup por empresa, envío outbound, normalización IG/FB, UI de bandeja. |
-| **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. **Sin tablero Kanban / sin drag&drop.** |
+| **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. Etapas configurables por tenant (HU-CRM-03) y **embudo con tablero Kanban y drag&drop** (HU-PIPE-01, ver ADR 0007). |
 | **M04 — Motor de IA (Gemini)** | MVP | Slot filling, lead scoring (frío/tibio/caliente), detección de objeción, actualización dinámica, worker BullMQ. |
 | **M08 — Catálogo (productos/servicios)** | MVP | CRUD genérico de ítems del catálogo (antes "cursos"), asociación al prospecto. |
 | **M07 — Campañas de Remarketing** | Fase 3 | Filtrado dinámico de prospectos, encolamiento masivo (BullMQ + rate limit Meta), wizard, historial. |
@@ -78,7 +78,10 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 > Fase 4. La numeración es por **dependencia**, no por fecha.
 
 ### Módulos eliminados respecto al material original
-- **Kanban (M02 original):** reemplazado por gestión basada en estados del cliente.
+- **Kanban (M02 original):** se eliminó del MVP y se reemplazó por gestión basada en estados del
+  cliente. **Reincorporado en HU-PIPE-01** una vez que el catálogo de etapas por tenant y el cambio
+  de etapa ya estaban construidos: el tablero pasó a ser una vista más, no un módulo. Ver
+  `docs/adr/0007-tablero-kanban-pipeline.md`.
 - **Verificación de Pagos (M03):** eliminado. Solo un atributo `estadoComercial = pagado`.
 - **Caché Semántica Redis (M05):** omitida en el MVP (Redis se mantiene solo como broker de colas).
 

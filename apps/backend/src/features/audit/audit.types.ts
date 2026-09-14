@@ -15,6 +15,10 @@ export type AuditAccion =
   | 'lead.create'
   | 'lead.update'
   | 'lead.delete'
+  // Cambio de etapa del pipeline (HU-PIPE-01). Acción propia y no `lead.update` para que el
+  // historial de etapa se pueda consultar sin que se le cuelen las altas y las bajas.
+  | 'lead.estado'
+  /** Cambio del semáforo comercial del lead — HU-CRM-04. */
   | 'lead.semaforo';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
 

@@ -108,21 +108,49 @@ export const listLeadsSchema = z.object({
     }),
 });
 
+// ─── Embudo (HU-PIPE-01) ────────────────────────────────────────────────────────
+
 /**
- * Cambio de semaforo (HU-CRM-04). Ruta propia (`/status`) y no el `PATCH /:id` de la etapa: son dos
- * ejes distintos, y la etapa ya funciona y esta testeada.
+ * Cambio de etapa por su ruta propia (`PATCH /leads/:id/stage`).
  *
- * `null` es un valor legitimo: retira la clasificacion. `.strict()` porque el body tiene UNA llave
- * — colar `estado` aqui debe ser un 400 explicito, no un cambio por la puerta de atras.
+ * `.strict()` porque el body tiene UNA llave: colar `responsableId` o `nombre` por aquí debe ser un
+ * `400` explícito, no un cambio por la puerta de atrás. Es la diferencia con `updateLeadSchema`,
+ * que se conserva sin `.strict()` para no romper a quien ya llamaba a `PATCH /leads/:id`.
+ *
+ * Zod solo comprueba la forma; que la clave exista **y esté activa** en el catálogo de ESTE tenant
+ * lo valida el service, que es quien puede consultarlo.
+ */
+export const updateLeadStageSchema = z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({ estado: z.string().trim().min(1).max(40) }).strict(),
+});
+
+/** Historial de cambios de etapa del lead. Misma paginación que el resto del contrato. */
+export const historialEstadoSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+  }),
+});
+
+// ─── Semáforo comercial (HU-CRM-04) ─────────────────────────────────────────────
+
+/**
+ * Cambio de semáforo. Ruta propia (`/status`) y no el `PATCH /:id` de la etapa: son dos ejes
+ * distintos, y la etapa ya funciona y está testeada.
+ *
+ * `null` es un valor legítimo: retira la clasificación. `.strict()` por la misma razón que el
+ * cambio de etapa — colar `estado` aquí debe ser un `400` explícito, no un cambio por la puerta
+ * de atrás.
  */
 export const updateLeadSemaforoSchema = z.object({
   params: z.object({ id: objectId }),
-  body: z
-    .object({ semaforo: z.string().trim().min(1).max(40).nullable() })
-    .strict(),
+  body: z.object({ semaforo: z.string().trim().min(1).max(40).nullable() }).strict(),
 });
 
-/** Historial de cambios de semaforo del lead. Misma paginacion que el resto del contrato. */
+/** Historial de cambios de semáforo del lead. Misma paginación que el resto del contrato. */
 export const historialSemaforoSchema = z.object({
   body: empty,
   params: z.object({ id: objectId }),
@@ -132,6 +160,8 @@ export const historialSemaforoSchema = z.object({
   }),
 });
 
+export type UpdateLeadStageBody = z.infer<typeof updateLeadStageSchema>['body'];
+export type HistorialEstadoQuery = z.infer<typeof historialEstadoSchema>['query'];
 export type UpdateLeadSemaforoBody = z.infer<typeof updateLeadSemaforoSchema>['body'];
 export type HistorialSemaforoQuery = z.infer<typeof historialSemaforoSchema>['query'];
 

@@ -14,6 +14,8 @@ const EstadoSchema = new Schema<IEstadoDocument>(
     orden: { type: Number, required: true, default: 0 },
     activo: { type: Boolean, required: true, default: true },
     esDefecto: { type: Boolean, required: true, default: false },
+    // Sin índice: nadie filtra por él, es un dato de pintado (HU-PIPE-01).
+    esSalida: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
 );
