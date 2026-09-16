@@ -27,5 +27,9 @@ const MessageSchema = new Schema<IMessageDocument>(
 
 MessageSchema.index({ tenantId: 1, clienteId: 1, createdAt: 1 });
 MessageSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
+// Consumo del tier de Meta en las últimas 24 h (HU-MARK-01): cuántos destinatarios únicos abrió el
+// número con plantillas. Se consulta antes de cada lote de campaña, así que el filtro por `tipo` y
+// el rango de `createdAt` tienen que resolverse con un índice y no recorriendo la colección.
+MessageSchema.index({ tenantId: 1, tipo: 1, createdAt: -1 });
 
 export const Message = model<IMessageDocument>('Message', MessageSchema);

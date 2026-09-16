@@ -70,7 +70,7 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 | **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. Etapas configurables por tenant (HU-CRM-03) y **embudo con tablero Kanban y drag&drop** (HU-PIPE-01, ver ADR 0007). |
 | **M04 — Motor de IA (Gemini)** | MVP | Slot filling, lead scoring (frío/tibio/caliente), detección de objeción, actualización dinámica, worker BullMQ. |
 | **M08 — Catálogo (productos/servicios)** | MVP | CRUD genérico de ítems del catálogo (antes "cursos"), asociación al prospecto. |
-| **M07 — Campañas de Remarketing** | Fase 3 | Filtrado dinámico de prospectos, encolamiento masivo (BullMQ + rate limit Meta), wizard, historial. |
+| **M07 — Campañas de Remarketing** | Fase 3 — **implementado** (HU-MARK-01) | Segmentación por atributo personalizado, rol y semáforo comercial; encolamiento masivo (BullMQ) con pacing atado al tier y la calidad del número de WhatsApp; wizard de 3 pasos, historial y progreso en vivo. |
 | **M06 — Constructor Visual de Flujos** | **Fase 3 (recomendado)** | Canvas React Flow + runtime server-side. Mayor riesgo técnico; se difiere para no comprometer el MVP. |
 
 > **Nota sobre fases:** la columna "Estado" usa la numeración de fases de §7. "MVP" agrupa las
@@ -110,7 +110,7 @@ Cada transición emite un evento asíncrono para recalcular métricas de convers
 - **Fase 0 — Cimientos:** INF + AUTH + SAAS. Sin esto nada es multi-tenant ni seguro.
 - **Fase 1 — Núcleo CRM:** M01 (omnicanal) + M02 (estados) + M08 (catálogo).
 - **Fase 2 — Inteligencia:** M04 (IA: slot filling, scoring, objeciones).
-- **Fase 3 — Crecimiento:** M07 (campañas) y luego M06 (flujos visuales).
+- **Fase 3 — Crecimiento:** M07 (campañas, cerrado en HU-MARK-01) y M06 (flujos visuales).
 - **Fase 4 — Móvil:** React Native (Expo) para los `admin` que atienden la bandeja (función de
   asesor).
 

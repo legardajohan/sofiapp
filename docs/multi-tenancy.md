@@ -112,6 +112,15 @@ propio código:
    índice que sostiene esta consulta, `Cliente: { ventana24hExpiraEn: 1, iaHabilitada: 1 }`, es el
    único del proyecto que no empieza por `tenantId` — documentado junto al índice en
    `cliente.model.ts`. Test de aislamiento: `flow.reminder.isolation.test.ts`.
+5. **Barrido de campañas programadas (HU-MARK-01)** — `campaign-broadcast.processor.ts:processCampaignSweep`
+   consulta `Campaign.find({ estado: 'programada', programadaPara: { $lte: now } })` sin `tenantId`:
+   igual que el anterior, el disparador es global por naturaleza (una pasada para toda la
+   plataforma) y **solo proyecta identificadores** (`{ tenantId, _id }`). A partir de ahí cada
+   campaña se lanza con su propio `tenantId` y todo vuelve a pasar por `*Scoped`. Lo sostiene el
+   índice `Campaign: { estado: 1, programadaPara: 1 }`, el segundo del proyecto que no empieza por
+   `tenantId` — documentado junto al índice en `campaign.model.ts`. Los **jobs de envío no son una
+   excepción**: `CampaignJobData` lleva el `tenantId` dentro, así que el worker nunca barre nada
+   cross-tenant. Test de aislamiento: `campaign.isolation.test.ts`.
 
 ## 6. El Superadmin (User global)
 

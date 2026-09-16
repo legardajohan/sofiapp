@@ -89,13 +89,38 @@ plantilla `APPROVED` (si no, 422) y número de parámetros exacto (`parametrosBo
 persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 con
 `{ esperados, recibidos }`).
 
-## 5. Campañas (fuera de alcance de HT-WA-02)
+## 5. Campañas (implementado en HU-MARK-01)
 
-- Las difusiones masivas reutilizarán las mismas plantillas HSM aprobadas.
-- **Rate limiting:** worker BullMQ con concurrencia controlada para respetar el límite de Meta
-  (~80 msg/s). Backoff ante error 429. Registro de estado por destinatario (`campaign_recipients`).
+- Las difusiones masivas reutilizan las mismas plantillas HSM aprobadas, y **consumen
+  `sendOutbound`**: ni la regla de la ventana de 24 h ni la validación de la plantilla se
+  reimplementan en el worker.
+- **Dos límites distintos, ambos respetados.** La cuota del plan (`campanasMes`, `mensajesMes`) la
+  impone SofiApp y responde `429`. El límite de Meta lo impone el tier del número y no devuelve un
+  error: rechaza mensajes, baja la calidad y, en el extremo, suspende la WABA.
+- **Pacing por tier y calidad.** `MetaIntegration` persiste `messagingTier`, `qualityRating` y
+  `healthStatus`, refrescados con la sonda de §8 (que hasta HU-MARK-01 solo se usaba a mano para
+  diagnosticar). El presupuesto del día se **deriva**, no se configura:
+
+  ```
+  limiteDiario = floor(destinatariosDelTier × CAMPAIGN_SAFETY_MARGIN × factorCalidad)
+  disponible   = max(limiteDiario − destinatariosÚnicosDePlantillaEnLas24hRodantes, 0)
+  intervaloMs  = max(CAMPAIGN_MIN_INTERVAL_MS, 86_400_000 / limiteDiario)
+  ```
+
+  `factorCalidad`: `GREEN` 1, `YELLOW` y `UNKNOWN` 0.5, `RED` **bloquea el lanzamiento** (`409`).
+  El descuento de las 24 h cuenta **destinatarios únicos**, no mensajes —el tier de Meta mide
+  conversaciones iniciadas por la empresa—, e incluye los recordatorios de HU-FLOW-02 y los envíos
+  manuales de plantilla: salen del mismo número y gastan el mismo cupo.
+- **Cola `campaign-broadcast`** con `concurrency: 1` (el pacing es secuencial por definición: dos
+  lotes en paralelo se saltarían el intervalo) y un `limiter` de `CAMPAIGN_MAX_PER_SECOND` como red
+  de seguridad frente al límite de ~80 msg/s de la Graph API. El backoff ante `429` ya lo hace
+  `meta-whatsapp.client.ts`. Agotar el cupo del día **no es un error**: el job se reencola y la
+  campaña sigue `en_curso` hasta que la ventana rodante libera capacidad.
+- Registro de estado por destinatario (`campaign_recipients`), alimentado también por los `statuses`
+  del webhook: `delivered` → `entregado`, `failed` → `fallido`, siempre resuelto **por tenant**.
 - **Riesgo operativo:** una infracción de políticas puede suspender la WABA del tenant. Probar
-  con números sandbox antes de producción.
+  con números sandbox antes de producción. Por eso `Cliente.marketingOptOut` se excluye siempre del
+  segmento: un reporte de spam degrada la calidad, que es justo lo que el pacing intenta proteger.
 
 ## 6. Normalización de canales
 

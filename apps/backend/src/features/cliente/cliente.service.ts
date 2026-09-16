@@ -240,6 +240,9 @@ const CAMPOS_SIMPLES = [
   'nivelInteres',
   'objecionPrincipal',
   'rolContacto',
+  // HU-MARK-01. Encaja en el bucle tal cual: no es `nullable`, así que nunca cae en la rama de
+  // `$unset`; `false` es un valor con significado ("sí acepta campañas") y se persiste.
+  'marketingOptOut',
 ] as const;
 
 /** Campos sensibles y la columna (sufijo `Enc`, hoy en claro) donde se persisten. */
