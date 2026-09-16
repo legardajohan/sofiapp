@@ -154,6 +154,8 @@ describe('ContactPanel — la vista unificada no duplica ni filtra de más (HU-I
             sender: 'user',
             tipo: 'texto',
             texto: 'Hola, quisiera información del curso.',
+            media: null,
+            previewEnlace: null,
             attachmentUrl: null,
             status: 'sent',
             createdAt: '2026-07-27T12:00:00.000Z',

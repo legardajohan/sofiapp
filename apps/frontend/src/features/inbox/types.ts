@@ -77,12 +77,37 @@ export interface InboxFiltros {
   etiqueta?: string;
 }
 
+export type EstadoMedia = 'pendiente' | 'disponible' | 'fallida';
+
+/**
+ * Archivo de un mensaje (HU-OMNI-06). `urlArchivo` viene firmada por el backend y es `null`
+ * mientras el estado no sea `disponible`: la descarga desde Meta es asíncrona.
+ */
+export interface MediaDTO {
+  estado: EstadoMedia;
+  mimeType: string;
+  nombreArchivo: string | null;
+  tamanoBytes: number | null;
+  urlArchivo: string | null;
+  /** Motivo del fallo, ya redactado por el backend para mostrarlo tal cual. */
+  error: string | null;
+}
+
+export interface PreviewEnlaceDTO {
+  url: string;
+  dominio: string;
+}
+
 export interface MessageDTO {
   id: string;
   direccion: Direccion;
   sender: Sender;
   tipo: TipoMensaje;
+  /** Texto libre o el pie de foto de un adjunto. */
   texto: string | null;
+  media: MediaDTO | null;
+  previewEnlace: PreviewEnlaceDTO | null;
+  /** @deprecated HU-OMNI-06: espejo de `media.urlArchivo`. Usar `media`. */
   attachmentUrl: string | null;
   status: MessageStatus;
   createdAt: string;
@@ -233,6 +258,13 @@ export interface RealtimeMessageEvent {
   conversationId: string;
   message: MessageDTO;
   conversation: ConversationDTO;
+}
+
+/** La media de un mensaje ya existente cambió de estado (HU-OMNI-06). */
+export interface RealtimeMessageUpdatedEvent {
+  tenantId: string;
+  conversationId: string;
+  message: MessageDTO;
 }
 
 export interface RealtimeConversationEvent {
