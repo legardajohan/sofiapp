@@ -10,6 +10,28 @@ export type Direccion = 'inbound' | 'outbound';
 export type Sender = 'user' | 'bot' | 'agent';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
 
+/**
+ * Espejo de `TipoMensaje` del backend (HU-OMNI-06). Antes era `string`, lo que dejaba que el hilo
+ * imprimiera `[loQueSea]` sin que el compilador dijera nada; tipado, añadir un tipo nuevo obliga a
+ * decidir cómo se pinta.
+ *
+ * `enlace` es texto con una URL dentro: lleva `texto` como cualquier mensaje normal y además
+ * `previewEnlace` para la tarjeta.
+ */
+export const TIPOS_MENSAJE = [
+  'texto',
+  'enlace',
+  'imagen',
+  'video',
+  'audio',
+  'documento',
+  'sticker',
+  'plantilla',
+  'otro',
+] as const;
+
+export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
+
 export interface ConversationDTO {
   id: string;
   nombre: string | null;
@@ -59,7 +81,7 @@ export interface MessageDTO {
   id: string;
   direccion: Direccion;
   sender: Sender;
-  tipo: string;
+  tipo: TipoMensaje;
   texto: string | null;
   attachmentUrl: string | null;
   status: MessageStatus;

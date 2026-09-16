@@ -11,6 +11,7 @@
     "seed:flow": "tsx --env-file .env src/seed/seed-flow-crm-ventas.ts",
     "typecheck": "tsc --noEmit",
     "migrate:tags": "tsx --env-file .env src/scripts/migrate-cliente-tags.ts",
+    "migrate:tipo-mensaje": "tsx --env-file .env src/scripts/migrate-tipo-mensaje.ts",
     "migrate:chat-template": "tsx --env-file .env src/scripts/migrate-chat-template.ts",
     "migrate:classify-template": "tsx --env-file .env src/scripts/migrate-classify-template.ts",
     "migrate:extract-template": "tsx --env-file .env src/scripts/migrate-extract-template.ts",

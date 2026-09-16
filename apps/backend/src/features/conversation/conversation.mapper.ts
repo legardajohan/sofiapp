@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose';
+import { normalizarTipoMensaje } from '../message/message.types.js';
 import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
 import type { IUserResponse } from '../users/user.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
@@ -115,7 +116,10 @@ export function toMessageResponse(msg: IMessageSource): IMessageResponse {
     id: String(msg._id),
     direccion: msg.direccion,
     sender: msg.sender,
-    tipo: msg.tipo,
+    // Normalizado y no crudo: `.lean()` no valida contra el enum del schema, así que un documento
+    // anterior a HU-OMNI-06 que se escape del script de migración llegaría al frontend como
+    // `"text"` y no se sabría pintar. Esta defensa se queda de forma permanente.
+    tipo: normalizarTipoMensaje(msg.tipo),
     texto: msg.texto ?? null,
     attachmentUrl: msg.attachmentUrl ?? null,
     status: msg.status,

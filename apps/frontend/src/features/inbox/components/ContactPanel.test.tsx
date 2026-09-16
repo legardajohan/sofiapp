@@ -152,7 +152,7 @@ describe('ContactPanel — la vista unificada no duplica ni filtra de más (HU-I
             id: 'm-1',
             direccion: 'inbound',
             sender: 'user',
-            tipo: 'text',
+            tipo: 'texto',
             texto: 'Hola, quisiera información del curso.',
             attachmentUrl: null,
             status: 'sent',

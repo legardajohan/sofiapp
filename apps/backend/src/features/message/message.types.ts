@@ -2,8 +2,84 @@ import { Document, Types } from 'mongoose';
 
 export type Direccion = 'inbound' | 'outbound';
 export type Sender = 'user' | 'bot' | 'agent';
-export type TipoMensaje = 'text' | 'image' | 'template' | 'audio' | 'document' | 'other';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+
+/**
+ * Tipo de contenido del mensaje, en español como el resto del vocabulario de dominio
+ * (`apps/backend/CLAUDE.md` → Naming). Migrado desde el enum en inglés en HU-OMNI-06.
+ *
+ * `enlace` es un mensaje de texto que además contiene una URL: se clasifica aparte para poder
+ * renderizar la tarjeta de previsualización, pero **sigue llevando texto** — ver `esTipoConTexto`.
+ */
+export type TipoMensaje =
+  | 'texto'
+  | 'enlace'
+  | 'imagen'
+  | 'video'
+  | 'audio'
+  | 'documento'
+  | 'sticker'
+  | 'plantilla'
+  | 'otro';
+
+/**
+ * Tipos cuyo `texto` es contenido real del cliente y no un pie de foto opcional.
+ *
+ * Existe porque `enlace` rompe la comparación ingenua `tipo !== 'texto'`: quien preguntaba eso lo
+ * hacía para saber si Sofi podía leer el mensaje, y un enlace se lee perfectamente. Sin esta lista,
+ * mandar un link dispararía el acuse de "solo entiendo texto" (`MENSAJE_SOLO_TEXTO`), que es una
+ * regresión visible para el cliente final. **Toda** decisión de "¿esto tiene texto?" pasa por aquí.
+ */
+export const TIPOS_CON_TEXTO: readonly TipoMensaje[] = ['texto', 'enlace'];
+
+export function esTipoConTexto(tipo: TipoMensaje): boolean {
+  return TIPOS_CON_TEXTO.includes(tipo);
+}
+
+/**
+ * Enum anterior a HU-OMNI-06 → actual. Lo consume el script de migración
+ * (`scripts/migrate-tipo-mensaje.ts`) y `normalizarTipoMensaje`.
+ *
+ * `video` y `sticker` no aparecen: antes caían en `other` y el payload original no se guardó, así
+ * que no hay nada que recuperar. Se quedan en `otro`, que es la verdad.
+ */
+export const TIPO_MENSAJE_LEGACY: Readonly<Record<string, TipoMensaje>> = {
+  text: 'texto',
+  image: 'imagen',
+  audio: 'audio',
+  document: 'documento',
+  template: 'plantilla',
+  other: 'otro',
+};
+
+/**
+ * Normaliza un `tipo` leído de Mongo que pueda venir del enum anterior. Idempotente.
+ *
+ * Se aplica de forma **permanente** en el mapper, no solo durante la migración: `.lean()` no valida
+ * contra el enum del schema, así que un documento heredado que se escape del script —una réplica,
+ * un backup restaurado— llegaría al frontend como `"text"` y no se sabría pintar.
+ */
+export function normalizarTipoMensaje(tipo: string): TipoMensaje {
+  return TIPO_MENSAJE_LEGACY[tipo] ?? (tipo as TipoMensaje);
+}
+
+/**
+ * Tipos de la Cloud API de WhatsApp → dominio. Fuente única: antes de HU-OMNI-06 existían dos
+ * `mapMsgType` duplicados (el del normalizador, que era código muerto, y el privado del processor
+ * de entrantes) que había que mantener sincronizados a mano.
+ */
+export const TIPO_POR_TIPO_META: Readonly<Record<string, TipoMensaje>> = {
+  text: 'texto',
+  image: 'imagen',
+  video: 'video',
+  audio: 'audio',
+  document: 'documento',
+  sticker: 'sticker',
+};
+
+export function mapTipoMensajeMeta(type: string): TipoMensaje {
+  return TIPO_POR_TIPO_META[type] ?? 'otro';
+}
 
 export interface IMessage {
   tenantId: Types.ObjectId;

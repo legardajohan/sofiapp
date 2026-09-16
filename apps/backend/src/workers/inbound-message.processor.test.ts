@@ -167,7 +167,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
         canal: 'whatsapp',
         direccion: 'outbound',
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto,
         status: 'sent',
       } as unknown as Record<string, unknown>);
@@ -193,7 +193,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
         canal: 'whatsapp',
         direccion: 'outbound',
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto,
         status: 'sent',
       } as unknown as Record<string, unknown>);

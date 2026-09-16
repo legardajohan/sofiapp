@@ -40,7 +40,7 @@ describe('cliente.service — getContactHistory', () => {
       canal: 'whatsapp',
       direccion: 'inbound',
       sender: 'user',
-      tipo: 'text',
+      tipo: 'texto',
       texto,
       status: 'sent',
     });

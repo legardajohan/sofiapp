@@ -14,22 +14,12 @@ import { getActiveFlow } from '../features/flow/flow.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import { parseDeliveryStatuses } from '../integrations/meta/meta-whatsapp.normalizer.js';
 import type { IWhatsAppMessage, IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
-import type { TipoMensaje } from '../features/message/message.types.js';
+import { esTipoConTexto, mapTipoMensajeMeta } from '../features/message/message.types.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 
 export interface InboundJobData {
   tenantId: string;
   payload: IWhatsAppWebhookPayload;
-}
-
-function mapMsgType(type: string): TipoMensaje {
-  const map: Record<string, TipoMensaje> = {
-    text: 'text',
-    image: 'image',
-    audio: 'audio',
-    document: 'document',
-  };
-  return map[type] ?? 'other';
 }
 
 /**
@@ -131,7 +121,7 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
           canal: 'whatsapp',
           direccion: 'inbound',
           sender: 'user',
-          tipo: mapMsgType(msg.type),
+          tipo: mapTipoMensajeMeta(msg.type),
           texto: msg.text?.body,
           metaMessageId: msg.id,
           status: 'sent',
@@ -204,7 +194,11 @@ async function atenderConSofi(
   tipo: string,
   texto: string | undefined,
 ): Promise<void> {
-  if (tipo !== 'text' || !texto) {
+  // `esTipoConTexto` y no `!== 'texto'`: desde HU-OMNI-06 un enlace es su propio tipo y sigue
+  // siendo un mensaje legible. Preguntar por la igualdad estricta mandaría el acuse de "solo
+  // entiendo texto" a cualquiera que comparta un link, que es justo lo contrario de lo que este
+  // guard pretende.
+  if (!esTipoConTexto(mapTipoMensajeMeta(tipo)) || !texto) {
     await acusarNoTexto(tenantId, clienteId);
     return;
   }

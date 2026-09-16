@@ -47,7 +47,7 @@ describe('conversation.service — listConversations', () => {
       canal: 'whatsapp',
       direccion: 'inbound',
       sender: 'user',
-      tipo: 'text',
+      tipo: 'texto',
       texto: 'último del nuevo',
       status: 'sent',
     });
@@ -56,7 +56,7 @@ describe('conversation.service — listConversations', () => {
       canal: 'whatsapp',
       direccion: 'inbound',
       sender: 'user',
-      tipo: 'text',
+      tipo: 'texto',
       texto: 'del viejo',
       status: 'sent',
     });

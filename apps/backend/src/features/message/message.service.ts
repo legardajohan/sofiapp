@@ -98,7 +98,7 @@ export async function sendOutbound(
       // Los envíos por plantilla se atribuyen a 'bot': son un mensaje automatizado/aprobado por
       // Meta, no texto libre redactado por el agente, aunque los haya disparado un admin.
       sender: 'bot',
-      tipo: 'template',
+      tipo: 'plantilla',
       metaMessageId: messageId,
       status: 'sent',
     } as Record<string, unknown>);
@@ -119,7 +119,7 @@ export async function sendOutbound(
     canal: 'whatsapp',
     direccion: 'outbound',
     sender,
-    tipo: 'text',
+    tipo: 'texto',
     texto,
     metaMessageId: messageId,
     status: 'sent',

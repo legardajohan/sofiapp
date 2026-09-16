@@ -82,7 +82,7 @@ beforeEach(async () => {
     canal: 'whatsapp',
     direccion: 'inbound',
     sender: 'user',
-    tipo: 'text',
+    tipo: 'texto',
     texto: 'Hola',
     status: 'sent',
   });

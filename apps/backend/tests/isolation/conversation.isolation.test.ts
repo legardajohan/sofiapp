@@ -41,7 +41,7 @@ describe('Aislamiento multi-tenant — conversations', () => {
       canal: 'whatsapp',
       direccion: 'inbound',
       sender: 'user',
-      tipo: 'text',
+      tipo: 'texto',
       texto: 'Mensaje privado de tenantA',
       status: 'sent',
     });

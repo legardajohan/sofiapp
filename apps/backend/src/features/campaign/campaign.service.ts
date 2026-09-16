@@ -99,7 +99,20 @@ export async function contarConsumo24h(tenantId: TenantId): Promise<number> {
   const desde = new Date(Date.now() - MS_24H);
 
   const filas = await aggregateScoped<{ _id: null; total: number }>(Message, tenantId, [
-    { $match: { direccion: 'outbound', tipo: 'template', createdAt: { $gte: desde } } },
+    // `$in` con los dos valores mientras dure la fase `expand` de HU-OMNI-06: la ventana rodante
+    // mira 24 h hacia atrás, así que aunque el enum ya se escriba en español, aquí siguen entrando
+    // documentos escritos con `'template'` hasta un día después del despliegue —y más, si el script
+    // de migración se retrasa—. Contar solo uno de los dos devolvería un consumo menor del real, el
+    // presupuesto saldría inflado y la campaña se pasaría del tier del número: Meta no responde con
+    // un error, rechaza mensajes y degrada la calidad de la WABA. Se reduce a un único valor en la
+    // fase `contract`, no antes.
+    {
+      $match: {
+        direccion: 'outbound',
+        tipo: { $in: ['plantilla', 'template'] },
+        createdAt: { $gte: desde },
+      },
+    },
     { $group: { _id: '$clienteId' } },
     { $group: { _id: null, total: { $sum: 1 } } },
   ]);

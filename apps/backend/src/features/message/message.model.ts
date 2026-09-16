@@ -8,9 +8,30 @@ const MessageSchema = new Schema<IMessageDocument>(
     canal: { type: String, enum: ['whatsapp'], required: true },
     direccion: { type: String, enum: ['inbound', 'outbound'], required: true },
     sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+    // Fase `expand` de la migración del enum a español (HU-OMNI-06): se ESCRIBE solo en español,
+    // pero el enum acepta todavía los 6 valores en inglés para que los documentos anteriores a
+    // `migrate:tipo-mensaje` sigan siendo válidos si algo los reescribe (p. ej. `updateDeliveryStatus`
+    // sobre un mensaje viejo). La fase `contract` —PR aparte, cuando no queden documentos legacy—
+    // deja solo los 9 de arriba. Ver `docs/specs/HU-OMNI-06-mensajeria-multimedia/plan.md` §1.
     tipo: {
       type: String,
-      enum: ['text', 'image', 'template', 'audio', 'document', 'other'],
+      enum: [
+        'texto',
+        'enlace',
+        'imagen',
+        'video',
+        'audio',
+        'documento',
+        'sticker',
+        'plantilla',
+        'otro',
+        // legacy — solo lectura/compatibilidad, no se escriben nunca
+        'text',
+        'image',
+        'template',
+        'document',
+        'other',
+      ],
       required: true,
     },
     texto: { type: String },

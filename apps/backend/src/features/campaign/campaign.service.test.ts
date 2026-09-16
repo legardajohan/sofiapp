@@ -312,7 +312,7 @@ describe('HU-MARK-01 — servicio de campañas', () => {
         canal: 'whatsapp',
         direccion: 'outbound',
         sender: 'bot',
-        tipo: 'template',
+        tipo: 'plantilla',
         metaMessageId: `wamid.${i}`,
         status: 'sent',
       });
@@ -327,7 +327,7 @@ describe('HU-MARK-01 — servicio de campañas', () => {
       canal: 'whatsapp',
       direccion: 'outbound',
       sender: 'agent',
-      tipo: 'text',
+      tipo: 'texto',
       status: 'sent',
     });
 
@@ -336,7 +336,7 @@ describe('HU-MARK-01 — servicio de campañas', () => {
       canal: 'whatsapp',
       direccion: 'outbound',
       sender: 'bot',
-      tipo: 'template',
+      tipo: 'plantilla',
       status: 'sent',
     });
     // Por el driver crudo: Mongoose marca `createdAt` como inmutable cuando hay `timestamps`,

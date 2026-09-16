@@ -45,7 +45,7 @@ describe('Aislamiento multi-tenant — HU-OMNI-03 (historial + resumen)', () => 
       canal: 'whatsapp',
       direccion: 'inbound',
       sender: 'user',
-      tipo: 'text',
+      tipo: 'texto',
       texto: 'Mensaje privado de tenantA',
       status: 'sent',
     });

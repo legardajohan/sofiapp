@@ -51,7 +51,7 @@ async function sembrarMensajes(clienteId: string, cuantos: number): Promise<void
       canal: 'whatsapp',
       direccion: i % 2 === 0 ? 'inbound' : 'outbound',
       sender: i % 2 === 0 ? 'user' : 'bot',
-      tipo: 'text',
+      tipo: 'texto',
       texto: `mensaje ${i}`,
       // Fechas crecientes: el orden importa, el transcript se recorta por los más recientes.
       createdAt: new Date(Date.now() - (cuantos - i) * 1000),

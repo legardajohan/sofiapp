@@ -53,10 +53,24 @@ import type {
   ThreadQuery,
 } from './conversation.validation.js';
 
+/**
+ * Etiqueta de un mensaje sin texto propio, para la preview de la bandeja y para el transcript que
+ * alimenta el resumen por IA.
+ *
+ * Acepta también las claves del enum anterior a HU-OMNI-06: la preview se calcula sobre el último
+ * mensaje del hilo, que puede ser anterior a la migración, y ahí un `[mensaje]` genérico sería un
+ * retroceso visible en la lista de conversaciones.
+ */
 function nonTextPreview(tipo: string): string {
   const labels: Record<string, string> = {
-    image: '📷 Imagen',
+    imagen: '📷 Imagen',
+    video: '🎬 Video',
     audio: '🎤 Audio',
+    documento: '📄 Documento',
+    sticker: '🩹 Sticker',
+    plantilla: '📋 Plantilla',
+    // legacy (pre-HU-OMNI-06)
+    image: '📷 Imagen',
     document: '📄 Documento',
     template: '📋 Plantilla',
   };
