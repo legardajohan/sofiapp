@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { AppError } from '../../utils/AppError.js';
 import {
   aplicarSemaforoSugerido,
   listClasificaciones,
@@ -12,6 +13,7 @@ import {
   listAssignments,
   listConversations,
   markRead,
+  replyMediaMessage,
   replyMessage,
   setConversationTags,
   setIaHabilitada,
@@ -61,6 +63,36 @@ export const replyController: RequestHandler = async (req, res) => {
   const id = req.params['id'] as string;
   const { texto } = req.body as ReplyBody;
   const message = await replyMessage(tenantId, id, texto);
+  res.status(201).json(message);
+};
+
+/**
+ * Envío de un archivo desde el composer (HU-OMNI-06).
+ *
+ * `req.file` lo deja `subirArchivo` (multer). No lo valida Zod: es un `Buffer`, no encaja en un
+ * schema, y la regla de qué mime y qué tamaño se aceptan vive en `media.service`.
+ */
+export const replyMediaController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const archivo = req.file;
+
+  if (!archivo) throw new AppError('Falta el archivo a enviar.', 400);
+
+  const { texto } = req.body as { texto?: string };
+  const message = await replyMediaMessage(
+    tenantId,
+    id,
+    {
+      buffer: archivo.buffer,
+      mimeType: archivo.mimetype,
+      // `originalname` es texto del navegador: se usa como etiqueta para Meta y para el hilo,
+      // nunca para construir una ruta de almacenamiento.
+      nombreArchivo: archivo.originalname,
+    },
+    texto,
+  );
+
   res.status(201).json(message);
 };
 

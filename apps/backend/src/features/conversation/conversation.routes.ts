@@ -7,6 +7,7 @@ import {
   SUBROLES_DATOS_SENSIBLES,
 } from '../../middlewares/authorize-subrol.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
+import { subirArchivo } from '../../middlewares/upload.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
   aplicarSemaforoSchema,
@@ -17,6 +18,7 @@ import {
   listConversationsSchema,
   overviewSchema,
   readSchema,
+  replyMediaSchema,
   replySchema,
   summarySchema,
   tagsSchema,
@@ -33,6 +35,7 @@ import {
   listConversationsController,
   markReadController,
   replyController,
+  replyMediaController,
   setIaController,
   setTagsController,
 } from './conversation.controller.js';
@@ -83,6 +86,23 @@ router.post(
   bandejaRoles,
   validate(replySchema),
   asyncHandler(replyController),
+);
+
+/**
+ * Envío de un archivo en la conversación (HU-OMNI-06).
+ *
+ * `subirArchivo` (multer) va entre `authorize` y `validate`, y es la **única excepción admitida** a
+ * la cadena fija de middlewares: `validate` parsea `req.body`, y en un multipart los campos de
+ * texto no existen hasta que multer ha consumido el stream.
+ */
+router.post(
+  '/:id/messages/media',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  subirArchivo,
+  validate(replyMediaSchema),
+  asyncHandler(replyMediaController),
 );
 
 router.patch(

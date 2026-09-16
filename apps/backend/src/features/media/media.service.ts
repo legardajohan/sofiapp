@@ -4,9 +4,24 @@ import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { findByIdScoped } from '../../repositories/base.repository.js';
 import { Message } from '../message/message.model.js';
-import type { IMensajeMedia, IPreviewEnlace, TipoMensaje } from '../message/message.types.js';
-import { esTipoConMedia } from './media.types.js';
-import type { IMediaDescargable, IMediaResponse, IMediaTokenPayload } from './media.types.js';
+import type {
+  IMensajeMedia,
+  IMessageDocument,
+  IPreviewEnlace,
+  TipoMensaje,
+} from '../message/message.types.js';
+import { LIMITES_MEDIA, esTipoConMedia } from './media.types.js';
+import type {
+  IMediaDescargable,
+  IMediaResponse,
+  IMediaTokenPayload,
+  TipoMediaSaliente,
+} from './media.types.js';
+import { construirMediaKey, getMediaStorage } from '../../integrations/storage/index.js';
+import { metaMediaClient } from '../../integrations/meta/meta-media.client.js';
+import { getIntegrationWithToken } from '../channel/channel.service.js';
+import { sendOutbound } from '../message/message.service.js';
+import { logger } from '../../utils/logger.js';
 
 type TenantId = string | Types.ObjectId;
 
@@ -154,3 +169,113 @@ export function clasificarTexto(texto: string | undefined): {
 }
 
 export { esTipoConMedia };
+
+/** Techo efectivo de un tipo: el menor entre el límite de Meta y el configurado. */
+function maxBytesDe(tipo: TipoMediaSaliente): number {
+  const porEnv = {
+    imagen: env.MEDIA_MAX_BYTES_IMAGEN,
+    video: env.MEDIA_MAX_BYTES_VIDEO,
+    documento: env.MEDIA_MAX_BYTES_DOCUMENTO,
+  }[tipo];
+  return Math.min(LIMITES_MEDIA[tipo].maxBytes, porEnv);
+}
+
+/**
+ * Clasifica un archivo por su mime y valida tipo y tamaño.
+ *
+ * El mime decide el tipo, no la extensión: la extensión la escribe quien sube el archivo y no se
+ * puede confiar en ella. Un mime fuera de las listas se rechaza con 415 en vez de intentar enviarlo
+ * y recibir un error opaco de Meta — y ahí es donde `svg` y `html` quedan fuera, que es lo que
+ * impide que un archivo de un cliente se sirva como script desde nuestro propio origen.
+ */
+export function clasificarArchivoSaliente(
+  mimeType: string,
+  tamanoBytes: number,
+): TipoMediaSaliente {
+  const mime = mimeType.toLowerCase().split(';')[0]?.trim() ?? '';
+
+  const tipo = (Object.keys(LIMITES_MEDIA) as TipoMediaSaliente[]).find((t) =>
+    LIMITES_MEDIA[t].mimes.includes(mime),
+  );
+
+  if (!tipo) {
+    throw new AppError(`No se pueden enviar archivos de tipo ${mime || 'desconocido'}.`, 415);
+  }
+
+  const max = maxBytesDe(tipo);
+  if (tamanoBytes > max) {
+    const mb = Math.floor(max / (1024 * 1024));
+    throw new AppError(`El archivo supera el tamaño permitido (${mb} MB).`, 413);
+  }
+
+  return tipo;
+}
+
+export interface IArchivoSaliente {
+  buffer: Buffer;
+  mimeType: string;
+  nombreArchivo: string;
+}
+
+/**
+ * Sube un archivo del asesor y lo envía por WhatsApp.
+ *
+ * **Orden: nuestro almacenamiento primero, Meta después.** Si Meta fuera primero y el guardado
+ * fallara, el cliente ya habría recibido un archivo que nuestra propia bandeja no puede mostrar:
+ * una inconsistencia visible e irreversible. Al revés, el peor caso es un objeto huérfano, y el
+ * `catch` lo limpia.
+ *
+ * La ventana de 24 h no se decide aquí: la decide `sendOutbound`, como todo lo demás.
+ */
+export async function enviarMediaSaliente(
+  tenantId: string,
+  clienteId: string,
+  archivo: IArchivoSaliente,
+  caption: string | undefined,
+): Promise<IMessageDocument> {
+  const tipo = clasificarArchivoSaliente(archivo.mimeType, archivo.buffer.byteLength);
+
+  const storage = getMediaStorage();
+  // La clave se construye con el `clienteId` como carpeta intermedia porque el mensaje aún no
+  // existe: se crea al final, dentro de `sendOutbound`.
+  const key = construirMediaKey(tenantId, clienteId, archivo.mimeType);
+
+  const guardado = await storage.guardar({
+    key,
+    contenido: archivo.buffer,
+    mimeType: archivo.mimeType,
+    nombreArchivo: archivo.nombreArchivo,
+  });
+
+  try {
+    const integration = await getIntegrationWithToken(tenantId);
+    const { mediaId } = await metaMediaClient.subir(
+      integration.phoneNumberId,
+      integration.accessToken,
+      archivo,
+    );
+
+    return await sendOutbound(
+      tenantId,
+      clienteId,
+      {
+        modo: 'media',
+        tipo,
+        metaMediaId: mediaId,
+        mediaKey: guardado.key,
+        mimeType: guardado.mimeType,
+        tamanoBytes: guardado.tamanoBytes,
+        ...(archivo.nombreArchivo ? { nombreArchivo: archivo.nombreArchivo } : {}),
+        ...(caption ? { caption } : {}),
+      },
+      'agent',
+    );
+  } catch (err: unknown) {
+    // Limpieza best-effort: si no se pudo enviar, el objeto que acabamos de guardar no lo va a
+    // referenciar ningún mensaje. Que el borrado falle no debe tapar el error real del envío.
+    void storage.eliminar(guardado.key).catch((e: unknown) => {
+      logger.warn('No se pudo limpiar la media huérfana', { key: guardado.key, error: String(e) });
+    });
+    throw err;
+  }
+}

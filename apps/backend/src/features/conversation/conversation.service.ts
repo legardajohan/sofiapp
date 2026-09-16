@@ -15,6 +15,7 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
+import { enviarMediaSaliente, type IArchivoSaliente } from '../media/media.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
@@ -281,9 +282,24 @@ async function enviarYNotificar(
   // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
   // cuota mensual de mensajes.
   const msg = await sendMessage(tenantId, { clienteId, texto, sender });
-  const message = toMessageResponse(msg as unknown as IMessageSource, String(tenantId));
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
+}
 
-  // La respuesta saliente reordena la bandeja y se notifica en vivo a los demás asesores.
+/**
+ * Deja la bandeja consistente tras un envío: refresca `ultimoMensajeAt` —que la reordena— y publica
+ * `message:new` para los demás asesores.
+ *
+ * Separada del envío porque el texto y la media producen el `Message` por caminos distintos
+ * (`sendMessage` y `enviarMediaSaliente`) pero necesitan exactamente la misma reacción después;
+ * duplicarla dejaría a la bandeja actualizándose solo para uno de los dos.
+ */
+async function notificarSaliente(
+  tenantId: string,
+  clienteId: string,
+  msg: IMessageSource,
+): Promise<IMessageResponse> {
+  const message = toMessageResponse(msg, String(tenantId));
+
   const cliente = await findOneAndUpdateScoped(
     Cliente,
     tenantId,
@@ -306,6 +322,22 @@ async function enviarYNotificar(
   }
 
   return message;
+}
+
+/**
+ * Envío de un archivo por el asesor desde el composer (HU-OMNI-06).
+ *
+ * La ventana de 24 h la sigue decidiendo `sendOutbound`, dentro de `enviarMediaSaliente`: aquí no
+ * se reimplementa la regla, solo se notifica el resultado igual que en un mensaje de texto.
+ */
+export async function replyMediaMessage(
+  tenantId: string,
+  clienteId: string,
+  archivo: IArchivoSaliente,
+  caption: string | undefined,
+): Promise<IMessageResponse> {
+  const msg = await enviarMediaSaliente(tenantId, clienteId, archivo, caption);
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
 }
 
 /** Respuesta manual de un asesor desde la bandeja. */

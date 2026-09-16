@@ -1,4 +1,5 @@
 import { Document, Types } from 'mongoose';
+import type { TipoMediaSaliente } from '../media/media.types.js';
 
 export type Direccion = 'inbound' | 'outbound';
 export type Sender = 'user' | 'bot' | 'agent';
@@ -177,7 +178,25 @@ export interface ISendMessageDto {
 export type ContenidoOutbound =
   | { modo: 'auto'; texto: string; plantillaFallback?: { templateId: string; parametros: string[] } }
   | { modo: 'texto'; texto: string }
-  | { modo: 'plantilla'; templateId: string; parametros: string[] };
+  | { modo: 'plantilla'; templateId: string; parametros: string[] }
+  /**
+   * Archivo YA guardado en nuestro almacenamiento y YA subido a Meta (HU-OMNI-06). `sendOutbound`
+   * no sube nada: recibe el `metaMediaId` hecho, decide si la ventana permite el envío y persiste.
+   *
+   * Es contenido libre, así que rige la MISMA regla que `'texto'`: fuera de la ventana, 422. Meta
+   * no acepta media libre fuera de ventana, y la única alternativa —plantilla con cabecera
+   * multimedia— está fuera del alcance de este feature.
+   */
+  | {
+      modo: 'media';
+      tipo: TipoMediaSaliente;
+      metaMediaId: string;
+      mediaKey: string;
+      mimeType: string;
+      tamanoBytes: number;
+      nombreArchivo?: string;
+      caption?: string;
+    };
 
 export interface ISendTemplateDto {
   clienteId: string;

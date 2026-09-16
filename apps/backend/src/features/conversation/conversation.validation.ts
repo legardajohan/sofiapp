@@ -115,3 +115,20 @@ export type IaBody = z.infer<typeof iaSchema>['body'];
 export type AssignBody = z.infer<typeof assignSchema>['body'];
 export type AssignmentsQuery = z.infer<typeof assignmentsSchema>['query'];
 export type ClassificationsQuery = z.infer<typeof classificationsSchema>['query'];
+
+/**
+ * Envío de media (HU-OMNI-06). El archivo NO se valida aquí: multer lo deja en `req.file` como
+ * `Buffer` y Zod no lo modela. El tipo y el tamaño los comprueba `media.service` contra
+ * `LIMITES_MEDIA`, que es donde vive la regla.
+ */
+export const replyMediaSchema = z.object({
+  body: z.object({
+    texto: z
+      .string()
+      .trim()
+      .max(1024, 'El pie de foto no puede pasar de 1024 caracteres.')
+      .optional(),
+  }),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
