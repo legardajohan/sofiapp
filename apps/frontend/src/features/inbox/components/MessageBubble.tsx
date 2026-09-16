@@ -28,6 +28,9 @@ function describir(m: MessageDTO): string {
 interface Props {
   message: MessageDTO;
   onAbrirImagen: (url: string, alt: string) => void;
+  /** Reintenta la descarga de una media fallida. Ausente = no se ofrece la acción. */
+  onReintentarMedia?: (messageId: string) => void;
+  reintentandoId?: string | null;
 }
 
 /**
@@ -37,7 +40,12 @@ interface Props {
  * cabía ahí, pero ramificar por seis tipos dentro de un `map` deja el componente del hilo
  * ilegible.
  */
-export function MessageBubble({ message, onAbrirImagen }: Props): React.ReactElement {
+export function MessageBubble({
+  message,
+  onAbrirImagen,
+  onReintentarMedia,
+  reintentandoId,
+}: Props): React.ReactElement {
   const outbound = message.direccion === 'outbound';
   // Saber si respondió Sofi o una persona cambia cómo se lee el hilo: sin esta marca, el asesor no
   // distingue lo que él escribió de lo que contestó la IA por él (HU-IA-01).
@@ -61,7 +69,12 @@ export function MessageBubble({ message, onAbrirImagen }: Props): React.ReactEle
         )}
       >
         {media ? (
-          <Contenido message={message} onAbrirImagen={onAbrirImagen} />
+          <Contenido
+            message={message}
+            onAbrirImagen={onAbrirImagen}
+            {...(onReintentarMedia ? { onReintentarMedia } : {})}
+            reintentandoId={reintentandoId ?? null}
+          />
         ) : message.texto ? (
           <>
             <p className="whitespace-pre-wrap break-words">{message.texto}</p>
@@ -95,7 +108,12 @@ export function MessageBubble({ message, onAbrirImagen }: Props): React.ReactEle
 }
 
 /** Ramificación por tipo. Separada para que la burbuja no mezcle layout con despacho. */
-function Contenido({ message, onAbrirImagen }: Props): React.ReactElement {
+function Contenido({
+  message,
+  onAbrirImagen,
+  onReintentarMedia,
+  reintentandoId,
+}: Props): React.ReactElement {
   const media = message.media!;
   const outbound = message.direccion === 'outbound';
 
@@ -103,7 +121,13 @@ function Contenido({ message, onAbrirImagen }: Props): React.ReactElement {
     return <MediaPendiente etiqueta={DESCARGANDO[message.tipo] ?? 'Descargando archivo…'} />;
   }
   if (media.estado === 'fallida') {
-    return <MediaFallida media={media} />;
+    return (
+      <MediaFallida
+        media={media}
+        {...(onReintentarMedia ? { onReintentar: () => onReintentarMedia(message.id) } : {})}
+        reintentando={reintentandoId === message.id}
+      />
+    );
   }
 
   const pie = message.texto ? (

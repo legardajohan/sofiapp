@@ -143,6 +143,22 @@ tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: t
   pre-auth). El índice `{ tenantId: 1, email: 1 }` se conserva **no único**, solo para lookups
   scoped. Decisión aceptada en `docs/adr/0003-login-tenant-resolution.md`.
 
+### Tercera excepción documentada: el token firmado de media (HU-OMNI-06)
+
+`GET /api/media/:id` no lleva `authenticateJWT`. Su credencial es un HMAC-SHA256 en el query
+(`?t=<tenantId>.<exp>.<firma>`) firmado con `MEDIA_URL_SECRET`, y de ahí sale el `tenantId`.
+
+Es la tercera —y la más benigna— de las excepciones a "el `tenantId` nace del token": aquí el
+tenant **sí** nace de un token, solo que no del JWT. Existe porque el JWT viaja en una cookie
+`httpOnly` y en producción el frontend está en Vercel y el API en el droplet: un `<img src>` es una
+subpetición cross-site y con `SameSite=lax` la cookie no se envía, así que toda la media daría 401
+solo en producción.
+
+**El aislamiento no lo da el token.** Lo da el `findByIdScoped(Message, tenantIdDelToken, id)` que
+hay detrás: un token del tenant A contra un mensaje del B devuelve un 404 idéntico al de un id
+inexistente, y el adaptador de almacenamiento no llega a invocarse. Probado en
+`tests/isolation/media.isolation.test.ts`.
+
 ## 8. Tests del invariante (obligatorios)
 
 Prioridad #1 de la suite. Como mínimo:

@@ -4,7 +4,16 @@
 > `tasks.md`. Extiende el normalizador de `HT-WA-01` y la bandeja de `HU-OMNI-01` para que una
 > conversación de WhatsApp deje de ser solo texto.
 
-**Estado:** creado
+**Estado:** implementado
+
+> Verificado automáticamente: `typecheck` en verde, **125 archivos de test del backend (1374 tests)** (incluido
+> `tests/isolation/media.isolation.test.ts`) y **59 del frontend**, más `build` y `lint`.
+>
+> **Queda pendiente la prueba manual del Definition of Done** —enviar y recibir una imagen, un video
+> y un documento en una conversación real— porque exige un número de WhatsApp conectado y no se
+> puede automatizar. También queda pendiente la fase `contract` del enum (§9 de `tasks.md`), que es
+> un PR posterior por diseño: no se puede hacer hasta que `migrate:tipo-mensaje` lleve tiempo
+> corrido en producción.
 
 ## Contexto de dominio (importante)
 

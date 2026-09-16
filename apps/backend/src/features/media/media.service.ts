@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
-import { findByIdScoped } from '../../repositories/base.repository.js';
+import { findByIdScoped, findOneAndUpdateScoped } from '../../repositories/base.repository.js';
+import { MEDIA_INGEST_JOB, mediaIngestQueue } from '../../config/queues.js';
+import { mediaIngestJobId } from '../../workers/media-ingest.processor.js';
 import { Message } from '../message/message.model.js';
 import type {
   IMensajeMedia,
@@ -278,4 +280,46 @@ export async function enviarMediaSaliente(
     });
     throw err;
   }
+}
+
+/**
+ * Reencola la descarga de una media que falló.
+ *
+ * Existe porque los fallos definitivos —Media ID caducado, Graph caído durante horas— dejan el
+ * mensaje en `fallida` sin más reintentos automáticos, y un asesor que ve el aviso necesita poder
+ * intentarlo una vez más sin pedirle nada al cliente.
+ *
+ * Vuelve a `pendiente` **antes** de encolar: si encolar falla, el estado ya refleja que hay algo en
+ * curso, y el barrido de media atascada lo recoge.
+ */
+export async function reintentarIngesta(tenantId: string, messageId: string): Promise<void> {
+  const msg = await findByIdScoped(Message, tenantId, messageId).lean();
+  if (!msg) throw new AppError('Archivo no encontrado.', 404);
+
+  if (!msg.media) throw new AppError('Este mensaje no tiene ningún archivo.', 409);
+  if (msg.media.estado === 'disponible') return;
+  if (!msg.media.metaMediaId) {
+    throw new AppError('El mensaje no trae identificador de archivo: no se puede reintentar.', 409);
+  }
+
+  await findOneAndUpdateScoped(
+    Message,
+    tenantId,
+    { _id: new Types.ObjectId(messageId) },
+    { $set: { 'media.estado': 'pendiente', 'media.intentos': 0 }, $unset: { 'media.error': '' } },
+  );
+
+  await mediaIngestQueue.add(
+    MEDIA_INGEST_JOB,
+    { tenantId, messageId, clienteId: String(msg.clienteId) },
+    {
+      // Sufijo con la hora: el `jobId` del intento original puede seguir en Redis como completado o
+      // fallido, y BullMQ trataría el reintento como duplicado y no haría nada.
+      jobId: `${mediaIngestJobId(tenantId, messageId)}-r${Date.now()}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: 100,
+    },
+  );
 }

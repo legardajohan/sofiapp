@@ -122,12 +122,84 @@ persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 
   con números sandbox antes de producción. Por eso `Cliente.marketingOptOut` se excluye siempre del
   segmento: un reporte de spam degrada la calidad, que es justo lo que el pacing intenta proteger.
 
-## 6. Normalización de canales
+## 6. Media: descarga de entrantes y subida de salientes (HU-OMNI-06)
+
+Meta **no manda el archivo** en el webhook: manda un **Media ID** que hay que canjear.
+
+```
+ENTRANTE
+  1. El webhook trae `msg.image.id` (o video/audio/document/sticker) + mime_type, sha256,
+     caption y, en documentos, filename.
+  2. `processInboundJob` guarda el Message con `media.estado: 'pendiente'` y encola `media-ingest`.
+     El mensaje aparece en la bandeja AL INSTANTE, con un esqueleto en lugar del archivo.
+  3. El worker: GET /{mediaId} → devuelve una `url` que CADUCA EN ~5 MIN
+                GET esa url con el MISMO Bearer → bytes
+                → IMediaStorage.guardar() → media.estado: 'disponible' → `message:updated`.
+
+SALIENTE
+  1. POST /api/conversations/:id/messages/media (multipart).
+  2. Se guarda en NUESTRO almacenamiento primero, y solo después
+     POST /{phoneNumberId}/media → { id } (el media id vale 30 días).
+  3. `sendOutbound({ modo: 'media' })` decide la ventana de 24 h y envía.
+```
+
+La URL de descarga **no se persiste jamás**: se resuelve en el momento de ejecutar el job. Por eso
+un reintento a la hora sigue funcionando —Meta guarda la media unos 30 días— y por eso la caducidad
+de 5 minutos no es argumento para descargar en línea con la ingesta.
+
+**Clasificación de errores de descarga**, que es lo que evita que el hilo se quede girando:
+
+| Situación | HTTP | Trato |
+|---|---|---|
+| Media ID caducado / no existe | 404, 410 | **Definitivo**: `media.estado: 'fallida'` en el primer intento, sin gastar reintentos |
+| Excede el tamaño permitido | 413 | **Definitivo** |
+| Rate limit o error de Meta | 429, 5xx | **Recuperable**: se relanza y BullMQ reintenta (5 intentos, backoff exponencial) |
+| Agotados los reintentos | — | El listener `failed` de `worker.ts` marca `fallida` y publica el cambio |
+
+### Límites y tipos admitidos
+
+Verificado contra `developers.facebook.com/docs/whatsapp/cloud-api/reference/media` el **2026-09-16**.
+Meta los ajusta sin avisar, así que la fecha importa tanto como los números.
+
+| Tipo | Mimes | Límite de Meta | Tope efectivo |
+|---|---|---|---|
+| Imagen | `image/jpeg`, `image/png` | 5 MB | `MEDIA_MAX_BYTES_IMAGEN` |
+| Video | `video/mp4`, `video/3gpp` | 16 MB | `MEDIA_MAX_BYTES_VIDEO` |
+| Audio | `audio/aac`, `mp4`, `mpeg`, `amr`, `ogg` | 16 MB | `MEDIA_MAX_BYTES_AUDIO` |
+| Documento | pdf, doc(x), xls(x), ppt(x), txt, csv | 100 MB | `MEDIA_MAX_BYTES_DOCUMENTO` (16 MB por defecto) |
+| Sticker | `image/webp` | 100 KB estático / 500 KB animado | — |
+
+Restricciones que producen rechazos opacos si se ignoran:
+
+- `video/mp4` debe ser **H.264 + AAC con una sola pista de audio**. Un mp4 con AC-3 se rechaza.
+- `audio/ogg` solo **Opus, mono**.
+- El `caption` **solo lo aceptan `image`, `video` y `document`**; en audio o sticker, Meta responde 400.
+- `filename` solo aplica a `document`: es lo que ve el destinatario al descargar.
+- Caption máximo 1024 caracteres.
+
+> **El tope de documentos es 16 MB y no los 100 MB de Meta a propósito.** El multipart entra en
+> memoria (`multer.memoryStorage()`), y 100 MB × N subidas simultáneas es un OOM esperando. Subirlo
+> exige pasar a `diskStorage`, no solo cambiar el número.
+
+**`image/svg+xml` y `text/html` están fuera de la lista blanca**: servirlos `inline` desde nuestro
+propio origen sería XSS almacenado con la cookie de sesión al alcance.
+
+### Previsualización de enlaces
+
+La Cloud API **no envía metadata Open Graph** en los webhooks entrantes: un mensaje con un link
+llega como `text` a secas. Por eso la tarjeta del hilo muestra solo **dominio y URL**, derivados del
+texto. La tarjeta rica sí la ve el cliente en su teléfono: los textos salientes se envían con
+`preview_url: true` y la renderiza WhatsApp.
+
+Sacar el título y la imagen exigiría descargar URLs arbitrarias escritas por terceros desde nuestro
+servidor —superficie de SSRF— por una tarjeta más bonita. Descartado.
+
+## 7. Normalización de canales
 
 Payloads de Instagram Direct y Facebook Messenger se normalizan a un **modelo canónico interno**
 de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 
-## 7. Variables de entorno relevantes
+## 8. Variables de entorno relevantes
 
 ```
 META_APP_ID=
@@ -135,14 +207,32 @@ META_APP_SECRET=            # validación HMAC del webhook — OBLIGATORIA fuera
 META_VERIFY_TOKEN=          # verificación GET del webhook — OBLIGATORIA fuera de NODE_ENV=test
 META_GRAPH_VERSION=v26.0    # confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
 TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM (64 hex) — OBLIGATORIA fuera de NODE_ENV=test
+
+# Media de la conversación (HU-OMNI-06, ADR-0008)
+MEDIA_DRIVER=local          # local | spaces
+MEDIA_LOCAL_DIR=./var/media # solo driver local; va en .gitignore
+MEDIA_URL_SECRET=           # HMAC de las URLs firmadas (64 hex) — OBLIGATORIA fuera de test
+MEDIA_URL_TTL_S=3600        # vida del token que se pinta en el hilo
+MEDIA_SIGNED_URL_TTL_S=300  # vida de la URL prefirmada de Spaces
+MEDIA_INGEST_ENABLED=on     # on | off — kill-switch de la descarga de entrantes
+MEDIA_MAX_BYTES_IMAGEN=5242880
+MEDIA_MAX_BYTES_VIDEO=16777216
+MEDIA_MAX_BYTES_AUDIO=16777216
+MEDIA_MAX_BYTES_DOCUMENTO=16777216
+SPACES_ENDPOINT= / SPACES_REGION= / SPACES_BUCKET= / SPACES_KEY= / SPACES_SECRET=
 ```
+
+> Las cinco `SPACES_*` son **obligatorias solo si `MEDIA_DRIVER=spaces`** (`superRefine` en
+> `env.ts`): con el driver `local` por defecto, el entorno de desarrollo arranca sin credenciales.
+> `MEDIA_INGEST_ENABLED` es un enum y no un booleano porque `z.coerce.boolean()` convierte la cadena
+> `"false"` en `true`, que es el fallo que un interruptor de emergencia no se puede permitir.
 
 > **Nota:** Meta deprecia versiones antiguas de Graph API cada pocos meses; confirma la vigente
 > antes de fijar `META_GRAPH_VERSION`. Las otras tres variables **no** tienen fallback: el proceso
 > aborta al arrancar si faltan fuera de `test` (`HT-WA-01-V2`, tras un incidente donde arrancaba
 > sin ellas y todo webhook fallaba en silencio).
 
-## 8. Diagnóstico de envíos rechazados con `403 (#131005) Access denied`
+## 9. Diagnóstico de envíos rechazados con `403 (#131005) Access denied`
 
 Cuando `sendMessage` falla con `403 (#131005)` y el token **sí** está vigente, la causa suele ser
 que la cuenta sandbox de Meta está **`BLOCKED` para conversaciones business-initiated**, no un bug

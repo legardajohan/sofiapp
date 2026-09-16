@@ -246,9 +246,29 @@
   canal: "whatsapp" | "instagram" | "messenger",
   direccion: "inbound" | "outbound",
   sender: "user" | "bot" | "agent",
-  tipo: "text" | "image" | "template" | "audio" | "document" | "other",
-  texto: String?,
-  attachmentUrl: String?,         // DO Spaces (media recibida/enviada)
+  // Enum en español desde HU-OMNI-06 (migrado con `migrate:tipo-mensaje`). Durante la fase
+  // `expand` el schema acepta además los 6 valores viejos; la fase `contract` los retira.
+  // `enlace` = mensaje de texto que contiene una URL: SIGUE llevando texto (ver `esTipoConTexto`).
+  tipo: "texto" | "enlace" | "imagen" | "video" | "audio" | "documento" | "sticker" | "plantilla" | "otro",
+  texto: String?,                 // texto libre O el caption de un adjunto
+  // Archivo del mensaje (HU-OMNI-06). Subdocumento y no campos planos: son 9 campos que solo
+  // existen juntos, y el 95 % de los mensajes son texto.
+  media: {
+    estado: "pendiente" | "disponible" | "fallida",  // la descarga desde Meta es asíncrona
+    mimeType: String,
+    mediaKey: String?,            // clave en IMediaStorage — NUNCA sale al navegador
+    metaMediaId: String?,         // id del media en Meta (entrante: para descargar)
+    nombreArchivo: String?,
+    tamanoBytes: Number?,
+    sha256: String?,
+    duracionSegundos: Number?,
+    miniaturaKey: String?,        // declarado; hoy nunca se rellena (ADR-0008)
+    intentos: Number,
+    error: String?,               // motivo del fallo definitivo, se le muestra al asesor
+    descargadaAt: ISODate?,
+  }?,
+  previewEnlace: { url: String, dominio: String }?,  // solo dominio: Meta no manda Open Graph
+  attachmentUrl: String?,         // @deprecated HU-OMNI-06 — documentos previos y el seed de demo
   metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
   // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
   status: "sent" | "delivered" | "read" | "failed",   // default "sent"
@@ -262,6 +282,10 @@
 //          { tenantId: 1, tipo: 1, createdAt: -1 }        (HU-MARK-01: consumo del tier en las
 //                                                          últimas 24 h — destinatarios únicos de
 //                                                          plantilla, se consulta antes de cada lote)
+//          { tenantId: 1, 'media.estado': 1, createdAt: 1 } PARCIAL sobre media.estado='pendiente'
+//                                                          (HU-OMNI-06: barrido de media atascada.
+//                                                          Parcial a propósito: un índice completo
+//                                                          pagaría por cada mensaje de texto)
 ```
 
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
@@ -289,6 +313,11 @@
 // Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
 //          { tenantId: 1, status: 1 }
 ```
+> **La URL del archivo NUNCA se persiste.** El modelo guarda `media.mediaKey`, una clave opaca de
+> `IMediaStorage` (`<tenantId>/<messageId>/<uuid>.<ext>`). La URL del DTO se deriva y se **firma**
+> en cada lectura (`/media/<id>?t=<hmac>`): una URL guardada caducaría o filtraría el bucket. Ver
+> `docs/adr/0008-almacenamiento-de-media.md`.
+
 > **Por qué no es único global `metaTemplateId`:** dos tenants distintos conectan WABAs distintas
 > y pueden tener plantillas homónimas; a diferencia de `MetaIntegration.phoneNumberId`, aquí el
 > identificador de Meta no es único por construcción entre tenants.

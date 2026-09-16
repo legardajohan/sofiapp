@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchThread,
   markConversationRead,
+  reintentarMedia,
   sendMediaReply,
   sendReply,
   setSofiEnabled,
@@ -51,6 +52,20 @@ export function useSendMedia(conversationId: string | null) {
   });
 
   return { ...mutation, progreso };
+}
+
+/**
+ * Reintenta la descarga de un archivo que falló.
+ *
+ * No invalida el hilo: el backend deja la media en `pendiente` y publica `message:updated` cuando
+ * termine, así que la burbuja se actualiza sola por el socket.
+ */
+export function useReintentarMedia(conversationId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => reintentarMedia(messageId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['thread', conversationId] }),
+  });
 }
 
 export function useMarkRead() {

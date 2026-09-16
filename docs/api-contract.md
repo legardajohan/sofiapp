@@ -18,8 +18,9 @@
 - **CSRF:** al usar cookie, las rutas mutadoras exigen protección CSRF *double-submit*: el backend
   emite una cookie legible `csrfToken` y valida el header `X-CSRF-Token` en POST/PUT/PATCH/DELETE.
   Las peticiones por `Bearer` no requieren CSRF (no usan cookie ambiental).
-- Endpoints públicos: `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/webhooks/meta`,
-  `GET /api/webhooks/meta` (verificación de Meta).
+- Endpoints públicos: `POST /api/auth/login`, `POST /api/auth/refresh`,
+  `POST /api/webhooks/whatsapp`, `GET /api/webhooks/whatsapp` (verificación de Meta) y
+  `GET /api/media/:id` (autorizado por el HMAC de la URL, no por la cookie — ver §8).
 - El `tenantId` y el `rol` viajan en el payload del JWT. El cliente nunca los envía aparte.
 
 ## 3. Pipeline de toda ruta tenant-aware
@@ -143,7 +144,9 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | PATCH | `/api/kb/faqs/:id` | admin | Edita pregunta, respuesta y/o `activo`. Solo re-embebe si cambia el **texto** de la pregunta. `409` con `{ activas, minimo }` si `activo: false` dejaría al tenant por debajo de `FAQ_MIN_ACTIVAS`; editar textos y reactivar nunca se bloquean (HU-KB-02-V3). |
 | DELETE | `/api/kb/faqs/:id` | admin | Mismo `409` al eliminar una FAQ **activa** que rompería el mínimo. Eliminar una ya inactiva nunca se bloquea: no mueve el conteo. |
 | POST | `/api/kb/faqs/test` | admin | Probador de calibración (`{ pregunta }`). Devuelve el mejor candidato **aunque no matchee**, con `umbral`, `margenMinimo`, `overlapMinimo` y el desglose de las tres señales del cortocircuito (HU-KB-02-V2). Solo lectura. |
-| GET/POST | `/api/webhooks/meta` | público | Verificación + recepción de eventos de Meta. |
+| GET/POST | `/api/webhooks/whatsapp` | público | Verificación + recepción de eventos de Meta. |
+| POST | `/api/conversations/:id/messages/media` | admin | **multipart/form-data** (`archivo` + `texto` opcional, máx. 1024). Sube el archivo, lo manda por WhatsApp y devuelve `201` con el `IMessageResponse`. `415` mime no admitido, `413` tamaño excedido, `422` fuera de la ventana de 24 h (HU-OMNI-06). |
+| GET | `/api/media/:id` | token | Archivo de un mensaje. `:id` es el `_id` del `Message`, no la clave del almacenamiento. Con driver `spaces` responde `302` a una URL prefirmada; con `local`, el stream. `?descargar=1` fuerza `attachment`. `403` token inválido o vencido, `404` de otro tenant o inexistente, `409` media aún no disponible. |
 
 ## 7. Tiempo real (Socket.IO)
 
@@ -157,3 +160,27 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
   `tenant:<id>`: el historial de campañas es una vista compartida — HU-MARK-01. Se emite **una vez
   por lote**, no por destinatario: un envío de 10 000 produciría 10 000 eventos y lo único que la UI
   necesita es la barra de progreso moviéndose).
+
+
+## 8. Acceso a los archivos de la conversación (HU-OMNI-06)
+
+`GET /api/media/:id` es la **única ruta autenticada que no pasa por `authenticateJWT`**. Su
+credencial es un HMAC-SHA256 en el query (`?t=<tenantId>.<exp>.<firma>`) que el DTO del hilo genera
+con `MEDIA_URL_SECRET` y el navegador reenvía en el `src` de un `<img>` o un `<video>`.
+
+**Por qué no la cookie de sesión.** El JWT viaja en una cookie `httpOnly`; en producción el frontend
+está en Vercel y el API en el droplet, así que pedir una imagen es una subpetición **cross-site** y
+con `SameSite=lax` la cookie no se envía. Todas las imágenes darían `401`, y solo en producción.
+
+El `tenantId` va dentro del material firmado, pero **el aislamiento no lo da el token**: lo da el
+`findByIdScoped(Message, tenantIdDelToken, id)` que hay detrás. Un token del tenant A contra un
+mensaje del B devuelve un `404` idéntico al de un id inexistente, y el almacenamiento no llega a
+invocarse.
+
+El token de la URL caduca a la hora (`MEDIA_URL_TTL_S`); la URL prefirmada de Spaces a la que
+redirige, a los 5 minutos (`MEDIA_SIGNED_URL_TTL_S`).
+
+Toda respuesta de media lleva `X-Content-Type-Options: nosniff` y `Cache-Control: private`, y los
+documentos se sirven como `attachment`: un archivo subido por un tercero y servido `inline` desde
+nuestro propio origen sería XSS almacenado. `image/svg+xml` y `text/html` están fuera de la lista
+blanca de mimes.

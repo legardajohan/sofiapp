@@ -89,8 +89,8 @@ actualiza al cerrar su fase (`/sdd-spec(-quick)` → `creado`, `/sdd-implement` 
 
 ## Comandos de calidad
 
-- Backend: `pnpm --filter backend typecheck` (`tsc --noEmit`) · `pnpm --filter backend test`
-- Frontend: `pnpm --filter frontend build && pnpm --filter frontend lint`
+- Backend: `pnpm --filter @sofiapp/api typecheck` (`tsc --noEmit`) · `pnpm --filter @sofiapp/api test`
+- Frontend: `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint`
 
 ## Capturas de pantalla (Playwright / verificación visual)
 

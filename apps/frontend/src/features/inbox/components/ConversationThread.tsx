@@ -8,9 +8,16 @@ import { MessageBubble } from './MessageBubble.js';
 interface Props {
   messages: MessageDTO[];
   isLoading: boolean;
+  onReintentarMedia?: (messageId: string) => void;
+  reintentandoId?: string | null;
 }
 
-export function ConversationThread({ messages, isLoading }: Props): React.ReactElement {
+export function ConversationThread({
+  messages,
+  isLoading,
+  onReintentarMedia,
+  reintentandoId,
+}: Props): React.ReactElement {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [ampliada, setAmpliada] = useState<{ url: string; alt: string } | null>(null);
 
@@ -39,6 +46,8 @@ export function ConversationThread({ messages, isLoading }: Props): React.ReactE
             key={m.id}
             message={m}
             onAbrirImagen={(url, alt) => setAmpliada({ url, alt })}
+            {...(onReintentarMedia ? { onReintentarMedia } : {})}
+            reintentandoId={reintentandoId ?? null}
           />
         ))}
         <div ref={bottomRef} />

@@ -122,6 +122,10 @@ export async function sendMediaReply(
   return data;
 }
 
+export async function reintentarMedia(messageId: string): Promise<void> {
+  await apiClient.post(`/media/${messageId}/reintentar`);
+}
+
 export async function markConversationRead(conversationId: string): Promise<ConversationDTO> {
   const { data } = await apiClient.patch<ConversationDTO>(
     `/conversations/${conversationId}/read`,

@@ -1,7 +1,11 @@
 import type { RequestHandler } from 'express';
 import { env } from '../../config/env.js';
 import { getMediaStorage } from '../../integrations/storage/index.js';
-import { resolverMediaDescargable, verificarTokenMedia } from './media.service.js';
+import {
+  reintentarIngesta,
+  resolverMediaDescargable,
+  verificarTokenMedia,
+} from './media.service.js';
 import type { GetMediaQuery } from './media.validation.js';
 
 /**
@@ -59,4 +63,13 @@ export const getMediaController: RequestHandler = async (req, res) => {
 
   stream.on('error', () => res.destroy());
   stream.pipe(res);
+};
+
+/**
+ * Reintenta la descarga de un archivo que falló. `202`: el trabajo queda encolado, no hecho.
+ */
+export const retryMediaController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  await reintentarIngesta(tenantId, req.params['id'] as string);
+  res.status(202).json({ estado: 'pendiente' });
 };

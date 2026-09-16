@@ -41,7 +41,10 @@ vi.mock('../usage/usage.service.js', () => ({
   incrementUsage: vi.fn(),
 }));
 
-const { clasificarArchivoSaliente, enviarMediaSaliente } = await import('./media.service.js');
+const { clasificarArchivoSaliente, enviarMediaSaliente, reintentarIngesta } = await import(
+  './media.service.js'
+);
+const { Message } = await import('../message/message.model.js');
 
 const tenantId = new Types.ObjectId();
 
@@ -249,6 +252,64 @@ describe('enviarMediaSaliente (HU-OMNI-06)', () => {
         { buffer: Buffer.from('x'), mimeType: 'image/jpeg', nombreArchivo: 'a.jpg' },
         undefined,
       ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe('reintentarIngesta — recuperar una descarga fallida (HU-OMNI-06)', () => {
+  async function sembrar(estado: 'fallida' | 'disponible', conMediaId = true): Promise<string> {
+    const doc = await createScoped(Message, tenantId, {
+      clienteId: new Types.ObjectId(),
+      canal: 'whatsapp',
+      direccion: 'inbound',
+      sender: 'user',
+      tipo: 'imagen',
+      media: {
+        estado,
+        mimeType: 'image/jpeg',
+        error: estado === 'fallida' ? 'El enlace de Meta expiró.' : undefined,
+        ...(conMediaId ? { metaMediaId: 'media-1' } : {}),
+        ...(estado === 'disponible' ? { mediaKey: 'k' } : {}),
+      },
+      status: 'sent',
+    });
+    return String(doc._id);
+  }
+
+  it('devuelve la media a pendiente y limpia el error', async () => {
+    const messageId = await sembrar('fallida');
+
+    await reintentarIngesta(tenantId.toString(), messageId);
+
+    const doc = await Message.collection.findOne({ _id: new Types.ObjectId(messageId) });
+    const media = doc?.['media'] as Record<string, unknown>;
+    expect(media['estado']).toBe('pendiente');
+    expect(media['error']).toBeUndefined();
+    expect(media['intentos']).toBe(0);
+  });
+
+  it('sobre una media ya disponible es un no-op, no un error', async () => {
+    const messageId = await sembrar('disponible');
+
+    await expect(reintentarIngesta(tenantId.toString(), messageId)).resolves.toBeUndefined();
+
+    const doc = await Message.collection.findOne({ _id: new Types.ObjectId(messageId) });
+    expect((doc?.['media'] as Record<string, unknown>)['estado']).toBe('disponible');
+  });
+
+  it('sin metaMediaId no se puede reintentar: 409 en vez de encolar en vano', async () => {
+    const messageId = await sembrar('fallida', false);
+
+    await expect(reintentarIngesta(tenantId.toString(), messageId)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+  });
+
+  it('un mensaje de otro tenant devuelve 404', async () => {
+    const messageId = await sembrar('fallida');
+
+    await expect(
+      reintentarIngesta(new Types.ObjectId().toString(), messageId),
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

@@ -23,6 +23,7 @@ import { useContactHistory, useGenerateSummary } from '../hooks/useContactHistor
 import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import {
   useMarkRead,
+  useReintentarMedia,
   useSendMedia,
   useSendReply,
   useSetSofi,
@@ -118,6 +119,7 @@ export function InboxPage(): React.ReactElement {
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
   const sendMedia = useSendMedia(activeId);
+  const reintentarMedia = useReintentarMedia(activeId);
   const setSofi = useSetSofi(activeId ?? '');
   const setTags = useSetConversationTags(activeId);
 
@@ -351,7 +353,12 @@ export function InboxPage(): React.ReactElement {
                 onRetry={() => void refetchThread()}
               />
             ) : (
-              <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+              <ConversationThread
+                messages={thread?.data ?? []}
+                isLoading={threadLoading}
+                onReintentarMedia={(messageId) => reintentarMedia.mutate(messageId)}
+                reintentandoId={reintentarMedia.isPending ? reintentarMedia.variables : null}
+              />
             )}
 
             {active.handoff && (
