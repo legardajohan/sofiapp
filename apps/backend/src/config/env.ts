@@ -159,11 +159,72 @@ const EnvSchema = z.object({
   // que el usuario elige la hora de inicio.
   CAMPAIGN_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
 
+  // ─── Media de la conversación (HU-OMNI-06, ADR-0008) ─────────────────────────────
+  // `local` por defecto: el entorno de desarrollo no necesita credenciales ni infraestructura
+  // nueva (docker-compose solo levanta Redis) y los tests corren sin tocar nada.
+  MEDIA_DRIVER: z.enum(['local', 'spaces']).default('local'),
+  /** Solo driver `local`. Relativa al cwd del proceso; va en `.gitignore`. */
+  MEDIA_LOCAL_DIR: z.string().default('./var/media'),
+  /**
+   * Clave HMAC de las URLs firmadas de media. Es lo único que separa un archivo de un cliente de
+   * ser público, así que no tiene fallback: el proceso aborta si falta fuera de `test`.
+   */
+  MEDIA_URL_SECRET: requiredInRuntime(
+    z.string().regex(/^[0-9a-f]{64}$/i, 'Debe ser 64 caracteres hexadecimales (32 bytes)'),
+  ),
+  /** Vida del token de la URL que se pinta en el hilo. Una hora: dura lo que dura mirar la bandeja. */
+  MEDIA_URL_TTL_S: z.coerce.number().int().positive().default(3600),
+  /** Vida de la URL prefirmada de Spaces a la que redirige `GET /api/media/:id`. */
+  MEDIA_SIGNED_URL_TTL_S: z.coerce.number().int().positive().default(300),
+  // Límites por tipo. Los de Meta son el techo; estos son iguales o menores, nunca mayores.
+  MEDIA_MAX_BYTES_IMAGEN: z.coerce.number().int().positive().default(5 * 1024 * 1024),
+  MEDIA_MAX_BYTES_VIDEO: z.coerce.number().int().positive().default(16 * 1024 * 1024),
+  MEDIA_MAX_BYTES_AUDIO: z.coerce.number().int().positive().default(16 * 1024 * 1024),
+  /**
+   * Meta admite 100 MB en documentos, pero el multipart entra en memoria (`memoryStorage`) y
+   * 100 MB × N subidas simultáneas es un OOM esperando. 16 MB es el techo mientras la subida no
+   * pase por disco; subirlo exige `diskStorage`, no solo cambiar este número.
+   */
+  MEDIA_MAX_BYTES_DOCUMENTO: z.coerce.number().int().positive().default(16 * 1024 * 1024),
+  /**
+   * Kill-switch de la descarga de media entrante. **Enum y no booleano**: `z.coerce.boolean()`
+   * convierte la cadena `"false"` en `true`, que es justo el fallo que un interruptor de emergencia
+   * no se puede permitir. Mismo criterio que `SEMAFORO_AUTO` y `EXTRACT_AUTO`.
+   */
+  MEDIA_INGEST_ENABLED: z.enum(['on', 'off']).default('on'),
+  SPACES_ENDPOINT: z.string().url().optional(),
+  SPACES_REGION: z.string().optional(),
+  SPACES_BUCKET: z.string().optional(),
+  SPACES_KEY: z.string().optional(),
+  SPACES_SECRET: z.string().optional(),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),
   SUPERADMIN_PASSWORD: z.string().min(8).optional(),
   SALT_ROUNDS: z.coerce.number().default(12),
+}).superRefine((valores, ctx) => {
+  // Las credenciales de Spaces solo son obligatorias si se eligió ese driver. Declararlas
+  // `required` a secas obligaría a todo entorno de desarrollo a inventarse un bucket.
+  if (valores.MEDIA_DRIVER !== 'spaces') return;
+
+  const requeridas = [
+    'SPACES_ENDPOINT',
+    'SPACES_REGION',
+    'SPACES_BUCKET',
+    'SPACES_KEY',
+    'SPACES_SECRET',
+  ] as const;
+
+  for (const clave of requeridas) {
+    if (!valores[clave]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [clave],
+        message: 'Obligatoria cuando MEDIA_DRIVER=spaces.',
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -1,5 +1,12 @@
 import type { AdminSubrol } from '../users/user.types.js';
-import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
+import type {
+  Direccion,
+  IPreviewEnlace,
+  MessageStatus,
+  Sender,
+  TipoMensaje,
+} from '../message/message.types.js';
+import type { IMediaResponse } from '../media/media.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import type { HandoffMotivo, IHandoffCondicionAplicada } from '../ai/ai-handoff.types.js';
 import type { ISemaforoIAResponse } from '../ai/ai-semaforo.types.js';
@@ -103,7 +110,12 @@ export interface IMessageResponse {
   direccion: Direccion;
   sender: Sender;
   tipo: TipoMensaje;
+  /** Texto libre o el pie de foto de un adjunto. */
   texto: string | null;
+  /** Archivo del mensaje, o `null` si no lleva (HU-OMNI-06). */
+  media: IMediaResponse | null;
+  previewEnlace: IPreviewEnlace | null;
+  /** @deprecated HU-OMNI-06: espejo de `media.urlArchivo`, o el valor legado. Usar `media`. */
   attachmentUrl: string | null;
   status: MessageStatus;
   createdAt: string;

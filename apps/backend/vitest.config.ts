@@ -1,4 +1,10 @@
+import os from 'node:os';
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// La media de los tests va a un temporal del sistema, no al repo: el adaptador `local` escribe
+// archivos de verdad y dejarlos en `./var/media` ensuciaría el árbol de trabajo.
+const MEDIA_TMP = path.join(os.tmpdir(), 'sofiapp-test-media');
 
 export default defineConfig({
   test: {
@@ -31,6 +37,11 @@ export default defineConfig({
       LLM_TIMEOUT_MS: '15000',
       AI_CACHE_TTL_CHAT_S: '3600',
       AI_CACHE_TTL_CLASSIFY_S: '7200',
+      // Media (HU-OMNI-06): driver local y clave de firma fija, para que los tests de
+      // `GET /api/media/:id` puedan firmar y verificar tokens de verdad.
+      MEDIA_DRIVER: 'local',
+      MEDIA_LOCAL_DIR: MEDIA_TMP,
+      MEDIA_URL_SECRET: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       COOKIE_SAMESITE: 'lax',
       SUPERADMIN_EMAIL: 'admin@sofiapp.test',
       SUPERADMIN_PASSWORD: 'super-secret-123',

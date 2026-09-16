@@ -44,6 +44,7 @@ import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
 import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
 import flowRoutes from './features/flow/flow.routes.js';
 import campaignRoutes from './features/campaign/campaign.routes.js';
+import mediaRoutes from './features/media/media.routes.js';
 
 const app = express();
 
@@ -93,6 +94,10 @@ app.use('/api/opciones-contacto', contactOptionRoutes);
 app.use('/api/kb/faqs', kbFaqRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/conversations', conversationRoutes);
+// Archivos de la conversación (HU-OMNI-06). NO lleva `authenticateJWT`: su credencial es el token
+// HMAC del query, porque un `<img src>` cross-site no manda la cookie de sesión. Ver
+// `media.routes.ts` y `docs/multi-tenancy.md`.
+app.use('/api/media', mediaRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/estados', estadoRoutes);

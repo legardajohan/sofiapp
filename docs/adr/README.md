@@ -13,6 +13,7 @@ marca al anterior como *Reemplazado*.
 | [0005](0005-decimal-money.md) | Dinero con precisión decimal (Decimal128 + decimal.js) | Aceptada |
 | [0006](0006-subrol-datos-sensibles.md) | El `subrol` gobierna el acceso a los datos sensibles del contacto | Aceptada |
 | [0007](0007-tablero-kanban-pipeline.md) | El embudo vuelve a tener tablero Kanban con drag & drop | Aceptada |
+| [0008](0008-almacenamiento-de-media.md) | Almacenamiento de media de conversación tras un puerto con dos adaptadores | Aceptada |
 
 ## Convención
 

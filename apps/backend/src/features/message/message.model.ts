@@ -1,5 +1,38 @@
 import { Schema, model } from 'mongoose';
-import type { IMessageDocument } from './message.types.js';
+import type { IMensajeMedia, IMessageDocument, IPreviewEnlace } from './message.types.js';
+
+/**
+ * Metadata del archivo, anidada y no plana. Son nueve campos que solo existen juntos: en plano, un
+ * mensaje de texto —que es el 95 % del histórico— arrastraría nueve `undefined` y el schema pasaría
+ * de diez a diecinueve campos de primer nivel.
+ *
+ * `_id: false`: es un value object del mensaje, no una entidad con vida propia.
+ */
+const MediaSchema = new Schema<IMensajeMedia>(
+  {
+    estado: { type: String, enum: ['pendiente', 'disponible', 'fallida'], required: true },
+    mimeType: { type: String, required: true },
+    mediaKey: { type: String },
+    metaMediaId: { type: String },
+    nombreArchivo: { type: String },
+    tamanoBytes: { type: Number },
+    sha256: { type: String },
+    duracionSegundos: { type: Number },
+    miniaturaKey: { type: String },
+    intentos: { type: Number, default: 0 },
+    error: { type: String },
+    descargadaAt: { type: Date },
+  },
+  { _id: false },
+);
+
+const PreviewEnlaceSchema = new Schema<IPreviewEnlace>(
+  {
+    url: { type: String, required: true },
+    dominio: { type: String, required: true },
+  },
+  { _id: false },
+);
 
 const MessageSchema = new Schema<IMessageDocument>(
   {
@@ -35,7 +68,10 @@ const MessageSchema = new Schema<IMessageDocument>(
       required: true,
     },
     texto: { type: String },
+    // @deprecated HU-OMNI-06: solo documentos anteriores al feature y el seed de demo.
     attachmentUrl: { type: String },
+    media: { type: MediaSchema },
+    previewEnlace: { type: PreviewEnlaceSchema },
     metaMessageId: { type: String },
     status: {
       type: String,
@@ -52,5 +88,12 @@ MessageSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
 // número con plantillas. Se consulta antes de cada lote de campaña, así que el filtro por `tipo` y
 // el rango de `createdAt` tienen que resolverse con un índice y no recorriendo la colección.
 MessageSchema.index({ tenantId: 1, tipo: 1, createdAt: -1 });
+// Media que todavía no se ha descargado (HU-OMNI-06). PARCIAL a propósito: solo interesa lo
+// pendiente —unas decenas de documentos en régimen normal— y un índice completo sobre `media.estado`
+// pagaría por cada mensaje de texto del sistema a cambio de nada.
+MessageSchema.index(
+  { tenantId: 1, 'media.estado': 1, createdAt: 1 },
+  { partialFilterExpression: { 'media.estado': 'pendiente' } },
+);
 
 export const Message = model<IMessageDocument>('Message', MessageSchema);

@@ -5,9 +5,9 @@
 
 ## 0. Preparación
 
-- [ ] Confirmar que no queda trabajo sin confirmar de otro feature en el árbol (`git status`); la
+- [x] Confirmar que no queda trabajo sin confirmar de otro feature en el árbol (`git status`); la
       rama sale de `develop`, no de la rama actual.
-- [ ] `git switch develop && git pull && git switch -c feat/HU-OMNI-06`.
+- [x] `git switch develop && git pull && git switch -c feat/HU-OMNI-06`.
 - [ ] Instalar dependencias backend: `multer@^2`, `@types/multer`, `@aws-sdk/client-s3`,
       `@aws-sdk/s3-request-presigner` (`pnpm --filter @sofiapp/api add …`).
 - [ ] Añadir `var/media/` (o el valor de `MEDIA_LOCAL_DIR`) a `.gitignore`.
@@ -17,27 +17,27 @@
 
 > Es la parte que puede romper lo que ya funciona. **Verde antes de seguir al paso 2.**
 
-- [ ] `message.types.ts`: nuevo `TipoMensaje` en español + `TIPOS_CON_TEXTO`, `esTipoConTexto()`,
+- [x] `message.types.ts`: nuevo `TipoMensaje` en español + `TIPOS_CON_TEXTO`, `esTipoConTexto()`,
       `TIPO_POR_TIPO_META`, `TIPO_MENSAJE_LEGACY` y `normalizarTipoMensaje()`.
-- [ ] `message.model.ts`: enum **expandido** (valores nuevos + los 6 legacy) — fase *expand*.
-- [ ] `scripts/migrate-message-tipo.ts`: idempotente, un `updateMany` por par **sobre
+- [x] `message.model.ts`: enum **expandido** (valores nuevos + los 6 legacy) — fase *expand*.
+- [x] `scripts/migrate-message-tipo.ts`: idempotente, un `updateMany` por par **sobre
       `Message.collection`** (no sobre el modelo: el schema ya no castea `text`), con `--dry-run`.
       Registrarlo en `package.json` como `migrate:tipo-mensaje`.
-- [ ] **`features/campaign/campaign.service.ts:102`** — `{ tipo: 'template' }` →
+- [x] **`features/campaign/campaign.service.ts:102`** — `{ tipo: 'template' }` →
       `{ tipo: { $in: ['plantilla', 'template'] } }`. **No es opcional ni cosmético:** es el conteo
       del consumo del tier de Meta y, si devuelve 0, una campaña se pasa del límite del número.
-- [ ] Sustituir los literales en inglés en: `workers/inbound-message.processor.ts` (borrar su
+- [x] Sustituir los literales en inglés en: `workers/inbound-message.processor.ts` (borrar su
       `mapMsgType` privado y consumir el normalizador), `workers/ai-reply.processor.ts`,
       `features/conversation/conversation.service.ts` (preview + transcript del resumen +
       `acusarNoTexto`), `features/flow/flow.runtime.service.ts`, `features/message/message.service.ts`,
       `seed/seed-inbox-demo.ts`.
-- [ ] `conversation.mapper.ts`: `toMessageResponse` devuelve `normalizarTipoMensaje(msg.tipo)` — esta
+- [x] `conversation.mapper.ts`: `toMessageResponse` devuelve `normalizarTipoMensaje(msg.tipo)` — esta
       defensa **se queda de forma permanente** (`.lean()` no valida el enum).
-- [ ] Hacer que **toda** decisión de "¿este mensaje tiene texto?" pase por `esTipoConTexto()`.
-- [ ] Fixtures de test: `grep -rn "tipo: 'text'" apps/backend/src` y actualizar (~20 archivos entre
+- [x] Hacer que **toda** decisión de "¿este mensaje tiene texto?" pase por `esTipoConTexto()`.
+- [x] Fixtures de test: `grep -rn "tipo: 'text'" apps/backend/src` y actualizar (~20 archivos entre
       `tests/isolation/`, `tests/unit/` y los `*.test.ts` de features).
-- [ ] Frontend: `features/inbox/types.ts` tipa `tipo` con la unión en español (hoy es `string`).
-- [ ] **Puerta de fase:** `pnpm --filter @sofiapp/api typecheck` y `test` en verde, y
+- [x] Frontend: `features/inbox/types.ts` tipa `tipo` con la unión en español (hoy es `string`).
+- [x] **Puerta de fase:** `pnpm --filter @sofiapp/api typecheck` y `test` en verde, y
       `migrate:tipo-mensaje --dry-run` revisado sobre una copia de la base, antes de seguir.
 
 ## 2. Capa de almacenamiento

@@ -262,7 +262,7 @@ export async function getThread(
 
   const data = docs
     .reverse()
-    .map((m) => toMessageResponse(m as unknown as IMessageSource));
+    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId)));
 
   return { data, page, limit, total };
 }
@@ -281,7 +281,7 @@ async function enviarYNotificar(
   // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
   // cuota mensual de mensajes.
   const msg = await sendMessage(tenantId, { clienteId, texto, sender });
-  const message = toMessageResponse(msg as unknown as IMessageSource);
+  const message = toMessageResponse(msg as unknown as IMessageSource, String(tenantId));
 
   // La respuesta saliente reordena la bandeja y se notifica en vivo a los demás asesores.
   const cliente = await findOneAndUpdateScoped(
@@ -821,7 +821,7 @@ export async function notifyInboundMessage(
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
   const tagMap = await resolveTags(tenantId, source);
-  const message = toMessageResponse(savedMsg);
+  const message = toMessageResponse(savedMsg, String(tenantId));
   await publishRealtime({
     type: 'message:new',
     tenantId,

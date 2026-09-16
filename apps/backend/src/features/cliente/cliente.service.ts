@@ -209,7 +209,9 @@ export async function getContactHistory(
     .limit(limit)
     .lean();
 
-  const mensajes = docs.reverse().map((m) => toMessageResponse(m as unknown as IMessageSource));
+  const mensajes = docs
+    .reverse()
+    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId)));
 
   const tagMap = await findTagsByIds(
     tenantId,

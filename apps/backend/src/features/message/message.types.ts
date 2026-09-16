@@ -81,6 +81,46 @@ export function mapTipoMensajeMeta(type: string): TipoMensaje {
   return TIPO_POR_TIPO_META[type] ?? 'otro';
 }
 
+/**
+ * Ciclo de vida del archivo de un mensaje multimedia.
+ *
+ * `pendiente` existe porque la ingesta es asíncrona: el mensaje se persiste y aparece en el hilo de
+ * inmediato, y los bytes llegan después por la cola `media-ingest`. Sin este estado habría que
+ * elegir entre retrasar el `message:new` varios segundos o perder el mensaje si la descarga falla.
+ */
+export type EstadoMedia = 'pendiente' | 'disponible' | 'fallida';
+
+export interface IMensajeMedia {
+  estado: EstadoMedia;
+  mimeType: string;
+  /** Clave en `IMediaStorage`. **Nunca sale al navegador**: el DTO expone una URL firmada. */
+  mediaKey?: string;
+  /** Id del media en Meta. Entrante: con él se descarga. Saliente: el que devolvió `POST /media`. */
+  metaMediaId?: string;
+  /** El que puso el cliente (solo documentos) o el que subió el asesor. */
+  nombreArchivo?: string;
+  tamanoBytes?: number;
+  sha256?: string;
+  duracionSegundos?: number;
+  /** Declarado para que añadir miniaturas propias sea aditivo; hoy nunca se rellena (ADR-0008). */
+  miniaturaKey?: string;
+  intentos?: number;
+  /** Motivo del fallo definitivo. Se le muestra al asesor, así que va en español y sin jerga. */
+  error?: string;
+  descargadaAt?: Date;
+}
+
+/**
+ * Previsualización de un enlace compartido. Solo dominio y URL: la Cloud API **no envía metadata
+ * Open Graph** en los webhooks entrantes, así que el título y la imagen no existen del lado del
+ * receptor. La tarjeta rica la renderiza WhatsApp en el teléfono del cliente gracias a
+ * `preview_url: true` en el envío.
+ */
+export interface IPreviewEnlace {
+  url: string;
+  dominio: string;
+}
+
 export interface IMessage {
   tenantId: Types.ObjectId;
   clienteId: Types.ObjectId;
@@ -88,8 +128,15 @@ export interface IMessage {
   direccion: Direccion;
   sender: Sender;
   tipo: TipoMensaje;
+  /** Texto libre, o el **caption** de una imagen, un video o un documento. */
   texto?: string;
+  /**
+   * @deprecated HU-OMNI-06. Solo documentos anteriores al feature y el seed de demo. La media nueva
+   * vive en `media`, que guarda una clave de almacenamiento en vez de una URL suelta.
+   */
   attachmentUrl?: string;
+  media?: IMensajeMedia;
+  previewEnlace?: IPreviewEnlace;
   metaMessageId?: string;
   status: MessageStatus;
   createdAt: Date;
@@ -105,7 +152,8 @@ export interface ICreateMessageDto {
   sender: Sender;
   tipo: TipoMensaje;
   texto?: string;
-  attachmentUrl?: string;
+  media?: IMensajeMedia;
+  previewEnlace?: IPreviewEnlace;
   metaMessageId?: string;
   status: MessageStatus;
 }
