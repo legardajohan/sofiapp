@@ -1,3 +1,4 @@
+import { urlDeArchivo } from '../../lib/media.js';
 import type { MediaDTO } from '../../types.js';
 import { MediaFallida } from './MediaEstado.js';
 
@@ -22,7 +23,7 @@ export function MediaVideo({ media }: { media: MediaDTO }): React.ReactElement {
       playsInline
       className="w-60 max-w-full rounded-lg bg-black"
     >
-      <source src={media.urlArchivo} type={media.mimeType} />
+      <source src={urlDeArchivo(media.urlArchivo)} type={media.mimeType} />
       Tu navegador no puede reproducir este video.
     </video>
   );

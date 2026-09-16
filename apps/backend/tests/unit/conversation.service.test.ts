@@ -13,9 +13,10 @@ vi.mock('../../src/integrations/meta/meta-whatsapp.client.js', () => ({
   metaWhatsAppClient: { sendText: vi.fn(), sendTemplate: vi.fn() },
 }));
 
-const { listConversations, markRead, replyMessage } = await import(
+const { listConversations, markRead, notifyInboundMessage, replyMessage } = await import(
   '../../src/features/conversation/conversation.service.js'
 );
+const { publishRealtime } = await import('../../src/realtime/realtime.publisher.js');
 
 describe('conversation.service — listConversations', () => {
   const tenantId = new Types.ObjectId();
@@ -152,5 +153,81 @@ describe('conversation.service — replyMessage (ventana 24h)', () => {
     }
     expect(caught).toBeInstanceOf(AppError);
     expect((caught as AppError).statusCode).toBe(422);
+  });
+});
+
+describe('conversation.service — preview en vivo de un mensaje sin texto (HU-OMNI-06)', () => {
+  const tenantId = new Types.ObjectId();
+
+  it('una imagen sin pie de foto NO deja la conversación en blanco en la lista', async () => {
+    const cliente = await Cliente.create({
+      tenantId,
+      metaUserId: 'wa_preview_media',
+      telefono: '5210003',
+      canalOrigen: 'whatsapp',
+      estadoComercial: 'nuevo',
+      customFields: {},
+      tags: [],
+    });
+    const clienteId = (cliente._id as Types.ObjectId).toString();
+
+    const msg = await createScoped(Message, tenantId, {
+      clienteId: cliente._id,
+      canal: 'whatsapp',
+      direccion: 'inbound',
+      sender: 'user',
+      tipo: 'imagen',
+      media: { estado: 'pendiente', mimeType: 'image/jpeg', metaMediaId: 'm1' },
+      status: 'sent',
+    });
+
+    vi.mocked(publishRealtime).mockClear();
+    await notifyInboundMessage(
+      tenantId.toString(),
+      clienteId,
+      msg as unknown as Parameters<typeof notifyInboundMessage>[2],
+    );
+
+    // Pasar `message.texto` crudo (null) dejaba la fila vacía hasta el siguiente refetch, que sí
+    // calculaba la etiqueta. El evento en vivo tiene que decir lo mismo que `listConversations`.
+    const evt = vi.mocked(publishRealtime).mock.calls[0]?.[0] as {
+      conversation: { preview: string | null };
+    };
+    expect(evt.conversation.preview).toBe('📷 Imagen');
+  });
+
+  it('si la imagen trae pie de foto, gana el texto del cliente', async () => {
+    const cliente = await Cliente.create({
+      tenantId,
+      metaUserId: 'wa_preview_caption',
+      telefono: '5210004',
+      canalOrigen: 'whatsapp',
+      estadoComercial: 'nuevo',
+      customFields: {},
+      tags: [],
+    });
+
+    const msg = await createScoped(Message, tenantId, {
+      clienteId: cliente._id,
+      canal: 'whatsapp',
+      direccion: 'inbound',
+      sender: 'user',
+      tipo: 'imagen',
+      texto: '¿Cuánto vale esto?',
+      media: { estado: 'pendiente', mimeType: 'image/jpeg', metaMediaId: 'm2' },
+      status: 'sent',
+    });
+
+    vi.mocked(publishRealtime).mockClear();
+    await notifyInboundMessage(
+      tenantId.toString(),
+      (cliente._id as Types.ObjectId).toString(),
+      msg as unknown as Parameters<typeof notifyInboundMessage>[2],
+    );
+
+    const evt = vi.mocked(publishRealtime).mock.calls[0]?.[0] as {
+      conversation: { preview: string | null };
+    };
+    expect(evt.conversation.preview).toBe('¿Cuánto vale esto?');
   });
 });

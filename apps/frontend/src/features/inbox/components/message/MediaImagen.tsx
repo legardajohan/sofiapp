@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { urlDeArchivo } from '../../lib/media.js';
 import type { MediaDTO } from '../../types.js';
 import { MediaFallida } from './MediaEstado.js';
 
@@ -24,10 +25,12 @@ export function MediaImagen({ media, alt, sticker = false, onAbrir }: Props): Re
     return <MediaFallida media={{ ...media, error: media.error ?? 'La imagen ya no está disponible.' }} />;
   }
 
+  const src = urlDeArchivo(media.urlArchivo);
+
   if (sticker) {
     return (
       <img
-        src={media.urlArchivo}
+        src={src}
         alt={alt}
         loading="lazy"
         decoding="async"
@@ -53,7 +56,7 @@ export function MediaImagen({ media, alt, sticker = false, onAbrir }: Props): Re
           empuja el hilo hacia abajo y el asesor pierde la línea que estaba leyendo. */}
       <div className="aspect-[4/3] w-full bg-muted">
         <img
-          src={media.urlArchivo}
+          src={src}
           alt={alt}
           loading="lazy"
           decoding="async"

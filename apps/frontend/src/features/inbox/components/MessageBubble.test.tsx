@@ -48,7 +48,30 @@ describe('MessageBubble — renderizado por tipo (HU-OMNI-06)', () => {
     pintar(mensaje({ tipo: 'imagen', media: media(), texto: 'el comprobante' }));
 
     const img = screen.getByRole('img', { name: 'el comprobante' });
-    expect(img).toHaveAttribute('src', '/media/m-1?t=token');
+    expect(img).toHaveAttribute('src', '/api/media/m-1?t=token');
+  });
+
+  it('REGRESIÓN: el src lleva el prefijo del API, no la ruta cruda del DTO', () => {
+    // El backend devuelve `/media/<id>?t=…` (convención del proyecto: sin `/api`), pero un `<img>`
+    // NO pasa por axios y no recibe el `baseURL`. Sin prefijarlo, el navegador pide contra el
+    // origen de la SPA: en dev Vite devuelve el index.html y la imagen sale rota; en producción la
+    // petición ni llega al API. Así se veía "no disponible" con el archivo perfectamente guardado.
+    pintar(mensaje({ tipo: 'imagen', media: media(), texto: 'foto' }));
+
+    const src = screen.getByRole('img', { name: 'foto' }).getAttribute('src');
+    expect(src).toBe('/api/media/m-1?t=token');
+    expect(src).not.toBe('/media/m-1?t=token');
+  });
+
+  it('REGRESIÓN: el video también sale por el prefijo del API', () => {
+    const { container } = render(
+      <MessageBubble
+        message={mensaje({ tipo: 'video', media: media({ mimeType: 'video/mp4' }) })}
+        onAbrirImagen={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('source')).toHaveAttribute('src', '/api/media/m-1?t=token');
   });
 
   it('al pulsar la imagen se pide abrir el lightbox, sin salir del CRM', async () => {
@@ -119,7 +142,10 @@ describe('MessageBubble — renderizado por tipo (HU-OMNI-06)', () => {
       }),
     );
 
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/media/m-1?t=token&descargar=1');
+    expect(screen.getByRole('link')).toHaveAttribute(
+      'href',
+      '/api/media/m-1?t=token&descargar=1',
+    );
   });
 
   it('un enlace muestra la tarjeta con su dominio, conservando el texto', () => {

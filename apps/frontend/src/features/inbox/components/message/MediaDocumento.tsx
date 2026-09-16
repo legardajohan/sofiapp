@@ -1,7 +1,7 @@
 import { Download, FileSpreadsheet, FileText, File as FileIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MediaDTO } from '../../types.js';
-import { etiquetaFormato, formatearTamano } from '../../lib/media.js';
+import { etiquetaFormato, formatearTamano, urlDeArchivo } from '../../lib/media.js';
 import { MediaFallida } from './MediaEstado.js';
 
 function iconoDe(mimeType: string): typeof FileIcon {
@@ -38,7 +38,7 @@ export function MediaDocumento({
 
   return (
     <a
-      href={`${media.urlArchivo}&descargar=1`}
+      href={urlDeArchivo(media.urlArchivo, true)}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(

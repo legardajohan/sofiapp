@@ -317,7 +317,16 @@ async function notificarSaliente(
       tenantId,
       conversationId: clienteId,
       message,
-      conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
+      // `?? nonTextPreview`: una imagen sin pie de foto tiene `texto: null`, y pasarlo tal cual
+      // dejaría la conversación EN BLANCO en la lista lateral hasta el siguiente refetch, que
+      // sí la calcula bien. El evento en vivo debe decir lo mismo que `listConversations`.
+      conversation: toConversationResponse(
+        source,
+        message.texto ?? nonTextPreview(message.tipo),
+        new Date(),
+        asignado,
+        tagMap,
+      ),
     });
   }
 
@@ -859,6 +868,15 @@ export async function notifyInboundMessage(
     tenantId,
     conversationId: clienteId,
     message,
-    conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
+    // `?? nonTextPreview`: una imagen sin pie de foto tiene `texto: null`, y pasarlo tal cual
+    // dejaría la conversación EN BLANCO en la lista lateral hasta el siguiente refetch, que
+    // sí la calcula bien. El evento en vivo debe decir lo mismo que `listConversations`.
+    conversation: toConversationResponse(
+      source,
+      message.texto ?? nonTextPreview(message.tipo),
+      new Date(),
+      asignado,
+      tagMap,
+    ),
   });
 }

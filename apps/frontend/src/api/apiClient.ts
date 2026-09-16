@@ -6,6 +6,24 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]!) : null;
 }
 
+/**
+ * Base del API. La misma que usa `apiClient`, expuesta aparte para las URLs que **no** pasan por
+ * axios: el `src` de un `<img>`, un `<video>` o un `<a href>`.
+ *
+ * Esas peticiones las hace el navegador en crudo, así que no reciben el `baseURL` del cliente. Sin
+ * prefijarlas a mano, el navegador las resuelve contra el origen de la SPA: en desarrollo Vite
+ * devuelve el `index.html` (solo proxea `/api` y `/socket.io`) y el recurso sale roto; en
+ * producción ni siquiera llegan al API, que vive en otro dominio.
+ */
+export const API_BASE_URL: string =
+  (import.meta.env['VITE_API_BASE_URL'] as string | undefined) ?? '/api';
+
+/** Antepone la base del API a una ruta relativa al recurso (sin el prefijo `/api`). */
+export function apiUrl(path: string): string {
+  const base = API_BASE_URL.replace(/\/$/, '');
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export const apiClient = axios.create({
   baseURL: import.meta.env['VITE_API_BASE_URL'] ?? '/api',
   timeout: 10000,

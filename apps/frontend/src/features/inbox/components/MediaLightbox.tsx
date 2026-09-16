@@ -1,6 +1,7 @@
 import { Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { urlDeArchivo } from '../lib/media.js';
 
 interface Props {
   url: string | null;
@@ -26,12 +27,12 @@ export function MediaLightbox({ url, alt, onClose }: Props): React.ReactElement 
         {url && (
           <div className="flex flex-col items-center gap-3">
             <img
-              src={url}
+              src={urlDeArchivo(url)}
               alt={alt}
               className="max-h-[80vh] w-auto max-w-full rounded-lg object-contain"
             />
             <Button asChild variant="secondary" size="sm">
-              <a href={`${url}&descargar=1`} target="_blank" rel="noopener noreferrer">
+              <a href={urlDeArchivo(url, true)} target="_blank" rel="noopener noreferrer">
                 <Download className="size-4" aria-hidden="true" />
                 Descargar
               </a>

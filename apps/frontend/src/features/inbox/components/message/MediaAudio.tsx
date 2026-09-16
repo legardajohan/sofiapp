@@ -1,3 +1,4 @@
+import { urlDeArchivo } from '../../lib/media.js';
 import type { MediaDTO } from '../../types.js';
 import { MediaFallida } from './MediaEstado.js';
 
@@ -15,7 +16,7 @@ export function MediaAudio({ media }: { media: MediaDTO }): React.ReactElement {
 
   return (
     <audio controls preload="metadata" className="h-10 w-60 max-w-full">
-      <source src={media.urlArchivo} type={media.mimeType} />
+      <source src={urlDeArchivo(media.urlArchivo)} type={media.mimeType} />
       Tu navegador no puede reproducir este audio.
     </audio>
   );

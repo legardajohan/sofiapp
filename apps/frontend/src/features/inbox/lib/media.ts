@@ -1,3 +1,4 @@
+import { apiUrl } from '@/api/apiClient';
 import type { TipoMensaje } from '../types.js';
 
 /**
@@ -117,4 +118,15 @@ export function dominioDe(url: string): string | null {
 /** Tipos de mensaje que se renderizan con un archivo en el hilo. */
 export function llevaArchivo(tipo: TipoMensaje): boolean {
   return tipo === 'imagen' || tipo === 'video' || tipo === 'audio' || tipo === 'documento' || tipo === 'sticker';
+}
+
+/**
+ * URL lista para el `src` de un `<img>`, un `<video>` o el `href` de una descarga.
+ *
+ * El backend devuelve la ruta **relativa al API** (`/media/<id>?t=…`), siguiendo la convención del
+ * proyecto de no repetir el prefijo `/api`. Ponerlo es responsabilidad del cliente, igual que hace
+ * `apiClient` con su `baseURL` — solo que un `<img>` no pasa por axios y hay que hacerlo a mano.
+ */
+export function urlDeArchivo(urlArchivo: string, descargar = false): string {
+  return apiUrl(descargar ? `${urlArchivo}&descargar=1` : urlArchivo);
 }
