@@ -15,8 +15,20 @@ export type AuditAccion =
   | 'lead.create'
   | 'lead.update'
   | 'lead.delete'
-  | 'lead.semaforo';
-export type AuditEntidad = 'cliente' | 'contact-note' | 'lead';
+  // Cambio de etapa del pipeline (HU-PIPE-01). Acción propia y no `lead.update` para que el
+  // historial de etapa se pueda consultar sin que se le cuelen las altas y las bajas.
+  | 'lead.estado'
+  /** Cambio del semáforo comercial del lead — HU-CRM-04. */
+  | 'lead.semaforo'
+  // Campañas de remarketing (HU-MARK-01). El ciclo entero deja rastro porque una campaña gasta
+  // cupo del número y escribe a gente real: quién la lanzó, quién la paró y cuándo tiene que poder
+  // reconstruirse meses después.
+  | 'campaign.create'
+  | 'campaign.launch'
+  | 'campaign.pause'
+  | 'campaign.resume'
+  | 'campaign.cancel';
+export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.
 export interface IAuditEvent {

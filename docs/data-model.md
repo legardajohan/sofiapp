@@ -104,11 +104,24 @@
   igBusinessId: String?,          // si canal = instagram
   fbPageId: String?,              // si canal = messenger
   activo: Boolean,
+  // Capacidad de envío del NÚMERO (HU-MARK-01). Vive aquí y no en `tenants` porque es del número:
+  // si la empresa cambia de número, su tier y su calidad se van con él.
+  messagingTier: "TIER_50"|"TIER_250"|"TIER_1K"|"TIER_10K"|"TIER_100K"|"TIER_UNLIMITED",
+  qualityRating: "GREEN"|"YELLOW"|"RED"|"UNKNOWN",   // UNKNOWN se trata como YELLOW al pacear
+  healthStatus: "AVAILABLE"|"LIMITED"|"BLOCKED"|"UNKNOWN",
+  tierSyncedAt: ISODate|null,     // último sondeo a la Graph API
+  tierManual: Boolean,            // true = lo fijó una persona; la sonda no lo pisa
   createdAt, updatedAt
 }
 // Índices: { phoneNumberId: 1 } unique  (global, NO tenant-scoped: lo usa el webhook)
 //          { tenantId: 1, canal: 1 }
 ```
+
+> `messagingTier` es el techo de **destinatarios únicos** que Meta permite abrir en 24 h rodantes
+> con conversaciones iniciadas por la empresa. No es un límite de mensajes: dos plantillas al mismo
+> contacto el mismo día cuentan una vez. `TIER_250` es el valor por defecto porque es el de un
+> número sin verificar — suponer más es acabar chocando con el límite real. Lo refresca
+> `POST /api/channels/whatsapp/tier/sync` con la sonda de `integrations/meta-whatsapp.md` §8.
 
 ## clientes  (prospectos / leads)
 ```js
@@ -141,6 +154,10 @@
     sensible: Boolean             // default false
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
+  // Baja de campañas (HU-MARK-01). El segmentador lo excluye SIEMPRE, no es un filtro opcional.
+  // Se consulta con `$ne: true`, no con `false`: los contactos anteriores al campo no lo llevan,
+  // y ausente significa "no ha pedido la baja", no "desconocido".
+  marketingOptOut: Boolean,       // default false
   // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
   // la conversación, nadie filtra la bandeja por esto.
   semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
@@ -193,9 +210,12 @@
 //          { tenantId: 1, ultimoMensajeAt: -1 }
 //          { tenantId: 1, telefono: 1 }
 //          { tenantId: 1, nivelInteres: 1 }   (segmentación de campañas)
-//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — ÚNICO índice sin tenantId como prefijo
+//          { tenantId: 1, marketingOptOut: 1 } (HU-MARK-01: está en TODOS los segmentos)
+//          { tenantId: 1, rolContacto: 1 }     (HU-MARK-01: uno de los tres ejes de segmentación)
+//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — índice sin tenantId como prefijo
 //          (HU-FLOW-02): el barrido de recordatorios es cross-tenant por naturaleza (una sola
 //          pasada para toda la plataforma). Documentado como excepción en `multi-tenancy.md`.
+//          El otro es `{ estado, programadaPara }` en `campaigns` (HU-MARK-01), por lo mismo.
 ```
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
@@ -239,6 +259,9 @@
 //                                                          global: HT-WA-01-V2 cerró una fuga de
 //                                                          aislamiento donde el dedupe y el update
 //                                                          de `status` no llevaban `tenantId`)
+//          { tenantId: 1, tipo: 1, createdAt: -1 }        (HU-MARK-01: consumo del tier en las
+//                                                          últimas 24 h — destinatarios únicos de
+//                                                          plantilla, se consulta antes de cada lote)
 ```
 
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
@@ -366,28 +389,58 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > **No confundir con la métrica de cuota.** `plans.limites.leads` y `QuotaMetric = 'leads'` cuentan
 > documentos de **`clientes`** vía `countScoped`, no esta colección. HU-CRM-01 no toca cuotas.
 
-> `estado` reutiliza la unión de `clientes.estadoComercial` (fuente única:
-> `ESTADOS_COMERCIALES` en `cliente.types.ts`). El lead **no** introduce etapas ni pipeline propio;
-> Kanban sigue descartado por `product.md` §5.
+> `estado` guarda la **`key` de una etapa del catálogo `estados`** del tenant (HU-CRM-03), no un
+> enum: el schema no lleva `enum` y lo valida el service contra el catálogo de la empresa. Las cinco
+> claves sembradas coinciden con el antiguo `ESTADOS_COMERCIALES`, así que los leads anteriores
+> siguen resolviendo su etiqueta sin migración.
+>
+> El lead **no** introduce etapas ni pipeline propio: el embudo de HU-PIPE-01 se dibuja sobre este
+> campo y sobre `estados`, sin colección nueva. El tablero Kanban, que `product.md` §5 había
+> descartado, se reincorporó en esa historia — ver `docs/adr/0007-tablero-kanban-pipeline.md`.
 
-## campaigns  (remarketing)
+## campaigns  (remarketing — implementado en HU-MARK-01)
 ```js
 {
   _id: ObjectId,
   tenantId: ObjectId,
-  nombre: String,
-  filtros: {                      // segmentación dinámica
-    nivelInteres: [String]?, estadoComercial: [String]?,
-    interesItemId: ObjectId?, tagIds: [ObjectId]?, customFields: Object?
+  nombre: String,                 // ≤120, solo lo ve la empresa
+  filtros: {                      // segmentación; TODO opcional, se combinan en AND
+    atributos: [{ key: String, valores: [String] }],  // "grado", "colegio"… (Cliente.atributos)
+    rolContacto: [String],        // keys del catálogo `contact_options` tipo rol
+    semaforoLead: [String],       // keys del catálogo `semaforos` → Lead.semaforo (eje COMERCIAL)
+    nivelInteres: [String], estadoComercial: [String], tagIds: [ObjectId]
   },
-  plantillaHSM: String,           // nombre de la plantilla aprobada por Meta
-  estado: "borrador" | "en_curso" | "completada" | "fallida",
-  totales: { destinatarios: Number, enviados: Number, fallidos: Number },
-  iniciadaAt: ISODate?,
+  templateId: ObjectId,           // ref WhatsAppTemplate — NO el `name` suelto (ver nota)
+  parametros: [String],           // huecos del BODY, fijos para toda la campaña
+  estado: "borrador" | "programada" | "en_curso" | "pausada"
+        | "completada" | "cancelada" | "fallida",
+  programadaPara: ISODate|null,
+  totales: { destinatarios, enviados, entregados, fallidos, omitidos },
+  presupuesto: {                  // congelado al lanzar; auditoría de la cadencia elegida
+    tier: String, calidad: String, limiteDiario: Number, intervaloMs: Number
+  } | null,
+  creadaPor: ObjectId,            // ref User
+  iniciadaAt: ISODate|null, finalizadaAt: ISODate|null,
+  motivo: String|null,            // por qué acabó `fallida` o `cancelada`
   createdAt, updatedAt
 }
-// Índices: { tenantId: 1, createdAt: -1 }
+// Índices: { tenantId: 1, createdAt: -1 } · { tenantId: 1, estado: 1, createdAt: -1 }
+//          { estado: 1, programadaPara: 1 }  ← NO empieza por tenantId: ver nota
 ```
+
+> **`templateId` y no `plantillaHSM: String`.** El boceto previo guardaba el nombre de la plantilla.
+> Se cambió a una referencia al catálogo local por la misma razón que `Tenant.recordatorio.templateId`:
+> el nombre es lo que Meta puede cambiar, y una campaña histórica tiene que seguir apuntando a la
+> plantilla con la que realmente se envió.
+>
+> **`{ estado: 1, programadaPara: 1 }` es el segundo índice del proyecto que no empieza por
+> `tenantId`,** y es deliberado: el barrido que levanta las campañas programadas es cross-tenant por
+> naturaleza, como el de recordatorios de HU-FLOW-02. Solo devuelve identificadores (`tenantId`,
+> `_id`); a partir de ahí todo vuelve a pasar por `*Scoped`. Documentado en `multi-tenancy.md` §5.
+>
+> **El segmento se congela al lanzar.** `totales.destinatarios` queda fijo en el instante del
+> lanzamiento y los `campaign_recipients` se materializan ahí. Un contacto que empiece a cumplir los
+> filtros a mitad del envío **no** se incorpora: si no, nadie podría decir a cuánta gente se escribió.
 
 ## campaign_recipients  (auditoría de envío por destinatario)
 ```js
@@ -396,13 +449,26 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   tenantId: ObjectId,
   campaignId: ObjectId,
   clienteId: ObjectId,
-  telefono: String,
-  estado: "pendiente" | "enviado" | "fallido",
+  telefono: String,               // copiado al materializar: es el número al que se escribió
+  estado: "pendiente" | "enviado" | "entregado" | "fallido" | "omitido",
+  metaMessageId: String|null,     // puente con los `statuses` del webhook
   error: String?,
-  enviadoAt: ISODate?
+  enviadoAt: ISODate?,
+  createdAt, updatedAt
 }
-// Índices: { tenantId: 1, campaignId: 1, estado: 1 }
+// Índices: { tenantId: 1, campaignId: 1, estado: 1 }               ← "dame el próximo lote"
+//          { tenantId: 1, campaignId: 1, clienteId: 1 } unique     ← un contacto, un envío
+//          { tenantId: 1, metaMessageId: 1 } sparse                ← statuses del webhook
 ```
+
+> `omitido` **no es un fallo**: es "no se le llegó a escribir" (la campaña se canceló antes de
+> alcanzarlo). Distinguirlo de `fallido` importa porque un `fallido` es una señal de salud del
+> número y un `omitido` no dice nada sobre él.
+>
+> El índice único `{tenantId, campaignId, clienteId}` —y no la comprobación previa del service— es
+> la única defensa real contra el doble envío: entre leer los pendientes y marcarlos cabe otro
+> proceso. El de `metaMessageId` va **encabezado por `tenantId`** a propósito: `HT-WA-01-V2` cerró
+> una fuga donde ese id se resolvía sin tenant.
 
 ## flows  (constructor visual — implementado en HU-FLOW-01-V2)
 ```js
@@ -563,8 +629,17 @@ cualquier intento de guardarlo es un 400.
 > (cambios de `estadoComercial`, borrados, etc.).
 >
 > Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
-> `cliente.update` y `contact-note.create` (HU-CRM-02); `conversation.handoff` (HU-IA-03);
-> `cliente.semaforo` (HU-IA-05); `cliente.extract` y `cliente.extract-confirm` (HU-IA-06).
+> `cliente.update` y `contact-note.create` (HU-CRM-02); `lead.estado` (HU-PIPE-01); `lead.semaforo`
+> (HU-CRM-04); `conversation.handoff` (HU-IA-03); `cliente.semaforo` (HU-IA-05); `cliente.extract` y
+> `cliente.extract-confirm` (HU-IA-06).
+>
+> **`lead.estado`** registra el cambio de etapa del pipeline. Es acción propia, y no `lead.update`,
+> para que el historial de etapa no tenga que colar las altas y las bajas; los cambios anteriores a
+> HU-PIPE-01 quedaron como `lead.update` y **no se migran**, se consultan.
+>
+> **`lead.semaforo`** registra el cambio del semáforo comercial del lead (`antes`/`despues` con la
+> `key` del catálogo, `null` = sin clasificar). Es otro eje que `cliente.semaforo`, que vive sobre la
+> conversación: uno es la oportunidad, el otro el hilo.
 >
 > **`cliente.semaforo`** registra cada cambio del semáforo por clasificación de intención de compra:
 > `antes: { semaforo }`, `despues: { semaforo, aplicado, confianza, motivo, nivelInteres, objecion }`.
@@ -836,10 +911,16 @@ del modelo en `contact_options`.
 | `orden` | number | Posición en el pipeline. El orden cuenta una historia; alfabético la rompe. |
 | `activo` | boolean | `false` = archivado: no se ofrece para filtrar, pero sigue resolviendo su etiqueta. |
 | `esDefecto` | boolean | Sembrado al crear el tenant. Informativo. |
+| `esSalida` | boolean | Etapa terminal del embudo (HU-PIPE-01). **Descriptivo, no restrictivo**: marca qué columnas cierran el recorrido para que la UI las señale, sin bloquear ninguna transición. |
 
 Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que los
 leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.
 
+> Desde HU-PIPE-01 se siembra además **`declinado`** («Declinado», `esSalida: true`), que convive
+> con `perdido`: `perdido` es la oportunidad que se enfrió y `declinado` la que dijo que no. Los
+> tenants anteriores la reciben por `backfillEstadoDeclinado()`, un backfill dirigido — la siembra
+> general ya no pasa por ellos porque llevan `estadosSeeded: true`.
+>
 > Las cinco claves sembradas (`nuevo`, `en_gestion`, `pago_pendiente`, `pagado`, `perdido`) son
 > **exactamente** los valores del enum anterior, así que el paso de enum a catálogo no necesita
 > migrar un solo documento. `Lead.estado` deja de tener `enum` en el schema: lo valida el service

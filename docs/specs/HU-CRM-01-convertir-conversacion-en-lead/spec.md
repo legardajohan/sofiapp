@@ -66,6 +66,8 @@ Fuera de alcance (otros features / fases):
 - Valor estimado y moneda del lead (arrastraría ADR 0005, `Decimal128` y TRM).
 - Cuota de plan sobre la colección `leads`.
 - Etapas de pipeline y tablero Kanban: excluidos por decisión de producto (`docs/product.md` §5).
+  **Superado:** las etapas configurables llegaron en HU-CRM-03 y el tablero con drag&drop en
+  HU-PIPE-01, que revirtió aquella exclusión (ver `docs/adr/0007-tablero-kanban-pipeline.md`).
 
 ## Criterios de aceptación
 
@@ -137,7 +139,8 @@ pipeline. El motivo es que son cardinalidades distintas:
 Dos acotaciones para que la decisión no se desborde:
 
 - El `Lead` **no** introduce `etapa` ni pipeline propio: reutiliza la unión `EstadoComercial` ya
-  existente (`nuevo | en_gestion | pago_pendiente | pagado | perdido`). Kanban y drag&drop siguen
+  existente (`nuevo | en_gestion | pago_pendiente | pagado | perdido`). **Superado por HU-CRM-03**
+  (catálogo por tenant) **y HU-PIPE-01** (tablero). Kanban y drag&drop seguían
   fuera de alcance por `docs/product.md` §5.
 - `Cliente.estadoComercial` **no** se deja de usar ni se sincroniza automáticamente con
   `Lead.estado` en este feature. Cualquier acoplamiento entre ambos es materia de `HU-CRM-04`.

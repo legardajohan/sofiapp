@@ -10,6 +10,7 @@ import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
 import { buildTemplatePayload } from '../whatsapp-template/whatsapp-template.service.js';
+import { applyDeliveryStatusToRecipient } from '../campaign/campaign.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from './message.model.js';
 import type {
@@ -146,4 +147,8 @@ export async function updateDeliveryStatus(
   status: MessageStatus,
 ): Promise<void> {
   await findOneAndUpdateScoped(Message, tenantId, { metaMessageId }, { status });
+  // Los `statuses` de Meta entran por un único camino (el webhook → esta función), así que el
+  // destinatario de campaña se actualiza aquí en vez de duplicar el parseo en otro sitio. Es un
+  // no-op para los mensajes que no pertenecen a ninguna campaña, que son la mayoría (HU-MARK-01).
+  await applyDeliveryStatusToRecipient(tenantId, metaMessageId, status);
 }

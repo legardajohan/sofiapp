@@ -74,6 +74,10 @@ const ClienteSchema = new Schema<IClienteDocument>(
     correoEnc: { type: String },
     documentoEnc: { type: String },
     atributos: { type: [AtributoSchema], default: [] },
+    // Baja de campañas (HU-MARK-01). Con índice porque el segmentador lo consulta en TODA
+    // segmentación —es la única cláusula incondicional del filtro—, no solo cuando el usuario
+    // elige filtrar por él.
+    marketingOptOut: { type: Boolean, required: true, default: false },
     // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
     resumenIA: {
       type: new Schema(
@@ -143,6 +147,10 @@ ClienteSchema.index({ tenantId: 1, ultimoMensajeAt: -1 });
 ClienteSchema.index({ tenantId: 1, asesorId: 1 });
 // Filtro de bandeja por etiqueta: un ObjectId suelto contra un array significa "contiene".
 ClienteSchema.index({ tenantId: 1, tagIds: 1 });
+// Segmentación de campañas (HU-MARK-01). Los dos campos que aparecen en más segmentos: el opt-out
+// está en TODOS por construcción, y el rol es uno de los tres ejes que pide la historia.
+ClienteSchema.index({ tenantId: 1, marketingOptOut: 1 });
+ClienteSchema.index({ tenantId: 1, rolContacto: 1 });
 
 // HU-FLOW-02 — ÚNICO índice del proyecto que no empieza por `tenantId`, y es deliberado: el
 // barrido de recordatorios es cross-tenant por naturaleza (una sola pasada para toda la

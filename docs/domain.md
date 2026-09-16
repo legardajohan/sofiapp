@@ -14,7 +14,8 @@
 | **Nivel de interés** | Señal inferida por IA: `frio | tibio | caliente`. |
 | **Objeción** | Motivo de duda inferido por IA: `precio | tiempo | confianza | otra`. |
 | **Catálogo** | Conjunto de productos/servicios que ofrece el tenant (genérico). |
-| **Campaña** | Difusión masiva segmentada a prospectos (remarketing). |
+| **Campaña** | Difusión masiva segmentada a prospectos (remarketing, `HU-MARK-01`). Se segmenta por atributo personalizado del contacto (por ahí entra «grado»), `rolContacto` y **`Lead.semaforo`** —el eje comercial, no la etiqueta del hilo—, combinables. Ciclo: `borrador` → `programada` → `en_curso` ⇄ `pausada` → `completada` \| `cancelada` \| `fallida`. Al lanzar, el segmento se **congela** en `campaign_recipients`: quien entre después en los filtros no se incorpora, porque si no nadie podría decir a cuánta gente se escribió. La cadencia la fija el **tier y la calidad del número**, no el usuario (ver `integrations/meta-whatsapp.md` §5). |
+| **Baja de marketing** | `Cliente.marketingOptOut`. El contacto pidió no recibir campañas; el segmentador lo excluye **siempre**, no es un filtro que se pueda desactivar. Solo se respeta la marca: captarla (formularios, doble opt-in, palabra clave "BAJA") sigue siendo responsabilidad de la empresa. |
 | **Flujo** | Grafo de conversación automatizada (constructor visual, `HU-FLOW-01-V2`). Nodos: `mensaje`, `captura`, `condicion`, `intencion`, `kb`, `accion`, `handoff`, `espera` (lo ejecuta `HU-FLOW-02`), `ia` (lo ejecuta `HU-FLOW-03`: conversa varios turnos con el historial real y retoma el flujo por la salida que decide, o por su rama por defecto al agotar `maxTurnos`). **No almacena conocimiento**: los nodos `kb`/`ia` delegan en `AIService` (`chat()`/`extract()`) y los nodos `condicion`/`intencion` no admiten texto de respuesta propio — esa regla es estructural (Zod la exige), no una convención. El estado de ejecución por conversación vive en `FlowState`, una colección propia (no un campo más de `Cliente`). |
 | **HSM** | Plantilla de mensaje aprobada por Meta para envíos proactivos. |
 | **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los subroles autorizados. |
@@ -50,6 +51,30 @@
 - Toda transición se valida en un servicio puro `changeEstadoComercial(clienteId, tenantId, nuevoEstado)`.
 - Transiciones permitidas: ver diagrama. Una transición no permitida lanza `AppError(400)`.
 - `perdido` es alcanzable desde cualquier estado activo.
+
+### Etapas del lead: transiciones libres y etapas de salida (HU-PIPE-01)
+
+El diagrama de arriba describe `Cliente.estadoComercial`. La **etapa del lead** (`Lead.estado`) es
+otra cosa desde HU-CRM-03: un catálogo **por tenant** (`estados`), no un enum, y por tanto no puede
+tener un grafo de transiciones fijo — el `orden` que cada empresa le da a sus etapas es una
+narrativa, no una lista de permisos.
+
+Sus reglas son deliberadamente más simples:
+
+- **Entre etapas activas, cualquier movimiento es válido**, incluido retroceder. Corregir un
+  arrastre equivocado es una necesidad real; bloquearlo obligaría a tocar la base de datos a mano.
+- **Mover a una etapa archivada (`activo: false`) es `400`.** El tablero solo pinta las activas: la
+  tarjeta desaparecería sin que nadie pudiera explicar dónde fue a parar. Leer sí las admite —un
+  lead puede llevar grabada una etapa que ya no se ofrece—, así que **escribir es más estricto que
+  leer**.
+- **`Estado.esSalida` marca las etapas terminales.** De fábrica lo son dos, y la distinción entre
+  ellas es la que hace accionable un embudo:
+  - **`perdido`** — la oportunidad se enfrió: dejó de responder, se agotó el plazo. Se reintenta en
+    la siguiente campaña.
+  - **`declinado`** — dijo que no. No se reintenta.
+
+  El campo es **descriptivo, no restrictivo**: señala qué columnas cierran el recorrido, pero no
+  impide sacar un lead de ellas. Reabrir una oportunidad es una decisión legítima del asesor.
 
 ## 4. Captura por IA — datos genéricos vs. personalizados
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 import { Estado } from './estado.model.js';
 import { createEstado, listEstados } from './estado.service.js';
-import { seedEstados } from '../../seed/seed-estados.js';
+import { ESTADOS_DEFECTO, seedEstados } from '../../seed/seed-estados.js';
 import { AppError } from '../../utils/AppError.js';
 
 describe('HU-CRM-03 — catálogo de estados del pipeline', () => {
@@ -15,7 +15,7 @@ describe('HU-CRM-03 — catálogo de estados del pipeline', () => {
     await seedEstados(tenant);
   });
 
-  it('siembra los cinco de fábrica en el orden del pipeline, no alfabético', async () => {
+  it('siembra las de fábrica en el orden del pipeline, no alfabético', async () => {
     const estados = await listEstados(tenantStr);
 
     expect(estados.map((e) => e.key)).toEqual([
@@ -24,8 +24,19 @@ describe('HU-CRM-03 — catálogo de estados del pipeline', () => {
       'pago_pendiente',
       'pagado',
       'perdido',
+      // HU-PIPE-01: etapa de salida explícita, al final del recorrido.
+      'declinado',
     ]);
     expect(estados.every((e) => e.esDefecto)).toBe(true);
+  });
+
+  it('las dos etapas terminales nacen marcadas como salida y el resto no (HU-PIPE-01)', async () => {
+    const porKey = new Map((await listEstados(tenantStr)).map((e) => [e.key, e]));
+
+    expect(porKey.get('perdido')?.esSalida).toBe(true);
+    expect(porKey.get('declinado')?.esSalida).toBe(true);
+    expect(porKey.get('nuevo')?.esSalida).toBe(false);
+    expect(porKey.get('pagado')?.esSalida).toBe(false);
   });
 
   it('las claves sembradas son las del enum anterior: los leads existentes no necesitan migración', async () => {
@@ -42,7 +53,10 @@ describe('HU-CRM-03 — catálogo de estados del pipeline', () => {
     expect(creado.key).toBe('visita-agendada');
     expect(creado.esDefecto).toBe(false);
     // Al final: un estado nuevo no se cuela entre "pagado" y "perdido" sin que alguien lo decida.
-    expect(creado.orden).toBe(5);
+    // Se cuenta contra la semilla y no contra un número escrito a mano.
+    expect(creado.orden).toBe(ESTADOS_DEFECTO.length);
+    // Una etapa creada a mano no es de salida hasta que alguien lo decida.
+    expect(creado.esSalida).toBe(false);
     expect((await listEstados(tenantStr)).at(-1)?.key).toBe('visita-agendada');
   });
 
@@ -74,6 +88,6 @@ describe('HU-CRM-03 — catálogo de estados del pipeline', () => {
   it('resembrar es idempotente: no duplica ni reordena', async () => {
     await seedEstados(tenant);
 
-    expect(await listEstados(tenantStr)).toHaveLength(5);
+    expect(await listEstados(tenantStr)).toHaveLength(ESTADOS_DEFECTO.length);
   });
 });

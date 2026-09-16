@@ -13,12 +13,13 @@ import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
 import { backfillContactOptions } from './seed/seed-contact-options.js';
-import { backfillEstados } from './seed/seed-estados.js';
+import { backfillEstadoDeclinado, backfillEstados } from './seed/seed-estados.js';
 import { backfillSemaforos } from './seed/seed-semaforos.js';
 import { seedPromptTemplates } from './seed/seed-prompt-templates.js';
 import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
 import estadoRoutes from './features/estado/estado.routes.js';
+import pipelineRoutes from './features/pipeline/pipeline.routes.js';
 import semaforoRoutes from './features/semaforo/semaforo.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
@@ -42,6 +43,7 @@ import aiRoutes from './features/ai/ai.routes.js';
 import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
 import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
 import flowRoutes from './features/flow/flow.routes.js';
+import campaignRoutes from './features/campaign/campaign.routes.js';
 
 const app = express();
 
@@ -94,6 +96,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/estados', estadoRoutes);
+app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/semaforos', semaforoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
@@ -103,6 +106,7 @@ app.use('/api/ai/handoff-rules', aiHandoffRoutes);
 // resolverse primero, o el genérico se los come.
 app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
+app.use('/api/campaigns', campaignRoutes);
 
 app.use(errorHandler);
 
@@ -134,6 +138,7 @@ if (env.NODE_ENV !== 'test') {
       await backfillSemaforoTags();
       await backfillContactOptions();
       await backfillEstados();
+      await backfillEstadoDeclinado();
       await backfillSemaforos();
       server.listen(env.PORT, () => {
         logger.info(`Servidor escuchando en el puerto ${env.PORT}`);

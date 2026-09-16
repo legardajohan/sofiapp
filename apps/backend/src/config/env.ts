@@ -141,6 +141,24 @@ const EnvSchema = z.object({
   REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().positive().default(600_000),
   REMINDER_SWEEP_BATCH: z.coerce.number().positive().default(200),
 
+  // HU-MARK-01 — campañas. Los cuatro primeros gobiernan el *pacing*: cuánto se manda de golpe,
+  // cada cuánto como mínimo, qué fracción del tier de Meta se considera gastable y cada cuánto se
+  // vuelve a preguntar por el tier del número.
+  CAMPAIGN_BATCH_SIZE: z.coerce.number().int().positive().default(25),
+  CAMPAIGN_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
+  // Fracción del límite del tier que la plataforma se permite gastar. **No es 1** a propósito: el
+  // tier es un techo duro de Meta y agotarlo al milímetro deja al tenant sin margen para los
+  // recordatorios de HU-FLOW-02 ni para un envío manual urgente, que salen del mismo cupo.
+  CAMPAIGN_SAFETY_MARGIN: z.coerce.number().min(0).max(1).default(0.8),
+  // Cada cuánto se vuelve a sondear tier/calidad en Meta. Una hora: cambian en escalas de días.
+  CAMPAIGN_TIER_TTL_MS: z.coerce.number().int().positive().default(3_600_000),
+  // Red de seguridad frente al límite de ~80 msg/s de la Graph API (meta-whatsapp.md §5).
+  // Deliberadamente muy por debajo: una campaña no tiene ninguna prisa.
+  CAMPAIGN_MAX_PER_SECOND: z.coerce.number().int().positive().default(10),
+  // Cadencia del barrido que levanta las campañas programadas. Un minuto: es la resolución con la
+  // que el usuario elige la hora de inicio.
+  CAMPAIGN_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

@@ -48,6 +48,18 @@ const TagsPage = lazy(() =>
   import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
 );
 
+const EstadosPage = lazy(() =>
+  import('./features/estados/index.js').then((m) => ({ default: m.EstadosPage })),
+);
+
+const CampaignsPage = lazy(() =>
+  import('./features/campaigns/index.js').then((m) => ({ default: m.CampaignsPage })),
+);
+
+const CampaignDetailPage = lazy(() =>
+  import('./features/campaigns/index.js').then((m) => ({ default: m.CampaignDetailPage })),
+);
+
 const FlowsPage = lazy(() =>
   import('./features/flows/index.js').then((m) => ({ default: m.FlowsPage })),
 );
@@ -175,11 +187,41 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/etapas',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <EstadosPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
             path: '/etiquetas',
             element: (
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <TagsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/campanas',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <CampaignsPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/campanas/:id',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <CampaignDetailPage />
                 </Suspense>
               </RequireRole>
             ),

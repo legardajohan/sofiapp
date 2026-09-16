@@ -20,8 +20,11 @@ import { SEMAFORO_SLUGS, type SemaforoSlug } from '../tag/tag.types.js';
 import { findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
+import type { AuditAccion } from '../audit/audit.types.js';
+import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { Lead } from './lead.model.js';
-import { existeEstado } from '../estado/estado.service.js';
+import { existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
+import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
 import {
   existeSemaforo,
   findSemaforoByKey,
@@ -30,6 +33,7 @@ import {
 import type { ISemaforoResponse } from '../semaforo/semaforo.types.js';
 import type {
   CreateLeadDTO,
+  IHistorialEstadoResponse,
   IHistorialSemaforoResponse,
   ILeadDocument,
   ILeadLean,
@@ -148,7 +152,7 @@ export async function createLeadFromConversation(
       telefono,
       correo: dto.correo,
       clienteId: conversacionOid,
-      estado: 'nuevo',
+      estado: KEY_ESTADO_ENTRADA,
       // Un lead nace sin clasificar: poner un semáforo es una decisión del asesor, y arrancarlo en
       // "frío" sería afirmar algo que nadie ha mirado todavía.
       semaforo: null,
@@ -445,8 +449,13 @@ function finDelDia(fecha: Date): Date {
   return fin;
 }
 
-/** Traduce los filtros de la query a un `FilterQuery`. El `tenantId` NO va aquí: lo pone el repo. */
-function buildLeadFilter(query: ListLeadsQuery): FilterQuery<ILeadDocument> {
+/**
+ * Traduce los filtros de la query a un `FilterQuery`. El `tenantId` NO va aquí: lo pone el repo.
+ *
+ * Exportada para el tablero del embudo (HU-PIPE-01), que aplica exactamente los mismos filtros
+ * que la tabla y no puede permitirse una copia que se desincronice.
+ */
+export function buildLeadFilter(query: ListLeadsQuery): FilterQuery<ILeadDocument> {
   const filter: FilterQuery<ILeadDocument> = {};
 
   if (query.estado) filter.estado = query.estado;
@@ -492,6 +501,177 @@ function toLeadListItemResponse(
 }
 
 /**
+ * Hidrata un conjunto de leads a la proyección de listado, resolviendo contacto, responsable y
+ * semáforo **en lote**: una consulta por colección para todos ellos, nunca N+1.
+ *
+ * Está extraída de `listLeads` para que el tablero del embudo (HU-PIPE-01) la reutilice en vez de
+ * escribir una proyección paralela: una tarjeta y una fila que se construyeran por separado
+ * divergirían en la primera modificación del listado. El tablero la llama **una sola vez con los
+ * leads de todas las columnas**, así que resolver diez columnas cuesta lo mismo que resolver una
+ * página de la tabla.
+ *
+ * `puedeVerSensibles` viaja como parámetro y no se resuelve aquí: el permiso sale del token y lo
+ * decide el controller (HU-IA-04), igual que en la tabla y en la bandeja. Por defecto `false`, que
+ * es el lado seguro si una llamada nueva olvidara pasarlo.
+ */
+export async function hidratarLeadsParaListado(
+  tenantId: TenantId,
+  leads: ILeadLean[],
+  puedeVerSensibles = false,
+): Promise<ILeadListItemResponse[]> {
+  if (leads.length === 0) return [];
+
+  // Los clientes del conjunto, con SOLO lo que la tabla pinta: resumen y último mensaje. El
+  // semáforo ya no sale de aquí (es campo del lead, HU-CRM-04), así que `tagIds` dejó de hacer falta.
+  const clientes = await findScoped(Cliente, tenantId, {
+    _id: { $in: leads.map((l) => l.clienteId) },
+  })
+    .select({ _id: 1, resumenIA: 1, ultimoMensajeAt: 1 })
+    .lean<IClienteListSource[]>();
+
+  const clienteMap = new Map(clientes.map((c) => [String(c._id), c]));
+
+  // Responsables y catálogo de semáforos de todo el conjunto, una consulta cada uno.
+  const [userMap, semaforoMap] = await Promise.all([
+    findUsersByIds(
+      tenantId,
+      leads.map((l) => String(l.responsableId)),
+    ),
+    mapaSemaforos(tenantId),
+  ]);
+
+  return leads.map((lead) =>
+    toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, puedeVerSensibles),
+  );
+}
+
+/**
+ * Cambia la etapa de un lead (HU-CRM-03, ampliada en HU-PIPE-01).
+ *
+ * El `estado` se valida contra el **catálogo del tenant**, no contra un enum: las etapas son datos
+ * de cada empresa. Una clave que no existe es un `400` y no un guardado silencioso — a diferencia
+ * del filtro del listado, donde una clave desconocida solo significa "no hay nada que mostrar",
+ * aquí escribiría en el lead un estado que nadie puede resolver.
+ *
+ * Entre etapas **activas** la transición es libre, incluido retroceder: el `orden` del catálogo es
+ * una narrativa que cada empresa escribe, no un grafo de permisos, y corregir un arrastre
+ * equivocado es una necesidad real que bloquearla convertiría en un viaje a la base de datos.
+ *
+ * La sirven las dos rutas —`PATCH /leads/:id` y `PATCH /leads/:id/stage`— a propósito: así la
+ * validación nueva y la auditoría nueva las gana también la ruta vieja.
+ */
+export async function updateLeadEstado(
+  tenantId: TenantId,
+  actorId: string,
+  leadId: string,
+  estado: string,
+): Promise<ILeadResponse> {
+  // Mismo criterio que `getLeadById`: un id de otro tenant es indistinguible de uno inexistente.
+  const lead = await findByIdScoped(Lead, tenantId, leadId).lean<ILeadLean>();
+  if (!lead) throw new AppError('Lead no encontrado.', 404);
+
+  // Activa, no solo existente (HU-PIPE-01): mover un lead a una etapa archivada lo sacaría del
+  // tablero —que solo pinta las activas— sin que nadie pudiera explicar dónde fue a parar.
+  // Escribir es más estricto que leer, donde `?estado=` sí admite archivadas.
+  if (!(await existeEstadoActivo(tenantId, estado))) {
+    throw new AppError('Esa etapa no existe o está archivada en el catálogo de la empresa.', 400);
+  }
+
+  // Cambiar al estado que ya tiene no es un error, pero tampoco merece auditoría ni escritura.
+  // Es justo el caso de soltar una tarjeta en la columna de la que salió: ni historial, ni evento.
+  if (lead.estado === estado) return getLeadById(tenantId, leadId);
+
+  await findOneAndUpdateScoped(Lead, tenantId, { _id: lead._id }, { $set: { estado } });
+
+  // La transición es información de negocio: saber quién movió un lead a "pagado" —y cuándo— es
+  // justo lo que se pregunta cuando las cuentas no cuadran. Acción propia desde HU-PIPE-01 para
+  // que el historial de etapa no tenga que colar `lead.create` ni `lead.delete`.
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'lead.estado',
+    entidad: 'lead',
+    entidadId: String(lead._id),
+    antes: { estado: lead.estado },
+    despues: { estado },
+  });
+
+  const actualizado = await getLeadById(tenantId, leadId);
+
+  // Después de persistir y auditar: el evento es una consecuencia del cambio, no parte de él.
+  // `publishRealtime` nunca lanza, así que un Redis caído no le cuesta el movimiento al usuario.
+  await publishRealtime({
+    type: 'lead:stage-changed',
+    tenantId: String(tenantId),
+    leadId: String(lead._id),
+    de: lead.estado,
+    a: estado,
+    lead: actualizado,
+  });
+
+  return actualizado;
+}
+
+/**
+ * Acciones que cuentan como un cambio de etapa en la bitácora.
+ *
+ * `lead.update` está aquí porque es como se registraron los cambios **antes** de HU-PIPE-01. Esos
+ * eventos **no se migran**: reescribir una bitácora de auditoría para que quede bonita es peor que
+ * tener dos nombres para lo mismo. Consultando ambas, el historial de un lead antiguo se sigue
+ * viendo entero.
+ */
+const ACCIONES_DE_ETAPA: AuditAccion[] = ['lead.estado', 'lead.update'];
+
+/**
+ * Historial de cambios de etapa del lead (HU-PIPE-01). Sale de `audit_events`, no de una colección
+ * propia: es exactamente el uso para el que esa bitácora se creó.
+ *
+ * El filtro por acción va **dentro** de la consulta paginada, no después: quedarse con las filas
+ * de etapa de las veinte ya traídas rompería el `total` y dejaría páginas de tamaño irregular.
+ */
+export async function listHistorialEstado(
+  tenantId: TenantId,
+  leadId: string,
+  page: number,
+  limit: number,
+): Promise<IPaginated<IHistorialEstadoResponse>> {
+  // Antes de leer la bitácora, que el lead sea de este tenant. Sin esto un id ajeno devolvería una
+  // página vacía —indistinguible de "este lead nunca cambió de etapa"— en vez de un 404 honesto.
+  const lead = await findByIdScoped(Lead, tenantId, leadId).select({ _id: 1 }).lean<ILeadLean>();
+  if (!lead) throw new AppError('Lead no encontrado.', 404);
+
+  const { data, total } = await listAuditEvents(
+    tenantId,
+    'lead',
+    leadId,
+    page,
+    limit,
+    ACCIONES_DE_ETAPA,
+  );
+
+  // Un actor nulo es el sistema (mismo criterio que el historial de asignaciones): no hay `User`
+  // que resolver, y colarlo en la lista le pasaría un id inválido a `findUsersByIds`.
+  const userMap = await findUsersByIds(
+    tenantId,
+    data.flatMap((e) => (e.actorId ? [e.actorId] : [])),
+  );
+
+  return {
+    data: data.map((evento) => ({
+      id: evento.id,
+      de: typeof evento.antes['estado'] === 'string' ? evento.antes['estado'] : null,
+      a: typeof evento.despues['estado'] === 'string' ? evento.despues['estado'] : null,
+      actor: evento.actorId
+        ? { id: evento.actorId, nombre: userMap.get(evento.actorId)?.nombre ?? null }
+        : null,
+      at: evento.createdAt,
+    })),
+    page,
+    limit,
+    total,
+  };
+}
+
+/**
  * Listado paginado de los leads del tenant, ordenado por lo más reciente. Todos los filtros son
  * opcionales y combinables.
  *
@@ -499,8 +679,7 @@ function toLeadListItemResponse(
  * usa `populate`, que saltaría el repositorio scoped y con él la garantía de aislamiento.
  *
  * `puedeVerSensibles` viaja como parámetro y no se resuelve aquí: el permiso sale del token y lo
- * decide el controller (HU-IA-04), igual que en la bandeja. Por defecto `false`, que es el lado
- * seguro si una llamada nueva olvidara pasarlo.
+ * decide el controller (HU-IA-04), igual que en la bandeja.
  */
 export async function listLeads(
   tenantId: TenantId,
@@ -534,74 +713,12 @@ export async function listLeads(
 
   if (leads.length === 0) return { data: [], page, limit, total };
 
-  // Los clientes de la página, con SOLO lo que la tabla pinta: resumen y último mensaje. El
-  // semáforo ya no sale de aquí (es campo del lead), así que `tagIds` dejó de hacer falta.
-  const clientes = await findScoped(Cliente, tenantId, {
-    _id: { $in: leads.map((l) => l.clienteId) },
-  })
-    .select({ _id: 1, resumenIA: 1, ultimoMensajeAt: 1 })
-    .lean<IClienteListSource[]>();
-
-  const clienteMap = new Map(clientes.map((c) => [String(c._id), c]));
-
-  // Responsables y catálogo de semáforos de toda la página, una consulta cada uno.
-  const [userMap, semaforoMap] = await Promise.all([
-    findUsersByIds(
-      tenantId,
-      leads.map((l) => String(l.responsableId)),
-    ),
-    mapaSemaforos(tenantId),
-  ]);
-
   return {
-    data: leads.map((lead) =>
-      toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, puedeVerSensibles),
-    ),
+    data: await hidratarLeadsParaListado(tenantId, leads, puedeVerSensibles),
     page,
     limit,
     total,
   };
-}
-
-/**
- * Cambia la etapa de un lead (HU-CRM-03).
- *
- * El `estado` se valida contra el **catálogo del tenant**, no contra un enum: las etapas son datos
- * de cada empresa. Una clave que no existe es un `400` y no un guardado silencioso — a diferencia
- * del filtro del listado, donde una clave desconocida solo significa "no hay nada que mostrar",
- * aquí escribiría en el lead un estado que nadie puede resolver.
- */
-export async function updateLeadEstado(
-  tenantId: TenantId,
-  actorId: string,
-  leadId: string,
-  estado: string,
-): Promise<ILeadResponse> {
-  // Mismo criterio que `getLeadById`: un id de otro tenant es indistinguible de uno inexistente.
-  const lead = await findByIdScoped(Lead, tenantId, leadId).lean<ILeadLean>();
-  if (!lead) throw new AppError('Lead no encontrado.', 404);
-
-  if (!(await existeEstado(tenantId, estado))) {
-    throw new AppError('Ese estado no existe en el catálogo de la empresa.', 400);
-  }
-
-  // Cambiar al estado que ya tiene no es un error, pero tampoco merece auditoría ni escritura.
-  if (lead.estado === estado) return getLeadById(tenantId, leadId);
-
-  await findOneAndUpdateScoped(Lead, tenantId, { _id: lead._id }, { $set: { estado } });
-
-  // La transición es información de negocio: saber quién movió un lead a "pagado" —y cuándo— es
-  // justo lo que se pregunta cuando las cuentas no cuadran.
-  await recordAuditEvent(tenantId, {
-    actorId,
-    accion: 'lead.update',
-    entidad: 'lead',
-    entidadId: String(lead._id),
-    antes: { estado: lead.estado },
-    despues: { estado },
-  });
-
-  return getLeadById(tenantId, leadId);
 }
 
 /**

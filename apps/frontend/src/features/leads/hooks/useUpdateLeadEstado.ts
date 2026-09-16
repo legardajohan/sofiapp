@@ -1,15 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import axios from 'axios';
 import { updateLeadEstado } from '../api.js';
-
-/** Mensaje del backend si lo hay: "Ese estado no existe…" dice más que un genérico. */
-function motivo(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
-    return error.response.data.message;
-  }
-  return fallback;
-}
+import { motivo } from '../lib/errors.js';
 
 /**
  * Cambia la etapa de un lead (HU-CRM-03).

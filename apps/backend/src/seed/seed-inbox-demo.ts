@@ -510,6 +510,9 @@ function construirDocs(
       nombre: conv.nombre,
       canalOrigen: 'whatsapp',
       estadoComercial: conv.estadoComercial,
+      // Los contactos demo aceptan campañas: el seed existe para poder probar la bandeja y el
+      // segmentador de HU-MARK-01, y una base entera dada de baja daría segmentos siempre vacíos.
+      marketingOptOut: false,
       ventana24hExpiraEn,
       ultimoMensajeAt,
       noLeidos: conv.noLeidos,
