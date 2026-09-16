@@ -17,6 +17,12 @@ export const REMINDER_SWEEP_SCHEDULER_ID = 'reminder-sweep';
 
 // HU-MARK-01 — difusión de campañas. El nombre de la cola es el que `apps/backend/CLAUDE.md` y
 // `docs/architecture.md` ya tenían reservado, y el que ocupaba el worker placeholder de `worker.ts`.
+// Descarga de la media entrante (HU-OMNI-06). Cola propia y no inline en `inbound-messages`:
+// esa corre con `attempts: 5` y un fallo de descarga reintentaría TODA la ingesta —upsert del
+// cliente, guardado del mensaje, disparo de la IA— por algo que no está ahí.
+export const MEDIA_INGEST_QUEUE_NAME = 'media-ingest';
+export const MEDIA_INGEST_JOB = 'descargar';
+
 export const CAMPAIGN_QUEUE_NAME = 'campaign-broadcast';
 /** Un lote de destinatarios. El job se re-encola a sí mismo hasta agotar la campaña. */
 export const CAMPAIGN_BATCH_JOB = 'batch';
@@ -31,3 +37,4 @@ export const kbIndexQueue = new Queue(KB_INDEX_QUEUE_NAME, { connection });
 export const aiReplyQueue = new Queue(AI_REPLY_QUEUE_NAME, { connection });
 export const flowRuntimeQueue = new Queue(FLOW_RUNTIME_QUEUE_NAME, { connection });
 export const campaignQueue = new Queue(CAMPAIGN_QUEUE_NAME, { connection });
+export const mediaIngestQueue = new Queue(MEDIA_INGEST_QUEUE_NAME, { connection });

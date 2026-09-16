@@ -18,6 +18,18 @@ export type RealtimeEvent =
       conversation: IConversationResponse;
     }
   | {
+      /**
+       * Un mensaje que YA existe cambió (HU-OMNI-06): su media terminó de descargarse, o falló.
+       *
+       * No se reutiliza `message:new` porque el hilo lo trata como alta y duplicaría la burbuja.
+       * El cliente resuelve este evento reemplazando por `id` dentro de la caché del hilo.
+       */
+      type: 'message:updated';
+      tenantId: string;
+      conversationId: string;
+      message: IMessageResponse;
+    }
+  | {
       type: 'conversation:updated';
       tenantId: string;
       conversationId: string;

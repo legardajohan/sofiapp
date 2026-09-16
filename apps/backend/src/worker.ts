@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import {
+  marcarMediaFallida,
+  processMediaIngestJob,
+  type MediaIngestJobData,
+} from './workers/media-ingest.processor.js';
+import {
   AI_REPLY_QUEUE_NAME,
   INBOUND_QUEUE_NAME,
   KB_INDEX_QUEUE_NAME,
@@ -12,6 +17,7 @@ import {
   CAMPAIGN_QUEUE_NAME,
   CAMPAIGN_START_JOB,
   CAMPAIGN_SWEEP_SCHEDULER_ID,
+  MEDIA_INGEST_QUEUE_NAME,
   campaignQueue,
   flowRuntimeQueue,
 } from './config/queues.js';
@@ -102,6 +108,38 @@ const flowRuntimeWorker = new Worker<FlowJobData | Record<string, never>>(
   { connection: redisConnection, concurrency: 5 },
 );
 
+// Descarga de la media entrante (HU-OMNI-06). `concurrency: 3` acota el ancho de banda y la
+// memoria: una ráfaga de 40 fotos de un catálogo no debe competir con la ingesta de mensajes, que
+// es lo que enciende la bandeja en vivo.
+const mediaIngestWorker = new Worker<MediaIngestJobData>(
+  MEDIA_INGEST_QUEUE_NAME,
+  async (job) => {
+    await processMediaIngestJob(job.data);
+  },
+  { connection: redisConnection, concurrency: 3 },
+);
+
+// Red de seguridad del último intento: los fallos definitivos los marca el propio processor sin
+// lanzar, pero un recuperable que agota los 5 reintentos llega aquí. Sin esto, el hilo se quedaría
+// con el esqueleto de "descargando" girando para siempre.
+mediaIngestWorker.on('failed', (job, err) => {
+  if (!job) return;
+  if (job.attemptsMade < (job.opts.attempts ?? 1)) return;
+
+  void marcarMediaFallida(
+    job.data.tenantId,
+    job.data.messageId,
+    job.data.clienteId,
+    'No se pudo descargar el archivo. Pídele al cliente que lo reenvíe.',
+  ).catch((e: unknown) => {
+    logger.error('No se pudo marcar la media como fallida', {
+      jobId: job.id,
+      error: String(e),
+      causaOriginal: String(err),
+    });
+  });
+});
+
 const workers = [
   inboundWorker,
   llmWorker,
@@ -110,6 +148,7 @@ const workers = [
   kbIndexWorker,
   aiReplyWorker,
   flowRuntimeWorker,
+  mediaIngestWorker,
 ];
 
 for (const w of workers) {

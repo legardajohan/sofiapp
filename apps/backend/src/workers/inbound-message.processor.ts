@@ -1,5 +1,10 @@
 import { Types } from 'mongoose';
-import { AI_REPLY_JOB_NAME, aiReplyQueue } from '../config/queues.js';
+import {
+  AI_REPLY_JOB_NAME,
+  MEDIA_INGEST_JOB,
+  aiReplyQueue,
+  mediaIngestQueue,
+} from '../config/queues.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
@@ -12,9 +17,15 @@ import { Message } from '../features/message/message.model.js';
 import { ejecutarFlujo } from '../features/flow/flow.runtime.service.js';
 import { getActiveFlow } from '../features/flow/flow.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
-import { parseDeliveryStatuses } from '../integrations/meta/meta-whatsapp.normalizer.js';
+import {
+  extraerMedia,
+  extraerTexto,
+  parseDeliveryStatuses,
+} from '../integrations/meta/meta-whatsapp.normalizer.js';
 import type { IWhatsAppMessage, IWhatsAppWebhookPayload } from '../features/webhook/webhook.types.js';
 import { esTipoConTexto, mapTipoMensajeMeta } from '../features/message/message.types.js';
+import { clasificarTexto } from '../features/media/media.service.js';
+import { mediaIngestJobId } from './media-ingest.processor.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 
 export interface InboundJobData {
@@ -115,20 +126,47 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
         const cliente = await upsertByMetaUser(tenantId, msg.from, msg.from, 'whatsapp', nombre);
         const clienteId = cliente._id as Types.ObjectId;
 
+        const media = extraerMedia(msg);
+        const texto = extraerTexto(msg);
+        // Un mensaje de texto con una URL dentro se clasifica como `enlace` al PERSISTIR, no al
+        // leer: así el hilo no tiene que re-analizar el histórico en cada consulta. El `texto` se
+        // conserva íntegro — `enlace` acompaña al texto, no lo sustituye.
+        const clasificado = media ? null : clasificarTexto(texto);
+
         const saved = await saveMessage(tenantId, {
           tenantId: tenantOid,
           clienteId,
           canal: 'whatsapp',
           direccion: 'inbound',
           sender: 'user',
-          tipo: mapTipoMensajeMeta(msg.type),
-          texto: msg.text?.body,
+          tipo: clasificado?.tipo ?? mapTipoMensajeMeta(msg.type),
+          ...(texto ? { texto } : {}),
+          ...(clasificado?.previewEnlace ? { previewEnlace: clasificado.previewEnlace } : {}),
+          ...(media
+            ? {
+                media: {
+                  estado: 'pendiente' as const,
+                  mimeType: media.mime_type,
+                  metaMediaId: media.id,
+                  intentos: 0,
+                  ...(media.filename ? { nombreArchivo: media.filename } : {}),
+                  ...(media.sha256 ? { sha256: media.sha256 } : {}),
+                },
+              }
+            : {}),
           metaMessageId: msg.id,
           status: 'sent',
         });
 
         // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
         await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
+
+        // La descarga va en su propia cola: el mensaje ya está guardado y en la bandeja, y bajar
+        // 16 MB dentro de ESTE job convertiría una ingesta de 200 ms en una de varios segundos,
+        // con el asesor esperando a ver entrar el mensaje.
+        if (media && env.MEDIA_INGEST_ENABLED === 'on') {
+          await encolarIngestaDeMedia(tenantId, String(saved._id), clienteId.toString());
+        }
 
         if (cliente.iaHabilitada) {
           try {
@@ -221,4 +259,40 @@ async function atenderConSofi(
       removeOnFail: 100,
     },
   );
+}
+
+/**
+ * Encola la descarga del archivo de un mensaje ya persistido.
+ *
+ * `attempts: 5` con backoff exponencial: los fallos recuperables aquí son 429 y 5xx de Graph, que
+ * se resuelven solos con tiempo. Los definitivos (media caducada, tamaño excedido) los corta el
+ * propio processor sin gastar intentos.
+ *
+ * Que encolar falle no puede tumbar la ingesta: el mensaje ya está guardado y notificado, y la
+ * media se queda en `pendiente` —recuperable a mano— en vez de perderse el mensaje entero.
+ */
+async function encolarIngestaDeMedia(
+  tenantId: string,
+  messageId: string,
+  clienteId: string,
+): Promise<void> {
+  try {
+    await mediaIngestQueue.add(
+      MEDIA_INGEST_JOB,
+      { tenantId, messageId, clienteId },
+      {
+        jobId: mediaIngestJobId(tenantId, messageId),
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: 100,
+      },
+    );
+  } catch (err: unknown) {
+    logger.error('No se pudo encolar la descarga de media', {
+      tenantId,
+      messageId,
+      error: String(err),
+    });
+  }
 }
