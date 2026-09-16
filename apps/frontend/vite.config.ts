@@ -13,6 +13,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // El default de 5 s se queda corto para los tests que usan `userEvent`: simula escritura
+    // realista (un evento por tecla, con sus esperas) y bajo carga paralela varios rozaban los
+    // 5090 ms, así que la suite fallaba en archivos distintos en cada pasada sin que nada hubiera
+    // cambiado. Subirlo no tapa un problema de rendimiento: hace que el resultado sea fiable, que
+    // es lo único que le pedimos a una puerta de calidad. El backend ya lo había subido por lo mismo.
+    testTimeout: 15000,
   },
   resolve: {
     alias: {

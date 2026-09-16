@@ -29,7 +29,20 @@ export const LIMITES_BYTES: Readonly<Record<'imagen' | 'video' | 'documento', nu
   documento: 16 * 1024 * 1024,
 };
 
-/** Valor del `accept` del input, derivado de los mimes aceptados para no repetir la lista. */
+/**
+ * Valores de `accept` por entrada del menú de adjuntar, derivados de los mimes aceptados.
+ *
+ * Separados a propósito: es lo que hace que «Fotos y videos» y «Documento» se comporten distinto de
+ * verdad —el diálogo del sistema filtra por cada uno— en vez de ser dos etiquetas que abren lo
+ * mismo. `ACCEPT_ARCHIVOS` se queda para cuando no hay que distinguir.
+ */
+export const ACCEPT_IMAGENES_VIDEOS = [
+  ...MIMES_ACEPTADOS.imagen,
+  ...MIMES_ACEPTADOS.video,
+].join(',');
+
+export const ACCEPT_DOCUMENTOS = MIMES_ACEPTADOS.documento.join(',');
+
 export const ACCEPT_ARCHIVOS = Object.values(MIMES_ACEPTADOS).flat().join(',');
 
 export type TipoArchivo = keyof typeof MIMES_ACEPTADOS;

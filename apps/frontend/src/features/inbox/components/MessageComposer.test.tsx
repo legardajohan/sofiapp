@@ -39,10 +39,21 @@ function archivo(nombre: string, tipo: string, bytes: number): File {
   return file;
 }
 
-function inputArchivo(): HTMLInputElement {
-  const input = document.querySelector('input[type="file"]');
-  if (!input) throw new Error('no hay input de archivo');
+/**
+ * Hay DOS inputs ocultos —uno por entrada del menú, con su propio `accept`— así que se elige por
+ * índice: 0 = fotos y videos, 1 = documentos.
+ */
+function inputArchivo(indice = 0): HTMLInputElement {
+  const inputs = document.querySelectorAll('input[type="file"]');
+  const input = inputs[indice];
+  if (!input) throw new Error(`no hay input de archivo en el índice ${indice}`);
   return input as HTMLInputElement;
+}
+
+function zonaDeSoltar(): Element {
+  const zona = screen.getByRole('textbox').closest('div.relative');
+  if (!zona) throw new Error('no se encontró la zona de soltar');
+  return zona;
 }
 
 describe('MessageComposer — adjuntar archivos (HU-OMNI-06)', () => {
@@ -84,8 +95,7 @@ describe('MessageComposer — adjuntar archivos (HU-OMNI-06)', () => {
 
     // Por arrastrar y soltar, no por el input: el `accept` del input ya filtra en el diálogo del
     // sistema, así que soltar el archivo es la vía real por la que llega un tipo no permitido.
-    const zona = screen.getByRole('textbox').closest('div.relative');
-    fireEvent.drop(zona as Element, {
+    fireEvent.drop(zonaDeSoltar(), {
       dataTransfer: { files: [archivo('virus.exe', 'application/x-msdownload', 100)] },
     });
 
@@ -96,8 +106,7 @@ describe('MessageComposer — adjuntar archivos (HU-OMNI-06)', () => {
   it('arrastrar y soltar un archivo válido lo adjunta', () => {
     pintar();
 
-    const zona = screen.getByRole('textbox').closest('div.relative');
-    fireEvent.drop(zona as Element, {
+    fireEvent.drop(zonaDeSoltar(), {
       dataTransfer: { files: [archivo('plano.pdf', 'application/pdf', 2048)] },
     });
 
@@ -179,5 +188,49 @@ describe('MessageComposer — adjuntar archivos (HU-OMNI-06)', () => {
 
     expect(onSend).toHaveBeenCalledWith('hola');
     expect(onSendMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessageComposer — menú de adjuntar', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('el clip abre un menú con las opciones, no el diálogo de archivos directo', async () => {
+    pintar();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Adjuntar archivo' }));
+
+    expect(await screen.findByRole('menuitem', { name: /fotos y videos/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /documento/i })).toBeInTheDocument();
+  });
+
+  it('cada opción filtra el diálogo del sistema por su propio tipo', () => {
+    pintar();
+
+    // Es lo que hace que las dos entradas se comporten distinto de verdad en vez de ser dos
+    // etiquetas que abren lo mismo.
+    expect(inputArchivo(0).accept).toContain('image/jpeg');
+    expect(inputArchivo(0).accept).toContain('video/mp4');
+    expect(inputArchivo(0).accept).not.toContain('application/pdf');
+
+    expect(inputArchivo(1).accept).toContain('application/pdf');
+    expect(inputArchivo(1).accept).not.toContain('image/jpeg');
+  });
+
+  it('con la ventana de 24 h cerrada el menú ni se abre', async () => {
+    pintar({ disabled: true });
+
+    const disparador = screen.getByRole('button', { name: 'Adjuntar archivo' });
+    expect(disparador).toBeDisabled();
+
+    await userEvent.click(disparador);
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+  });
+
+  it('un documento elegido por su opción del menú se adjunta igual', async () => {
+    pintar();
+
+    await userEvent.upload(inputArchivo(1), archivo('contrato.pdf', 'application/pdf', 2048));
+
+    expect(screen.getByText('contrato.pdf')).toBeInTheDocument();
   });
 });
