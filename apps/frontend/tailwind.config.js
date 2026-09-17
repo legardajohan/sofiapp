@@ -44,6 +44,10 @@ export default {
   				foreground: 'hsl(var(--success-foreground))',
   				subtle: 'hsl(var(--success-subtle))'
   			},
+  			adjunto: {
+  				galeria: 'hsl(var(--adjunto-galeria))',
+  				documento: 'hsl(var(--adjunto-documento))'
+  			},
   			popover: {
   				DEFAULT: 'hsl(var(--popover))',
   				foreground: 'hsl(var(--popover-foreground))'

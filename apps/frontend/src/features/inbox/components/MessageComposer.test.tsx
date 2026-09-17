@@ -285,6 +285,19 @@ describe('MessageComposer — texto y menú de adjuntar', () => {
     expect(inputArchivo(1).accept).not.toContain('image/jpeg');
   });
 
+  it('los iconos van con los tokens de color, no con hex sueltos', async () => {
+    pintar();
+    await userEvent.click(screen.getByRole('button', { name: 'Adjuntar archivo' }));
+
+    const galeria = await screen.findByRole('menuitem', { name: /fotos y videos/i });
+    const documento = screen.getByRole('menuitem', { name: /documento/i });
+
+    // La gama es la de WhatsApp, pero vía tokens semánticos: un `text-[#AC44CF]` no tendría modo
+    // oscuro y el `CLAUDE.md` del frontend prohíbe los colores arbitrarios en `src/**`.
+    expect(galeria.querySelector('svg')).toHaveClass('text-adjunto-galeria');
+    expect(documento.querySelector('svg')).toHaveClass('text-adjunto-documento');
+  });
+
   it('con la ventana de 24 h cerrada no se puede adjuntar', async () => {
     pintar({ disabled: true });
 

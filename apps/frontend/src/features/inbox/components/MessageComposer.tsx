@@ -179,11 +179,11 @@ export function MessageComposer({
               abriría fuera de la vista. */}
           <DropdownMenuContent align="start" side="top" className="w-52">
             <DropdownMenuItem onSelect={() => abrirSelector(inputMediaRef)}>
-              <Images className="h-4 w-4 text-muted-foreground" />
+              <Images className="h-4 w-4 text-adjunto-galeria" />
               Fotos y videos
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => abrirSelector(inputDocRef)}>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <FileText className="h-4 w-4 text-adjunto-documento" />
               Documento
             </DropdownMenuItem>
           </DropdownMenuContent>
