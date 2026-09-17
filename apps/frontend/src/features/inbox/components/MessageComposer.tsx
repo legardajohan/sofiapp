@@ -11,13 +11,18 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ACCEPT_DOCUMENTOS, ACCEPT_IMAGENES_VIDEOS, validarArchivo } from '../lib/media.js';
-import { AttachmentPreview } from './AttachmentPreview.js';
+import { MediaSendDialog } from './MediaSendDialog.js';
 
 interface Props {
   disabled: boolean;
   pending: boolean;
   onSend: (texto: string) => void;
-  onSendMedia: (archivo: File, caption: string) => void;
+  /**
+   * Devuelve una promesa a propósito: el composer necesita saber cuándo TERMINÓ la subida para
+   * cerrar la ventana de confirmación. Antes limpiaba el archivo al instante, así que la ventana se
+   * cerraba —y la barra de progreso desaparecía— antes de subir un solo byte.
+   */
+  onSendMedia: (archivo: File, caption: string) => Promise<unknown>;
   /** 0-100 mientras sube un archivo; `null` si no hay subida en curso. */
   uploadProgress: number | null;
 }
@@ -73,17 +78,26 @@ export function MessageComposer({
   function submit(): void {
     if (bloqueado) return;
 
-    if (archivo) {
-      onSendMedia(archivo, texto.trim());
-      setArchivo(null);
-      setTexto('');
-      return;
-    }
-
     const value = texto.trim();
     if (!value) return;
     onSend(value);
     setTexto('');
+  }
+
+  /**
+   * Manda el archivo y espera a que termine.
+   *
+   * Si falla, el archivo **se queda**: el asesor puede reintentar sin volver a buscarlo, y el
+   * motivo se lo dice el toast de la mutación.
+   */
+  async function enviarArchivo(caption: string): Promise<void> {
+    if (!archivo) return;
+    try {
+      await onSendMedia(archivo, caption);
+      setArchivo(null);
+    } catch {
+      // El toast lo muestra `useSendMedia`; aquí solo se evita cerrar la ventana.
+    }
   }
 
   function onDrop(e: React.DragEvent): void {
@@ -119,13 +133,12 @@ export function MessageComposer({
         </div>
       )}
 
-      {archivo && (
-        <AttachmentPreview
-          archivo={archivo}
-          progreso={uploadProgress}
-          onQuitar={() => setArchivo(null)}
-        />
-      )}
+      <MediaSendDialog
+        archivo={archivo}
+        progreso={uploadProgress}
+        onEnviar={(caption) => void enviarArchivo(caption)}
+        onCancelar={() => setArchivo(null)}
+      />
 
       <div className="flex items-end gap-2">
         <input
@@ -185,13 +198,7 @@ export function MessageComposer({
               submit();
             }
           }}
-          placeholder={
-            disabled
-              ? 'Ventana de 24 h cerrada'
-              : archivo
-                ? 'Añade un comentario…'
-                : 'Escribe un mensaje…'
-          }
+          placeholder={disabled ? 'Ventana de 24 h cerrada' : 'Escribe un mensaje…'}
           disabled={bloqueado}
           rows={1}
           className={cn('max-h-40 min-h-[40px] resize-none')}
@@ -201,7 +208,7 @@ export function MessageComposer({
           type="button"
           size="icon"
           onClick={submit}
-          disabled={bloqueado || (!texto.trim() && !archivo)}
+          disabled={bloqueado || !texto.trim()}
           aria-label="Enviar"
           className="shrink-0 transition-transform duration-150 ease-out active:scale-95"
         >

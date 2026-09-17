@@ -373,7 +373,7 @@ export function InboxPage(): React.ReactElement {
               disabled={!active.ventana24hAbierta}
               pending={sendReply.isPending || sendMedia.isPending}
               onSend={(texto) => sendReply.mutate(texto)}
-              onSendMedia={(archivo, caption) => sendMedia.mutate({ archivo, caption })}
+              onSendMedia={(archivo, caption) => sendMedia.mutateAsync({ archivo, caption })}
               uploadProgress={sendMedia.progreso}
             />
           </>

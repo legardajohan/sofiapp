@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchThread,
@@ -8,6 +9,7 @@ import {
   sendReply,
   setSofiEnabled,
 } from '../api.js';
+import { errorMessage } from '../lib/errors.js';
 import type { MessageDTO, Paginated } from '../types.js';
 
 export function useThread(conversationId: string | null) {
@@ -47,6 +49,14 @@ export function useSendMedia(conversationId: string | null) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['thread', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (error: unknown) => {
+      // Sin esto un envío fallido era SILENCIOSO: el asesor veía la ventana seguir abierta sin
+      // saber si el problema era el tamaño, el tipo o la ventana de 24 h cerrada. El backend manda
+      // el motivo ya redactado en cada caso (413, 415, 422).
+      toast.error('No se pudo enviar el archivo', {
+        description: errorMessage(error, 'Inténtalo de nuevo.'),
+      });
     },
     onSettled: () => setProgreso(null),
   });
