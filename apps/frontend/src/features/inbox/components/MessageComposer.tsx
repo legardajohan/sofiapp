@@ -95,6 +95,9 @@ export function MessageComposer({
     try {
       await onSendMedia(archivo, caption);
       setArchivo(null);
+      // El texto del composer viajó como pie de foto: dejarlo ahí haría que el asesor lo mandara
+      // otra vez como mensaje suelto.
+      setTexto('');
     } catch {
       // El toast lo muestra `useSendMedia`; aquí solo se evita cerrar la ventana.
     }
@@ -136,7 +139,9 @@ export function MessageComposer({
       <MediaSendDialog
         archivo={archivo}
         progreso={uploadProgress}
+        captionInicial={texto.trim()}
         onEnviar={(caption) => void enviarArchivo(caption)}
+        // Cancelar NO borra lo escrito en el composer: el asesor descartó el archivo, no su texto.
         onCancelar={() => setArchivo(null)}
       />
 

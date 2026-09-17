@@ -275,9 +275,17 @@ export async function enviarMediaSaliente(
   } catch (err: unknown) {
     // Limpieza best-effort: si no se pudo enviar, el objeto que acabamos de guardar no lo va a
     // referenciar ningún mensaje. Que el borrado falle no debe tapar el error real del envío.
-    void storage.eliminar(guardado.key).catch((e: unknown) => {
-      logger.warn('No se pudo limpiar la media huérfana', { key: guardado.key, error: String(e) });
-    });
+    //
+    // Envuelto en `Promise.resolve().then(...)` y no `storage.eliminar(...).catch(...)` a
+    // propósito: así también se captura un adaptador que lance de forma SÍNCRONA o que no devuelva
+    // una promesa. Con el `.catch` directo, ese caso reventaba aquí mismo con un `TypeError` y el
+    // asesor recibía un 500 en lugar del 404 o el 422 que de verdad había ocurrido — exactamente
+    // lo que este comentario dice que no debe pasar.
+    void Promise.resolve()
+      .then(() => storage.eliminar(guardado.key))
+      .catch((e: unknown) => {
+        logger.warn('No se pudo limpiar la media huérfana', { key: guardado.key, error: String(e) });
+      });
     throw err;
   }
 }

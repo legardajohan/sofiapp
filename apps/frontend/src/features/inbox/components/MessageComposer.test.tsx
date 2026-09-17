@@ -96,6 +96,79 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
     expect(onSendMedia.mock.calls[0]?.[1]).toBe('mira esto');
   });
 
+  it('REGRESIÓN: el texto ya escrito en el composer viaja como pie de foto', async () => {
+    // Escribir primero y adjuntar después es un orden natural. Antes ese texto se quedaba en el
+    // composer: la imagen salía sola y el asesor creía haber mandado las dos cosas.
+    const { onSendMedia } = pintar();
+    await userEvent.type(screen.getByRole('textbox'), 'te mando el comprobante');
+
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    expect(campoComentario()).toHaveValue('te mando el comprobante');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar archivo' }));
+    expect(onSendMedia.mock.calls[0]?.[1]).toBe('te mando el comprobante');
+  });
+
+  it('tras enviarlo, el composer queda vacío y no se reenvía como mensaje suelto', async () => {
+    pintar();
+    await userEvent.type(screen.getByRole('textbox'), 'con el comprobante');
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar archivo' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  it('cancelar NO borra lo escrito en el composer', async () => {
+    pintar();
+    await userEvent.type(screen.getByRole('textbox'), 'no me borres');
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // Descartó el archivo, no su texto.
+    expect(screen.getByRole('textbox')).toHaveValue('no me borres');
+  });
+
+  it('el comentario se puede editar en la ventana sobre lo que venía del composer', async () => {
+    const { onSendMedia } = pintar();
+    await userEvent.type(screen.getByRole('textbox'), 'hola');
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    await userEvent.type(campoComentario(), ' y adiós');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar archivo' }));
+    expect(onSendMedia.mock.calls[0]?.[1]).toBe('hola y adiós');
+  });
+
+  it('escribir el comentario y pulsar Enter envía', async () => {
+    const { onSendMedia } = pintar();
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    await userEvent.type(campoComentario(), 'mira esto{Enter}');
+
+    expect(onSendMedia).toHaveBeenCalledOnce();
+    expect(onSendMedia.mock.calls[0]?.[1]).toBe('mira esto');
+  });
+
+  it('Shift+Enter hace salto de línea, no envía', async () => {
+    const { onSendMedia } = pintar();
+    await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
+    await screen.findByRole('dialog');
+
+    await userEvent.type(campoComentario(), 'linea uno{Shift>}{Enter}{/Shift}linea dos');
+
+    expect(onSendMedia).not.toHaveBeenCalled();
+  });
+
   it('se puede enviar sin comentario', async () => {
     const { onSendMedia } = pintar();
     await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));

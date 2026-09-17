@@ -17,6 +17,12 @@ interface Props {
   archivo: File | null;
   /** 0-100 mientras sube; `null` si no hay subida en curso. */
   progreso: number | null;
+  /**
+   * Lo que el asesor ya había escrito en el composer al adjuntar. Se arrastra como pie de foto
+   * porque escribir primero y adjuntar después es un orden natural, y perderlo en silencio es la
+   * diferencia entre «mandé la foto con su explicación» y «mandé una foto suelta».
+   */
+  captionInicial: string;
   onEnviar: (caption: string) => void;
   onCancelar: () => void;
 }
@@ -32,16 +38,20 @@ interface Props {
 export function MediaSendDialog({
   archivo,
   progreso,
+  captionInicial,
   onEnviar,
   onCancelar,
 }: Props): React.ReactElement {
   const [caption, setCaption] = useState('');
   const subiendo = progreso !== null;
 
-  // El comentario es de ESTE envío: al cambiar de archivo se empieza en limpio, o el pie de la foto
-  // anterior viajaría con la siguiente.
+  // Al cambiar de archivo se parte de lo que hubiera en el composer. La dependencia es SOLO
+  // `archivo`: si `captionInicial` estuviera aquí, cada tecla que el asesor escribe en la ventana
+  // —que no toca el composer— no la pisaría, pero sí lo haría cualquier re-render que cambiara esa
+  // prop, y el comentario se reiniciaría a mitad de escribirlo.
   useEffect(() => {
-    setCaption('');
+    setCaption(archivo ? captionInicial : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archivo]);
 
   function enviar(): void {
