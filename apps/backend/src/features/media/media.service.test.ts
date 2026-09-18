@@ -36,6 +36,11 @@ vi.mock('../channel/channel.service.js', () => ({
   })),
 }));
 
+vi.mock('../../config/queues.js', async (original) => {
+  const real = await original<typeof import('../../config/queues.js')>();
+  return { ...real, mediaIngestQueue: { add: vi.fn() } };
+});
+
 vi.mock('../usage/usage.service.js', () => ({
   assertWithinQuota: vi.fn(),
   incrementUsage: vi.fn(),
@@ -45,6 +50,7 @@ const { clasificarArchivoSaliente, enviarMediaSaliente, reintentarIngesta } = aw
   './media.service.js'
 );
 const { Message } = await import('../message/message.model.js');
+const { mediaIngestQueue } = await import('../../config/queues.js');
 
 const tenantId = new Types.ObjectId();
 
@@ -257,6 +263,10 @@ describe('enviarMediaSaliente (HU-OMNI-06)', () => {
 });
 
 describe('reintentarIngesta — recuperar una descarga fallida (HU-OMNI-06)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   async function sembrar(estado: 'fallida' | 'disponible', conMediaId = true): Promise<string> {
     const doc = await createScoped(Message, tenantId, {
       clienteId: new Types.ObjectId(),
@@ -286,6 +296,7 @@ describe('reintentarIngesta — recuperar una descarga fallida (HU-OMNI-06)', ()
     expect(media['estado']).toBe('pendiente');
     expect(media['error']).toBeUndefined();
     expect(media['intentos']).toBe(0);
+    expect(mediaIngestQueue.add).toHaveBeenCalledTimes(1);
   });
 
   it('sobre una media ya disponible es un no-op, no un error', async () => {
