@@ -105,31 +105,31 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 2880,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Hola, buenas tardes. Vi el anuncio del curso Pre-ICFES en Instagram y quisiera más información.',
       },
       {
         hace: 2875,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           '¡Hola María Fernanda! 👋 Soy Sofi, la asistente virtual. Con gusto te cuento: nuestro curso ' +
           'Pre-ICFES intensivo dura 4 meses e incluye simulacros semanales. ¿Para qué grado lo necesitas?',
       },
-      { hace: 2860, sender: 'user', tipo: 'text', texto: 'Es para mi hija, está en grado 11.' },
+      { hace: 2860, sender: 'user', tipo: 'texto', texto: 'Es para mi hija, está en grado 11.' },
       {
         hace: 2858,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'Perfecto. Para grado 11 tenemos el plan intensivo de 4 meses, clases de lunes a viernes y ' +
           '8 simulacros calificados. ¿Te comparto los horarios disponibles?',
       },
-      { hace: 2840, sender: 'user', tipo: 'text', texto: 'Sí por favor. Y también el precio.' },
+      { hace: 2840, sender: 'user', tipo: 'texto', texto: 'Sí por favor. Y también el precio.' },
       {
         hace: 2838,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'Claro. Los horarios son 2:00–5:00 p.m. o 6:00–9:00 p.m.\nLa inversión del plan completo es ' +
           'de $890.000 COP, con opción de pago en 3 cuotas sin interés.',
@@ -137,22 +137,22 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 1500,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Uy, está un poco alto para nosotros. ¿No hay algún descuento?',
       },
       {
         hace: 1440,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'Hola María Fernanda, soy Diego del equipo comercial. Sí, manejamos un 15% por pago ' +
           'anticipado y becas parciales por mérito académico. ¿Tu hija tiene promedio superior a 4.0?',
       },
-      { hace: 1400, sender: 'user', tipo: 'text', texto: 'Sí, ella tiene 4.3 de promedio.' },
+      { hace: 1400, sender: 'user', tipo: 'texto', texto: 'Sí, ella tiene 4.3 de promedio.' },
       {
         hace: 1380,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           '¡Excelente! Con ese promedio aplica a la beca del 20%: quedaría en $712.000. ' +
           '¿Te agendo una cita esta semana para formalizar?',
@@ -161,7 +161,7 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 0,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Me parece bien. ¿Qué documentos necesito llevar?',
       },
     ],
@@ -184,13 +184,13 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 240,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Buenas, ¿todavía hay cupos para el curso de nivelación en matemáticas?',
       },
       {
         hace: 238,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           '¡Hola Carlos! Sí, aún tenemos cupos para el grupo que inicia el próximo lunes. ' +
           '¿Es para ti o para alguien más?',
@@ -198,20 +198,20 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 220,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Para mí. Estoy en primer semestre de ingeniería y voy flojo en cálculo.',
       },
       {
         hace: 218,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'Entiendo. El módulo de nivelación en cálculo diferencial son 6 semanas, 2 sesiones por ' +
           'semana. ¿Lo prefieres presencial o virtual?',
       },
-      { hace: 45, sender: 'user', tipo: 'text', texto: 'Virtual estaría mejor' },
-      { hace: 40, sender: 'user', tipo: 'text', texto: '¿Y cuánto cuesta?' },
-      { hace: 0, sender: 'user', tipo: 'text', texto: '¿Hola? ¿Sigues ahí?' },
+      { hace: 45, sender: 'user', tipo: 'texto', texto: 'Virtual estaría mejor' },
+      { hace: 40, sender: 'user', tipo: 'texto', texto: '¿Y cuánto cuesta?' },
+      { hace: 0, sender: 'user', tipo: 'texto', texto: '¿Hola? ¿Sigues ahí?' },
     ],
   },
   {
@@ -234,21 +234,21 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 120,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Buenas tardes, ya realicé el pago de la matrícula.',
       },
       {
         hace: 110,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: '¡Gracias Luisa! ¿Me compartes el comprobante para verificarlo con contabilidad?',
       },
-      { hace: 100, sender: 'user', tipo: 'text', texto: 'Claro, ya se lo envío.' },
+      { hace: 100, sender: 'user', tipo: 'texto', texto: 'Claro, ya se lo envío.' },
       // Último mensaje sin texto → la bandeja debe mostrar "📷 Imagen" como preview.
       {
         hace: 0,
         sender: 'user',
-        tipo: 'image',
+        tipo: 'imagen',
         attachmentUrl: 'https://demo.invalid/media/comprobante-pago.jpg',
       },
     ],
@@ -269,18 +269,18 @@ const CONVERSACIONES: SeedConversation[] = [
     ventanaAbierta: false,
     antiguedadDias: 20,
     mensajes: [
-      { hace: 60, sender: 'user', tipo: 'text', texto: 'Hola, quiero info del curso' },
-      { hace: 58, sender: 'bot', tipo: 'text', texto: '¡Hola Jorge! Con gusto. ¿Qué curso te interesa?' },
+      { hace: 60, sender: 'user', tipo: 'texto', texto: 'Hola, quiero info del curso' },
+      { hace: 58, sender: 'bot', tipo: 'texto', texto: '¡Hola Jorge! Con gusto. ¿Qué curso te interesa?' },
       {
         hace: 40,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'El de preparación para el examen de admisión',
       },
       {
         hace: 38,
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'El curso de admisión universitaria son 8 semanas con énfasis en razonamiento ' +
           'cuantitativo y lectura crítica. ¿Te comparto fechas de inicio?',
@@ -307,20 +307,20 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 180,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Hola Diana, confirmamos tu inscripción al curso Pre-ICFES. ¡Bienvenida! 🎉',
         status: 'read',
       },
       {
         hace: 170,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: '¡Muchas gracias! ¿Cuándo empiezan las clases?',
       },
       {
         hace: 160,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto:
           'El lunes 3 de agosto a las 2:00 p.m. ¿Me puedes enviar la copia del documento de ' +
           'identidad de la estudiante para completar la carpeta?',
@@ -330,7 +330,7 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 0,
         sender: 'user',
-        tipo: 'document',
+        tipo: 'documento',
         attachmentUrl: 'https://demo.invalid/media/documento-identidad.pdf',
       },
     ],
@@ -357,33 +357,33 @@ const CONVERSACIONES: SeedConversation[] = [
       {
         hace: 90,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Hola, para completar tu inscripción necesito unos datos. ¿Me confirmas tu nombre completo?',
       },
-      { hace: 85, sender: 'user', tipo: 'text', texto: 'Claro, soy Andrés Felipe Quintero Salazar' },
+      { hace: 85, sender: 'user', tipo: 'texto', texto: 'Claro, soy Andrés Felipe Quintero Salazar' },
       {
         hace: 80,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Gracias. ¿Y un correo electrónico para enviarte el comprobante de pago?',
       },
-      { hace: 70, sender: 'user', tipo: 'text', texto: 'Mi correo es andres.quintero88@gmail.com' },
+      { hace: 70, sender: 'user', tipo: 'texto', texto: 'Mi correo es andres.quintero88@gmail.com' },
       {
         hace: 60,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: '¿Tienes un número de contacto alterno, distinto a este de WhatsApp?',
       },
       {
         hace: 50,
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Sí, el fijo de la casa es 6027312945, ahí contesta mi mamá si no me encuentran.',
       },
       {
         hace: 0,
         sender: 'agent',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Listo Andrés, quedó registrado. Te llega el comprobante al correo.',
       },
     ],
@@ -510,6 +510,9 @@ function construirDocs(
       nombre: conv.nombre,
       canalOrigen: 'whatsapp',
       estadoComercial: conv.estadoComercial,
+      // Los contactos demo aceptan campañas: el seed existe para poder probar la bandeja y el
+      // segmentador de HU-MARK-01, y una base entera dada de baja daría segmentos siempre vacíos.
+      marketingOptOut: false,
       ventana24hExpiraEn,
       ultimoMensajeAt,
       noLeidos: conv.noLeidos,

@@ -184,6 +184,17 @@ export interface ICliente {
   /** Documento de identidad. */
   documentoEnc?: string;
   atributos: IAtributoPersonalizado[];
+  /**
+   * El contacto pidió no recibir campañas (HU-MARK-01).
+   *
+   * Existe porque las políticas de Meta exigen consentimiento para plantillas `MARKETING` y un
+   * reporte de spam degrada la calidad del número — justo lo que la épica de campañas quiere
+   * evitar. El segmentador lo excluye **siempre**; no es un filtro que se pueda desactivar.
+   *
+   * Los documentos anteriores a este campo no lo llevan, así que el filtro es `$ne: true` y no
+   * `false`: ausente significa "no se ha pedido la baja", no "desconocido".
+   */
+  marketingOptOut: boolean;
 }
 
 export interface IClienteDocument extends ICliente, Document {}
@@ -257,6 +268,8 @@ export interface UpdateClienteDTO {
   objecionPrincipal?: OpcionContactoKey | null;
   rolContacto?: OpcionContactoKey | null;
   atributos?: IAtributoPersonalizado[];
+  /** Baja de campañas (HU-MARK-01). Sin `null`: es un interruptor, no un campo que se vacíe. */
+  marketingOptOut?: boolean;
 }
 
 /** Datos de contacto extraídos por IA, tal como los consume la ficha. */

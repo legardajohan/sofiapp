@@ -10,6 +10,28 @@ export type Direccion = 'inbound' | 'outbound';
 export type Sender = 'user' | 'bot' | 'agent';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
 
+/**
+ * Espejo de `TipoMensaje` del backend (HU-OMNI-06). Antes era `string`, lo que dejaba que el hilo
+ * imprimiera `[loQueSea]` sin que el compilador dijera nada; tipado, añadir un tipo nuevo obliga a
+ * decidir cómo se pinta.
+ *
+ * `enlace` es texto con una URL dentro: lleva `texto` como cualquier mensaje normal y además
+ * `previewEnlace` para la tarjeta.
+ */
+export const TIPOS_MENSAJE = [
+  'texto',
+  'enlace',
+  'imagen',
+  'video',
+  'audio',
+  'documento',
+  'sticker',
+  'plantilla',
+  'otro',
+] as const;
+
+export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
+
 export interface ConversationDTO {
   id: string;
   nombre: string | null;
@@ -55,12 +77,37 @@ export interface InboxFiltros {
   etiqueta?: string;
 }
 
+export type EstadoMedia = 'pendiente' | 'disponible' | 'fallida';
+
+/**
+ * Archivo de un mensaje (HU-OMNI-06). `urlArchivo` viene firmada por el backend y es `null`
+ * mientras el estado no sea `disponible`: la descarga desde Meta es asíncrona.
+ */
+export interface MediaDTO {
+  estado: EstadoMedia;
+  mimeType: string;
+  nombreArchivo: string | null;
+  tamanoBytes: number | null;
+  urlArchivo: string | null;
+  /** Motivo del fallo, ya redactado por el backend para mostrarlo tal cual. */
+  error: string | null;
+}
+
+export interface PreviewEnlaceDTO {
+  url: string;
+  dominio: string;
+}
+
 export interface MessageDTO {
   id: string;
   direccion: Direccion;
   sender: Sender;
-  tipo: string;
+  tipo: TipoMensaje;
+  /** Texto libre o el pie de foto de un adjunto. */
   texto: string | null;
+  media: MediaDTO | null;
+  previewEnlace: PreviewEnlaceDTO | null;
+  /** @deprecated HU-OMNI-06: espejo de `media.urlArchivo`. Usar `media`. */
   attachmentUrl: string | null;
   status: MessageStatus;
   createdAt: string;
@@ -211,6 +258,13 @@ export interface RealtimeMessageEvent {
   conversationId: string;
   message: MessageDTO;
   conversation: ConversationDTO;
+}
+
+/** La media de un mensaje ya existente cambió de estado (HU-OMNI-06). */
+export interface RealtimeMessageUpdatedEvent {
+  tenantId: string;
+  conversationId: string;
+  message: MessageDTO;
 }
 
 export interface RealtimeConversationEvent {

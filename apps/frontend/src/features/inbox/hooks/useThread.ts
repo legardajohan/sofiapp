@@ -1,5 +1,15 @@
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchThread, markConversationRead, sendReply, setSofiEnabled } from '../api.js';
+import {
+  fetchThread,
+  markConversationRead,
+  reintentarMedia,
+  sendMediaReply,
+  sendReply,
+  setSofiEnabled,
+} from '../api.js';
+import { errorMessage } from '../lib/errors.js';
 import type { MessageDTO, Paginated } from '../types.js';
 
 export function useThread(conversationId: string | null) {
@@ -18,6 +28,53 @@ export function useSendReply(conversationId: string | null) {
       void qc.invalidateQueries({ queryKey: ['thread', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
+  });
+}
+
+/**
+ * Envío de un archivo, con el progreso de subida expuesto para la barra del composer.
+ *
+ * El progreso vive aquí y no en el componente porque la mutación es quien sabe cuándo empieza y
+ * cuándo termina; el composer solo lo pinta.
+ */
+export function useSendMedia(conversationId: string | null) {
+  const qc = useQueryClient();
+  const [progreso, setProgreso] = useState<number | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: ({ archivo, caption }: { archivo: File; caption: string }) => {
+      setProgreso(0);
+      return sendMediaReply(conversationId as string, archivo, caption, setProgreso);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['thread', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (error: unknown) => {
+      // Sin esto un envío fallido era SILENCIOSO: el asesor veía la ventana seguir abierta sin
+      // saber si el problema era el tamaño, el tipo o la ventana de 24 h cerrada. El backend manda
+      // el motivo ya redactado en cada caso (413, 415, 422).
+      toast.error('No se pudo enviar el archivo', {
+        description: errorMessage(error, 'Inténtalo de nuevo.'),
+      });
+    },
+    onSettled: () => setProgreso(null),
+  });
+
+  return { ...mutation, progreso };
+}
+
+/**
+ * Reintenta la descarga de un archivo que falló.
+ *
+ * No invalida el hilo: el backend deja la media en `pendiente` y publica `message:updated` cuando
+ * termine, así que la burbuja se actualiza sola por el socket.
+ */
+export function useReintentarMedia(conversationId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => reintentarMedia(messageId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['thread', conversationId] }),
   });
 }
 

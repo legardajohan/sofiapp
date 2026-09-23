@@ -96,7 +96,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     vi.mocked(metaWhatsAppClient.sendTemplate).mockClear();
   });
 
-  it("modo:'texto' con ventana abierta → sendText, Message con tipo:'text'", async () => {
+  it("modo:'texto' con ventana abierta → sendText, Message con tipo:'texto'", async () => {
     const tenantId = new Types.ObjectId();
     await crearIntegracion(tenantId);
     const clienteId = await crearCliente(tenantId, true);
@@ -105,7 +105,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     const message = await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' });
 
     expect(metaWhatsAppClient.sendText).toHaveBeenCalledOnce();
-    expect(message.tipo).toBe('text');
+    expect(message.tipo).toBe('texto');
   });
 
   it("modo:'texto' con ventana cerrada → AppError 422 con el mensaje literal de siempre", async () => {
@@ -120,7 +120,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
   });
 
-  it("modo:'auto' con ventana cerrada y plantillaFallback → sendTemplate, Message con tipo:'template'", async () => {
+  it("modo:'auto' con ventana cerrada y plantillaFallback → sendTemplate, Message con tipo:'plantilla'", async () => {
     const tenantId = new Types.ObjectId();
     await crearIntegracion(tenantId);
     const clienteId = await crearCliente(tenantId, false);
@@ -134,7 +134,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     });
 
     expect(metaWhatsAppClient.sendTemplate).toHaveBeenCalledOnce();
-    expect(message.tipo).toBe('template');
+    expect(message.tipo).toBe('plantilla');
     expect(message.sender).toBe('bot');
   });
 
@@ -161,7 +161,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
       parametros: ['Ana'],
     });
 
-    expect(message.tipo).toBe('template');
+    expect(message.tipo).toBe('plantilla');
   });
 
   it('cuota agotada → falla antes de llamar a Meta en los tres modos', async () => {

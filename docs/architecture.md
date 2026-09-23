@@ -32,10 +32,13 @@ posible, inmutabilidad, inyección de dependencias para testear.
                          │   • flow-runtime    (nodos `espera` +          │
                          │     recordatorios de inactividad, HU-FLOW-02;  │
                          │     barrido periódico vía Job Scheduler)       │
+                         │   • media-ingest    (descarga la media entrante │
+                         │     desde Graph, HU-OMNI-06)                   │
                          └───────────────┬───────────────────────────────┘
             Redis (ioredis) ◀────────────┤  SOLO colas (sin caché semántica en MVP)
             MongoDB Atlas  ◀─────────────┤  datos (tenant-scoped)
-            DO Spaces (S3) ◀─────────────┘  media de chat (imágenes recibidas)
+            IMediaStorage  ◀─────────────┘  media de chat: disco local en dev,
+                                            DO Spaces (S3) en prod — ADR-0008
 ```
 
 El proceso **WEB** y el **WORKER** comparten el mismo código de dominio (mismo monorepo) pero se
@@ -70,7 +73,8 @@ Request → authenticateJWT → requireTenant → authorize([roles]) → validat
 | Auth | jsonwebtoken 9.x + bcrypt 5/6 (cookie `httpOnly`) | — |
 | Colas | BullMQ 5.x + ioredis 5.x | — |
 | Tiempo real | Socket.IO 4.x | — |
-| Storage | `@aws-sdk/client-s3` 3.x (DO Spaces, S3-compat) | — |
+| Storage | `@aws-sdk/client-s3` 3.x + `s3-request-presigner` (DO Spaces, S3-compat) | Tras el puerto `IMediaStorage`; en desarrollo el adaptador es disco local y no hace falta bucket (ADR-0008) |
+| Subida HTTP | `multer` 2.x (`memoryStorage`) | Solo en `POST /conversations/:id/messages/media` |
 | Frontend | React 19 + Vite 6/7 | — |
 | Estado | Zustand 5.x + TanStack Query 5.x | — |
 | UI | Tailwind 3/4 (+ shadcn/ui opcional) | — |
@@ -101,7 +105,8 @@ sofiapp/
 │   │       ├── middlewares/        # auth, require-tenant, role, validate, async-handler, error
 │   │       ├── repositories/
 │   │       │   └── base.repository.ts   # tenant-safe (corazón del aislamiento)
-│   │       ├── workers/            # procesadores BullMQ (llm-process, outbound, campaign)
+│   │       ├── workers/            # procesadores BullMQ (llm-process, outbound, campaign,
+│   │       │                       #   media-ingest)
 │   │       ├── integrations/       # meta/, llm/ (clientes externos)
 │   │       ├── realtime/           # gateway Socket.IO
 │   │       ├── services/           # soporte no atado a un feature

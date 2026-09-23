@@ -148,6 +148,11 @@ apiClient.interceptors.response.use(r => r, (e) => {
 
 - **Bandeja omnicanal:** lista lateral de conversaciones (canal, nombre, preview, tag de
   interés) + hilo central de mensajes por `sender`. Filtrada por tenant y asesor.
+  - **Multimedia (HU-OMNI-06):** `MessageBubble` ramifica por `tipo` — imagen con lightbox sobre
+    `dialog`, video embebido, documento como tarjeta, enlace como tarjeta de dominio— y el composer
+    acepta adjuntos por botón y por arrastrar y soltar, con barra de progreso. La proporción del
+    hueco se reserva con `aspect-*` de Tailwind (nativo desde v3.4): **no** hace falta el
+    `aspect-ratio` de shadcn.
 - **Leads (`/leads`):** dos vistas de la misma cartera, con un toggle `Tabla | Embudo` persistido
   en la URL (`?vista=embudo`):
   - **Tabla** — filtrable y paginada; es la que sirve para recorrer muchos leads.
@@ -163,4 +168,4 @@ apiClient.interceptors.response.use(r => r, (e) => {
 
 ## Verificación
 
-- `pnpm --filter frontend build && pnpm --filter frontend lint` en verde.
+- `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint` en verde.

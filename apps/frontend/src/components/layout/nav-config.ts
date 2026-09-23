@@ -85,13 +85,7 @@ export const navGroups: NavGroup[] = [
         roles: ['admin'],
         disabled: true,
       },
-      {
-        label: 'Campañas',
-        to: '/campanas',
-        icon: Megaphone,
-        roles: ['admin'],
-        disabled: true,
-      },
+      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['admin'] },
     ],
   },
   {

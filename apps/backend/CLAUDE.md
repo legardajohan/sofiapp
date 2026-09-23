@@ -23,6 +23,10 @@ del router en `app.ts`, no un archivo del feature):
 6. `<feature>.routes.ts` — endpoints + cadena de middlewares en orden fijo.
 7. Montar en `app.ts`: `app.use('/api/<plural>', <feature>Routes)`.
 
+> **Un feature puede no tener `model.ts`** cuando su dominio vive dentro de otra colección:
+> `conversation/` proyecta sobre `Cliente` + `Message`, y `media/` guarda su metadata en
+> `Message.media`. Inventar un modelo para ellos sería una colección vacía con un `tenantId`.
+
 ## Cadena de middlewares (orden fijo)
 
 ```ts
@@ -34,6 +38,12 @@ router.<m>('<path>',
   asyncHandler(<controller>)  // 5. envuelve el controller
 );
 ```
+**Única excepción admitida a la cadena:** `subirArchivo` (multer) en
+`POST /api/conversations/:id/messages/media`, y va **entre `authorize` y `validate`** — `validate`
+parsea `req.body`, y en un multipart los campos de texto no existen hasta que multer ha consumido el
+stream. El middleware además traduce los errores de multer a `AppError`: sin eso un
+`LIMIT_FILE_SIZE` sale como 500 opaco en vez de 413.
+
 Rutas Superadmin (cross-tenant): omiten `requireTenant`, usan `authorize(['superadmin'])`.
 Rutas públicas (`/login`, webhook): omiten `authenticateJWT`/`requireTenant`.
 
@@ -69,6 +79,6 @@ Rutas públicas (`/login`, webhook): omiten `authenticateJWT`/`requireTenant`.
 
 ## Verificación antes de cerrar un feature
 
-- `pnpm --filter backend typecheck` (`tsc --noEmit`) en verde.
+- `pnpm --filter @sofiapp/api typecheck` (`tsc --noEmit`) en verde.
 - Test de **aislamiento multi-tenant** del feature añadido y en verde.
 - Checklist de PR de `docs/multi-tenancy.md` §9 completo.

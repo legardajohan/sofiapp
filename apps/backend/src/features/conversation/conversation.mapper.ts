@@ -1,5 +1,14 @@
 import type { Types } from 'mongoose';
-import type { Direccion, MessageStatus, Sender, TipoMensaje } from '../message/message.types.js';
+import { normalizarTipoMensaje } from '../message/message.types.js';
+import { toMediaResponse } from '../media/media.service.js';
+import type {
+  Direccion,
+  IMensajeMedia,
+  IPreviewEnlace,
+  MessageStatus,
+  Sender,
+  TipoMensaje,
+} from '../message/message.types.js';
 import type { IUserResponse } from '../users/user.types.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import type { IAuditEventResponse } from '../audit/audit.types.js';
@@ -38,6 +47,8 @@ export interface IMessageSource {
   tipo: TipoMensaje;
   texto?: string;
   attachmentUrl?: string;
+  media?: IMensajeMedia;
+  previewEnlace?: IPreviewEnlace;
   status: MessageStatus;
   createdAt: Date;
 }
@@ -110,14 +121,29 @@ export function toAssignmentResponse(
   };
 }
 
-export function toMessageResponse(msg: IMessageSource): IMessageResponse {
+/**
+ * `tenantId` es obligatorio porque la URL del archivo se **firma** en cada lectura (HU-OMNI-06): el
+ * modelo guarda una clave de almacenamiento, nunca una URL, para que no pueda caducar ni filtrar el
+ * bucket.
+ */
+export function toMessageResponse(msg: IMessageSource, tenantId: string): IMessageResponse {
+  const id = String(msg._id);
+  const media = toMediaResponse(tenantId, id, msg.media);
+
   return {
-    id: String(msg._id),
+    id,
     direccion: msg.direccion,
     sender: msg.sender,
-    tipo: msg.tipo,
+    // Normalizado y no crudo: `.lean()` no valida contra el enum del schema, así que un documento
+    // anterior a HU-OMNI-06 que se escape del script de migración llegaría al frontend como
+    // `"text"` y no se sabría pintar. Esta defensa se queda de forma permanente.
+    tipo: normalizarTipoMensaje(msg.tipo),
     texto: msg.texto ?? null,
-    attachmentUrl: msg.attachmentUrl ?? null,
+    media,
+    previewEnlace: msg.previewEnlace ?? null,
+    // @deprecated: se conserva para los documentos anteriores al feature y el seed de demo, que no
+    // tienen `media`. Lo nuevo viaja siempre por `media.urlArchivo`.
+    attachmentUrl: media?.urlArchivo ?? msg.attachmentUrl ?? null,
     status: msg.status,
     createdAt: msg.createdAt.toISOString(),
   };

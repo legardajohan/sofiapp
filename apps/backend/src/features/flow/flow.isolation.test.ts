@@ -207,7 +207,7 @@ describe('HU-FLOW-01-V2 — aislamiento multi-tenant', () => {
         canal: 'whatsapp',
         direccion: 'inbound',
         sender: 'user',
-        tipo: 'text',
+        tipo: 'texto',
         texto: 'Mensaje secreto de B',
         status: 'sent',
       });

@@ -65,7 +65,7 @@ describe('conversation.service — generateConversationSummary', () => {
       canal: 'whatsapp',
       direccion,
       sender,
-      tipo: 'text',
+      tipo: 'texto',
       texto,
       status: 'sent',
     });

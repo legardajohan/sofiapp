@@ -152,17 +152,17 @@ docker compose up -d
 cp .env.example apps/backend/.env   # rellena los valores
 
 # 4. Desarrollo
-pnpm --filter backend dev           # API (web)
-pnpm --filter backend worker        # worker BullMQ
-pnpm --filter frontend dev          # SPA
+pnpm --filter @sofiapp/api dev           # API (web)
+pnpm --filter @sofiapp/api worker        # worker BullMQ
+pnpm --filter @sofiapp/web dev          # SPA
 ```
 
 Calidad:
 
 ```bash
-pnpm --filter backend typecheck     # tsc --noEmit
-pnpm --filter backend test          # Vitest (incluye tests de aislamiento multi-tenant)
-pnpm --filter frontend build && pnpm --filter frontend lint
+pnpm --filter @sofiapp/api typecheck     # tsc --noEmit
+pnpm --filter @sofiapp/api test          # Vitest (incluye tests de aislamiento multi-tenant)
+pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint
 ```
 
 ## 🔐 Variables de entorno

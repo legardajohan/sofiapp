@@ -54,6 +54,12 @@ body {
     --chart-5: 27 87% 67%;
     /* Paleta propia del plan ANUAL (HU-SAAS-02): violeta → magenta → ámbar → cian,
        distinta y más llamativa que la del semestral (que reusa tokens de marca). */
+    /* Iconos del menú de adjuntar (HU-OMNI-06). Toman la gama de WhatsApp —violeta para la
+       galería, índigo para los documentos— porque el asesor llega a la bandeja con esa app en la
+       cabeza y el color es lo que le deja escanear el menú sin leerlo. Van como tokens y no como
+       hex sueltos para que el modo oscuro exista y el contraste sea comprobable. */
+    --adjunto-galeria: 285 59% 54%;
+    --adjunto-documento: 236 52% 59%;
     --plan-anual-1: 268 85% 58%;
     --plan-anual-2: 322 88% 57%;
     --plan-anual-3: 40 96% 56%;
@@ -103,6 +109,10 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     /* En dark subimos luminosidad y saturación para que el resplandor "queme" más. */
+    /* Más claros sobre el fondo oscuro: los valores de `:root` caerían por debajo de 3:1 contra
+       `--popover` en dark y el icono dejaría de distinguirse. */
+    --adjunto-galeria: 285 70% 68%;
+    --adjunto-documento: 236 70% 70%;
     --plan-anual-1: 270 96% 70%;
     --plan-anual-2: 322 96% 70%;
     --plan-anual-3: 43 100% 64%;
@@ -338,6 +348,8 @@ body {
     --destructive: 0 72.2% 50.6%;
     --destructive-foreground: 0 0% 100%;
     --destructive-subtle: 0 85.7% 97.3%;
+    --adjunto-galeria: 285 59% 54%;
+    --adjunto-documento: 236 52% 59%;
     --success: 142 76.2% 36.3%;
     --success-foreground: 0 0% 100%;
     --success-subtle: 138 76.5% 96.7%;

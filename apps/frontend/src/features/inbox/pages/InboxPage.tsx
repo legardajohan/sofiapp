@@ -21,7 +21,14 @@ import { leadIdEnConflicto } from '@/features/leads/lib/errors';
 import { useConversations } from '../hooks/useConversations.js';
 import { useContactHistory, useGenerateSummary } from '../hooks/useContactHistory.js';
 import { useSetConversationTags } from '../hooks/useConversationTags.js';
-import { useMarkRead, useSendReply, useSetSofi, useThread } from '../hooks/useThread.js';
+import {
+  useMarkRead,
+  useReintentarMedia,
+  useSendMedia,
+  useSendReply,
+  useSetSofi,
+  useThread,
+} from '../hooks/useThread.js';
 import { useInboxRealtime } from '../hooks/useInboxRealtime.js';
 import { useInboxStore } from '../useInboxStore.js';
 import { useConversationOverview } from '../hooks/useConversationOverview.js';
@@ -111,6 +118,8 @@ export function InboxPage(): React.ReactElement {
 
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
+  const sendMedia = useSendMedia(activeId);
+  const reintentarMedia = useReintentarMedia(activeId);
   const setSofi = useSetSofi(activeId ?? '');
   const setTags = useSetConversationTags(activeId);
 
@@ -344,7 +353,12 @@ export function InboxPage(): React.ReactElement {
                 onRetry={() => void refetchThread()}
               />
             ) : (
-              <ConversationThread messages={thread?.data ?? []} isLoading={threadLoading} />
+              <ConversationThread
+                messages={thread?.data ?? []}
+                isLoading={threadLoading}
+                onReintentarMedia={(messageId) => reintentarMedia.mutate(messageId)}
+                reintentandoId={reintentarMedia.isPending ? reintentarMedia.variables : null}
+              />
             )}
 
             {active.handoff && (
@@ -357,8 +371,10 @@ export function InboxPage(): React.ReactElement {
             {!active.ventana24hAbierta && <WindowClosedBanner />}
             <MessageComposer
               disabled={!active.ventana24hAbierta}
-              pending={sendReply.isPending}
+              pending={sendReply.isPending || sendMedia.isPending}
               onSend={(texto) => sendReply.mutate(texto)}
+              onSendMedia={(archivo, caption) => sendMedia.mutateAsync({ archivo, caption })}
+              uploadProgress={sendMedia.progreso}
             />
           </>
         ) : (

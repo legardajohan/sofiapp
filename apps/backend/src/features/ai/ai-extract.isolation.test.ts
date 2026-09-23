@@ -44,7 +44,7 @@ async function crearCliente(tenantId: Types.ObjectId): Promise<string> {
     canal: 'whatsapp',
     direccion: 'inbound',
     sender: 'user',
-    tipo: 'text',
+    tipo: 'texto',
     texto: 'hola, soy Diego Ramírez, me interesa el curso sabatino',
   });
   return id;

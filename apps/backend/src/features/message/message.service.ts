@@ -10,6 +10,7 @@ import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
 import { buildTemplatePayload } from '../whatsapp-template/whatsapp-template.service.js';
+import { applyDeliveryStatusToRecipient } from '../campaign/campaign.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from './message.model.js';
 import type {
@@ -58,6 +59,50 @@ export async function sendOutbound(
   const now = new Date();
   const ventanaAbierta = !!cliente.ventana24hExpiraEn && cliente.ventana24hExpiraEn > now;
 
+  // Media: cae del MISMO lado que el texto libre frente a la ventana de 24 h. Se resuelve antes
+  // que el resto porque su envío no comparte cuerpo con los otros modos.
+  if (contenido.modo === 'media') {
+    if (!ventanaAbierta) throw new AppError(FUERA_DE_VENTANA, 422);
+
+    const integrationMedia = await getIntegrationWithToken(tenantId);
+    const { messageId } = await metaWhatsAppClient.sendMedia(
+      cliente.telefono,
+      contenido.tipo,
+      contenido.metaMediaId,
+      {
+        ...(contenido.caption ? { caption: contenido.caption } : {}),
+        ...(contenido.nombreArchivo ? { filename: contenido.nombreArchivo } : {}),
+      },
+      integrationMedia.phoneNumberId,
+      integrationMedia.accessToken,
+    );
+
+    const mensajeMedia = await createScoped(Message, tenantId, {
+      clienteId: new Types.ObjectId(clienteId),
+      canal: 'whatsapp',
+      direccion: 'outbound',
+      sender,
+      tipo: contenido.tipo,
+      // El archivo saliente ya está en nuestro almacenamiento antes de llegar aquí, así que nace
+      // `disponible`: no hay nada que descargar después.
+      ...(contenido.caption ? { texto: contenido.caption } : {}),
+      media: {
+        estado: 'disponible' as const,
+        mimeType: contenido.mimeType,
+        mediaKey: contenido.mediaKey,
+        metaMediaId: contenido.metaMediaId,
+        tamanoBytes: contenido.tamanoBytes,
+        descargadaAt: new Date(),
+        ...(contenido.nombreArchivo ? { nombreArchivo: contenido.nombreArchivo } : {}),
+      },
+      metaMessageId: messageId,
+      status: 'sent',
+    } as Record<string, unknown>);
+
+    await incrementUsage(tenantId, 'mensajesMes');
+    return mensajeMedia;
+  }
+
   let plantilla: { templateId: string; parametros: string[] } | undefined;
   let texto: string | undefined;
 
@@ -97,7 +142,7 @@ export async function sendOutbound(
       // Los envíos por plantilla se atribuyen a 'bot': son un mensaje automatizado/aprobado por
       // Meta, no texto libre redactado por el agente, aunque los haya disparado un admin.
       sender: 'bot',
-      tipo: 'template',
+      tipo: 'plantilla',
       metaMessageId: messageId,
       status: 'sent',
     } as Record<string, unknown>);
@@ -118,7 +163,7 @@ export async function sendOutbound(
     canal: 'whatsapp',
     direccion: 'outbound',
     sender,
-    tipo: 'text',
+    tipo: 'texto',
     texto,
     metaMessageId: messageId,
     status: 'sent',
@@ -146,4 +191,8 @@ export async function updateDeliveryStatus(
   status: MessageStatus,
 ): Promise<void> {
   await findOneAndUpdateScoped(Message, tenantId, { metaMessageId }, { status });
+  // Los `statuses` de Meta entran por un único camino (el webhook → esta función), así que el
+  // destinatario de campaña se actualiza aquí en vez de duplicar el parseo en otro sitio. Es un
+  // no-op para los mensajes que no pertenecen a ninguna campaña, que son la mayoría (HU-MARK-01).
+  await applyDeliveryStatusToRecipient(tenantId, metaMessageId, status);
 }

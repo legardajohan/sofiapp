@@ -58,7 +58,7 @@ async function crearMensaje(clienteId: string, sender: 'user' | 'bot' | 'agent',
     canal: 'whatsapp',
     direccion: sender === 'user' ? 'inbound' : 'outbound',
     sender,
-    tipo: 'text',
+    tipo: 'texto',
     texto,
     status: 'sent',
   });

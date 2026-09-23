@@ -146,6 +146,11 @@ export const updateClienteSchema = z.object({
       objecionPrincipal: opcionKey.nullable().optional(),
       rolContacto: opcionKey.nullable().optional(),
       atributos: atributosSchema.optional(),
+      // Baja de campañas (HU-MARK-01). Entra por aquí y no por un endpoint propio porque es un
+      // dato de la ficha del contacto, como el resto: quien atiende la conversación es quien se
+      // entera de que la persona no quiere recibir más difusiones. NO es sensible (no revela nada
+      // de la persona), así que no pasa por el gate de subrol.
+      marketingOptOut: z.boolean().optional(),
     })
     .strict()
     .refine((b) => Object.keys(b).length > 0, 'Debes enviar al menos un campo para actualizar.'),

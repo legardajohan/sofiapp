@@ -91,7 +91,7 @@ async function crearCliente(datos?: Partial<IDatosExtraidos>): Promise<string> {
     canal: 'whatsapp',
     direccion: 'inbound',
     sender: 'user',
-    tipo: 'text',
+    tipo: 'texto',
     texto: 'hola, soy Diego',
   });
   return id;

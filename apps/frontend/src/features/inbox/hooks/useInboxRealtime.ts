@@ -3,7 +3,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { disconnectSocket, getSocket } from '../../../lib/socket.js';
 import { useInboxStore } from '../useInboxStore.js';
-import type { RealtimeAssignedEvent, RealtimeConversationEvent, RealtimeMessageEvent } from '../types.js';
+import type {
+  MessageDTO,
+  Paginated,
+  RealtimeAssignedEvent,
+  RealtimeConversationEvent,
+  RealtimeMessageEvent,
+  RealtimeMessageUpdatedEvent,
+} from '../types.js';
 
 /**
  * Suscribe la bandeja al gateway Socket.IO: cada evento invalida la caché de TanStack Query
@@ -42,12 +49,28 @@ export function useInboxRealtime(): void {
       });
     };
 
+    /**
+     * La media de un mensaje que YA está en el hilo terminó de descargarse, o falló (HU-OMNI-06).
+     *
+     * Se escribe en la caché en vez de invalidar: una ráfaga de diez fotos dispararía diez refetch
+     * del hilo entero. Misma decisión que tomó `useCampaignRealtime` con el progreso de campaña.
+     */
+    const onMessageUpdated = (evt: RealtimeMessageUpdatedEvent): void => {
+      qc.setQueryData<Paginated<MessageDTO>>(['thread', evt.conversationId], (prev) =>
+        prev
+          ? { ...prev, data: prev.data.map((m) => (m.id === evt.message.id ? evt.message : m)) }
+          : prev,
+      );
+    };
+
     socket.on('message:new', onMessage);
+    socket.on('message:updated', onMessageUpdated);
     socket.on('conversation:updated', onConversation);
     socket.on('conversation:assigned', onAssigned);
 
     return () => {
       socket.off('message:new', onMessage);
+      socket.off('message:updated', onMessageUpdated);
       socket.off('conversation:updated', onConversation);
       socket.off('conversation:assigned', onAssigned);
       disconnectSocket();

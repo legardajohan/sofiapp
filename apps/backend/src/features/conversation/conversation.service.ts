@@ -15,6 +15,7 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
+import { enviarMediaSaliente, type IArchivoSaliente } from '../media/media.service.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
@@ -53,10 +54,24 @@ import type {
   ThreadQuery,
 } from './conversation.validation.js';
 
+/**
+ * Etiqueta de un mensaje sin texto propio, para la preview de la bandeja y para el transcript que
+ * alimenta el resumen por IA.
+ *
+ * Acepta también las claves del enum anterior a HU-OMNI-06: la preview se calcula sobre el último
+ * mensaje del hilo, que puede ser anterior a la migración, y ahí un `[mensaje]` genérico sería un
+ * retroceso visible en la lista de conversaciones.
+ */
 function nonTextPreview(tipo: string): string {
   const labels: Record<string, string> = {
-    image: '📷 Imagen',
+    imagen: '📷 Imagen',
+    video: '🎬 Video',
     audio: '🎤 Audio',
+    documento: '📄 Documento',
+    sticker: '🩹 Sticker',
+    plantilla: '📋 Plantilla',
+    // legacy (pre-HU-OMNI-06)
+    image: '📷 Imagen',
     document: '📄 Documento',
     template: '📋 Plantilla',
   };
@@ -248,7 +263,7 @@ export async function getThread(
 
   const data = docs
     .reverse()
-    .map((m) => toMessageResponse(m as unknown as IMessageSource));
+    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId)));
 
   return { data, page, limit, total };
 }
@@ -267,9 +282,24 @@ async function enviarYNotificar(
   // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
   // cuota mensual de mensajes.
   const msg = await sendMessage(tenantId, { clienteId, texto, sender });
-  const message = toMessageResponse(msg as unknown as IMessageSource);
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
+}
 
-  // La respuesta saliente reordena la bandeja y se notifica en vivo a los demás asesores.
+/**
+ * Deja la bandeja consistente tras un envío: refresca `ultimoMensajeAt` —que la reordena— y publica
+ * `message:new` para los demás asesores.
+ *
+ * Separada del envío porque el texto y la media producen el `Message` por caminos distintos
+ * (`sendMessage` y `enviarMediaSaliente`) pero necesitan exactamente la misma reacción después;
+ * duplicarla dejaría a la bandeja actualizándose solo para uno de los dos.
+ */
+async function notificarSaliente(
+  tenantId: string,
+  clienteId: string,
+  msg: IMessageSource,
+): Promise<IMessageResponse> {
+  const message = toMessageResponse(msg, String(tenantId));
+
   const cliente = await findOneAndUpdateScoped(
     Cliente,
     tenantId,
@@ -287,11 +317,36 @@ async function enviarYNotificar(
       tenantId,
       conversationId: clienteId,
       message,
-      conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
+      // `?? nonTextPreview`: una imagen sin pie de foto tiene `texto: null`, y pasarlo tal cual
+      // dejaría la conversación EN BLANCO en la lista lateral hasta el siguiente refetch, que
+      // sí la calcula bien. El evento en vivo debe decir lo mismo que `listConversations`.
+      conversation: toConversationResponse(
+        source,
+        message.texto ?? nonTextPreview(message.tipo),
+        new Date(),
+        asignado,
+        tagMap,
+      ),
     });
   }
 
   return message;
+}
+
+/**
+ * Envío de un archivo por el asesor desde el composer (HU-OMNI-06).
+ *
+ * La ventana de 24 h la sigue decidiendo `sendOutbound`, dentro de `enviarMediaSaliente`: aquí no
+ * se reimplementa la regla, solo se notifica el resultado igual que en un mensaje de texto.
+ */
+export async function replyMediaMessage(
+  tenantId: string,
+  clienteId: string,
+  archivo: IArchivoSaliente,
+  caption: string | undefined,
+): Promise<IMessageResponse> {
+  const msg = await enviarMediaSaliente(tenantId, clienteId, archivo, caption);
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
 }
 
 /** Respuesta manual de un asesor desde la bandeja. */
@@ -807,12 +862,21 @@ export async function notifyInboundMessage(
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
   const tagMap = await resolveTags(tenantId, source);
-  const message = toMessageResponse(savedMsg);
+  const message = toMessageResponse(savedMsg, String(tenantId));
   await publishRealtime({
     type: 'message:new',
     tenantId,
     conversationId: clienteId,
     message,
-    conversation: toConversationResponse(source, message.texto, new Date(), asignado, tagMap),
+    // `?? nonTextPreview`: una imagen sin pie de foto tiene `texto: null`, y pasarlo tal cual
+    // dejaría la conversación EN BLANCO en la lista lateral hasta el siguiente refetch, que
+    // sí la calcula bien. El evento en vivo debe decir lo mismo que `listConversations`.
+    conversation: toConversationResponse(
+      source,
+      message.texto ?? nonTextPreview(message.tipo),
+      new Date(),
+      asignado,
+      tagMap,
+    ),
   });
 }

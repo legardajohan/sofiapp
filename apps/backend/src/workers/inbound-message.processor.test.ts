@@ -6,12 +6,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 
-const { mockAdd, mockReplyFromIa, mockNotifyInbound, mockEjecutarFlujo } = vi.hoisted(() => ({
-  mockAdd: vi.fn(),
-  mockReplyFromIa: vi.fn(),
-  mockNotifyInbound: vi.fn(),
-  mockEjecutarFlujo: vi.fn(),
-}));
+const { mockAdd, mockMediaAdd, mockReplyFromIa, mockNotifyInbound, mockEjecutarFlujo } = vi.hoisted(
+  () => ({
+    mockAdd: vi.fn(),
+    mockMediaAdd: vi.fn(),
+    mockReplyFromIa: vi.fn(),
+    mockNotifyInbound: vi.fn(),
+    mockEjecutarFlujo: vi.fn(),
+  }),
+);
 
 vi.mock('../config/queues.js', () => ({
   INBOUND_QUEUE_NAME: 'inbound-messages',
@@ -22,6 +25,9 @@ vi.mock('../config/queues.js', () => ({
   inboundQueue: { add: vi.fn() },
   kbIndexQueue: { add: vi.fn() },
   aiReplyQueue: { add: mockAdd },
+  MEDIA_INGEST_QUEUE_NAME: 'media-ingest',
+  MEDIA_INGEST_JOB: 'descargar',
+  mediaIngestQueue: { add: mockMediaAdd },
 }));
 
 vi.mock('../features/conversation/conversation.service.js', () => ({
@@ -48,7 +54,12 @@ const PHONE_ID = 'phone-hu-ia-02';
 const WA_ID = '573001112233';
 
 function payload(
-  mensajes: Array<{ id: string; type: 'text' | 'image' | 'audio'; body?: string }>,
+  mensajes: Array<{
+    id: string;
+    type: 'text' | 'image' | 'audio' | 'video' | 'document';
+    body?: string;
+    media?: { id: string; mime_type: string; caption?: string; filename?: string };
+  }>,
 ): IWhatsAppWebhookPayload {
   return {
     object: 'whatsapp_business_account',
@@ -68,6 +79,7 @@ function payload(
                 timestamp: `${Math.floor(Date.now() / 1000)}`,
                 type: m.type,
                 ...(m.body ? { text: { body: m.body } } : {}),
+                ...(m.media ? { [m.type]: m.media } : {}),
               })),
             },
           },
@@ -114,6 +126,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
       Flow.deleteMany({}),
     ]);
     mockAdd.mockReset().mockResolvedValue(undefined);
+    mockMediaAdd.mockReset().mockResolvedValue(undefined);
     mockReplyFromIa.mockReset().mockResolvedValue(undefined);
     mockNotifyInbound.mockReset().mockResolvedValue(undefined);
     mockEjecutarFlujo.mockReset().mockResolvedValue(undefined);
@@ -167,7 +180,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
         canal: 'whatsapp',
         direccion: 'outbound',
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto,
         status: 'sent',
       } as unknown as Record<string, unknown>);
@@ -193,7 +206,7 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
         canal: 'whatsapp',
         direccion: 'outbound',
         sender: 'bot',
-        tipo: 'text',
+        tipo: 'texto',
         texto,
         status: 'sent',
       } as unknown as Record<string, unknown>);
@@ -442,6 +455,7 @@ describe('processInboundJob — flujo activo y Sofi no contestan a la vez', () =
       Flow.deleteMany({}),
     ]);
     mockAdd.mockReset().mockResolvedValue(undefined);
+    mockMediaAdd.mockReset().mockResolvedValue(undefined);
     mockReplyFromIa.mockReset().mockResolvedValue(undefined);
     mockNotifyInbound.mockReset().mockResolvedValue(undefined);
     mockEjecutarFlujo.mockReset().mockResolvedValue(undefined);
@@ -547,6 +561,7 @@ describe('processInboundJob — tras un handoff, Sofi se calla (HU-IA-03)', () =
       MetaIntegration.deleteMany({}),
     ]);
     mockAdd.mockReset().mockResolvedValue(undefined);
+    mockMediaAdd.mockReset().mockResolvedValue(undefined);
     mockReplyFromIa.mockReset().mockResolvedValue(undefined);
     mockNotifyInbound.mockReset().mockResolvedValue(undefined);
     tenantId = await crearTenantConCanal();

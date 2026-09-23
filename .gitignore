@@ -50,3 +50,5 @@ opencode.json
 
 # Scripts de debug ad-hoc (pueden contener credenciales sueltas, nunca son fuente de verdad)
 apps/backend/check-*.cjs
+# Media de conversación en desarrollo (MEDIA_DRIVER=local)
+**/var/media/

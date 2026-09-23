@@ -90,6 +90,42 @@ export async function sendReply(conversationId: string, texto: string): Promise<
   return data;
 }
 
+/**
+ * Subir 16 MB por una conexión móvil son minutos, no segundos: el `timeout: 10000` global del
+ * `apiClient` cortaría la subida a mitad. Mismo precedente que `TIMEOUT_IA_MS`, que sube el tiempo
+ * solo en las llamadas que lo necesitan en vez de relajarlo para todas.
+ */
+const TIMEOUT_SUBIDA_MS = 120_000;
+
+export async function sendMediaReply(
+  conversationId: string,
+  archivo: File,
+  caption: string,
+  onProgress?: (porcentaje: number) => void,
+): Promise<MessageDTO> {
+  const form = new FormData();
+  form.append('archivo', archivo);
+  if (caption) form.append('texto', caption);
+
+  const { data } = await apiClient.post<MessageDTO>(
+    `/conversations/${conversationId}/messages/media`,
+    form,
+    {
+      timeout: TIMEOUT_SUBIDA_MS,
+      // Sin `Content-Type` a mano: el navegador tiene que poner el `boundary` del multipart, y
+      // fijarlo aquí rompería el parseo en el servidor.
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    },
+  );
+  return data;
+}
+
+export async function reintentarMedia(messageId: string): Promise<void> {
+  await apiClient.post(`/media/${messageId}/reintentar`);
+}
+
 export async function markConversationRead(conversationId: string): Promise<ConversationDTO> {
   const { data } = await apiClient.patch<ConversationDTO>(
     `/conversations/${conversationId}/read`,

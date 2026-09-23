@@ -104,11 +104,24 @@
   igBusinessId: String?,          // si canal = instagram
   fbPageId: String?,              // si canal = messenger
   activo: Boolean,
+  // Capacidad de envío del NÚMERO (HU-MARK-01). Vive aquí y no en `tenants` porque es del número:
+  // si la empresa cambia de número, su tier y su calidad se van con él.
+  messagingTier: "TIER_50"|"TIER_250"|"TIER_1K"|"TIER_10K"|"TIER_100K"|"TIER_UNLIMITED",
+  qualityRating: "GREEN"|"YELLOW"|"RED"|"UNKNOWN",   // UNKNOWN se trata como YELLOW al pacear
+  healthStatus: "AVAILABLE"|"LIMITED"|"BLOCKED"|"UNKNOWN",
+  tierSyncedAt: ISODate|null,     // último sondeo a la Graph API
+  tierManual: Boolean,            // true = lo fijó una persona; la sonda no lo pisa
   createdAt, updatedAt
 }
 // Índices: { phoneNumberId: 1 } unique  (global, NO tenant-scoped: lo usa el webhook)
 //          { tenantId: 1, canal: 1 }
 ```
+
+> `messagingTier` es el techo de **destinatarios únicos** que Meta permite abrir en 24 h rodantes
+> con conversaciones iniciadas por la empresa. No es un límite de mensajes: dos plantillas al mismo
+> contacto el mismo día cuentan una vez. `TIER_250` es el valor por defecto porque es el de un
+> número sin verificar — suponer más es acabar chocando con el límite real. Lo refresca
+> `POST /api/channels/whatsapp/tier/sync` con la sonda de `integrations/meta-whatsapp.md` §8.
 
 ## clientes  (prospectos / leads)
 ```js
@@ -141,6 +154,10 @@
     sensible: Boolean             // default false
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
+  // Baja de campañas (HU-MARK-01). El segmentador lo excluye SIEMPRE, no es un filtro opcional.
+  // Se consulta con `$ne: true`, no con `false`: los contactos anteriores al campo no lo llevan,
+  // y ausente significa "no ha pedido la baja", no "desconocido".
+  marketingOptOut: Boolean,       // default false
   // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
   // la conversación, nadie filtra la bandeja por esto.
   semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
@@ -193,9 +210,12 @@
 //          { tenantId: 1, ultimoMensajeAt: -1 }
 //          { tenantId: 1, telefono: 1 }
 //          { tenantId: 1, nivelInteres: 1 }   (segmentación de campañas)
-//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — ÚNICO índice sin tenantId como prefijo
+//          { tenantId: 1, marketingOptOut: 1 } (HU-MARK-01: está en TODOS los segmentos)
+//          { tenantId: 1, rolContacto: 1 }     (HU-MARK-01: uno de los tres ejes de segmentación)
+//          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — índice sin tenantId como prefijo
 //          (HU-FLOW-02): el barrido de recordatorios es cross-tenant por naturaleza (una sola
 //          pasada para toda la plataforma). Documentado como excepción en `multi-tenancy.md`.
+//          El otro es `{ estado, programadaPara }` en `campaigns` (HU-MARK-01), por lo mismo.
 ```
 > **Decisión:** el historial de conversación NO se embebe aquí (evita el límite de 16MB y el
 > crecimiento ilimitado del documento en chats activos). Se modela en `messages`.
@@ -226,9 +246,29 @@
   canal: "whatsapp" | "instagram" | "messenger",
   direccion: "inbound" | "outbound",
   sender: "user" | "bot" | "agent",
-  tipo: "text" | "image" | "template" | "audio" | "document" | "other",
-  texto: String?,
-  attachmentUrl: String?,         // DO Spaces (media recibida/enviada)
+  // Enum en español desde HU-OMNI-06 (migrado con `migrate:tipo-mensaje`). Durante la fase
+  // `expand` el schema acepta además los 6 valores viejos; la fase `contract` los retira.
+  // `enlace` = mensaje de texto que contiene una URL: SIGUE llevando texto (ver `esTipoConTexto`).
+  tipo: "texto" | "enlace" | "imagen" | "video" | "audio" | "documento" | "sticker" | "plantilla" | "otro",
+  texto: String?,                 // texto libre O el caption de un adjunto
+  // Archivo del mensaje (HU-OMNI-06). Subdocumento y no campos planos: son 9 campos que solo
+  // existen juntos, y el 95 % de los mensajes son texto.
+  media: {
+    estado: "pendiente" | "disponible" | "fallida",  // la descarga desde Meta es asíncrona
+    mimeType: String,
+    mediaKey: String?,            // clave en IMediaStorage — NUNCA sale al navegador
+    metaMediaId: String?,         // id del media en Meta (entrante: para descargar)
+    nombreArchivo: String?,
+    tamanoBytes: Number?,
+    sha256: String?,
+    duracionSegundos: Number?,
+    miniaturaKey: String?,        // declarado; hoy nunca se rellena (ADR-0008)
+    intentos: Number,
+    error: String?,               // motivo del fallo definitivo, se le muestra al asesor
+    descargadaAt: ISODate?,
+  }?,
+  previewEnlace: { url: String, dominio: String }?,  // solo dominio: Meta no manda Open Graph
+  attachmentUrl: String?,         // @deprecated HU-OMNI-06 — documentos previos y el seed de demo
   metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
   // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
   status: "sent" | "delivered" | "read" | "failed",   // default "sent"
@@ -239,6 +279,13 @@
 //                                                          global: HT-WA-01-V2 cerró una fuga de
 //                                                          aislamiento donde el dedupe y el update
 //                                                          de `status` no llevaban `tenantId`)
+//          { tenantId: 1, tipo: 1, createdAt: -1 }        (HU-MARK-01: consumo del tier en las
+//                                                          últimas 24 h — destinatarios únicos de
+//                                                          plantilla, se consulta antes de cada lote)
+//          { tenantId: 1, 'media.estado': 1, createdAt: 1 } PARCIAL sobre media.estado='pendiente'
+//                                                          (HU-OMNI-06: barrido de media atascada.
+//                                                          Parcial a propósito: un índice completo
+//                                                          pagaría por cada mensaje de texto)
 ```
 
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
@@ -266,6 +313,11 @@
 // Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
 //          { tenantId: 1, status: 1 }
 ```
+> **La URL del archivo NUNCA se persiste.** El modelo guarda `media.mediaKey`, una clave opaca de
+> `IMediaStorage` (`<tenantId>/<messageId>/<uuid>.<ext>`). La URL del DTO se deriva y se **firma**
+> en cada lectura (`/media/<id>?t=<hmac>`): una URL guardada caducaría o filtraría el bucket. Ver
+> `docs/adr/0008-almacenamiento-de-media.md`.
+
 > **Por qué no es único global `metaTemplateId`:** dos tenants distintos conectan WABAs distintas
 > y pueden tener plantillas homónimas; a diferencia de `MetaIntegration.phoneNumberId`, aquí el
 > identificador de Meta no es único por construcción entre tenants.
@@ -375,24 +427,49 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > campo y sobre `estados`, sin colección nueva. El tablero Kanban, que `product.md` §5 había
 > descartado, se reincorporó en esa historia — ver `docs/adr/0007-tablero-kanban-pipeline.md`.
 
-## campaigns  (remarketing)
+## campaigns  (remarketing — implementado en HU-MARK-01)
 ```js
 {
   _id: ObjectId,
   tenantId: ObjectId,
-  nombre: String,
-  filtros: {                      // segmentación dinámica
-    nivelInteres: [String]?, estadoComercial: [String]?,
-    interesItemId: ObjectId?, tagIds: [ObjectId]?, customFields: Object?
+  nombre: String,                 // ≤120, solo lo ve la empresa
+  filtros: {                      // segmentación; TODO opcional, se combinan en AND
+    atributos: [{ key: String, valores: [String] }],  // "grado", "colegio"… (Cliente.atributos)
+    rolContacto: [String],        // keys del catálogo `contact_options` tipo rol
+    semaforoLead: [String],       // keys del catálogo `semaforos` → Lead.semaforo (eje COMERCIAL)
+    nivelInteres: [String], estadoComercial: [String], tagIds: [ObjectId]
   },
-  plantillaHSM: String,           // nombre de la plantilla aprobada por Meta
-  estado: "borrador" | "en_curso" | "completada" | "fallida",
-  totales: { destinatarios: Number, enviados: Number, fallidos: Number },
-  iniciadaAt: ISODate?,
+  templateId: ObjectId,           // ref WhatsAppTemplate — NO el `name` suelto (ver nota)
+  parametros: [String],           // huecos del BODY, fijos para toda la campaña
+  estado: "borrador" | "programada" | "en_curso" | "pausada"
+        | "completada" | "cancelada" | "fallida",
+  programadaPara: ISODate|null,
+  totales: { destinatarios, enviados, entregados, fallidos, omitidos },
+  presupuesto: {                  // congelado al lanzar; auditoría de la cadencia elegida
+    tier: String, calidad: String, limiteDiario: Number, intervaloMs: Number
+  } | null,
+  creadaPor: ObjectId,            // ref User
+  iniciadaAt: ISODate|null, finalizadaAt: ISODate|null,
+  motivo: String|null,            // por qué acabó `fallida` o `cancelada`
   createdAt, updatedAt
 }
-// Índices: { tenantId: 1, createdAt: -1 }
+// Índices: { tenantId: 1, createdAt: -1 } · { tenantId: 1, estado: 1, createdAt: -1 }
+//          { estado: 1, programadaPara: 1 }  ← NO empieza por tenantId: ver nota
 ```
+
+> **`templateId` y no `plantillaHSM: String`.** El boceto previo guardaba el nombre de la plantilla.
+> Se cambió a una referencia al catálogo local por la misma razón que `Tenant.recordatorio.templateId`:
+> el nombre es lo que Meta puede cambiar, y una campaña histórica tiene que seguir apuntando a la
+> plantilla con la que realmente se envió.
+>
+> **`{ estado: 1, programadaPara: 1 }` es el segundo índice del proyecto que no empieza por
+> `tenantId`,** y es deliberado: el barrido que levanta las campañas programadas es cross-tenant por
+> naturaleza, como el de recordatorios de HU-FLOW-02. Solo devuelve identificadores (`tenantId`,
+> `_id`); a partir de ahí todo vuelve a pasar por `*Scoped`. Documentado en `multi-tenancy.md` §5.
+>
+> **El segmento se congela al lanzar.** `totales.destinatarios` queda fijo en el instante del
+> lanzamiento y los `campaign_recipients` se materializan ahí. Un contacto que empiece a cumplir los
+> filtros a mitad del envío **no** se incorpora: si no, nadie podría decir a cuánta gente se escribió.
 
 ## campaign_recipients  (auditoría de envío por destinatario)
 ```js
@@ -401,13 +478,26 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   tenantId: ObjectId,
   campaignId: ObjectId,
   clienteId: ObjectId,
-  telefono: String,
-  estado: "pendiente" | "enviado" | "fallido",
+  telefono: String,               // copiado al materializar: es el número al que se escribió
+  estado: "pendiente" | "enviado" | "entregado" | "fallido" | "omitido",
+  metaMessageId: String|null,     // puente con los `statuses` del webhook
   error: String?,
-  enviadoAt: ISODate?
+  enviadoAt: ISODate?,
+  createdAt, updatedAt
 }
-// Índices: { tenantId: 1, campaignId: 1, estado: 1 }
+// Índices: { tenantId: 1, campaignId: 1, estado: 1 }               ← "dame el próximo lote"
+//          { tenantId: 1, campaignId: 1, clienteId: 1 } unique     ← un contacto, un envío
+//          { tenantId: 1, metaMessageId: 1 } sparse                ← statuses del webhook
 ```
+
+> `omitido` **no es un fallo**: es "no se le llegó a escribir" (la campaña se canceló antes de
+> alcanzarlo). Distinguirlo de `fallido` importa porque un `fallido` es una señal de salud del
+> número y un `omitido` no dice nada sobre él.
+>
+> El índice único `{tenantId, campaignId, clienteId}` —y no la comprobación previa del service— es
+> la única defensa real contra el doble envío: entre leer los pendientes y marcarlos cabe otro
+> proceso. El de `metaMessageId` va **encabezado por `tenantId`** a propósito: `HT-WA-01-V2` cerró
+> una fuga donde ese id se resolvía sin tenant.
 
 ## flows  (constructor visual — implementado en HU-FLOW-01-V2)
 ```js
