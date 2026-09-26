@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { FileText, Images, Paperclip, Send } from 'lucide-react';
+import { FileText, Images, Mic, Paperclip, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,13 +10,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { useGrabadora } from '../hooks/useGrabadora.js';
+import { insertarEnCursor } from '../lib/insertarEnCursor.js';
 import { ACCEPT_DOCUMENTOS, ACCEPT_IMAGENES_VIDEOS, validarArchivo } from '../lib/media.js';
+import { EmojiButton } from './composer/EmojiButton.js';
+import { VoiceRecorder } from './composer/VoiceRecorder.js';
 import { MediaSendDialog } from './MediaSendDialog.js';
 
 interface Props {
   disabled: boolean;
   pending: boolean;
-  onSend: (texto: string) => void;
+  /**
+   * Puede devolver una promesa: si se rechaza, el texto vuelve al campo para no perder lo que el
+   * asesor escribió (HU-OMNI-07). El motivo lo muestra el toast de la mutación.
+   */
+  onSend: (texto: string) => void | Promise<unknown>;
   /**
    * Devuelve una promesa a propósito: el composer necesita saber cuándo TERMINÓ la subida para
    * cerrar la ventana de confirmación. Antes limpiaba el archivo al instante, así que la ventana se
@@ -25,6 +33,15 @@ interface Props {
   onSendMedia: (archivo: File, caption: string) => Promise<unknown>;
   /** 0-100 mientras sube un archivo; `null` si no hay subida en curso. */
   uploadProgress: number | null;
+  /**
+   * Envía una nota de voz (HU-OMNI-07). Promesa por lo mismo que `onSendMedia`: la
+   * previsualización solo se cierra cuando el envío terminó bien; si falla, la grabación se queda.
+   */
+  onSendAudio: (grabacion: Blob, duracionSegundos: number) => Promise<unknown>;
+  /** 0-100 mientras sube una nota de voz; `null` si no hay envío en curso. */
+  audioProgress: number | null;
+  /** Límite de grabación del tenant: la grabación se corta sola al llegar. */
+  maxDuracionAudio: number;
 }
 
 export function MessageComposer({
@@ -33,8 +50,15 @@ export function MessageComposer({
   onSend,
   onSendMedia,
   uploadProgress,
+  onSendAudio,
+  audioProgress,
+  maxDuracionAudio,
 }: Props): React.ReactElement {
   const [texto, setTexto] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const grabadora = useGrabadora(maxDuracionAudio);
+  // Mientras hay una grabación en curso o por revisar, la barra de grabación ocupa el composer.
+  const enModoVoz = grabadora.estado.fase !== 'inactivo';
   const [archivo, setArchivo] = useState<File | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
   // Dos inputs y no uno: cada entrada del menú abre el diálogo del sistema con su propio `accept`,
@@ -45,8 +69,9 @@ export function MessageComposer({
   // profundidad, el overlay parpadea cada vez que el cursor cruza el textarea.
   const profundidad = useRef(0);
 
-  const subiendo = uploadProgress !== null;
+  const subiendo = uploadProgress !== null || audioProgress !== null;
   const bloqueado = disabled || pending || subiendo;
+  const hayTexto = texto.trim().length > 0;
 
   function elegir(file: File): void {
     const resultado = validarArchivo(file);
@@ -80,8 +105,13 @@ export function MessageComposer({
 
     const value = texto.trim();
     if (!value) return;
-    onSend(value);
+    // Se vacía al instante, como en WhatsApp: esperar a Meta dejaría el mensaje "pegado" en el
+    // campo un segundo. Si el envío falla, se devuelve el texto —salvo que el asesor ya haya
+    // empezado a escribir otra cosa— para que pueda reintentar sin reescribirlo.
     setTexto('');
+    void Promise.resolve(onSend(value)).catch(() => {
+      setTexto((actual) => (actual.trim() ? actual : value));
+    });
   }
 
   /**
@@ -103,11 +133,51 @@ export function MessageComposer({
     }
   }
 
+  /**
+   * Dónde insertar el próximo emoji. Se guarda al abrir el selector y avanza con cada emoji: el
+   * foco está en el selector mientras tanto, y el `selectionStart` del campo no sirve porque React,
+   * al reescribir el valor, manda el cursor nativo al final.
+   */
+  const seleccionRef = useRef<{ inicio: number; fin: number } | null>(null);
+
+  function recordarSeleccion(): void {
+    const campo = textareaRef.current;
+    seleccionRef.current = campo ? { inicio: campo.selectionStart, fin: campo.selectionEnd } : null;
+  }
+
+  /** Inserta el emoji donde estaba el cursor (o sobre la selección) sin cerrar el selector. */
+  function insertarEmoji(emoji: string): void {
+    const sel = seleccionRef.current;
+    const { valor, cursor } = insertarEnCursor(texto, sel?.inicio ?? null, sel?.fin ?? null, emoji);
+    setTexto(valor);
+    seleccionRef.current = { inicio: cursor, fin: cursor };
+  }
+
+  /** Al cerrar el selector, el foco vuelve al campo con el cursor justo detrás del último emoji. */
+  function volverAlCampo(): void {
+    const campo = textareaRef.current;
+    const sel = seleccionRef.current;
+    campo?.focus();
+    if (campo && sel) campo.setSelectionRange(sel.fin, sel.fin);
+    seleccionRef.current = null;
+  }
+
+  /** Manda la nota de voz; si falla, la previsualización se queda para reintentar (toast aparte). */
+  async function enviarNotaDeVoz(grabacion: Blob, duracionSegundos: number): Promise<void> {
+    try {
+      await onSendAudio(grabacion, duracionSegundos);
+      grabadora.descartar();
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } catch {
+      // El toast lo muestra `useSendAudio`.
+    }
+  }
+
   function onDrop(e: React.DragEvent): void {
     e.preventDefault();
     profundidad.current = 0;
     setArrastrando(false);
-    if (bloqueado) return;
+    if (bloqueado || enModoVoz) return;
 
     const file = e.dataTransfer.files[0];
     if (file) elegir(file);
@@ -119,7 +189,7 @@ export function MessageComposer({
       onDragEnter={(e) => {
         e.preventDefault();
         profundidad.current += 1;
-        if (!bloqueado) setArrastrando(true);
+        if (!bloqueado && !enModoVoz) setArrastrando(true);
       }}
       onDragOver={(e) => e.preventDefault()}
       onDragLeave={() => {
@@ -146,6 +216,15 @@ export function MessageComposer({
       />
 
       <div className="flex items-end gap-2">
+        {enModoVoz ? (
+          <VoiceRecorder
+            grabadora={grabadora}
+            maxDuracionSegundos={maxDuracionAudio}
+            progreso={audioProgress}
+            onEnviar={(grabacion, duracion) => void enviarNotaDeVoz(grabacion, duracion)}
+          />
+        ) : (
+          <>
         <input
           ref={inputMediaRef}
           type="file"
@@ -194,11 +273,21 @@ export function MessageComposer({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <EmojiButton
+          disabled={bloqueado}
+          onAbrir={recordarSeleccion}
+          onElegir={insertarEmoji}
+          onCerrar={volverAlCampo}
+        />
+
         <Textarea
+          ref={textareaRef}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // `isComposing`: el panel de emojis de Windows (Win + .) y de macOS, y los teclados
+            // con IME, confirman con Enter. Sin esta guarda, elegir un emoji ENVIABA el mensaje.
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               submit();
             }
@@ -209,16 +298,34 @@ export function MessageComposer({
           className={cn('max-h-40 min-h-[40px] resize-none')}
         />
 
+        {/* Un solo botón que cambia de papel, como en WhatsApp: micrófono con el campo vacío,
+            enviar en cuanto hay texto. El cambio es un fundido corto con un poco de desenfoque,
+            que funde los dos iconos en uno en vez de verlos cruzarse. */}
         <Button
           type="button"
           size="icon"
-          onClick={submit}
-          disabled={bloqueado || !texto.trim()}
-          aria-label="Enviar"
-          className="shrink-0 transition-transform duration-150 ease-out active:scale-95"
+          onClick={hayTexto ? submit : () => void grabadora.iniciar()}
+          disabled={bloqueado}
+          aria-label={hayTexto ? 'Enviar' : 'Grabar nota de voz'}
+          className="relative shrink-0 transition-transform duration-150 ease-out active:scale-95"
         >
-          <Send />
+          <Send
+            aria-hidden="true"
+            className={cn(
+              'absolute transition-[opacity,filter,transform] duration-150 ease-out motion-reduce:transition-opacity',
+              hayTexto ? 'opacity-100' : 'scale-75 opacity-0 blur-[2px] motion-reduce:scale-100 motion-reduce:blur-0',
+            )}
+          />
+          <Mic
+            aria-hidden="true"
+            className={cn(
+              'absolute transition-[opacity,filter,transform] duration-150 ease-out motion-reduce:transition-opacity',
+              hayTexto ? 'scale-75 opacity-0 blur-[2px] motion-reduce:scale-100 motion-reduce:blur-0' : 'opacity-100',
+            )}
+          />
         </Button>
+          </>
+        )}
       </div>
     </div>
   );

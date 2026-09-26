@@ -72,6 +72,7 @@ export async function sendOutbound(
       {
         ...(contenido.caption ? { caption: contenido.caption } : {}),
         ...(contenido.nombreArchivo ? { filename: contenido.nombreArchivo } : {}),
+        ...(contenido.esNotaDeVoz ? { esNotaDeVoz: true } : {}),
       },
       integrationMedia.phoneNumberId,
       integrationMedia.accessToken,
@@ -94,6 +95,10 @@ export async function sendOutbound(
         tamanoBytes: contenido.tamanoBytes,
         descargadaAt: new Date(),
         ...(contenido.nombreArchivo ? { nombreArchivo: contenido.nombreArchivo } : {}),
+        ...(contenido.esNotaDeVoz ? { esNotaDeVoz: true } : {}),
+        ...(contenido.duracionSegundos !== undefined
+          ? { duracionSegundos: contenido.duracionSegundos }
+          : {}),
       },
       metaMessageId: messageId,
       status: 'sent',

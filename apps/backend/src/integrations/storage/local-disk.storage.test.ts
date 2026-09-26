@@ -102,4 +102,21 @@ describe('localDiskStorage (HU-OMNI-06)', () => {
   it('un mime desconocido cae a `.bin` en vez de inventarse una extensión', () => {
     expect(construirMediaKey(tenantId, messageId, 'application/x-raro').endsWith('.bin')).toBe(true);
   });
+
+  it('HU-OMNI-07: con rango devuelve solo esos bytes y el tamaño del objeto completo', async () => {
+    const key = construirMediaKey(tenantId, messageId, 'audio/ogg');
+    await localDiskStorage.guardar({
+      key,
+      contenido: Buffer.from('0123456789'),
+      mimeType: 'audio/ogg',
+    });
+
+    const { stream, tamanoBytes } = await localDiskStorage.leer(key, { inicio: 2, fin: 5 });
+    const trozos: Buffer[] = [];
+    for await (const t of stream) trozos.push(Buffer.from(t as Buffer));
+
+    expect(Buffer.concat(trozos).toString('utf8')).toBe('2345');
+    expect(tamanoBytes).toBe(10);
+  });
 });
+

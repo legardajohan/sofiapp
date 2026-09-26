@@ -12,16 +12,29 @@ import type {
   IPreviewEnlace,
   TipoMensaje,
 } from '../message/message.types.js';
-import { LIMITES_MEDIA, esTipoConMedia } from './media.types.js';
+import {
+  LIMITES_MEDIA,
+  MIME_NOTA_DE_VOZ,
+  TIPOS_ADJUNTABLES,
+  esTipoConMedia,
+} from './media.types.js';
 import type {
+  IConfigAudioResponse,
   IMediaDescargable,
   IMediaResponse,
   IMediaTokenPayload,
   TipoMediaSaliente,
 } from './media.types.js';
-import { construirMediaKey, getMediaStorage } from '../../integrations/storage/index.js';
+import {
+  construirMediaKey,
+  getMediaStorage,
+  type IRangoBytes,
+} from '../../integrations/storage/index.js';
 import { metaMediaClient } from '../../integrations/meta/meta-media.client.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
+import { getNotasDeVozConfig } from '../tenant/tenant.service.js';
+import { Cliente } from '../cliente/cliente.model.js';
+import { getTranscodificador } from '../../integrations/audio/index.js';
 import { sendOutbound } from '../message/message.service.js';
 import { logger } from '../../utils/logger.js';
 
@@ -109,6 +122,45 @@ export async function resolverMediaDescargable(
   };
 }
 
+/**
+ * Interpreta la cabecera `Range` de una petición de media (HU-OMNI-07).
+ *
+ * - `undefined`: sin cabecera, o con una forma que no soportamos (varios rangos, otra unidad). Se
+ *   sirve el archivo completo con `200`, que es lo que la RFC 9110 permite hacer con un `Range` que
+ *   el servidor decide ignorar.
+ * - `null`: el rango es **insatisfacible** (empieza después del final) → `416`.
+ *
+ * Solo `bytes=a-b`, `bytes=a-` y `bytes=-n` (sufijo): es todo lo que piden `<audio>` y `<video>`.
+ */
+export function resolverRangoBytes(
+  cabecera: string | undefined,
+  tamanoBytes: number,
+): IRangoBytes | null | undefined {
+  if (!cabecera || tamanoBytes <= 0) return undefined;
+
+  const m = /^bytes=(\d*)-(\d*)$/.exec(cabecera.trim());
+  if (!m) return undefined;
+
+  const [, desdeRaw = '', hastaRaw = ''] = m;
+  if (desdeRaw === '' && hastaRaw === '') return undefined;
+
+  const ultimo = tamanoBytes - 1;
+
+  if (desdeRaw === '') {
+    // Sufijo: los últimos N bytes.
+    const n = Number(hastaRaw);
+    if (n === 0) return null;
+    return { inicio: Math.max(0, tamanoBytes - n), fin: ultimo };
+  }
+
+  const inicio = Number(desdeRaw);
+  if (inicio > ultimo) return null;
+  const fin = hastaRaw === '' ? ultimo : Math.min(Number(hastaRaw), ultimo);
+  if (fin < inicio) return undefined;
+
+  return { inicio, fin };
+}
+
 /** Proyecta `Message.media` al DTO, firmando la URL solo cuando hay algo que servir. */
 export function toMediaResponse(
   tenantId: string,
@@ -127,6 +179,8 @@ export function toMediaResponse(
         ? `/media/${messageId}?t=${firmarUrlMedia(tenantId, messageId)}`
         : null,
     error: media.error ?? null,
+    duracionSegundos: media.duracionSegundos ?? null,
+    esNotaDeVoz: media.esNotaDeVoz === true,
   };
 }
 
@@ -178,6 +232,7 @@ function maxBytesDe(tipo: TipoMediaSaliente): number {
     imagen: env.MEDIA_MAX_BYTES_IMAGEN,
     video: env.MEDIA_MAX_BYTES_VIDEO,
     documento: env.MEDIA_MAX_BYTES_DOCUMENTO,
+    audio: env.MEDIA_MAX_BYTES_AUDIO,
   }[tipo];
   return Math.min(LIMITES_MEDIA[tipo].maxBytes, porEnv);
 }
@@ -193,12 +248,13 @@ function maxBytesDe(tipo: TipoMediaSaliente): number {
 export function clasificarArchivoSaliente(
   mimeType: string,
   tamanoBytes: number,
+  permitidos: readonly TipoMediaSaliente[] = TIPOS_ADJUNTABLES,
 ): TipoMediaSaliente {
   const mime = mimeType.toLowerCase().split(';')[0]?.trim() ?? '';
 
-  const tipo = (Object.keys(LIMITES_MEDIA) as TipoMediaSaliente[]).find((t) =>
-    LIMITES_MEDIA[t].mimes.includes(mime),
-  );
+  // `permitidos` separa los dos caminos de subida: el menú de adjuntar no acepta audio (no pasaría
+  // por la transcodificación) y el de notas de voz solo acepta audio.
+  const tipo = permitidos.find((t) => LIMITES_MEDIA[t].mimes.includes(mime));
 
   if (!tipo) {
     throw new AppError(`No se pueden enviar archivos de tipo ${mime || 'desconocido'}.`, 415);
@@ -285,6 +341,131 @@ export async function enviarMediaSaliente(
       .then(() => storage.eliminar(guardado.key))
       .catch((e: unknown) => {
         logger.warn('No se pudo limpiar la media huérfana', { key: guardado.key, error: String(e) });
+      });
+    throw err;
+  }
+}
+
+/**
+ * Límite efectivo de las notas de voz del tenant (HU-OMNI-07): el suyo, pero nunca por encima del
+ * de Meta ni del configurado en el despliegue. Lo consumen el endpoint de configuración —para que
+ * el navegador corte la grabación— y `enviarNotaDeVoz`, que lo vuelve a aplicar en el servidor.
+ */
+export async function obtenerConfigAudio(tenantId: string): Promise<IConfigAudioResponse> {
+  const config = await getNotasDeVozConfig(tenantId);
+  return {
+    maxDuracionSegundos: config.maxDuracionSegundos,
+    maxBytes: Math.min(config.maxBytes, maxBytesDe('audio')),
+  };
+}
+
+function tamanoLegible(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${Math.floor(mb)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+function duracionLegible(segundos: number): string {
+  const m = Math.floor(segundos / 60);
+  const s = Math.round(segundos % 60);
+  if (m === 0) return `${s} s`;
+  return s ? `${m} min ${s} s` : `${m} min`;
+}
+
+/**
+ * Transcodifica una nota de voz grabada en el navegador y la envía por WhatsApp (HU-OMNI-07).
+ *
+ * Espejo de `enviarMediaSaliente`, con dos pasos propios antes de guardar:
+ *
+ * 1. **El cliente se resuelve dentro del tenant ANTES de tocar ffmpeg.** `sendOutbound` también lo
+ *    comprueba, pero al final: sin este corte, un id de otro tenant consumiría CPU transcodificando
+ *    y solo después devolvería 404. Es la misma respuesta que un id inexistente.
+ * 2. **La duración que vale es la medida**, no la que declara el navegador (`duracionPista`, que
+ *    solo sirve para el log). El límite del tenant se aplica sobre ella.
+ *
+ * La ventana de 24 h sigue sin decidirse aquí: la decide `sendOutbound`. Comprobarla antes de
+ * transcodificar ahorraría CPU fuera de ventana, pero sería una segunda implementación de la regla;
+ * el frontend ya deshabilita el micrófono con la ventana cerrada.
+ */
+export async function enviarNotaDeVoz(
+  tenantId: string,
+  clienteId: string,
+  grabacion: IArchivoSaliente,
+  duracionPista?: number,
+): Promise<IMessageDocument> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).select('_id').lean();
+  if (!cliente) throw new AppError('Cliente no encontrado.', 404);
+
+  clasificarArchivoSaliente(grabacion.mimeType, grabacion.buffer.byteLength, ['audio']);
+
+  const limite = await obtenerConfigAudio(tenantId);
+  if (grabacion.buffer.byteLength > limite.maxBytes) {
+    throw new AppError(
+      `La nota de voz supera el tamaño permitido (${tamanoLegible(limite.maxBytes)}).`,
+      413,
+    );
+  }
+
+  const audio = await getTranscodificador().aNotaDeVoz(grabacion.buffer);
+
+  // `+ 1`: MediaRecorder corta en el segundo exacto, pero el contenedor puede sumar unas décimas de
+  // relleno. Rechazar por eso una grabación que el propio navegador cortó a tiempo sería absurdo.
+  if (audio.duracionSegundos > limite.maxDuracionSegundos + 1) {
+    throw new AppError(
+      `La nota de voz dura más de lo permitido (${duracionLegible(limite.maxDuracionSegundos)}).`,
+      422,
+    );
+  }
+
+  if (duracionPista !== undefined && Math.abs(duracionPista - audio.duracionSegundos) > 2) {
+    logger.info('La duración declarada y la medida de la nota de voz difieren', {
+      duracionPista,
+      duracionMedida: audio.duracionSegundos,
+    });
+  }
+
+  const storage = getMediaStorage();
+  const key = construirMediaKey(tenantId, clienteId, MIME_NOTA_DE_VOZ);
+  const nombreArchivo = 'nota-de-voz.ogg';
+
+  const guardado = await storage.guardar({
+    key,
+    contenido: audio.buffer,
+    mimeType: MIME_NOTA_DE_VOZ,
+    nombreArchivo,
+  });
+
+  try {
+    const integration = await getIntegrationWithToken(tenantId);
+    const { mediaId } = await metaMediaClient.subir(
+      integration.phoneNumberId,
+      integration.accessToken,
+      { buffer: audio.buffer, mimeType: MIME_NOTA_DE_VOZ, nombreArchivo },
+    );
+
+    return await sendOutbound(
+      tenantId,
+      clienteId,
+      {
+        modo: 'media',
+        tipo: 'audio',
+        metaMediaId: mediaId,
+        mediaKey: guardado.key,
+        mimeType: guardado.mimeType,
+        tamanoBytes: guardado.tamanoBytes,
+        esNotaDeVoz: true,
+        duracionSegundos: audio.duracionSegundos,
+      },
+      'agent',
+    );
+  } catch (err: unknown) {
+    // Misma limpieza best-effort que `enviarMediaSaliente` (allí se explica el `Promise.resolve()`).
+    void Promise.resolve()
+      .then(() => storage.eliminar(guardado.key))
+      .catch((e: unknown) => {
+        logger.warn('No se pudo limpiar la nota de voz huérfana', {
+          key: guardado.key,
+          error: String(e),
+        });
       });
     throw err;
   }

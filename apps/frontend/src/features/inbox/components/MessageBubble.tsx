@@ -158,7 +158,7 @@ function Contenido({
         </>
       );
     case 'audio':
-      return <MediaAudio media={media} />;
+      return <MediaAudio messageId={message.id} media={media} outbound={outbound} />;
     default:
       // `documento` y cualquier tipo con archivo que no sepamos pintar: la tarjeta con nombre,
       // formato y tamaño siempre es mejor que un hueco vacío.

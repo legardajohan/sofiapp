@@ -53,7 +53,25 @@ export interface ITenant {
    * nadie empieza a enviar mensajes automáticos a sus clientes sin haberlo pedido.
    */
   recordatorio?: IReminderConfig;
+  /**
+   * Límite de las notas de voz que graban los asesores (HU-OMNI-07). Opcional: un tenant que nunca
+   * lo configuró usa `NOTAS_DE_VOZ_DEFAULT`. Lo edita el superadmin desde el CRUD de empresas.
+   */
+  notasDeVoz?: Partial<INotasDeVozConfig>;
 }
+
+export interface INotasDeVozConfig {
+  /** Tope de la grabación. El frontend corta al llegar; el servidor lo vuelve a medir. */
+  maxDuracionSegundos: number;
+  /** Tope del archivo grabado, antes de transcodificar. Nunca supera el de Meta (16 MB). */
+  maxBytes: number;
+}
+
+/** Cinco minutos y 16 MB: una nota de voz larga de WhatsApp cabe holgada en ambos. */
+export const NOTAS_DE_VOZ_DEFAULT: Readonly<INotasDeVozConfig> = {
+  maxDuracionSegundos: 300,
+  maxBytes: 16 * 1024 * 1024,
+};
 
 export interface IReminderConfig {
   activo: boolean;
@@ -87,6 +105,7 @@ export interface UpdateTenantDTO {
   nit?: string;
   contacto?: { email?: string; telefono?: string };
   planId?: string;
+  notasDeVoz?: Partial<INotasDeVozConfig>;
 }
 
 export interface UpdateTenantStatusDTO {
@@ -119,6 +138,8 @@ export interface ITenantResponse {
   fotografiaFinancieraContratada?: IFotografiaFinanciera;
   planContratadoVersion?: number;
   fechaContratacion?: string;
+  /** Ya resuelto con los defaults: el formulario siempre tiene un valor que mostrar. */
+  notasDeVoz: INotasDeVozConfig;
   createdAt: string;
   updatedAt: string;
 }

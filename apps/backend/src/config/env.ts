@@ -192,6 +192,13 @@ const EnvSchema = z.object({
    * no se puede permitir. Mismo criterio que `SEMAFORO_AUTO` y `EXTRACT_AUTO`.
    */
   MEDIA_INGEST_ENABLED: z.enum(['on', 'off']).default('on'),
+  /**
+   * Rutas a los binarios de ffmpeg/ffprobe (HU-OMNI-07, ADR-0009). Opcionales: por defecto se usan
+   * los que descargan `ffmpeg-static` / `ffprobe-static` al instalar. Solo hacen falta si el
+   * despliegue instala con `--ignore-scripts` y se usa el ffmpeg del sistema.
+   */
+  FFMPEG_PATH: z.string().optional().transform((v) => v || undefined),
+  FFPROBE_PATH: z.string().optional().transform((v) => v || undefined),
   SPACES_ENDPOINT: z.string().url().optional(),
   SPACES_REGION: z.string().optional(),
   SPACES_BUCKET: z.string().optional(),

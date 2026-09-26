@@ -5,11 +5,15 @@ import type { IMessagingProvider } from './messaging-provider.interface.js';
 import type { TipoMediaSaliente } from '../../features/media/media.types.js';
 
 /** Dominio → nombre del tipo en la Cloud API. */
-const TIPO_META: Record<TipoMediaSaliente, 'image' | 'video' | 'document'> = {
+const TIPO_META: Record<TipoMediaSaliente, 'image' | 'video' | 'document' | 'audio'> = {
   imagen: 'image',
   video: 'video',
   documento: 'document',
+  audio: 'audio',
 };
+
+/** Los únicos tipos a los que Meta les acepta `caption`: en audio o sticker responde 400. */
+const ACEPTAN_CAPTION: ReadonlySet<string> = new Set(['image', 'video', 'document']);
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
@@ -71,11 +75,16 @@ export const metaWhatsAppClient: IMessagingProvider = {
       type: tipoMeta,
       [tipoMeta]: {
         id: mediaId,
-        // El caption solo lo aceptan image, video y document. En audio o sticker, mandarlo hace
-        // que Meta responda 400, así que el llamador lo descarta antes de llegar aquí.
-        ...(opciones.caption ? { caption: opciones.caption } : {}),
+        // El caption solo lo aceptan image, video y document: en audio o sticker Meta responde 400.
+        // Se filtra AQUÍ y no en el llamador para que ningún camino nuevo pueda olvidarlo.
+        ...(ACEPTAN_CAPTION.has(tipoMeta) && opciones.caption ? { caption: opciones.caption } : {}),
         // `filename` solo aplica a document: es el nombre que ve el destinatario al descargar.
         ...(tipoMeta === 'document' && opciones.filename ? { filename: opciones.filename } : {}),
+        // `voice: true` hace que WhatsApp la presente como nota de voz (onda, micrófono,
+        // transcripción) y no como archivo de audio. Exige ogg/Opus mono, que es lo que sale del
+        // transcodificador. Verificado en developers.facebook.com/docs/whatsapp/cloud-api/messages/
+        // audio-messages el 2026-09-26 (HU-OMNI-07).
+        ...(tipoMeta === 'audio' && opciones.esNotaDeVoz ? { voice: true } : {}),
       },
     });
 

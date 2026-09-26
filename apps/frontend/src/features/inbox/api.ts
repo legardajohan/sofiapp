@@ -1,6 +1,7 @@
 import { apiClient } from '../../api/apiClient.js';
 import type {
   CampoExtraido,
+  ConfigAudioDTO,
   ConfirmarExtraccionDTO,
   ContactHistoryDTO,
   ConversationDTO,
@@ -119,6 +120,41 @@ export async function sendMediaReply(
       },
     },
   );
+  return data;
+}
+
+/**
+ * Envía una nota de voz grabada en el navegador (HU-OMNI-07). El servidor la transcodifica a
+ * `ogg/opus` y mide su duración; `duracionSegundos` es solo la pista del navegador.
+ */
+export async function sendAudioReply(
+  conversationId: string,
+  grabacion: Blob,
+  duracionSegundos: number,
+  onProgress?: (porcentaje: number) => void,
+): Promise<MessageDTO> {
+  const form = new FormData();
+  // El nombre es cosmético (el servidor lo ignora), pero multer necesita uno para tratarlo como
+  // archivo y no como campo de texto.
+  form.append('audio', grabacion, 'nota-de-voz');
+  form.append('duracionSegundos', String(Math.max(1, Math.round(duracionSegundos))));
+
+  const { data } = await apiClient.post<MessageDTO>(
+    `/conversations/${conversationId}/messages/audio`,
+    form,
+    {
+      timeout: TIMEOUT_SUBIDA_MS,
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    },
+  );
+  return data;
+}
+
+/** Límite de grabación del tenant: el navegador corta la nota de voz al llegar a él. */
+export async function fetchConfigAudio(): Promise<ConfigAudioDTO> {
+  const { data } = await apiClient.get<ConfigAudioDTO>('/conversations/config/audio');
   return data;
 }
 

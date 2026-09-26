@@ -151,6 +151,9 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
                   intentos: 0,
                   ...(media.filename ? { nombreArchivo: media.filename } : {}),
                   ...(media.sha256 ? { sha256: media.sha256 } : {}),
+                  // HU-OMNI-07: Meta marca con `voice: true` el audio grabado en WhatsApp (nota de
+                  // voz) frente a un archivo de audio reenviado. Solo existe en `audio`.
+                  ...(msg.type === 'audio' ? { esNotaDeVoz: media.voice === true } : {}),
                 },
               }
             : {}),

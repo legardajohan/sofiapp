@@ -13,6 +13,8 @@ import {
   listAssignments,
   listConversations,
   markRead,
+  getConfigAudio,
+  replyAudioMessage,
   replyMediaMessage,
   replyMessage,
   setConversationTags,
@@ -24,6 +26,7 @@ import type {
   ClassificationsQuery,
   IaBody,
   ListConversationsQuery,
+  ReplyAudioBody,
   ReplyBody,
   TagsBody,
   ThreadQuery,
@@ -94,6 +97,35 @@ export const replyMediaController: RequestHandler = async (req, res) => {
   );
 
   res.status(201).json(message);
+};
+
+/**
+ * Envío de una nota de voz grabada en el navegador (HU-OMNI-07).
+ *
+ * `req.file` lo deja `subirAudio`. El nombre del archivo del navegador se ignora: la grabación sale
+ * transcodificada y con un nombre fijo, así que no hay nada del usuario que conservar.
+ */
+export const replyAudioController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const grabacion = req.file;
+
+  if (!grabacion) throw new AppError('Falta la grabación a enviar.', 400);
+
+  const { duracionSegundos } = req.body as ReplyAudioBody;
+  const message = await replyAudioMessage(
+    tenantId,
+    id,
+    { buffer: grabacion.buffer, mimeType: grabacion.mimetype, nombreArchivo: 'nota-de-voz' },
+    duracionSegundos,
+  );
+
+  res.status(201).json(message);
+};
+
+export const getConfigAudioController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  res.json(await getConfigAudio(tenantId));
 };
 
 export const markReadController: RequestHandler = async (req, res) => {

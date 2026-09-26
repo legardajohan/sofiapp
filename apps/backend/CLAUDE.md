@@ -38,8 +38,9 @@ router.<m>('<path>',
   asyncHandler(<controller>)  // 5. envuelve el controller
 );
 ```
-**Única excepción admitida a la cadena:** `subirArchivo` (multer) en
-`POST /api/conversations/:id/messages/media`, y va **entre `authorize` y `validate`** — `validate`
+**Única excepción admitida a la cadena:** el multer de subida —`subirArchivo` en
+`POST /api/conversations/:id/messages/media` y `subirAudio` en `.../messages/audio` (HU-OMNI-07)—,
+y va **entre `authorize` y `validate`** — `validate`
 parsea `req.body`, y en un multipart los campos de texto no existen hasta que multer ha consumido el
 stream. El middleware además traduce los errores de multer a `AppError`: sin eso un
 `LIMIT_FILE_SIZE` sale como 500 opaco en vez de 413.

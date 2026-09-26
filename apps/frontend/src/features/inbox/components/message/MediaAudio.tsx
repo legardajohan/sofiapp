@@ -1,23 +1,34 @@
 import { urlDeArchivo } from '../../lib/media.js';
 import type { MediaDTO } from '../../types.js';
 import { MediaFallida } from './MediaEstado.js';
+import { ReproductorAudio } from './ReproductorAudio.js';
+
+interface Props {
+  /** Id del mensaje: identidad del reproductor y semilla de su onda. */
+  messageId: string;
+  media: MediaDTO;
+  outbound: boolean;
+}
 
 /**
- * Nota de voz o archivo de audio.
+ * Nota de voz o archivo de audio del hilo.
  *
- * Reproductor nativo: uno propio exigiría una barra de progreso, una forma de onda y gestión de
- * estado a mano, por una ganancia estética. El nativo es accesible por teclado y funciona en todos
- * los navegadores desde el primer día.
+ * Desde HU-OMNI-07 usa un reproductor propio en vez del `<audio controls>` nativo de HU-OMNI-06:
+ * la historia pide ver la duración y avanzar como en WhatsApp, y el nativo ocupaba toda la burbuja
+ * con controles que cada navegador pinta distinto (y que en dark no respetan el tema).
  */
-export function MediaAudio({ media }: { media: MediaDTO }): React.ReactElement {
+export function MediaAudio({ messageId, media, outbound }: Props): React.ReactElement {
   if (!media.urlArchivo) {
     return <MediaFallida media={{ ...media, error: media.error ?? 'El audio ya no está disponible.' }} />;
   }
 
   return (
-    <audio controls preload="metadata" className="h-10 w-60 max-w-full">
-      <source src={urlDeArchivo(media.urlArchivo)} type={media.mimeType} />
-      Tu navegador no puede reproducir este audio.
-    </audio>
+    <ReproductorAudio
+      id={messageId}
+      src={urlDeArchivo(media.urlArchivo)}
+      duracionSegundos={media.duracionSegundos}
+      esNotaDeVoz={media.esNotaDeVoz}
+      tono={outbound ? 'saliente' : 'entrante'}
+    />
   );
 }
