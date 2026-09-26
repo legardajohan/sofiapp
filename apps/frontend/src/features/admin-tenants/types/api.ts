@@ -20,6 +20,7 @@ export interface UpdateTenantPayload {
   nit?: string;
   contacto?: { email?: string; telefono?: string };
   planId?: string;
+  notasDeVoz?: { maxDuracionSegundos?: number; maxBytes?: number };
 }
 
 export interface UpdateTenantStatusPayload {

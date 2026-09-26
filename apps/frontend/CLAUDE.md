@@ -153,6 +153,21 @@ apiClient.interceptors.response.use(r => r, (e) => {
     acepta adjuntos por botón y por arrastrar y soltar, con barra de progreso. La proporción del
     hueco se reserva con `aspect-*` de Tailwind (nativo desde v3.4): **no** hace falta el
     `aspect-ratio` de shadcn.
+  - **Notas de voz y emojis (HU-OMNI-07):**
+    - `ReproductorAudio` sustituye al `<audio controls>` nativo. Tiene una onda decorativa estable
+      por mensaje con el `Slider` de shadcn encima (variante `transparente`), y un solo audio suena
+      a la vez (`useAudioActivo`, Zustand).
+    - En el composer, el botón principal es micrófono con el campo vacío y enviar con texto.
+      `useGrabadora` (sobre `MediaRecorder`) **libera siempre el micrófono** y corta al llegar al
+      límite del tenant (`useConfigAudio`). `VoiceRecorder` ocupa el lugar del campo mientras se
+      graba o se revisa.
+    - El selector de emojis es `components/ui/emoji-picker.tsx` (`frimousse`, vendorizado a mano: la
+      CLI 3.8.5 no lo trae). Inserta en el cursor y no se cierra al elegir.
+    - El Enter del campo ignora `isComposing`, porque el panel de emojis del SO confirma con Enter.
+    - Tokens `nota-voz` y `grabacion` en los tres bloques de `index.css`, y fuentes de emoji al
+      final del stack tipográfico.
+    - El `MessageComposer` lleva `key` por conversación: cambiar de chat descarta una grabación a
+      medias.
 - **Leads (`/leads`):** dos vistas de la misma cartera, con un toggle `Tabla | Embudo` persistido
   en la URL (`?vista=embudo`):
   - **Tabla** — filtrable y paginada; es la que sirve para recorrer muchos leads.

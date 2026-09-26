@@ -36,6 +36,13 @@
     texto: String?,
     templateId: ObjectId?,         // ref WhatsAppTemplate; debe estar APPROVED
   },
+  // HU-OMNI-07: límite de las notas de voz de los asesores. Opcional y SIN defaults en el schema:
+  // un campo ausente significa "usa el default" (300 s, 16 MB). Lo edita el superadmin; el tope
+  // efectivo nunca supera MEDIA_MAX_BYTES_AUDIO ni los 16 MB de Meta.
+  notasDeVoz: {
+    maxDuracionSegundos: Number?,  // Zod exige 5..900
+    maxBytes: Number?,             // Zod exige 100 KB..16 MB
+  }?,
   createdAt, updatedAt
 }
 // Índices: { slug: 1 } unique
@@ -261,7 +268,9 @@
     nombreArchivo: String?,
     tamanoBytes: Number?,
     sha256: String?,
-    duracionSegundos: Number?,
+    duracionSegundos: Number?,    // HU-OMNI-07: medida con ffprobe (ingesta o transcodificación)
+    esNotaDeVoz: Boolean,         // HU-OMNI-07: default false. Entrante: audio.voice de Meta;
+                                  // saliente: toda grabación del composer
     miniaturaKey: String?,        // declarado; hoy nunca se rellena (ADR-0008)
     intentos: Number,
     error: String?,               // motivo del fallo definitivo, se le muestra al asesor

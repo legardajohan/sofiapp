@@ -183,6 +183,29 @@ describe('tenant.service — HU-SAAS-01', () => {
       const updated = await updateTenant(created._id, { nombre: 'Empresa Actualizada' });
       expect(updated.nombre).toBe('Empresa Actualizada');
     });
+
+    it('HU-OMNI-07: sin configurar, la respuesta trae el límite de notas de voz por defecto', async () => {
+      const created = await createTenant({
+        nombre: 'Empresa Voz',
+        slug: 'empresa-voz',
+        contacto: { email: 'voz@empresa.com', telefono: '3001234580' },
+      });
+
+      expect(created.notasDeVoz).toEqual({ maxDuracionSegundos: 300, maxBytes: 16 * 1024 * 1024 });
+    });
+
+    it('HU-OMNI-07: actualizar un solo campo de notasDeVoz no borra el otro', async () => {
+      const created = await createTenant({
+        nombre: 'Empresa Voz Parcial',
+        slug: 'empresa-voz-parcial',
+        contacto: { email: 'vozp@empresa.com', telefono: '3001234581' },
+      });
+
+      await updateTenant(created._id, { notasDeVoz: { maxDuracionSegundos: 60, maxBytes: 500_000 } });
+      const updated = await updateTenant(created._id, { notasDeVoz: { maxDuracionSegundos: 90 } });
+
+      expect(updated.notasDeVoz).toEqual({ maxDuracionSegundos: 90, maxBytes: 500_000 });
+    });
   });
 
   describe('updateTenantStatus', () => {

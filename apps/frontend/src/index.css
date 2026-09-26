@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, sans-serif;
+  /* Las fuentes de emoji van al final a propósito (HU-OMNI-07): sin ellas, en Windows y en algunos
+     Linux un emoji compuesto (👩🏽‍💻, 🇨🇴) cae en una fuente monocroma o se parte en sus piezas. */
+  font-family: Inter, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   color-scheme: light;
 }
 
@@ -60,6 +62,13 @@ body {
        hex sueltos para que el modo oscuro exista y el contraste sea comprobable. */
     --adjunto-galeria: 285 59% 54%;
     --adjunto-documento: 236 52% 59%;
+    /* Notas de voz (HU-OMNI-07). `--nota-voz` es el verde azulado de la nota de voz de WhatsApp:
+       marca el micrófono y la parte ya escuchada de la onda en las burbujas entrantes.
+       `--grabacion` es el rojo del "estás grabando", distinto de `--destructive` porque no avisa
+       de un error: avisa de que el micrófono está abierto. */
+    --nota-voz: 164 70% 32%;
+    --nota-voz-foreground: 0 0% 100%;
+    --grabacion: 358 75% 52%;
     --plan-anual-1: 268 85% 58%;
     --plan-anual-2: 322 88% 57%;
     --plan-anual-3: 40 96% 56%;
@@ -113,6 +122,10 @@ body {
        `--popover` en dark y el icono dejaría de distinguirse. */
     --adjunto-galeria: 285 70% 68%;
     --adjunto-documento: 236 70% 70%;
+    --nota-voz: 164 58% 52%;
+    /* En dark el verde es claro: el icono va oscuro encima para no perder contraste. */
+    --nota-voz-foreground: 164 60% 10%;
+    --grabacion: 358 85% 64%;
     --plan-anual-1: 270 96% 70%;
     --plan-anual-2: 322 96% 70%;
     --plan-anual-3: 43 100% 64%;
@@ -350,6 +363,9 @@ body {
     --destructive-subtle: 0 85.7% 97.3%;
     --adjunto-galeria: 285 59% 54%;
     --adjunto-documento: 236 52% 59%;
+    --nota-voz: 164 70% 32%;
+    --nota-voz-foreground: 0 0% 100%;
+    --grabacion: 358 75% 52%;
     --success: 142 76.2% 36.3%;
     --success-foreground: 0 0% 100%;
     --success-subtle: 138 76.5% 96.7%;

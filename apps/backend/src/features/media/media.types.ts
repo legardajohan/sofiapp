@@ -1,7 +1,20 @@
 import type { EstadoMedia, TipoMensaje } from '../message/message.types.js';
 
-/** Los tres tipos que un asesor puede enviar desde el composer (HU-OMNI-06). */
-export type TipoMediaSaliente = 'imagen' | 'video' | 'documento';
+/**
+ * Lo que un asesor puede enviar: los tres adjuntos del composer (HU-OMNI-06) y la nota de voz
+ * grabada en el navegador (HU-OMNI-07). El audio **no** entra por el menú de adjuntar: tiene su
+ * propio endpoint porque exige transcodificación y un límite por tenant.
+ */
+export type TipoMediaSaliente = 'imagen' | 'video' | 'documento' | 'audio';
+
+/** Los que acepta `POST /messages/media` (el menú de adjuntar). El audio va por `/messages/audio`. */
+export const TIPOS_ADJUNTABLES: readonly TipoMediaSaliente[] = ['imagen', 'video', 'documento'];
+
+/**
+ * Formato en el que sale **toda** nota de voz tras transcodificar. WhatsApp solo la presenta como
+ * nota de voz —onda, icono de micrófono, "escuchada"— si es `audio/ogg` con Opus mono (ADR-0009).
+ */
+export const MIME_NOTA_DE_VOZ = 'audio/ogg';
 
 export interface ILimiteMedia {
   mimes: readonly string[];
@@ -44,6 +57,13 @@ export const LIMITES_MEDIA: Readonly<Record<TipoMediaSaliente, ILimiteMedia>> = 
       'text/csv',
     ],
     maxBytes: 100 * 1024 * 1024,
+  },
+  audio: {
+    // Mimes de ENTRADA: lo que produce `MediaRecorder` en cada navegador (webm/opus en Chrome, Edge
+    // y Firefox; mp4/aac en Safari) más los formatos que ya son de voz. Lo que sale hacia Meta es
+    // siempre `MIME_NOTA_DE_VOZ`, porque el servidor transcodifica.
+    mimes: ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/aac', 'audio/x-m4a'],
+    maxBytes: 16 * 1024 * 1024,
   },
 };
 
@@ -96,4 +116,14 @@ export interface IMediaResponse {
   /** `/media/<id>?t=<token>`; `null` mientras el archivo no esté `disponible`. */
   urlArchivo: string | null;
   error: string | null;
+  /** Solo audio/video. `null` si no se pudo medir: el reproductor la toma de los metadatos. */
+  duracionSegundos: number | null;
+  /** `true` si es una nota de voz (grabada) y no un archivo de audio. */
+  esNotaDeVoz: boolean;
+}
+
+/** Límite de grabación que el navegador necesita para cortar a tiempo (HU-OMNI-07). */
+export interface IConfigAudioResponse {
+  maxDuracionSegundos: number;
+  maxBytes: number;
 }

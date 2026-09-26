@@ -132,3 +132,25 @@ export const replyMediaSchema = z.object({
   params: z.object({ id: objectId }),
   query: empty,
 });
+
+/**
+ * Nota de voz (HU-OMNI-07). Igual que en `replyMediaSchema`, la grabación la deja multer en
+ * `req.file` y Zod no la modela. `duracionSegundos` es solo la **pista** del navegador: la duración
+ * que se persiste y contra la que se aplica el límite la mide el servidor al transcodificar.
+ */
+export const replyAudioSchema = z.object({
+  body: z.object({
+    duracionSegundos: z.coerce.number().positive().max(3600).optional(),
+  }),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
+/** Límite de grabación del tenant del token (HU-OMNI-07). Sin entrada: el tenant sale del JWT. */
+export const configAudioSchema = z.object({
+  body: empty,
+  params: empty,
+  query: empty,
+});
+
+export type ReplyAudioBody = z.infer<typeof replyAudioSchema>['body'];

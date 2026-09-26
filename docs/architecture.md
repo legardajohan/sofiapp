@@ -74,7 +74,8 @@ Request → authenticateJWT → requireTenant → authorize([roles]) → validat
 | Colas | BullMQ 5.x + ioredis 5.x | — |
 | Tiempo real | Socket.IO 4.x | — |
 | Storage | `@aws-sdk/client-s3` 3.x + `s3-request-presigner` (DO Spaces, S3-compat) | Tras el puerto `IMediaStorage`; en desarrollo el adaptador es disco local y no hace falta bucket (ADR-0008) |
-| Subida HTTP | `multer` 2.x (`memoryStorage`) | Solo en `POST /conversations/:id/messages/media` |
+| Subida HTTP | `multer` 2.x (`memoryStorage`) | Solo en `POST /conversations/:id/messages/media` y `/messages/audio` |
+| Audio | `ffmpeg-static` + `ffprobe-static` | Transcodifica las notas de voz a `ogg/opus` mono y mide duraciones, tras el puerto `ITranscodificadorAudio` (ADR-0009) |
 | Frontend | React 19 + Vite 6/7 | — |
 | Estado | Zustand 5.x + TanStack Query 5.x | — |
 | UI | Tailwind 3/4 (+ shadcn/ui opcional) | — |

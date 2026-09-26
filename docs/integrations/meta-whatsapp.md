@@ -184,6 +184,28 @@ Restricciones que producen rechazos opacos si se ignoran:
 **`image/svg+xml` y `text/html` están fuera de la lista blanca**: servirlos `inline` desde nuestro
 propio origen sería XSS almacenado con la cookie de sesión al alcance.
 
+### Notas de voz (HU-OMNI-07)
+
+Verificado contra `developers.facebook.com/docs/whatsapp/cloud-api/messages/audio-messages` el
+**2026-09-26**.
+
+- **Entrante:** el webhook marca con `audio.voice: true` el audio grabado en WhatsApp (nota de voz)
+  frente a un archivo de audio reenviado. Se guarda como `media.esNotaDeVoz`. Meta **no** informa la
+  duración: `media-ingest` la mide con ffprobe al descargar (ADR-0009).
+- **Saliente:** `POST /api/conversations/:id/messages/audio`. El navegador graba en webm/opus
+  (Chrome, Edge), mp4/aac (Safari) u ogg/opus (Firefox); el servidor transcodifica siempre a
+  **`audio/ogg` Opus mono** y lo envía como:
+
+  ```json
+  { "type": "audio", "audio": { "id": "<media id>", "voice": true } }
+  ```
+
+  Sin `voice: true`, o con otro formato, Meta la entrega como **archivo de audio** y no como nota de
+  voz, y su transcripción falla. `caption` y `filename` se filtran en el propio cliente
+  (`meta-whatsapp.client.ts`) para el tipo `audio`, porque Meta responde 400.
+- El límite por tenant (`Tenant.notasDeVoz`) se aplica antes de transcodificar (tamaño) y después
+  (duración medida). La ventana de 24 h la decide `sendOutbound`, como para el resto de la media.
+
 ### Previsualización de enlaces
 
 La Cloud API **no envía metadata Open Graph** en los webhooks entrantes: un mensaje con un link

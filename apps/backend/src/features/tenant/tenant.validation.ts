@@ -1,6 +1,17 @@
 import { z } from 'zod';
 import { objectIdSchema } from '../../utils/validation.js';
 
+/**
+ * Cotas del límite de notas de voz que puede fijar el superadmin (HU-OMNI-07). Viven aquí y no en
+ * `tenant.types.ts` porque este archivo ya es importado por los tipos: al revés sería un ciclo.
+ */
+export const NOTAS_DE_VOZ_COTAS = {
+  minDuracionSegundos: 5,
+  maxDuracionSegundos: 900,
+  minBytes: 100 * 1024,
+  maxBytes: 16 * 1024 * 1024,
+} as const;
+
 export const listTenantsSchema = z.object({
   query: z.object({
     search: z.string().optional(),
@@ -45,6 +56,22 @@ export const updateTenantSchema = z.object({
       })
       .optional(),
     planId: objectIdSchema.optional(),
+    // HU-OMNI-07 — límite de las notas de voz de la empresa.
+    notasDeVoz: z
+      .object({
+        maxDuracionSegundos: z
+          .number()
+          .int()
+          .min(NOTAS_DE_VOZ_COTAS.minDuracionSegundos)
+          .max(NOTAS_DE_VOZ_COTAS.maxDuracionSegundos),
+        maxBytes: z
+          .number()
+          .int()
+          .min(NOTAS_DE_VOZ_COTAS.minBytes)
+          .max(NOTAS_DE_VOZ_COTAS.maxBytes),
+      })
+      .partial()
+      .optional(),
   }),
 });
 

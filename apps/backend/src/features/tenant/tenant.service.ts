@@ -23,7 +23,19 @@ import type {
   IReminderResponse,
   ListTenantsQuery,
   TenantsListResponse,
+  INotasDeVozConfig,
 } from './tenant.types.js';
+import { NOTAS_DE_VOZ_DEFAULT } from './tenant.types.js';
+
+/** Completa con los defaults lo que el tenant no configuró (HU-OMNI-07). */
+export function resolverNotasDeVoz(
+  config: Partial<INotasDeVozConfig> | undefined,
+): INotasDeVozConfig {
+  return {
+    maxDuracionSegundos: config?.maxDuracionSegundos ?? NOTAS_DE_VOZ_DEFAULT.maxDuracionSegundos,
+    maxBytes: config?.maxBytes ?? NOTAS_DE_VOZ_DEFAULT.maxBytes,
+  };
+}
 
 export function mapTenantToResponse(doc: ITenantDocument): ITenantResponse {
   return {
@@ -39,6 +51,7 @@ export function mapTenantToResponse(doc: ITenantDocument): ITenantResponse {
     fechaContratacion: doc.fechaContratacion
       ? new Date(doc.fechaContratacion).toISOString()
       : undefined,
+    notasDeVoz: resolverNotasDeVoz(doc.notasDeVoz),
     createdAt: (doc as unknown as { createdAt: Date }).createdAt.toISOString(),
     updatedAt: (doc as unknown as { updatedAt: Date }).updatedAt.toISOString(),
   };
@@ -156,9 +169,18 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
 }
 
 export async function updateTenant(id: string, dto: UpdateTenantDTO): Promise<ITenantResponse> {
+  // `notasDeVoz` se aplana a rutas con punto: con `$set: { notasDeVoz: { maxBytes } }` Mongo
+  // reemplazaría el subdocumento entero y un PATCH parcial borraría la duración ya configurada.
+  const { notasDeVoz, ...resto } = dto;
+  const set: Record<string, unknown> = { ...resto };
+  if (notasDeVoz?.maxDuracionSegundos !== undefined) {
+    set['notasDeVoz.maxDuracionSegundos'] = notasDeVoz.maxDuracionSegundos;
+  }
+  if (notasDeVoz?.maxBytes !== undefined) set['notasDeVoz.maxBytes'] = notasDeVoz.maxBytes;
+
   const tenant = await Tenant.findByIdAndUpdate(
     id,
-    { $set: dto },
+    { $set: set },
     { new: true, runValidators: true }
   ).lean<ITenantDocument>();
 
@@ -264,6 +286,16 @@ export async function updateReminderConfig(
 
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
   return mapReminderToResponse(tenant);
+}
+
+/**
+ * Límite de notas de voz del **propio** tenant (HU-OMNI-07), ya resuelto con los defaults. Mismo
+ * contrato que `getReminderConfig`: el `tenantId` lo resuelve siempre el caller desde el token.
+ */
+export async function getNotasDeVozConfig(tenantId: string): Promise<INotasDeVozConfig> {
+  const tenant = await Tenant.findById(tenantId).select('notasDeVoz').lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return resolverNotasDeVoz(tenant.notasDeVoz);
 }
 
 /**
