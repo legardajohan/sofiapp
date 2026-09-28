@@ -1,4 +1,15 @@
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ETIQUETA_CALIDAD, etiquetaTier } from '../../campaigns/lib/pacing.js';
@@ -50,9 +61,27 @@ export function ChannelStatusPanel({
           </p>
         </div>
         {puedeReconectar && (
-          <Button variant="outline" onClick={onReconectar} className={`${PRESS} shrink-0`}>
-            Cambiar número
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className={`${PRESS} shrink-0`}>
+                Cambiar número
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Cambiar el número de WhatsApp?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {titulo} dejará de recibir mensajes en cuanto elijas el nuevo número, hasta que
+                  termines de activarlo.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                {/* Síncrono a propósito: el popup de Meta tiene que abrirse dentro de este clic. */}
+                <AlertDialogAction onClick={onReconectar}>Cambiar número</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
 

@@ -6,7 +6,7 @@
  * `postMessage`), el PIN solo cuando Meta lo pide, y que cerrar el popup no se trate como error.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders } from 'axios';
@@ -175,5 +175,25 @@ describe('ChannelConfigPage (HT-WA-03)', () => {
 
     await waitFor(() => expect(mockActivate).toHaveBeenCalledTimes(1));
     expect(mockActivate.mock.calls[0]?.[0]).toBeUndefined();
+  });
+
+  it('«Cambiar número» pide confirmación: cancelar no abre el popup, confirmar sí', async () => {
+    mockStatus.mockResolvedValue(CONECTADO);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /cambiar número/i }));
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo).toHaveTextContent(/dejará de recibir mensajes/i);
+    expect(mockLogin).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialogo).getByRole('button', { name: /cancelar/i }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(mockLogin).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /cambiar número/i }));
+    const dialogo2 = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialogo2).getByRole('button', { name: /cambiar número/i }));
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(1));
   });
 });

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { IChannelStatusResponse } from './api.js';
 import { ChannelStatusPanel } from './components/ChannelStatusPanel.js';
@@ -9,6 +10,7 @@ import { ConnectWhatsAppPanel } from './components/ConnectWhatsAppPanel.js';
 import { ManualConnectForm } from './components/ManualConnectForm.js';
 import { useChannelStatus } from './hooks/useChannelStatus.js';
 import { useEmbeddedSignup } from './hooks/useEmbeddedSignup.js';
+import { PRESS } from './lib/press.js';
 
 function WhatsAppGlyph(): React.ReactElement {
   return (
@@ -65,13 +67,14 @@ export function ChannelConfigPage(): React.ReactElement {
       {isError && (
         <div className="rounded-xl border border-border bg-card p-6 shadow-card">
           <p className="text-sm text-foreground">No se pudo consultar el estado de WhatsApp.</p>
-          <button
+          <Button
             type="button"
+            variant="link"
             onClick={() => void refetch()}
-            className="mt-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className={`${PRESS} mt-2 h-auto p-0`}
           >
             Reintentar
-          </button>
+          </Button>
         </div>
       )}
 

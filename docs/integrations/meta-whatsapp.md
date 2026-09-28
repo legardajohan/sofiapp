@@ -1,8 +1,9 @@
-# Integración Meta — WhatsApp / Instagram / Messenger (BSP)
+# Integración Meta — WhatsApp / Instagram / Messenger (Tech Provider)
 
-SofiApp opera como **proveedor de tecnología (BSP)**: cada tenant conecta su propia cuenta de
-WhatsApp Business API (WABA) mediante **Embedded Signup**. El estado de Tech Provider/BSP de Meta
-lo provee el cliente.
+SofiApp opera como **proveedor de tecnología (Tech Provider)**: cada tenant conecta su propia cuenta
+de WhatsApp Business API (WABA) mediante **Embedded Signup**, sobre la **única app de Meta que tiene
+SofiApp** (con ese estado Tech Provider). Cada tenant es dueño de su Business Portfolio, su WABA y su
+número — no los crea ni los administra SofiApp.
 
 ## 1. Webhook multi-tenant — resolución de tenant ANTES de autenticar
 
@@ -85,14 +86,44 @@ BACKEND (connectViaEmbeddedSignup → activateChannel)
   al log, no a la UI.
 - **Conexión manual** (`POST /connect`, IDs + token pegados): se conserva plegada para el número de
   prueba y soporte. No suscribe ni registra.
+- **Timeout por llamada.** Cada llamada a la Graph API del onboarding (`exchangeCode`, `subscribeApp`,
+  `registerPhone`, `getPhoneInfo`) lleva su propio `AbortSignal.timeout` (15 s, menor que los 45 s
+  que el frontend le da a `/embedded-signup` y `/activate`). Si vence → 502 con texto legible;
+  `getPhoneInfo` sigue sin lanzar nunca, un timeout suyo se trata igual que cualquier otro fallo
+  (devuelve `null`).
+- **Cambiar de número.** Reconectar con un `phoneNumberId` distinto al que ya tenía el tenant
+  **reemplaza** el canal: se limpian el PIN, el nombre y el tier del número anterior (no tienen
+  sentido para el nuevo), salvo el override manual del tier (`tierManual`), que es una decisión del
+  admin y sobrevive. Si la activación del número nuevo falla, el canal queda `activo:false` — la UI
+  pide confirmación antes de iniciar el cambio, porque el número anterior deja de operar mientras
+  tanto.
+
+### Modelo con Meta: quién paga
+
+Tech Provider (a diferencia de Solution Partner/BSP) significa que **cada tenant le paga a Meta
+directamente** el consumo de su WABA, con el método de pago que carga ahí. SofiApp no paga ni
+revende ese consumo — cobra únicamente su plan SaaS (`docs/specs/HU-SAAS-02-planes-limites-uso/`).
+No hay línea de crédito compartida ni facturación centralizada. La evolución a Solution Partner (con
+margen sobre los mensajes) queda registrada como decisión futura en
+`docs/adr/0010-modelo-tech-provider.md`.
 
 ### Prerrequisitos en Meta (operador de SofiApp, una sola vez)
 
+- Business Portfolio de SofiApp verificado.
 - App con estado **Tech Provider** y el producto WhatsApp; permisos `whatsapp_business_management` y
-  `whatsapp_business_messaging`.
+  `whatsapp_business_messaging` (Advanced Access, vía App Review).
 - Una configuración de **Facebook Login for Business** del tipo *WhatsApp Embedded Signup* → su id es
   `VITE_META_CONFIG_ID`.
 - *Login with the JavaScript SDK* = Yes, con dominios permitidos `localhost` (dev) y el de Vercel.
+
+### Lo que necesita cada tenant
+
+- Una cuenta de Facebook y un Business Portfolio (se puede crear dentro del mismo popup).
+- Un número que **no** esté activo en la app de WhatsApp Business del celular: al conectarlo por la
+  Cloud API deja de funcionar ahí, porque este flujo no cubre coexistencia.
+- Un método de pago cargado en su WABA, porque **Meta le factura los mensajes pagos a él**, no a
+  SofiApp.
+- Verificar su negocio es recomendable (sube los límites de envío), pero no bloquea la conexión.
 
 ## 3. Envío outbound — `MetaService`
 

@@ -92,7 +92,7 @@
 //          { rol: 1 }  (para localizar al/los superadmin)
 ```
 
-## meta_integrations  (conexión BSP por tenant; resuelve el webhook)
+## meta_integrations  (conexión Tech Provider por tenant; resuelve el webhook)
 ```js
 {
   _id: ObjectId,

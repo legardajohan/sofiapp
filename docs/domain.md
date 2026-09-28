@@ -9,7 +9,7 @@
 | **Cliente / Prospecto** | Contacto. Entidad de datos (`Cliente`), nunca inicia sesión. Es a la vez el contacto y la conversación. |
 | **Lead / Oportunidad** | Intento de venta concreto (`Lead`, HU-CRM-01), creado al convertir una conversación. Único **por teléfono** dentro del tenant, mientras el `Cliente` es único por `metaUserId`: un mismo contacto puede generar varios leads en el tiempo (recompra, segundo producto, ciclo reabierto). |
 | **Canal** | Origen de la comunicación: `whatsapp | instagram | messenger | formulario | web`. |
-| **WABA** | WhatsApp Business Account; cada tenant conecta la suya (modelo BSP). |
+| **WABA** | WhatsApp Business Account; cada tenant conecta la suya (modelo Tech Provider, ADR 0010). |
 | **Slot filling** | Extracción por IA de datos del prospecto desde la conversación. |
 | **Nivel de interés** | Señal inferida por IA: `frio | tibio | caliente`. |
 | **Objeción** | Motivo de duda inferido por IA: `precio | tiempo | confianza | otra`. |

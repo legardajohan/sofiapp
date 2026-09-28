@@ -39,8 +39,20 @@ const PIN_ATTEMPTS_EXCEEDED = new Set([133008, 133009]);
 /** Motivo accionable del 422, para que la UI abra el diálogo del PIN en vez de mostrar un error. */
 export const PIN_REQUIRED_REASON = 'pin_required';
 
+/**
+ * Timeout por llamada a la Graph API (no del flujo completo): con varias llamadas en serie, un
+ * único intento colgado no puede consumir los 45 s que el frontend le da a `/embedded-signup` o
+ * `/activate`.
+ */
+const META_ONBOARDING_TIMEOUT_MS = 15_000;
+
 function graphUrl(path: string): string {
   return `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${path}`;
+}
+
+/** `AbortSignal.timeout` lanza `DOMException('TimeoutError')`, no un error de red normal. */
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'TimeoutError';
 }
 
 async function readGraphError(res: Response): Promise<IGraphError['error']> {
@@ -65,11 +77,23 @@ async function postGraph(
   body: Record<string, unknown> | undefined,
   paso: string,
 ): Promise<void> {
-  const res = await fetch(graphUrl(path), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(graphUrl(path), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(META_ONBOARDING_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (isTimeoutError(err)) {
+      logger.warn(`Embedded Signup: ${paso} no respondió a tiempo`, {
+        timeoutMs: META_ONBOARDING_TIMEOUT_MS,
+      });
+      throw metaUnavailable();
+    }
+    throw err;
+  }
 
   if (res.ok) return;
 
@@ -108,7 +132,20 @@ export const metaOnboardingClient: IMetaOnboardingClient = {
       client_secret: env.META_APP_SECRET,
       code,
     });
-    const res = await fetch(`${graphUrl('oauth/access_token')}?${params.toString()}`);
+    let res: Response;
+    try {
+      res = await fetch(`${graphUrl('oauth/access_token')}?${params.toString()}`, {
+        signal: AbortSignal.timeout(META_ONBOARDING_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (isTimeoutError(err)) {
+        logger.warn('Embedded Signup: el canje del code no respondió a tiempo', {
+          timeoutMs: META_ONBOARDING_TIMEOUT_MS,
+        });
+        throw metaUnavailable();
+      }
+      throw err;
+    }
 
     if (!res.ok) {
       const error = await readGraphError(res);
@@ -149,6 +186,7 @@ export const metaOnboardingClient: IMetaOnboardingClient = {
     try {
       const res = await fetch(`${graphUrl(phoneNumberId)}?fields=display_phone_number,verified_name`, {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(META_ONBOARDING_TIMEOUT_MS),
       });
       if (!res.ok) return null;
 

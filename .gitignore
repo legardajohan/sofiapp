@@ -42,6 +42,9 @@ dev/
 # Snapshots temporales de Playwright MCP
 .playwright-mcp/
 
+# Cache local de la skill impeccable (no es fuente de verdad, una por feature tocado)
+.impeccable/
+
 # Capturas/imágenes sueltas (no deben commitearse por error)
 *.png
 

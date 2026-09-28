@@ -2,7 +2,7 @@
 
 > CRM SaaS **multi-tenant** para entidades comerciales. Centraliza la captación de
 > prospectos, la comunicación omnicanal automatizada con IA y el cierre de ventas. Cada empresa
-> conecta su propia cuenta de WhatsApp Business API (modelo BSP).
+> conecta su propia cuenta de WhatsApp Business API (modelo Tech Provider).
 
 [![Node](https://img.shields.io/badge/node-24_LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -65,7 +65,7 @@ Variables que necesitas en `apps/backend/.env` (ver [`.env.example`](apps/backen
 - **Campañas de remarketing** — segmentación dinámica + envío masivo con rate limiting de Meta.
 - **Panel Superadmin** — alta/suspensión de empresas, activación manual de planes y métricas
   globales cross-tenant.
-- **Onboarding BSP** — cada empresa conecta su WABA por Embedded Signup.
+- **Onboarding Tech Provider** — cada empresa conecta su WABA por Embedded Signup.
 
 ## 🧱 Arquitectura
 
@@ -169,7 +169,7 @@ pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint
 
 Todas las variables se documentan en [`.env.example`](.env.example) y se **validan al arranque**
 con Zod (sin fallbacks inseguros; `JWT_SECRET` es obligatorio). Grupos: App, Auth, MongoDB,
-Redis, Meta (BSP), LLM (Gemini), Storage (DO Spaces).
+Redis, Meta (Tech Provider), LLM (Gemini), Storage (DO Spaces).
 
 ## 🗺️ Roadmap por fases
 

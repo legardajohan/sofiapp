@@ -54,23 +54,49 @@ interface IPersistIntegrationData {
  * Upsert del canal del tenant. Un `phoneNumberId` ya conectado a **otra** empresa choca con el índice
  * único global: se traduce el E11000 a un 409 legible en vez de consultar antes a los demás tenants
  * (que sería una lectura fuera del repositorio scoped sin necesidad).
+ *
+ * Si el `phoneNumberId` **cambia** respecto al canal que ya tenía este tenant (reconexión con otro
+ * número), se limpian el PIN, el nombre y el tier: son datos del número anterior y no tienen sentido
+ * para el nuevo. La lectura previa es **scoped** al propio tenant, no cross-tenant — el E11000 sigue
+ * siendo quien detecta el número de otra empresa.
  */
 async function persistIntegration(
   tenantId: TenantId,
   data: IPersistIntegrationData,
 ): Promise<IMetaIntegrationDocument> {
+  const previo = await findOneScoped(MetaIntegration, tenantId, { canal: 'whatsapp' })
+    .select('phoneNumberId tierManual')
+    .lean<Pick<IMetaIntegration, 'phoneNumberId' | 'tierManual'>>();
+
+  const cambiaDeNumero = previo !== null && previo.phoneNumberId !== data.phoneNumberId;
+
+  const $set: Record<string, unknown> = {
+    canal: 'whatsapp',
+    wabaId: data.wabaId,
+    phoneNumberId: data.phoneNumberId,
+    accessTokenEnc: encrypt(data.accessToken),
+    activo: data.activo,
+  };
+  const $unset: Record<string, 1> = {};
+
+  if (cambiaDeNumero) {
+    $unset['pinEnc'] = 1;
+    $unset['displayPhoneNumber'] = 1;
+    $unset['verifiedName'] = 1;
+    $set['qualityRating'] = 'UNKNOWN';
+    $set['healthStatus'] = 'UNKNOWN';
+    $set['tierSyncedAt'] = null;
+    // El override manual es una decisión del admin sobre SU capacidad de envío declarada, no una
+    // propiedad del número: sobrevive al cambio. El tier leído de Meta, no.
+    if (!previo!.tierManual) $set['messagingTier'] = 'TIER_250';
+  }
+
   try {
     const integration = await findOneAndUpdateScoped(
       MetaIntegration,
       tenantId,
       { canal: 'whatsapp' },
-      {
-        canal: 'whatsapp',
-        wabaId: data.wabaId,
-        phoneNumberId: data.phoneNumberId,
-        accessTokenEnc: encrypt(data.accessToken),
-        activo: data.activo,
-      },
+      Object.keys($unset).length > 0 ? { $set, $unset } : $set,
       { upsert: true, new: true },
     ).lean<IMetaIntegrationDocument>();
 

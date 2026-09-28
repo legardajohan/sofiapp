@@ -28,6 +28,7 @@ import {
   activateChannel,
   connectChannel,
   connectViaEmbeddedSignup,
+  updateChannelTier,
 } from './channel.service.js';
 import type { IMetaIntegration } from './channel.types.js';
 
@@ -156,5 +157,49 @@ describe('HT-WA-03 — conexión por Embedded Signup', () => {
 
     expect(status.activo).toBe(true);
     expect(status.displayPhoneNumber).toBeNull();
+  });
+
+  describe('reconexión con otro número (CA-9)', () => {
+    it('reconectar con el mismo número conserva el PIN, sin generar uno nuevo', async () => {
+      await connectViaEmbeddedSignup(tenantId, dto);
+      const pinOriginal = registerPhone.mock.calls[0]?.[2] as string;
+
+      await connectViaEmbeddedSignup(tenantId, dto);
+
+      expect(registerPhone.mock.calls[1]?.[2]).toBe(pinOriginal);
+    });
+
+    it('reconectar con OTRO número no reutiliza el PIN ni el nombre del anterior', async () => {
+      await connectViaEmbeddedSignup(tenantId, dto);
+      const pinOriginal = registerPhone.mock.calls[0]?.[2] as string;
+
+      const nuevoDto = { code: 'code-2', wabaId: 'waba-2', phoneNumberId: 'phone-2' };
+      getPhoneInfo.mockResolvedValueOnce(null); // Meta aún no confirma el nombre del número nuevo
+      const status = await connectViaEmbeddedSignup(tenantId, nuevoDto);
+
+      expect(registerPhone.mock.calls[1]?.[2]).not.toBe(pinOriginal);
+      expect(status.phoneNumberId).toBe('phone-2');
+      expect(status.displayPhoneNumber).toBeNull();
+      expect(status.verifiedName).toBeNull();
+
+      const guardada = await leerConSecretos(tenantId);
+      expect(decrypt(guardada!.pinEnc!)).not.toBe(pinOriginal);
+    });
+
+    it('reconectar con otro número restablece calidad y salud, pero conserva el tier manual', async () => {
+      await connectViaEmbeddedSignup(tenantId, dto);
+      await updateChannelTier(tenantId, { messagingTier: 'TIER_10K' });
+
+      const nuevoDto = { code: 'code-2', wabaId: 'waba-2', phoneNumberId: 'phone-2' };
+      // La sonda falla a propósito: así el estado devuelto es el que dejó `persistIntegration`,
+      // sin que `syncChannelTier` lo pise de inmediato con un valor fresco.
+      getHealth.mockRejectedValueOnce(new Error('Graph caído'));
+      const status = await connectViaEmbeddedSignup(tenantId, nuevoDto);
+
+      expect(status.qualityRating).toBe('UNKNOWN');
+      expect(status.healthStatus).toBe('UNKNOWN');
+      expect(status.tierSyncedAt).toBeNull();
+      expect(status.messagingTier).toBe('TIER_10K');
+    });
   });
 });
