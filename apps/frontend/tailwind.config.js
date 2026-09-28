@@ -8,7 +8,11 @@ export default {
   			sans: [
   				'Inter',
   				'system-ui',
-  				'sans-serif'
+  				'sans-serif',
+  				// HU-OMNI-07: emojis a color en todos los SO (ver `:root` en index.css).
+  				'Apple Color Emoji',
+  				'Segoe UI Emoji',
+  				'Noto Color Emoji'
   			]
   		},
   		colors: {
@@ -48,6 +52,11 @@ export default {
   				galeria: 'hsl(var(--adjunto-galeria))',
   				documento: 'hsl(var(--adjunto-documento))'
   			},
+  			'nota-voz': {
+  				DEFAULT: 'hsl(var(--nota-voz))',
+  				foreground: 'hsl(var(--nota-voz-foreground))'
+  			},
+  			grabacion: 'hsl(var(--grabacion))',
   			popover: {
   				DEFAULT: 'hsl(var(--popover))',
   				foreground: 'hsl(var(--popover-foreground))'

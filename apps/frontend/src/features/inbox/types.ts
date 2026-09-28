@@ -91,6 +91,19 @@ export interface MediaDTO {
   urlArchivo: string | null;
   /** Motivo del fallo, ya redactado por el backend para mostrarlo tal cual. */
   error: string | null;
+  /**
+   * Solo audio/video (HU-OMNI-07), medida en el servidor. `null` si no se pudo medir: el
+   * reproductor la toma entonces de los metadatos del `<audio>`.
+   */
+  duracionSegundos: number | null;
+  /** Nota de voz grabada (en WhatsApp o desde el CRM) frente a un archivo de audio. */
+  esNotaDeVoz: boolean;
+}
+
+/** Límite de grabación del tenant (HU-OMNI-07): el navegador corta al llegar a él. */
+export interface ConfigAudioDTO {
+  maxDuracionSegundos: number;
+  maxBytes: number;
 }
 
 export interface PreviewEnlaceDTO {

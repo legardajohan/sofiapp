@@ -25,7 +25,7 @@ export interface IMessagingProvider {
     to: string,
     tipo: TipoMediaSaliente,
     mediaId: string,
-    opciones: { caption?: string; filename?: string },
+    opciones: { caption?: string; filename?: string; esNotaDeVoz?: boolean },
     phoneNumberId: string,
     accessToken: string,
   ): Promise<{ messageId: string }>;

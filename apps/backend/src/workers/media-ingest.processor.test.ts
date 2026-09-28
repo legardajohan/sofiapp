@@ -10,6 +10,7 @@ import { AppError } from '../utils/AppError.js';
 import { createScoped } from '../repositories/base.repository.js';
 import { Message } from '../features/message/message.model.js';
 import { setMediaStorageForTests, type IMediaStorage } from '../integrations/storage/index.js';
+import { setTranscodificadorForTests } from '../integrations/audio/index.js';
 
 const mockObtenerMetadata = vi.fn();
 const mockDescargar = vi.fn();
@@ -234,6 +235,77 @@ function bullmqRechazaElJobId(jobId: string): string | null {
   if (jobId.includes(':') && jobId.split(':').length !== 3) return 'Custom Id cannot contain :';
   return null;
 }
+
+describe('processMediaIngestJob — duración de los audios (HU-OMNI-07)', () => {
+  const medirDuracion = vi.fn<(b: Buffer) => Promise<number | null>>();
+
+  async function sembrarAudioPendiente(): Promise<string> {
+    const doc = await createScoped(Message, tenantId, {
+      clienteId,
+      canal: 'whatsapp',
+      direccion: 'inbound',
+      sender: 'user',
+      tipo: 'audio',
+      media: {
+        estado: 'pendiente',
+        mimeType: 'audio/ogg',
+        metaMediaId: 'media-voz',
+        intentos: 0,
+        esNotaDeVoz: true,
+      },
+      status: 'sent',
+    });
+    return String(doc._id);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setMediaStorageForTests(storageFalso().storage);
+    setTranscodificadorForTests({ aNotaDeVoz: vi.fn(), medirDuracion });
+    mockObtenerMetadata.mockResolvedValue({
+      id: 'media-voz',
+      url: 'https://lookaside.fb/media-voz',
+      mimeType: 'audio/ogg',
+    });
+    mockDescargar.mockResolvedValue({
+      buffer: Buffer.from('OggS'),
+      mimeType: 'audio/ogg',
+      tamanoBytes: 4,
+    });
+  });
+
+  it('mide la duración del audio descargado y la guarda junto con la media', async () => {
+    medirDuracion.mockResolvedValue(7.3);
+    const messageId = await sembrarAudioPendiente();
+
+    await processMediaIngestJob({ tenantId: tenantId.toString(), messageId, clienteId: clienteId.toString() });
+
+    const media = await mediaDe(messageId);
+    expect(media?.['estado']).toBe('disponible');
+    expect(media?.['duracionSegundos']).toBe(7.3);
+    expect(media?.['esNotaDeVoz']).toBe(true);
+  });
+
+  it('si no se puede medir, el audio queda disponible igual y sin duración', async () => {
+    medirDuracion.mockResolvedValue(null);
+    const messageId = await sembrarAudioPendiente();
+
+    await processMediaIngestJob({ tenantId: tenantId.toString(), messageId, clienteId: clienteId.toString() });
+
+    const media = await mediaDe(messageId);
+    expect(media?.['estado']).toBe('disponible');
+    expect(media).not.toHaveProperty('duracionSegundos');
+  });
+
+  it('no mide nada que no sea audio (ffprobe no se gasta en una imagen)', async () => {
+    const messageId = await sembrarPendiente();
+    mockDescargar.mockResolvedValue({ buffer: Buffer.from('foto'), mimeType: 'image/jpeg', tamanoBytes: 4 });
+
+    await processMediaIngestJob({ tenantId: tenantId.toString(), messageId, clienteId: clienteId.toString() });
+
+    expect(medirDuracion).not.toHaveBeenCalled();
+  });
+});
 
 describe('mediaIngestJobId — contrato con BullMQ', () => {
   const messageId = new Types.ObjectId().toString();

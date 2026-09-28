@@ -15,7 +15,13 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
-import { enviarMediaSaliente, type IArchivoSaliente } from '../media/media.service.js';
+import {
+  enviarMediaSaliente,
+  enviarNotaDeVoz,
+  obtenerConfigAudio,
+  type IArchivoSaliente,
+} from '../media/media.service.js';
+import type { IConfigAudioResponse } from '../media/media.types.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
@@ -347,6 +353,26 @@ export async function replyMediaMessage(
 ): Promise<IMessageResponse> {
   const msg = await enviarMediaSaliente(tenantId, clienteId, archivo, caption);
   return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
+}
+
+/**
+ * Envío de una nota de voz grabada por el asesor (HU-OMNI-07). Mismo contrato que
+ * `replyMediaMessage`: la ventana la decide `sendOutbound` y la bandeja se entera por
+ * `notificarSaliente`.
+ */
+export async function replyAudioMessage(
+  tenantId: string,
+  clienteId: string,
+  grabacion: IArchivoSaliente,
+  duracionPista: number | undefined,
+): Promise<IMessageResponse> {
+  const msg = await enviarNotaDeVoz(tenantId, clienteId, grabacion, duracionPista);
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
+}
+
+/** Límite de grabación del tenant, para que el navegador corte a tiempo (HU-OMNI-07). */
+export async function getConfigAudio(tenantId: string): Promise<IConfigAudioResponse> {
+  return obtenerConfigAudio(tenantId);
 }
 
 /** Respuesta manual de un asesor desde la bandeja. */

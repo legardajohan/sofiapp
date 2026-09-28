@@ -3,6 +3,7 @@ packages:
   - 'packages/*'
 allowBuilds:
   bcrypt: true
+  ffmpeg-static: true
   esbuild: true
   mongodb-memory-server: true
   msgpackr-extract: true

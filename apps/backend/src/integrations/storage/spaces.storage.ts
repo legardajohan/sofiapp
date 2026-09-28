@@ -13,6 +13,7 @@ import type {
   IGuardarMediaInput,
   IMediaStorage,
   IObjetoAlmacenado,
+  IRangoBytes,
   MediaKey,
 } from './storage.types.js';
 
@@ -84,10 +85,14 @@ export const spacesStorage: IMediaStorage = {
     return { key, mimeType, tamanoBytes: contenido.byteLength };
   },
 
-  async leer(key: MediaKey): Promise<IArchivoLeido> {
+  async leer(key: MediaKey, rango?: IRangoBytes): Promise<IArchivoLeido> {
     try {
       const res = await getCliente().send(
-        new GetObjectCommand({ Bucket: bucket(), Key: key }),
+        new GetObjectCommand({
+          Bucket: bucket(),
+          Key: key,
+          ...(rango ? { Range: `bytes=${rango.inicio}-${rango.fin}` } : {}),
+        }),
       );
 
       if (!res.Body) throw new AppError('Archivo no encontrado.', 404);
@@ -95,7 +100,10 @@ export const spacesStorage: IMediaStorage = {
       return {
         stream: res.Body as Readable,
         mimeType: res.ContentType ?? '',
-        tamanoBytes: res.ContentLength ?? 0,
+        // Con rango, `ContentLength` es el del trozo; el total viene en `Content-Range` (`…/total`).
+        tamanoBytes: rango
+          ? Number(res.ContentRange?.split('/')[1] ?? res.ContentLength ?? 0)
+          : (res.ContentLength ?? 0),
       };
     } catch (err: unknown) {
       if (err instanceof AppError) throw err;

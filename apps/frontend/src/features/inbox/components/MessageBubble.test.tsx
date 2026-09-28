@@ -28,6 +28,8 @@ function media(parcial: Partial<MediaDTO> = {}): MediaDTO {
     tamanoBytes: null,
     urlArchivo: '/media/m-1?t=token',
     error: null,
+    duracionSegundos: null,
+    esNotaDeVoz: false,
     ...parcial,
   };
 }

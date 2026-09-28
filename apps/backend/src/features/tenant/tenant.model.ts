@@ -24,6 +24,16 @@ const RecordatorioSchema = new Schema(
   { _id: false },
 );
 
+// HU-OMNI-07 — límite de las notas de voz. Sin defaults en el schema A PROPÓSITO: un campo ausente
+// significa "usa `NOTAS_DE_VOZ_DEFAULT`", y así cambiar el default no exige migrar documentos.
+const NotasDeVozSchema = new Schema(
+  {
+    maxDuracionSegundos: { type: Number },
+    maxBytes: { type: Number },
+  },
+  { _id: false },
+);
+
 const TenantSchema = new Schema<ITenantDocument>(
   {
     nombre: { type: String, required: true },
@@ -51,6 +61,7 @@ const TenantSchema = new Schema<ITenantDocument>(
     semaforosSeeded: { type: Boolean, default: false },
     kbVersion: { type: Number, default: 1 },
     recordatorio: { type: RecordatorioSchema, default: () => ({}) },
+    notasDeVoz: { type: NotasDeVozSchema },
   },
   { timestamps: true }
 );

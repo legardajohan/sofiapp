@@ -16,6 +16,10 @@ interface Props {
   onCancel: () => void;
 }
 
+const MB = 1024 * 1024;
+/** Mismos valores que `NOTAS_DE_VOZ_DEFAULT` del backend. */
+const NOTAS_DE_VOZ_DEFAULT = { maxDuracionSegundos: 300, maxBytes: 16 * MB };
+
 const toSlug = (value: string): string =>
   value
     .toLowerCase()
@@ -34,6 +38,8 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
     contactoEmail: tenant?.contacto.email ?? '',
     contactoTelefono: tenant?.contacto.telefono ?? '',
     planId: tenant?.planId ?? '',
+    vozDuracion: String(tenant?.notasDeVoz?.maxDuracionSegundos ?? NOTAS_DE_VOZ_DEFAULT.maxDuracionSegundos),
+    vozMb: String(Math.round((tenant?.notasDeVoz?.maxBytes ?? NOTAS_DE_VOZ_DEFAULT.maxBytes) / MB)),
     adminNombre: '',
     adminEmail: '',
     adminPassword: '',
@@ -56,6 +62,8 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
         contactoEmail: tenant.contacto.email,
         contactoTelefono: tenant.contacto.telefono,
         planId: tenant.planId ?? '',
+        vozDuracion: String(tenant.notasDeVoz?.maxDuracionSegundos ?? NOTAS_DE_VOZ_DEFAULT.maxDuracionSegundos),
+        vozMb: String(Math.round((tenant.notasDeVoz?.maxBytes ?? NOTAS_DE_VOZ_DEFAULT.maxBytes) / MB)),
         adminNombre: '',
         adminEmail: '',
         adminPassword: '',
@@ -99,6 +107,10 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
         nit: form.nit || undefined,
         contacto: { email: form.contactoEmail, telefono: form.contactoTelefono },
         planId: form.planId || undefined,
+        notasDeVoz: {
+          maxDuracionSegundos: Number(form.vozDuracion),
+          maxBytes: Number(form.vozMb) * MB,
+        },
       };
       onSuccess(payload);
     }
@@ -201,6 +213,49 @@ export function TenantForm({ tenant, plans, onSuccess, onCancel }: Props): React
           </p>
         )}
       </div>
+
+      {/* HU-OMNI-07: solo al editar. Una empresa nueva arranca con los valores por defecto y no
+          hace falta decidir esto para darla de alta. */}
+      {isEdit && (
+        <fieldset className="space-y-3 border-t border-border pt-4">
+          <legend className="text-sm font-medium">Notas de voz</legend>
+          <p className="text-xs text-muted-foreground">
+            Límite de las grabaciones que envían los asesores desde la bandeja.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="tenant-voz-duracion">Duración máxima (segundos)</Label>
+              <Input
+                id="tenant-voz-duracion"
+                type="number"
+                inputMode="numeric"
+                className="mt-1"
+                min={5}
+                max={900}
+                step={1}
+                value={form.vozDuracion}
+                onChange={(e) => setForm((p) => ({ ...p, vozDuracion: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="tenant-voz-mb">Tamaño máximo (MB)</Label>
+              <Input
+                id="tenant-voz-mb"
+                type="number"
+                inputMode="numeric"
+                className="mt-1"
+                min={1}
+                max={16}
+                step={1}
+                value={form.vozMb}
+                onChange={(e) => setForm((p) => ({ ...p, vozMb: e.target.value }))}
+                required
+              />
+            </div>
+          </div>
+        </fieldset>
+      )}
 
       {!isEdit && (
         <div className="border-t border-border pt-4">
