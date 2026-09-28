@@ -4,9 +4,17 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { connectSchema, syncTierSchema, updateTierSchema } from './channel.validation.js';
 import {
+  activateSchema,
+  connectSchema,
+  embeddedSignupSchema,
+  syncTierSchema,
+  updateTierSchema,
+} from './channel.validation.js';
+import {
+  activateController,
   connectController,
+  embeddedSignupController,
   statusController,
   syncTierController,
   updateTierController,
@@ -21,6 +29,26 @@ router.post(
   authorize(['admin']),
   validate(connectSchema),
   asyncHandler(connectController),
+);
+
+// Embedded Signup (HT-WA-03): el popup de Meta entrega un `code`; aquí se canjea y se activa el
+// número. `/activate` reintenta la activación (o recibe el PIN 2FA) sin volver a abrir el popup.
+router.post(
+  '/embedded-signup',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  validate(embeddedSignupSchema),
+  asyncHandler(embeddedSignupController),
+);
+
+router.post(
+  '/activate',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  validate(activateSchema),
+  asyncHandler(activateController),
 );
 
 router.get(

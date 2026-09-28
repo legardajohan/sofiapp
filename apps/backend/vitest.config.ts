@@ -25,6 +25,7 @@ export default defineConfig({
       REDIS_URL: 'redis://127.0.0.1:6379',
       META_APP_SECRET: 'test-app-secret-12345678901234',
       META_VERIFY_TOKEN: 'test-verify-token',
+      META_APP_ID: 'test-app-id',
       META_GRAPH_VERSION: 'v19.0',
       TENANT_TOKEN_ENC_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       // `DATA_ENC_KEY` se deja SIN definir a propósito: es el escenario real de un despliegue que no

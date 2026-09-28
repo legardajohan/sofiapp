@@ -42,12 +42,57 @@ eso se monta en `app.ts` **antes** de `express.json()`: si el parser JSON global
 `req.body` llegaría como objeto y la firma nunca calzaría con la que envía Meta — ver
 `HT-WA-01-V2/spec.md` para el detalle del defecto que esto corrigió.
 
-## 2. Embedded Signup (onboarding por empresa)
+## 2. Embedded Signup (onboarding por empresa) — HT-WA-03
 
-- El Admin del tenant inicia el flujo de Embedded Signup desde el panel.
-- Al completarse, Meta devuelve la WABA + `phone_number_id` + token.
-- Se persiste un `MetaIntegration` con el **token cifrado at-rest** (AES-256-GCM,
-  `accessTokenEnc`, `select:false`) y el `phoneNumberId` (índice único global).
+El admin del tenant pulsa **«Conectar con Facebook»** en `/settings/channels/whatsapp`, elige su WABA
+y su número en el popup de Meta y queda operativo sin ver IDs, tokens ni PIN.
+
+> **El Embedded Signup no entrega un access token al navegador.** `FB.login` devuelve un `code` de un
+> solo uso (~30 s) y los ids llegan aparte por `postMessage`. El canje exige el App Secret, que solo
+> vive en el backend: el token nunca pasa por el navegador.
+
+```
+FRONTEND
+  1. Carga perezosa del SDK de JS (lib/facebook-sdk.ts) al montar la pantalla.
+  2. FB.login({ config_id, response_type:'code', override_default_response_type:true,
+                extras:{ setup:{}, sessionInfoVersion:'3' } })     → dentro del gesto del clic
+  3. window 'message' de *.facebook.com (https) con type WA_EMBEDDED_SIGNUP:
+       FINISH            → { waba_id, phone_number_id }
+       FINISH_ONLY_WABA  → error: falta elegir número
+       CANCEL            → vuelve al inicio, sin error
+       ERROR             → mensaje de Meta
+  4. Con code + ids → POST /api/channels/whatsapp/embedded-signup { code, wabaId, phoneNumberId }
+
+BACKEND (connectViaEmbeddedSignup → activateChannel)
+  5. GET /oauth/access_token?client_id&client_secret&code           → token de negocio
+  6. Persistir MetaIntegration con token cifrado y activo:false      ← ANTES de lo que puede fallar
+  7. POST /{wabaId}/subscribed_apps                                  → sin esto no llegan webhooks
+  8. POST /{phoneNumberId}/register { messaging_product, pin }       → PIN propio de 6 dígitos
+  9. GET /{phoneNumberId}?fields=display_phone_number,verified_name  (best-effort)
+ 10. activo:true + pinEnc cifrado; sonda de tier (best-effort, §8)
+```
+
+- **Por qué se persiste en el paso 6:** el `code` se gasta al canjearlo. Si la suscripción o el
+  registro fallan, el canal queda `activo:false` con el token, y **`POST /activate`** reintenta los
+  pasos 7–10 sin volver a abrir el popup. Es idempotente.
+- **PIN transparente:** el backend lo genera (`crypto.randomInt`), lo guarda cifrado (`pinEnc`,
+  `select:false`) y lo reutiliza en reactivaciones. Solo si Meta responde **`133005`** (el número ya
+  tenía 2FA con otro PIN) se devuelve **422 `{ reason: 'pin_required' }`** y la UI pide ese PIN en
+  línea; `POST /activate { pin }` termina. `133008/133009` (demasiados intentos) → 429.
+- **Número de otra empresa:** el índice único global de `phoneNumberId` produce un E11000 que se
+  traduce a **409**, sin consultar antes a los demás tenants.
+- Errores de Meta → `AppError` con texto humano (code caducado 400, resto 502). El código crudo va
+  al log, no a la UI.
+- **Conexión manual** (`POST /connect`, IDs + token pegados): se conserva plegada para el número de
+  prueba y soporte. No suscribe ni registra.
+
+### Prerrequisitos en Meta (operador de SofiApp, una sola vez)
+
+- App con estado **Tech Provider** y el producto WhatsApp; permisos `whatsapp_business_management` y
+  `whatsapp_business_messaging`.
+- Una configuración de **Facebook Login for Business** del tipo *WhatsApp Embedded Signup* → su id es
+  `VITE_META_CONFIG_ID`.
+- *Login with the JavaScript SDK* = Yes, con dominios permitidos `localhost` (dev) y el de Vercel.
 
 ## 3. Envío outbound — `MetaService`
 
@@ -202,8 +247,8 @@ de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 ## 8. Variables de entorno relevantes
 
 ```
-META_APP_ID=
-META_APP_SECRET=            # validación HMAC del webhook — OBLIGATORIA fuera de NODE_ENV=test
+META_APP_ID=                # canje del code del Embedded Signup (HT-WA-03). Opcional: sin ella ese endpoint da 503
+META_APP_SECRET=            # validación HMAC del webhook y canje del code — OBLIGATORIA fuera de NODE_ENV=test
 META_VERIFY_TOKEN=          # verificación GET del webhook — OBLIGATORIA fuera de NODE_ENV=test
 META_GRAPH_VERSION=v26.0    # confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
 TENANT_TOKEN_ENC_KEY=       # clave AES-256-GCM (64 hex) — OBLIGATORIA fuera de NODE_ENV=test
@@ -220,6 +265,12 @@ MEDIA_MAX_BYTES_VIDEO=16777216
 MEDIA_MAX_BYTES_AUDIO=16777216
 MEDIA_MAX_BYTES_DOCUMENTO=16777216
 SPACES_ENDPOINT= / SPACES_REGION= / SPACES_BUCKET= / SPACES_KEY= / SPACES_SECRET=
+
+# Frontend (apps/frontend) — Embedded Signup (HT-WA-03). Sin APP_ID o CONFIG_ID, el botón
+# «Conectar con Facebook» se desactiva y solo queda la conexión manual.
+VITE_META_APP_ID=
+VITE_META_CONFIG_ID=
+VITE_META_GRAPH_VERSION=v26.0
 ```
 
 > Las cinco `SPACES_*` son **obligatorias solo si `MEDIA_DRIVER=spaces`** (`superRefine` en

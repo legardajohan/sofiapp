@@ -19,6 +19,9 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   META_APP_SECRET: requiredInRuntime(z.string().min(1)),
   META_VERIFY_TOKEN: requiredInRuntime(z.string().min(1)),
+  // Embedded Signup (HT-WA-03): con el App Secret canjea el `code` del popup por el token del tenant.
+  // Opcional a propósito: sin él el resto de la app arranca y solo ese endpoint responde 503.
+  META_APP_ID: z.string().min(1).optional(),
   // v19.0 quedó fuera de soporte; confirmar la vigente en developers.facebook.com/docs/graph-api/changelog
   // antes de subirla de nuevo (verificado v26.0, vigente al 2026-08, fecha de este cambio).
   META_GRAPH_VERSION: z.string().default('v26.0'),

@@ -11,6 +11,36 @@ export const connectSchema = z.object({
   query: z.object({}),
 });
 
+/**
+ * Resultado del popup de Meta (HT-WA-03). `.strict()`: si alguien reintenta mandar un `accessToken`
+ * por aquí, es un error del cliente y no se ignora en silencio.
+ */
+export const embeddedSignupSchema = z.object({
+  body: z
+    .object({
+      code: z.string().min(1),
+      wabaId: z.string().min(1),
+      phoneNumberId: z.string().min(1),
+    })
+    .strict(),
+  params: z.object({}),
+  query: z.object({}),
+});
+
+/** El PIN solo viaja cuando Meta pidió el que el número ya tenía (422 `pin_required`). */
+export const activateSchema = z.object({
+  body: z
+    .object({
+      pin: z.string().regex(/^\d{6}$/, 'El PIN tiene 6 dígitos.').optional(),
+    })
+    .strict(),
+  params: z.object({}),
+  query: z.object({}),
+});
+
+export type EmbeddedSignupBody = z.infer<typeof embeddedSignupSchema>['body'];
+export type ActivateBody = z.infer<typeof activateSchema>['body'];
+
 /** Sin cuerpo: el número a sondear es el del canal del tenant, que nace del token. */
 export const syncTierSchema = z.object({
   body: z.object({}).strict(),

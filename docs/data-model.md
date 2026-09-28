@@ -103,7 +103,11 @@
   accessTokenEnc: String,         // cifrado at-rest (AES-256-GCM). select:false
   igBusinessId: String?,          // si canal = instagram
   fbPageId: String?,              // si canal = messenger
-  activo: Boolean,
+  activo: Boolean,                // false = Embedded Signup a medias (token guardado, número sin activar)
+  // Embedded Signup (HT-WA-03)
+  pinEnc: String?,                // PIN 2FA del número, cifrado (AES-256-GCM). select:false. Lo genera el backend
+  displayPhoneNumber: String?,    // "+57 300 …", para no mostrar IDs en la UI
+  verifiedName: String?,          // nombre verificado del negocio en Meta
   // Capacidad de envío del NÚMERO (HU-MARK-01). Vive aquí y no en `tenants` porque es del número:
   // si la empresa cambia de número, su tier y su calidad se van con él.
   messagingTier: "TIER_50"|"TIER_250"|"TIER_1K"|"TIER_10K"|"TIER_100K"|"TIER_UNLIMITED",

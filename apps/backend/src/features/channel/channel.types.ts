@@ -37,6 +37,12 @@ export interface IMetaIntegration {
   phoneNumberId: string;
   accessTokenEnc: string;
   activo: boolean;
+  // ─── Embedded Signup (HT-WA-03) ────────────────────────────────────────────
+  /** PIN 2FA del número, cifrado. Ausente en integraciones conectadas a mano. */
+  pinEnc?: string;
+  /** Número legible (`+57 300 …`) y nombre verificado, para no mostrarle IDs a la persona. */
+  displayPhoneNumber?: string;
+  verifiedName?: string;
   // ─── Capacidad de envío del número (HU-MARK-01) ────────────────────────────
   messagingTier: MessagingTier;
   qualityRating: QualityRating;
@@ -60,10 +66,22 @@ export interface IChannelConnectDto {
   accessToken: string;
 }
 
+/**
+ * Lo que devuelve el popup de Meta. No hay token: el `code` es de un solo uso (~30 s) y lo canjea
+ * el backend con el App Secret, así el token nunca pasa por el navegador.
+ */
+export interface IEmbeddedSignupDto {
+  code: string;
+  wabaId: string;
+  phoneNumberId: string;
+}
+
 export interface IChannelStatusResponse {
   activo: boolean;
   phoneNumberId: string;
   wabaId: string;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
   messagingTier: MessagingTier;
   qualityRating: QualityRating;
   healthStatus: HealthStatus;
