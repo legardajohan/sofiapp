@@ -37,6 +37,7 @@ import { logger } from '../../utils/logger.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
+import { createNotification } from '../notification/notification.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import {
   toAssignmentResponse,
@@ -656,6 +657,18 @@ export async function assignConversation(
     actor: { id: actorId, nombre: actorInfo?.nombre ?? null },
   });
 
+  if (asignadoA) {
+    await createNotification(tenantId, {
+      userId: asignadoA,
+      tipo: 'assignment',
+      conversacionId: clienteId,
+      clienteResumen: conversation.nombre ?? conversation.telefono,
+      actorId,
+      actorNombre: actorInfo?.nombre ?? 'Un administrador',
+      mensaje: `${actorInfo?.nombre ?? 'Un administrador'} te reasignó una conversación`,
+    });
+  }
+
   return conversation;
 }
 
@@ -815,18 +828,27 @@ export async function handoffConversation(
   // Un solo evento. `conversation:assigned` solo si hay un destinatario NUEVO al que avisar: si la
   // conversación ya la llevaba alguien, o si no hay a quién asignársela, nadie estrena
   // responsabilidad y el evento correcto es el de actualización.
-  await publishRealtime(
-    !yaTeniaAsesor && destino
-      ? {
-          type: 'conversation:assigned',
-          tenantId,
-          conversationId: clienteId,
-          conversation,
-          targetUserId: destino,
-          actor: { id: null, nombre: 'Sofi' },
-        }
-      : { type: 'conversation:updated', tenantId, conversationId: clienteId, conversation },
-  );
+  if (!yaTeniaAsesor && destino) {
+    await publishRealtime({
+      type: 'conversation:assigned',
+      tenantId,
+      conversationId: clienteId,
+      conversation,
+      targetUserId: destino,
+      actor: { id: null, nombre: 'Sofi' },
+    });
+    await createNotification(tenantId, {
+      userId: destino,
+      tipo: 'handoff',
+      conversacionId: clienteId,
+      clienteResumen: conversation.nombre ?? conversation.telefono,
+      actorId: null,
+      actorNombre: 'Sofi',
+      mensaje: 'Sofi te transfirió una conversación',
+    });
+  } else {
+    await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  }
 }
 
 /**

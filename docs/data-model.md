@@ -707,6 +707,35 @@ cualquier intento de guardarlo es un 400.
 > nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
 > texto.
 
+## notifications  (centro de notificaciones tenant-scoped — HU-NOTIF-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  userId: ObjectId,               // ref User — destinatario
+  tipo: String,                   // "handoff" | "assignment"
+  conversacionId: ObjectId,        // ref Cliente
+  clienteResumen: String,         // snapshot: nombre ?? telefono al momento de crearse
+  actorId: ObjectId | null,       // ref User; null = Sofi (handoff automático, HU-IA-03)
+  actorNombre: String,
+  mensaje: String,
+  leidaAt: Date | null,           // null = no leída
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1, userId: 1, createdAt: -1 }
+```
+> Persiste lo que `conversation:assigned` (HU-OMNI-02, HU-IA-03) ya notificaba en vivo por
+> Socket.IO pero de forma efímera: se crea junto al mismo evento, solo cuando hay un destinatario
+> **nuevo** al que avisar (mismos casos en los que hoy se emite `conversation:assigned` y no
+> `conversation:updated`). `clienteResumen` y `actorNombre` son snapshots — igual criterio que
+> `audit_events.antes/despues` — para no depender de un `populate` que saltaría el repositorio
+> scoped ni de que la conversación o el actor sigan existiendo igual después.
+>
+> El filtro por `userId` —además del `tenantId` que ya impone el repositorio `*Scoped`— es lo que
+> impide que un admin lea o marque como leída la notificación de **otro** admin del mismo tenant.
+> `tipo` queda abierto a futuros disparadores, pero hoy solo escriben `handoffConversation()` y
+> `assignConversation()` (`conversation.service.ts`).
+
 ## semaforos  (semaforización comercial de leads — HU-CRM-04)
 
 Catálogo por tenant de cómo cada empresa clasifica sus oportunidades. Mismo patrón que

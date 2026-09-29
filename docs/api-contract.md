@@ -80,6 +80,10 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<key del catálogo>` (ya no es un enum cerrado: las etapas son un catálogo por tenant, ver `GET /api/estados`; una clave que no exista en el tenant → **página vacía**, no `400`), `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
+| GET | `/api/notifications` | admin | Notificaciones del usuario autenticado (`?page&limit`), más reciente primero. Solo las suyas, nunca las de otro admin del mismo tenant (HU-NOTIF-01). |
+| GET | `/api/notifications/unread-count` | admin | `{ count }` de notificaciones sin leer del usuario autenticado (HU-NOTIF-01). |
+| PATCH | `/api/notifications/:id/read` | admin | Marca una notificación como leída. Idempotente; de otro usuario del mismo tenant → `404` (HU-NOTIF-01). |
+| PATCH | `/api/notifications/read-all` | admin | Marca como leídas todas las pendientes del usuario autenticado → `204` (HU-NOTIF-01). |
 | GET | `/api/conversations/:id/overview` | admin | Cabecera + etiquetas + resumen + `semaforoIA` + permisos, en una lectura. Sin el hilo (HU-IA-04, HU-IA-05). |
 | POST | `/api/conversations/:id/summary` | admin + subrol | Genera/regenera el resumen por IA. Solo `director`/`manager` (o `admin` sin subrol); el resto `403` (HU-IA-04). |
 | POST | `/api/conversations/:id/semaforo` | admin | Aplica la sugerencia de semáforo que dejó la IA. **Sin cuerpo**: el destino es el que ya guardó (HU-IA-05). `409` si no hay propuesta pendiente, si la etiqueta se borró o si ya está aplicada. |
@@ -156,7 +160,9 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 - *Rooms* por `tenantId` y por `asesorId` para que cada usuario solo reciba sus conversaciones.
 - Eventos: `message:new`, `conversation:updated` (room `tenant:<id>`, refresca la bandeja de todos
   los admins), `conversation:assigned` (room `asesor:<destinatario>` **únicamente**, dispara el
-  toast de notificación — HU-OMNI-02) y `lead:stage-changed` (room `tenant:<id>`: el embudo es una
+  toast de notificación — HU-OMNI-02; el mismo evento, ya llegando solo al destinatario correcto, es
+  también la señal que usa la campanita del header para refrescarse en vivo — HU-NOTIF-01, sin un
+  evento nuevo) y `lead:stage-changed` (room `tenant:<id>`: el embudo es una
   vista compartida, así que cualquier administrador con el tablero abierto ve moverse la tarjeta —
   HU-PIPE-01. Solo se emite en un cambio **efectivo** de etapa) y `campaign:progress` (room
   `tenant:<id>`: el historial de campañas es una vista compartida — HU-MARK-01. Se emite **una vez

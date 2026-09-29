@@ -45,6 +45,7 @@ import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
 import flowRoutes from './features/flow/flow.routes.js';
 import campaignRoutes from './features/campaign/campaign.routes.js';
 import mediaRoutes from './features/media/media.routes.js';
+import notificationRoutes from './features/notification/notification.routes.js';
 
 const app = express();
 
