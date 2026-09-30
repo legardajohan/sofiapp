@@ -102,7 +102,16 @@ export interface IMensajeMedia {
   nombreArchivo?: string;
   tamanoBytes?: number;
   sha256?: string;
+  /**
+   * Medida con ffprobe (HU-OMNI-07): en `media-ingest` para los entrantes —Meta no la informa en el
+   * webhook— y al transcodificar para las notas de voz salientes. Ausente si no se pudo medir.
+   */
   duracionSegundos?: number;
+  /**
+   * Nota de voz (grabada) frente a archivo de audio. Entrante: `audio.voice` del webhook. Saliente:
+   * toda grabación del composer. Junto a `direccion` distingue "audio recibido" de "nota propia".
+   */
+  esNotaDeVoz?: boolean;
   /** Declarado para que añadir miniaturas propias sea aditivo; hoy nunca se rellena (ADR-0008). */
   miniaturaKey?: string;
   intentos?: number;
@@ -196,6 +205,9 @@ export type ContenidoOutbound =
       tamanoBytes: number;
       nombreArchivo?: string;
       caption?: string;
+      /** HU-OMNI-07: nota de voz grabada. Meta la presenta como tal (ver `sendMedia`). */
+      esNotaDeVoz?: boolean;
+      duracionSegundos?: number;
     };
 
 export interface ISendTemplateDto {

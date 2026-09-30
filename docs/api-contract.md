@@ -80,6 +80,10 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<key del catálogo>` (ya no es un enum cerrado: las etapas son un catálogo por tenant, ver `GET /api/estados`; una clave que no exista en el tenant → **página vacía**, no `400`), `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
+| GET | `/api/notifications` | admin | Notificaciones del usuario autenticado (`?page&limit`), más reciente primero. Solo las suyas, nunca las de otro admin del mismo tenant (HU-NOTIF-01). |
+| GET | `/api/notifications/unread-count` | admin | `{ count }` de notificaciones sin leer del usuario autenticado (HU-NOTIF-01). |
+| PATCH | `/api/notifications/:id/read` | admin | Marca una notificación como leída. Idempotente; de otro usuario del mismo tenant → `404` (HU-NOTIF-01). |
+| PATCH | `/api/notifications/read-all` | admin | Marca como leídas todas las pendientes del usuario autenticado → `204` (HU-NOTIF-01). |
 | GET | `/api/conversations/:id/overview` | admin | Cabecera + etiquetas + resumen + `semaforoIA` + permisos, en una lectura. Sin el hilo (HU-IA-04, HU-IA-05). |
 | POST | `/api/conversations/:id/summary` | admin + subrol | Genera/regenera el resumen por IA. Solo `director`/`manager` (o `admin` sin subrol); el resto `403` (HU-IA-04). |
 | POST | `/api/conversations/:id/semaforo` | admin | Aplica la sugerencia de semáforo que dejó la IA. **Sin cuerpo**: el destino es el que ya guardó (HU-IA-05). `409` si no hay propuesta pendiente, si la etiqueta se borró o si ya está aplicada. |
@@ -146,7 +150,9 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | POST | `/api/kb/faqs/test` | admin | Probador de calibración (`{ pregunta }`). Devuelve el mejor candidato **aunque no matchee**, con `umbral`, `margenMinimo`, `overlapMinimo` y el desglose de las tres señales del cortocircuito (HU-KB-02-V2). Solo lectura. |
 | GET/POST | `/api/webhooks/whatsapp` | público | Verificación + recepción de eventos de Meta. |
 | POST | `/api/conversations/:id/messages/media` | admin | **multipart/form-data** (`archivo` + `texto` opcional, máx. 1024). Sube el archivo, lo manda por WhatsApp y devuelve `201` con el `IMessageResponse`. `415` mime no admitido, `413` tamaño excedido, `422` fuera de la ventana de 24 h (HU-OMNI-06). |
-| GET | `/api/media/:id` | token | Archivo de un mensaje. `:id` es el `_id` del `Message`, no la clave del almacenamiento. Con driver `spaces` responde `302` a una URL prefirmada; con `local`, el stream. `?descargar=1` fuerza `attachment`. `403` token inválido o vencido, `404` de otro tenant o inexistente, `409` media aún no disponible. |
+| POST | `/api/conversations/:id/messages/audio` | admin | **multipart/form-data** (`audio` + `duracionSegundos` opcional, solo pista). Nota de voz grabada en el navegador: el servidor la transcodifica a `ogg/opus` mono, mide su duración, la envía con `voice: true` y devuelve `201` con el `IMessageResponse` (`media.esNotaDeVoz: true`, `media.duracionSegundos`). `400` sin grabación, `404` conversación de otro tenant o inexistente, `413` supera el tamaño del tenant, `415` no es audio, `422` duración mayor que la del tenant, audio ilegible o fuera de la ventana de 24 h (HU-OMNI-07). |
+| GET | `/api/conversations/config/audio` | admin | Límite de grabación del tenant del token: `{ maxDuracionSegundos, maxBytes }`, ya con defaults y topes aplicados (HU-OMNI-07). |
+| GET | `/api/media/:id` | token | Archivo de un mensaje. `:id` es el `_id` del `Message`, no la clave del almacenamiento. Con driver `spaces` responde `302` a una URL prefirmada; con `local`, el stream. `?descargar=1` fuerza `attachment`. Con `local` admite `Range` (`206` + `Content-Range`, `416` si es insatisfacible) para que audio y video puedan avanzar (HU-OMNI-07). `403` token inválido o vencido, `404` de otro tenant o inexistente, `409` media aún no disponible. |
 
 ## 7. Tiempo real (Socket.IO)
 
@@ -154,7 +160,9 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 - *Rooms* por `tenantId` y por `asesorId` para que cada usuario solo reciba sus conversaciones.
 - Eventos: `message:new`, `conversation:updated` (room `tenant:<id>`, refresca la bandeja de todos
   los admins), `conversation:assigned` (room `asesor:<destinatario>` **únicamente**, dispara el
-  toast de notificación — HU-OMNI-02) y `lead:stage-changed` (room `tenant:<id>`: el embudo es una
+  toast de notificación — HU-OMNI-02; el mismo evento, ya llegando solo al destinatario correcto, es
+  también la señal que usa la campanita del header para refrescarse en vivo — HU-NOTIF-01, sin un
+  evento nuevo) y `lead:stage-changed` (room `tenant:<id>`: el embudo es una
   vista compartida, así que cualquier administrador con el tablero abierto ve moverse la tarjeta —
   HU-PIPE-01. Solo se emite en un cambio **efectivo** de etapa) y `campaign:progress` (room
   `tenant:<id>`: el historial de campañas es una vista compartida — HU-MARK-01. Se emite **una vez

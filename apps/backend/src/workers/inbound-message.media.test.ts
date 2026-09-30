@@ -52,7 +52,7 @@ interface MensajeDePrueba {
   id: string;
   type: 'text' | 'image' | 'audio' | 'video' | 'document';
   body?: string;
-  media?: { id: string; mime_type: string; caption?: string; filename?: string };
+  media?: { id: string; mime_type: string; caption?: string; filename?: string; voice?: boolean };
 }
 
 function payload(mensajes: MensajeDePrueba[]): IWhatsAppWebhookPayload {
@@ -274,5 +274,35 @@ describe('processInboundJob — media y enlaces entrantes (HU-OMNI-06)', () => {
     // El mensaje ya está guardado y notificado; la media queda `pendiente`, que es recuperable.
     // Perder el mensaje entero por un fallo de Redis no lo sería.
     expect(await Message.findOne({ metaMessageId: 'wamid.IMG8' }).lean()).not.toBeNull();
+  });
+
+  it('HU-OMNI-07: un audio con `voice: true` se guarda como nota de voz', async () => {
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([
+        {
+          id: 'wamid.VOZ1',
+          type: 'audio',
+          media: { id: 'media-voz', mime_type: 'audio/ogg; codecs=opus', voice: true },
+        },
+      ]),
+    });
+
+    const msg = await Message.findOne({ metaMessageId: 'wamid.VOZ1' }).lean();
+    expect(msg?.tipo).toBe('audio');
+    expect(msg?.media?.esNotaDeVoz).toBe(true);
+    expect(msg?.media?.estado).toBe('pendiente');
+  });
+
+  it('HU-OMNI-07: un audio sin `voice` es un archivo de audio, no una nota de voz', async () => {
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([
+        { id: 'wamid.MP3', type: 'audio', media: { id: 'media-mp3', mime_type: 'audio/mpeg' } },
+      ]),
+    });
+
+    const msg = await Message.findOne({ metaMessageId: 'wamid.MP3' }).lean();
+    expect(msg?.media?.esNotaDeVoz).toBe(false);
   });
 });

@@ -8,6 +8,7 @@ import type {
   IGuardarMediaInput,
   IMediaStorage,
   IObjetoAlmacenado,
+  IRangoBytes,
   MediaKey,
 } from './storage.types.js';
 
@@ -37,8 +38,8 @@ function resolverRuta(key: MediaKey): string {
  * credenciales de un bucket real ni una pieza más en `docker-compose`.
  *
  * No firma URLs (`urlFirmada` devuelve `null`): el controller lo interpreta como "sirve tú el
- * stream". Tampoco implementa `Range`, así que en desarrollo no se puede buscar dentro de un video
- * —en producción sí, porque Spaces lo soporta sobre la URL prefirmada—.
+ * stream". Implementa `Range` desde HU-OMNI-07: sin él, el reproductor de audio no puede avanzar en
+ * desarrollo (en producción Spaces lo soporta sobre la URL prefirmada).
  */
 export const localDiskStorage: IMediaStorage = {
   driver: 'local',
@@ -51,7 +52,7 @@ export const localDiskStorage: IMediaStorage = {
     return { key, mimeType, tamanoBytes: contenido.byteLength };
   },
 
-  async leer(key: MediaKey): Promise<IArchivoLeido> {
+  async leer(key: MediaKey, rango?: IRangoBytes): Promise<IArchivoLeido> {
     const absoluta = resolverRuta(key);
 
     let tamanoBytes: number;
@@ -63,7 +64,8 @@ export const localDiskStorage: IMediaStorage = {
     }
 
     return {
-      stream: createReadStream(absoluta),
+      // `createReadStream` usa `end` inclusivo, igual que la cabecera `Range`.
+      stream: createReadStream(absoluta, rango ? { start: rango.inicio, end: rango.fin } : {}),
       // El disco no guarda el mime; lo conoce el `Message` que apunta a esta clave, y es el
       // controller quien pone la cabecera. Aquí se devuelve vacío en vez de adivinar por extensión.
       mimeType: '',

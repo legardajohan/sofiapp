@@ -25,6 +25,12 @@ export interface IArchivoLeido {
   tamanoBytes: number;
 }
 
+/** Rango de bytes **inclusivo** en ambos extremos, como en la cabecera HTTP `Range`. */
+export interface IRangoBytes {
+  inicio: number;
+  fin: number;
+}
+
 export interface IGuardarMediaInput {
   key: MediaKey;
   contenido: Buffer;
@@ -42,8 +48,12 @@ export interface IMediaStorage {
 
   guardar(input: IGuardarMediaInput): Promise<IObjetoAlmacenado>;
 
-  /** Lectura en streaming. Lanza `AppError(…, 404)` si la clave no existe. */
-  leer(key: MediaKey): Promise<IArchivoLeido>;
+  /**
+   * Lectura en streaming. Lanza `AppError(…, 404)` si la clave no existe. Con `rango`, solo esos
+   * bytes (HU-OMNI-07): es lo que deja al reproductor de audio avanzar sin descargar el archivo.
+   * `tamanoBytes` es siempre el del objeto **completo**, no el del trozo.
+   */
+  leer(key: MediaKey, rango?: IRangoBytes): Promise<IArchivoLeido>;
 
   /**
    * URL prefirmada de vida corta, o **`null` si el adaptador no sabe firmar** (disco local).

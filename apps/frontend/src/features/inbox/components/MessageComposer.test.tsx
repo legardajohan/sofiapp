@@ -10,6 +10,13 @@ beforeAll(() => {
   URL.revokeObjectURL = vi.fn();
 });
 
+/** Props de nota de voz (HU-OMNI-07) que estos tests de adjuntos no ejercitan. */
+const SIN_AUDIO = {
+  onSendAudio: vi.fn(async () => undefined),
+  audioProgress: null,
+  maxDuracionAudio: 300,
+} as const;
+
 const mockToastError = vi.fn();
 vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => mockToastError(...a) } }));
 
@@ -26,6 +33,7 @@ function pintar(props: Partial<React.ComponentProps<typeof MessageComposer>> = {
       onSend={onSend}
       onSendMedia={onSendMedia}
       uploadProgress={null}
+      {...SIN_AUDIO}
       {...props}
     />,
   );
@@ -201,6 +209,7 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
         onSend={vi.fn()}
         onSendMedia={onSendMedia}
         uploadProgress={null}
+        {...SIN_AUDIO}
       />,
     );
     await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
@@ -230,6 +239,7 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
         onSend={vi.fn()}
         onSendMedia={vi.fn(async () => undefined)}
         uploadProgress={null}
+        {...SIN_AUDIO}
       />,
     );
     await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
@@ -242,6 +252,7 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
         onSend={vi.fn()}
         onSendMedia={vi.fn(async () => undefined)}
         uploadProgress={42}
+        {...SIN_AUDIO}
       />,
     );
 
@@ -257,6 +268,7 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
         onSend={vi.fn()}
         onSendMedia={vi.fn(async () => undefined)}
         uploadProgress={null}
+        {...SIN_AUDIO}
       />,
     );
     await userEvent.upload(inputArchivo(), archivo('foto.jpg', 'image/jpeg', 1024));
@@ -269,6 +281,7 @@ describe('MessageComposer — ventana de confirmación del archivo (HU-OMNI-06)'
         onSend={vi.fn()}
         onSendMedia={vi.fn(async () => undefined)}
         uploadProgress={100}
+        {...SIN_AUDIO}
       />,
     );
 

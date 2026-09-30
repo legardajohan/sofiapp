@@ -15,7 +15,13 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { sendMessage } from '../message/message.service.js';
-import { enviarMediaSaliente, type IArchivoSaliente } from '../media/media.service.js';
+import {
+  enviarMediaSaliente,
+  enviarNotaDeVoz,
+  obtenerConfigAudio,
+  type IArchivoSaliente,
+} from '../media/media.service.js';
+import type { IConfigAudioResponse } from '../media/media.types.js';
 import { assertAssignableAdmin, findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
@@ -31,6 +37,7 @@ import { logger } from '../../utils/logger.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
+import { createNotification } from '../notification/notification.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import {
   toAssignmentResponse,
@@ -349,6 +356,26 @@ export async function replyMediaMessage(
   return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
 }
 
+/**
+ * Envío de una nota de voz grabada por el asesor (HU-OMNI-07). Mismo contrato que
+ * `replyMediaMessage`: la ventana la decide `sendOutbound` y la bandeja se entera por
+ * `notificarSaliente`.
+ */
+export async function replyAudioMessage(
+  tenantId: string,
+  clienteId: string,
+  grabacion: IArchivoSaliente,
+  duracionPista: number | undefined,
+): Promise<IMessageResponse> {
+  const msg = await enviarNotaDeVoz(tenantId, clienteId, grabacion, duracionPista);
+  return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
+}
+
+/** Límite de grabación del tenant, para que el navegador corte a tiempo (HU-OMNI-07). */
+export async function getConfigAudio(tenantId: string): Promise<IConfigAudioResponse> {
+  return obtenerConfigAudio(tenantId);
+}
+
 /** Respuesta manual de un asesor desde la bandeja. */
 export async function replyMessage(
   tenantId: string,
@@ -630,6 +657,18 @@ export async function assignConversation(
     actor: { id: actorId, nombre: actorInfo?.nombre ?? null },
   });
 
+  if (asignadoA) {
+    await createNotification(tenantId, {
+      userId: asignadoA,
+      tipo: 'assignment',
+      conversacionId: clienteId,
+      clienteResumen: conversation.nombre ?? conversation.telefono,
+      actorId,
+      actorNombre: actorInfo?.nombre ?? 'Un administrador',
+      mensaje: `${actorInfo?.nombre ?? 'Un administrador'} te reasignó una conversación`,
+    });
+  }
+
   return conversation;
 }
 
@@ -789,18 +828,27 @@ export async function handoffConversation(
   // Un solo evento. `conversation:assigned` solo si hay un destinatario NUEVO al que avisar: si la
   // conversación ya la llevaba alguien, o si no hay a quién asignársela, nadie estrena
   // responsabilidad y el evento correcto es el de actualización.
-  await publishRealtime(
-    !yaTeniaAsesor && destino
-      ? {
-          type: 'conversation:assigned',
-          tenantId,
-          conversationId: clienteId,
-          conversation,
-          targetUserId: destino,
-          actor: { id: null, nombre: 'Sofi' },
-        }
-      : { type: 'conversation:updated', tenantId, conversationId: clienteId, conversation },
-  );
+  if (!yaTeniaAsesor && destino) {
+    await publishRealtime({
+      type: 'conversation:assigned',
+      tenantId,
+      conversationId: clienteId,
+      conversation,
+      targetUserId: destino,
+      actor: { id: null, nombre: 'Sofi' },
+    });
+    await createNotification(tenantId, {
+      userId: destino,
+      tipo: 'handoff',
+      conversacionId: clienteId,
+      clienteResumen: conversation.nombre ?? conversation.telefono,
+      actorId: null,
+      actorNombre: 'Sofi',
+      mensaje: 'Sofi te transfirió una conversación',
+    });
+  } else {
+    await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  }
 }
 
 /**

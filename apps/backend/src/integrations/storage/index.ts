@@ -9,6 +9,7 @@ export type {
   IGuardarMediaInput,
   IMediaStorage,
   IObjetoAlmacenado,
+  IRangoBytes,
   MediaDriver,
   MediaKey,
 } from './storage.types.js';

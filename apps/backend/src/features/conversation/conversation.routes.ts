@@ -7,17 +7,19 @@ import {
   SUBROLES_DATOS_SENSIBLES,
 } from '../../middlewares/authorize-subrol.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
-import { subirArchivo } from '../../middlewares/upload.middleware.js';
+import { subirArchivo, subirAudio } from '../../middlewares/upload.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
   aplicarSemaforoSchema,
   assignSchema,
   assignmentsSchema,
   classificationsSchema,
+  configAudioSchema,
   iaSchema,
   listConversationsSchema,
   overviewSchema,
   readSchema,
+  replyAudioSchema,
   replyMediaSchema,
   replySchema,
   summarySchema,
@@ -28,12 +30,14 @@ import {
   aplicarSemaforoController,
   assignController,
   generateSummaryController,
+  getConfigAudioController,
   getOverviewController,
   getThreadController,
   listAssignmentsController,
   listClassificationsController,
   listConversationsController,
   markReadController,
+  replyAudioController,
   replyController,
   replyMediaController,
   setIaController,
@@ -51,6 +55,19 @@ router.get(
   bandejaRoles,
   validate(listConversationsSchema),
   asyncHandler(listConversationsController),
+);
+
+/**
+ * Límite de grabación de notas de voz del tenant (HU-OMNI-07). Registrada **antes** que cualquier
+ * `/:id` para que `config` nunca se interprete como el id de una conversación.
+ */
+router.get(
+  '/config/audio',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  validate(configAudioSchema),
+  asyncHandler(getConfigAudioController),
 );
 
 /**
@@ -103,6 +120,20 @@ router.post(
   subirArchivo,
   validate(replyMediaSchema),
   asyncHandler(replyMediaController),
+);
+
+/**
+ * Nota de voz grabada en el navegador (HU-OMNI-07). Misma cadena que `/messages/media`, con
+ * `subirAudio` (campo `audio`, techo de audio) en el lugar de multer.
+ */
+router.post(
+  '/:id/messages/audio',
+  authenticateJWT,
+  requireTenant,
+  bandejaRoles,
+  subirAudio,
+  validate(replyAudioSchema),
+  asyncHandler(replyAudioController),
 );
 
 router.patch(

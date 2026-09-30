@@ -18,6 +18,7 @@ const MediaSchema = new Schema<IMensajeMedia>(
     tamanoBytes: { type: Number },
     sha256: { type: String },
     duracionSegundos: { type: Number },
+    esNotaDeVoz: { type: Boolean, default: false },
     miniaturaKey: { type: String },
     intentos: { type: Number, default: 0 },
     error: { type: String },

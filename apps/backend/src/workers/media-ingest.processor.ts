@@ -8,6 +8,7 @@ import type { TipoMensaje } from '../features/message/message.types.js';
 import { getIntegrationWithToken } from '../features/channel/channel.service.js';
 import { esMediaExpirada, metaMediaClient } from '../integrations/meta/meta-media.client.js';
 import { construirMediaKey, getMediaStorage } from '../integrations/storage/index.js';
+import { getTranscodificador } from '../integrations/audio/index.js';
 import { publishRealtime } from '../realtime/realtime.publisher.js';
 import { toMessageResponse, type IMessageSource } from '../features/conversation/conversation.mapper.js';
 
@@ -128,12 +129,20 @@ export async function processMediaIngestJob(data: MediaIngestJobData): Promise<v
       ...(msg.media?.nombreArchivo ? { nombreArchivo: msg.media.nombreArchivo } : {}),
     });
 
+    // HU-OMNI-07: Meta no informa la duración de un audio en el webhook, así que se mide aquí,
+    // con los bytes ya en mano. `medirDuracion` nunca lanza: si no se puede medir, el audio queda
+    // `disponible` igual y el reproductor la toma de los metadatos del `<audio>`. La duración es un
+    // adorno; perder el archivo por ella sería absurdo.
+    const duracionSegundos =
+      msg.tipo === 'audio' ? await getTranscodificador().medirDuracion(archivo.buffer) : null;
+
     await findOneAndUpdateScoped(
       Message,
       tenantId,
       { _id: new Types.ObjectId(messageId) },
       {
         $set: {
+          ...(duracionSegundos !== null ? { 'media.duracionSegundos': duracionSegundos } : {}),
           'media.estado': 'disponible',
           'media.mediaKey': guardado.key,
           'media.mimeType': guardado.mimeType,

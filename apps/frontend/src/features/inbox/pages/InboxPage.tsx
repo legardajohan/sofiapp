@@ -24,6 +24,8 @@ import { useSetConversationTags } from '../hooks/useConversationTags.js';
 import {
   useMarkRead,
   useReintentarMedia,
+  useConfigAudio,
+  useSendAudio,
   useSendMedia,
   useSendReply,
   useSetSofi,
@@ -119,6 +121,8 @@ export function InboxPage(): React.ReactElement {
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
   const sendMedia = useSendMedia(activeId);
+  const sendAudio = useSendAudio(activeId);
+  const configAudio = useConfigAudio();
   const reintentarMedia = useReintentarMedia(activeId);
   const setSofi = useSetSofi(activeId ?? '');
   const setTags = useSetConversationTags(activeId);
@@ -369,12 +373,23 @@ export function InboxPage(): React.ReactElement {
               />
             )}
             {!active.ventana24hAbierta && <WindowClosedBanner />}
+            {/* `key` por conversación (HU-OMNI-07): cambiar de conversación a mitad de una
+                grabación la descarta y libera el micrófono, en vez de dejarla viva y enviarla a
+                la conversación que se abrió después. */}
             <MessageComposer
+              key={activeId}
               disabled={!active.ventana24hAbierta}
-              pending={sendReply.isPending || sendMedia.isPending}
-              onSend={(texto) => sendReply.mutate(texto)}
+              pending={sendReply.isPending || sendMedia.isPending || sendAudio.isPending}
+              onSend={(texto) => sendReply.mutateAsync(texto)}
               onSendMedia={(archivo, caption) => sendMedia.mutateAsync({ archivo, caption })}
               uploadProgress={sendMedia.progreso}
+              onSendAudio={(grabacion, duracionSegundos) =>
+                sendAudio.mutateAsync({ grabacion, duracionSegundos })
+              }
+              audioProgress={sendAudio.progreso}
+              // Mientras llega la config, el default del backend: nunca bloquear la grabadora por
+              // una petición lenta. El servidor revalida igual.
+              maxDuracionAudio={configAudio.data?.maxDuracionSegundos ?? 300}
             />
           </>
         ) : (

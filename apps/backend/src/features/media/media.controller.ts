@@ -4,6 +4,7 @@ import { getMediaStorage } from '../../integrations/storage/index.js';
 import {
   reintentarIngesta,
   resolverMediaDescargable,
+  resolverRangoBytes,
   verificarTokenMedia,
 } from './media.service.js';
 import type { GetMediaQuery } from './media.validation.js';
@@ -44,13 +45,31 @@ export const getMediaController: RequestHandler = async (req, res) => {
     return;
   }
 
-  const { stream } = await storage.leer(media.mediaKey);
+  // `Range` (HU-OMNI-07): sin él, `<audio>` y `<video>` no pueden avanzar. Solo aplica si
+  // conocemos el tamaño total; si no, se sirve completo (un `200` es una respuesta válida a un
+  // `Range` que el servidor decide ignorar).
+  const total = media.tamanoBytes ?? 0;
+  const rango = resolverRangoBytes(req.headers.range, total);
+  if (rango === null) {
+    res.setHeader('Content-Range', `bytes */${total}`);
+    res.status(416).end();
+    return;
+  }
+
+  const { stream } = await storage.leer(media.mediaKey, rango);
 
   const inline = descargar !== '1' && TIPOS_INLINE.has(media.tipo);
   const nombre = media.nombreArchivo ?? `archivo-${messageId}`;
 
   res.setHeader('Content-Type', media.mimeType);
-  if (media.tamanoBytes) res.setHeader('Content-Length', String(media.tamanoBytes));
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (rango) {
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${rango.inicio}-${rango.fin}/${total}`);
+    res.setHeader('Content-Length', String(rango.fin - rango.inicio + 1));
+  } else if (media.tamanoBytes) {
+    res.setHeader('Content-Length', String(media.tamanoBytes));
+  }
   // Sin `nosniff`, el navegador puede ignorar el Content-Type y ejecutar lo que "parezca" HTML.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // `private` no es cosmético: sin él un proxy compartido podría cachear la media de una empresa

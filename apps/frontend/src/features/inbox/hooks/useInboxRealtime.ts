@@ -1,12 +1,9 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { disconnectSocket, getSocket } from '../../../lib/socket.js';
-import { useInboxStore } from '../useInboxStore.js';
+import { getSocket } from '../../../lib/socket.js';
 import type {
   MessageDTO,
   Paginated,
-  RealtimeAssignedEvent,
   RealtimeConversationEvent,
   RealtimeMessageEvent,
   RealtimeMessageUpdatedEvent,
@@ -17,10 +14,13 @@ import type {
  * para que la lista y el hilo se actualicen en vivo, sin recargar. `conversation:assigned`
  * solo llega al socket del destinatario (room `asesor:<id>`, ver realtime.publisher del backend),
  * así que si este cliente lo recibe, la conversación es para él.
+ *
+ * NO es dueño de la conexión (HU-NOTIF-01): `getSocket()` solo toma la instancia ya abierta por
+ * `useNotificationsRealtime` (montado en `AppLayout`), y el cleanup no la desconecta — si lo hiciera,
+ * salir de `/inbox` cortaría también las notificaciones en el resto de la app.
  */
 export function useInboxRealtime(): void {
   const qc = useQueryClient();
-  const setActiveId = useInboxStore((s) => s.setActiveId);
 
   useEffect(() => {
     const socket = getSocket();
@@ -40,13 +40,10 @@ export function useInboxRealtime(): void {
       // Una etiqueta aplicada desde otra sesión tiene que llegar a la tira igual que a la lista.
       void qc.invalidateQueries({ queryKey: ['conversation-overview', evt.conversationId] });
     };
-    const onAssigned = (evt: RealtimeAssignedEvent): void => {
+    // El toast y la campanita viven en `useNotificationsRealtime` (HU-NOTIF-01); aquí solo se
+    // refresca la lista de la bandeja.
+    const onAssigned = (): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
-      const nombre = evt.conversation.nombre ?? evt.conversation.telefono;
-      toast.success('Nueva conversación asignada', {
-        description: `${evt.actor.nombre ?? 'Un administrador'} te asignó a ${nombre}`,
-        action: { label: 'Abrir', onClick: () => setActiveId(evt.conversationId) },
-      });
     };
 
     /**
@@ -73,7 +70,6 @@ export function useInboxRealtime(): void {
       socket.off('message:updated', onMessageUpdated);
       socket.off('conversation:updated', onConversation);
       socket.off('conversation:assigned', onAssigned);
-      disconnectSocket();
     };
-  }, [qc, setActiveId]);
+  }, [qc]);
 }
