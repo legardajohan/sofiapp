@@ -10,6 +10,11 @@ const MetaIntegrationSchema = new Schema<IMetaIntegrationDocument>(
     phoneNumberId: { type: String, required: true },
     accessTokenEnc: { type: String, required: true, select: false },
     activo: { type: Boolean, default: true },
+    // Embedded Signup (HT-WA-03). El PIN de verificación en dos pasos lo genera el backend y se
+    // guarda cifrado para poder reactivar el número sin preguntárselo a nadie.
+    pinEnc: { type: String, select: false },
+    displayPhoneNumber: { type: String },
+    verifiedName: { type: String },
     // Capacidad de envío del número (HU-MARK-01). Vive aquí y no en `Tenant` porque es del
     // NÚMERO: si una empresa cambiara de número, su tier y su calidad se van con él.
     // Deliberadamente SIN índice: se lee una vez por lanzamiento y por lote, siempre por tenant.

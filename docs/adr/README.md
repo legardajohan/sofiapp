@@ -15,6 +15,7 @@ marca al anterior como *Reemplazado*.
 | [0007](0007-tablero-kanban-pipeline.md) | El embudo vuelve a tener tablero Kanban con drag & drop | Aceptada |
 | [0008](0008-almacenamiento-de-media.md) | Almacenamiento de media de conversación tras un puerto con dos adaptadores | Aceptada |
 | [0009](0009-transcodificacion-de-audio.md) | Transcodificación de notas de voz con ffmpeg en el backend | Aceptada |
+| [0010](0010-modelo-tech-provider.md) | SofiApp opera como Tech Provider frente a Meta, por ahora | Aceptada |
 
 ## Convención
 

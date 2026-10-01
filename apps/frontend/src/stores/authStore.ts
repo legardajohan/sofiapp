@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { disconnectSocket } from '../lib/socket.js';
 
 export type UserRol = 'superadmin' | 'admin';
 export type AdminSubrol = 'director' | 'manager' | 'coordinator' | 'secretary';
@@ -27,6 +28,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   setStatus: (status) => set({ status }),
   logout: () => {
     set({ user: null, status: 'unauthenticated' });
+    // La sesión, no la pantalla, es dueña del socket (HU-NOTIF-01): se cierra aquí, no al salir
+    // de /inbox.
+    disconnectSocket();
     window.location.href = '/login';
   },
 }));

@@ -64,6 +64,20 @@ cerrado.
   `bg-success`, etc.), **cero utilidades de color arbitrarias** (`bg-[#...]`) en `src/**`. Desde
   DSN-03 los tokens viven como **variables CSS** en `src/index.css` (`:root` = light, `.dark` =
   dark) y `tailwind.config.js` los referencia con `hsl(var(--token))`; ya no son hex estático.
+- **Scrollbars (regla global, no negociable):** en toda la app, light y dark, son **delgadas, sin
+  flechas arriba/abajo, con pista transparente y pulgar tonal** (`muted-foreground` al 35 %), nunca
+  las nativas claras. Viven en un solo lugar, `src/index.css`: `::-webkit-scrollbar*` para
+  Chrome/Edge/Safari (único modo de quitar las flechas) y `scrollbar-width`/`scrollbar-color`
+  **solo dentro de `@supports (-moz-appearance: none)`** para Firefox. **No** declares las
+  propiedades estándar de forma global: en Chrome/Edge 121+ anulan las reglas de WebKit y vuelve la
+  barra nativa con flechas. El `ScrollArea` de shadcn (`ui/scroll-area.tsx`) usa el mismo pulgar.
+  **Prohibido** declarar scrollbars por componente o con colores fijos: si una vista necesita otro
+  aspecto, se ajusta la regla global. Ojo: `:root { color-scheme: light }` está sin capa y le gana a `.dark` de
+  `@layer base`; por eso existe `:root.dark { color-scheme: dark }` — no la quites.
+- **Notificaciones (HU-NOTIF-01):** la campana vive en el footer del sidebar, junto a `NavUser`
+  (`SidebarUserBar`); su panel abre hacia arriba, alineado a la izquierda de la fila. Con
+  notificaciones sin leer cambia a `BellRing` + color primario + contador y se sacude al llegar una
+  nueva, además del toast.
 - **Tema light/dark:** `darkMode: 'class'`. `<ThemeProvider>` envuelve la app en `main.tsx` y
   aplica la clase `.dark`/`.light` en `<html>`. Cualquier vista nueva hereda el tema activo
   automáticamente si usa los tokens semánticos.

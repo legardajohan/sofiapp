@@ -9,8 +9,8 @@
 SofiApp es un **CRM SaaS multi-inquilino** que cualquier **entidad comercial** puede alquilar
 para captar prospectos, conversar con ellos de forma automatizada con IA a través de canales de
 mensajería (WhatsApp, Instagram, Facebook Messenger), y cerrarlos en venta. Opera como
-**proveedor de tecnología (BSP)** frente a Meta: cada empresa conecta su propia cuenta de
-WhatsApp Business API.
+**proveedor de tecnología (Tech Provider)** frente a Meta: cada empresa conecta su propia cuenta de
+WhatsApp Business API, y le paga su consumo directamente a Meta (ver ADR 0010).
 
 **Generalización clave:** SofiApp NO está atado al nicho Pre-ICFES. El dominio se modela de
 forma genérica (prospectos, productos/servicios, estados comerciales). Los datos específicos de
