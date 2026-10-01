@@ -113,6 +113,7 @@ app.use('/api/ai/handoff-rules', aiHandoffRoutes);
 app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(errorHandler);
 

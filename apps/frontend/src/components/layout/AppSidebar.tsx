@@ -2,7 +2,7 @@ import { ChevronLeft } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { navGroupsForRole } from '@/components/layout/nav-config';
-import { NavUser } from '@/components/layout/NavUser';
+import { SidebarUserBar } from '@/components/layout/SidebarUserBar';
 import { SidebarLogo } from '@/components/layout/SidebarLogo';
 import { cn } from '@/lib/utils';
 import {
@@ -104,7 +104,7 @@ export function AppSidebar(): React.ReactElement | null {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser />
+        <SidebarUserBar />
       </SidebarFooter>
     </Sidebar>
   );

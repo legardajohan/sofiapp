@@ -648,15 +648,8 @@ export async function assignConversation(
   );
 
   const actorInfo = (await findUsersByIds(tenantId, [actorId])).get(actorId) ?? null;
-  await publishRealtime({
-    type: 'conversation:assigned',
-    tenantId,
-    conversationId: clienteId,
-    conversation,
-    targetUserId: asignadoA,
-    actor: { id: actorId, nombre: actorInfo?.nombre ?? null },
-  });
-
+  // La notificación se persiste ANTES de publicar: al recibir el evento el front refresca la campana,
+  // y si el registro aún no existe esa lectura llega vacía.
   if (asignadoA) {
     await createNotification(tenantId, {
       userId: asignadoA,
@@ -668,6 +661,15 @@ export async function assignConversation(
       mensaje: `${actorInfo?.nombre ?? 'Un administrador'} te reasignó una conversación`,
     });
   }
+
+  await publishRealtime({
+    type: 'conversation:assigned',
+    tenantId,
+    conversationId: clienteId,
+    conversation,
+    targetUserId: asignadoA,
+    actor: { id: actorId, nombre: actorInfo?.nombre ?? null },
+  });
 
   return conversation;
 }
@@ -829,14 +831,7 @@ export async function handoffConversation(
   // conversación ya la llevaba alguien, o si no hay a quién asignársela, nadie estrena
   // responsabilidad y el evento correcto es el de actualización.
   if (!yaTeniaAsesor && destino) {
-    await publishRealtime({
-      type: 'conversation:assigned',
-      tenantId,
-      conversationId: clienteId,
-      conversation,
-      targetUserId: destino,
-      actor: { id: null, nombre: 'Sofi' },
-    });
+    // Persistir antes de publicar: el front refresca la campana al recibir el evento.
     await createNotification(tenantId, {
       userId: destino,
       tipo: 'handoff',
@@ -845,6 +840,14 @@ export async function handoffConversation(
       actorId: null,
       actorNombre: 'Sofi',
       mensaje: 'Sofi te transfirió una conversación',
+    });
+    await publishRealtime({
+      type: 'conversation:assigned',
+      tenantId,
+      conversationId: clienteId,
+      conversation,
+      targetUserId: destino,
+      actor: { id: null, nombre: 'Sofi' },
     });
   } else {
     await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });

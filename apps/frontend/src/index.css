@@ -13,6 +13,68 @@ body {
   margin: 0;
 }
 
+/* `.dark` vive dentro de @layer base y este `:root` está sin capa: ganaba el `light` incluso con la
+   clase `.dark` en <html>, y por eso el navegador pintaba scrollbars claros en modo oscuro. Esta
+   regla (sin capa, mayor especificidad) restablece el esquema real. */
+:root.dark {
+  color-scheme: dark;
+}
+
+/* REGLA GLOBAL DE SCROLLBARS (toda la app, light y dark): delgadas, sin flechas arriba/abajo, pista
+   transparente y pulgar con el token semántico `muted-foreground`, así que siguen al tema. No
+   declarar scrollbars por componente: si una vista necesita otro aspecto, se ajusta aquí. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+/* Sin flechas: en Chrome/Edge solo se eliminan con la API de WebKit. */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.55);
+}
+
+/* Firefox ignora ::-webkit-scrollbar y ya dibuja barras finas sin flechas con las propiedades
+   estándar. NO declararlas para el resto de navegadores: en Chrome/Edge (121+) `scrollbar-width` /
+   `scrollbar-color` anulan las reglas de WebKit de arriba y devuelven la barra nativa con flechas. */
+@supports (-moz-appearance: none) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+}
+
+/* Campana de notificaciones: sacudida breve al llegar una nueva (solo transform; se apaga con
+   prefers-reduced-motion, donde queda el cambio de ícono y el contador). */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(9deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+}
+.bell-ring {
+  transform-origin: 50% 0;
+  animation: bell-ring 700ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bell-ring {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 import { useNotificationsRealtime } from '@/features/notifications/hooks/useNotificationsRealtime';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
@@ -16,10 +15,11 @@ export function AppLayout(): React.ReactElement {
       {/* `min-w-0` permite que el contenedor encoja: sin él, una tabla ancha no hace scroll
           interno y se sobrepone al sidebar (regla de min-width de flexbox). */}
       <SidebarInset className="min-w-0">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-          {/* Antes ausente: sin ella el sidebar no se puede abrir en mobile (se comporta como Sheet). */}
+        {/* Solo mobile (< md, el mismo corte que `useIsMobile`): ahí el sidebar es un Sheet y su botón
+            de colapso interno no se alcanza, así que este trigger es la única forma de abrirlo. En
+            escritorio el sidebar ya trae su propio botón de colapso/expansión. */}
+        <header className="flex h-14 shrink-0 items-center border-b px-4 md:hidden">
           <SidebarTrigger />
-          <NotificationBell />
         </header>
         <main className="min-w-0 flex-1 overflow-auto p-6">
           <Outlet />
