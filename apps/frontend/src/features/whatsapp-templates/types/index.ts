@@ -3,6 +3,7 @@ export {
   ESTADOS_PLANTILLA,
   type CategoriaPlantilla,
   type EstadoPlantilla,
+  type FormatoCabecera,
   type IWhatsAppTemplate,
 } from './domain.js';
 export type {

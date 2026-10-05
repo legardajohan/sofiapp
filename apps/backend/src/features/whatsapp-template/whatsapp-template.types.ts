@@ -3,6 +3,20 @@ import { Document, Types } from 'mongoose';
 export const ESTADOS_PLANTILLA = ['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED'] as const;
 export type EstadoPlantilla = (typeof ESTADOS_PLANTILLA)[number];
 
+/**
+ * Formato de la cabecera de una plantilla, derivado de sus `components` (HU-MARK-03). `NINGUNA` si
+ * no tiene `HEADER`. Solo `IMAGE` admite media en envío por ahora; `DOCUMENT` y `VIDEO` están fuera
+ * de alcance y se rechazan al programar.
+ */
+export const FORMATOS_CABECERA = ['NINGUNA', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'] as const;
+export type FormatoCabecera = (typeof FORMATOS_CABECERA)[number];
+
+/** Media de cabecera ya subida a Meta, lista para ir como parámetro del `HEADER` en el envío. */
+export interface ICabeceraEnvio {
+  tipo: 'image';
+  metaMediaId: string;
+}
+
 export const CATEGORIAS_PLANTILLA = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
 export type CategoriaPlantilla = (typeof CATEGORIAS_PLANTILLA)[number];
 
@@ -54,6 +68,8 @@ export interface IWhatsAppTemplateResponse {
   /** Set de ejemplo del BODY (si Meta o el alta local lo trajeron), para la vista previa. */
   ejemplos: string[];
   parametrosBody: number;
+  /** Formato de la cabecera: el programador de campañas solo ofrece las de `IMAGE` (HU-MARK-03). */
+  cabecera: FormatoCabecera;
   obsoleta: boolean;
   syncedAt: string;
 }

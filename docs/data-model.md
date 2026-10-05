@@ -450,10 +450,20 @@ CRM-04, IA-05 y MARK-01 las resuelven.
     atributos: [{ key: String, valores: [String] }],  // "grado", "colegio"… (Cliente.atributos)
     rolContacto: [String],        // keys del catálogo `contact_options` tipo rol
     semaforoLead: [String],       // keys del catálogo `semaforos` → Lead.semaforo (eje COMERCIAL)
+    intencionCompra: [String],    // frio|tibio|caliente → Cliente.semaforoIA.nivelInteres (IA, HU-IA-05)
     nivelInteres: [String], estadoComercial: [String], tagIds: [ObjectId]
   },
   templateId: ObjectId,           // ref WhatsAppTemplate — NO el `name` suelto (ver nota)
   parametros: [String],           // huecos del BODY, fijos para toda la campaña
+  contenido: {                    // HU-MARK-03 — media que acompaña a la plantilla
+    imagen: {                     // cabecera IMAGE de la plantilla; null = solo texto
+      mediaKey: String,           // `<tenantId>/campaigns/<campaignId>/<uuid>.<ext>` (nuestro storage)
+      mimeType: "image/jpeg" | "image/png",
+      tamanoBytes: Number,        // ≤ 5 MB (límite de Meta)
+      metaMediaId: String|null,   // caché de la subida a Meta; se pide AL ARRANCAR
+      subidaMetaAt: ISODate|null  // se renueva a los 25 días (Meta lo conserva 30)
+    } | null
+  },
   estado: "borrador" | "programada" | "en_curso" | "pausada"
         | "completada" | "cancelada" | "fallida",
   programadaPara: ISODate|null,
@@ -479,6 +489,11 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > `tenantId`,** y es deliberado: el barrido que levanta las campañas programadas es cross-tenant por
 > naturaleza, como el de recordatorios de HU-FLOW-02. Solo devuelve identificadores (`tenantId`,
 > `_id`); a partir de ahí todo vuelve a pasar por `*Scoped`. Documentado en `multi-tenancy.md` §5.
+>
+> **La imagen se guarda al programar y se sube a Meta al arrancar** (HU-MARK-03). El `media id` de
+> Meta caduca a los 30 días: pedirlo al programar una campaña para dentro de seis semanas lo dejaría
+> inservible. `metaMediaId` es una caché que los lotes reutilizan; si un envío largo supera los 25
+> días desde la subida, el lote siguiente la renueva.
 >
 > **El segmento se congela al lanzar.** `totales.destinatarios` queda fijo en el instante del
 > lanzamiento y los `campaign_recipients` se materializan ahí. Un contacto que empiece a cumplir los

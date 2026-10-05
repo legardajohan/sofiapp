@@ -108,7 +108,9 @@ export async function sendOutbound(
     return mensajeMedia;
   }
 
-  let plantilla: { templateId: string; parametros: string[] } | undefined;
+  let plantilla:
+    | { templateId: string; parametros: string[]; imagenCabecera?: { metaMediaId: string } }
+    | undefined;
   let texto: string | undefined;
 
   if (contenido.modo === 'texto') {
@@ -124,13 +126,24 @@ export async function sendOutbound(
     }
   } else {
     // 'plantilla': permitido dentro y fuera de la ventana, Meta lo acepta en ambos casos.
-    plantilla = { templateId: contenido.templateId, parametros: contenido.parametros };
+    plantilla = {
+      templateId: contenido.templateId,
+      parametros: contenido.parametros,
+      ...(contenido.imagenCabecera ? { imagenCabecera: contenido.imagenCabecera } : {}),
+    };
   }
 
   const integration = await getIntegrationWithToken(tenantId);
 
   if (plantilla) {
-    const payload = await buildTemplatePayload(tenantId, plantilla.templateId, plantilla.parametros);
+    const payload = await buildTemplatePayload(
+      tenantId,
+      plantilla.templateId,
+      plantilla.parametros,
+      plantilla.imagenCabecera
+        ? { tipo: 'image', metaMediaId: plantilla.imagenCabecera.metaMediaId }
+        : undefined,
+    );
     const { messageId } = await metaWhatsAppClient.sendTemplate(
       cliente.telefono,
       payload.name,

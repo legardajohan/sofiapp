@@ -10,11 +10,22 @@ import {
   findScoped,
   updateManyScoped,
 } from '../../repositories/base.repository.js';
-import { CAMPAIGN_BATCH_JOB, campaignQueue } from '../../config/queues.js';
+import {
+  CAMPAIGN_BATCH_JOB,
+  CAMPAIGN_SCHEDULED_START_JOB,
+  campaignQueue,
+} from '../../config/queues.js';
+import { construirCampaignMediaKey, getMediaStorage } from '../../integrations/storage/index.js';
+import { metaMediaClient } from '../../integrations/meta/meta-media.client.js';
+import { logger } from '../../utils/logger.js';
+import { firmarUrlMedia, recursoImagenCampana } from '../media/media.token.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
-import { buildTemplatePayload } from '../whatsapp-template/whatsapp-template.service.js';
+import {
+  assertContenidoCompatible,
+  buildTemplatePayload,
+} from '../whatsapp-template/whatsapp-template.service.js';
 import { WhatsAppTemplate } from '../whatsapp-template/whatsapp-template.model.js';
-import { getChannelCapacity } from '../channel/channel.service.js';
+import { getChannelCapacity, getIntegrationWithToken } from '../channel/channel.service.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from '../message/message.model.js';
@@ -26,8 +37,15 @@ import type { ICliente } from '../cliente/cliente.types.js';
 import type { LeanWhatsAppTemplate } from '../whatsapp-template/whatsapp-template.types.js';
 import type { MessageStatus } from '../message/message.types.js';
 import type {
+  CampaignStartJobData,
   CreateCampaignDTO,
   EstadoDestinatario,
+  IImagenCampana,
+  IImagenCampanaResponse,
+  IImagenSubida,
+  MimeImagenCampana,
+  RescheduleCampaignDTO,
+  ScheduleCampaignDTO,
   ICampaignDetalleResponse,
   ICampaignRecipientResponse,
   ICampaignResponse,
@@ -38,7 +56,7 @@ import type {
   LeanCampaign,
   LeanCampaignRecipient,
 } from './campaign.types.js';
-import { ESTADOS_DESTINATARIO } from './campaign.types.js';
+import { ESTADOS_DESTINATARIO, MIMES_IMAGEN_CAMPANA } from './campaign.types.js';
 
 type TenantId = string | Types.ObjectId;
 
@@ -48,6 +66,23 @@ const LOTE_MATERIALIZACION = 500;
 
 // ─── Mapeadores ─────────────────────────────────────────────────────────────────
 
+/**
+ * URL firmada de la imagen de cabecera (HU-MARK-03). Relativa a la base del API, igual que
+ * `urlArchivo` de los mensajes: el front le antepone `VITE_API_BASE_URL`.
+ */
+function toImagenResponse(c: LeanCampaign): IImagenCampanaResponse | null {
+  // `?.` porque las campañas de MARK-01 anteriores al campo no lo traen en el documento crudo.
+  const imagen = c.contenido?.imagen;
+  if (!imagen) return null;
+  const campaignId = c._id.toString();
+  const token = firmarUrlMedia(c.tenantId.toString(), recursoImagenCampana(campaignId));
+  return {
+    url: `/media/campaigns/${campaignId}/imagen?t=${token}`,
+    mimeType: imagen.mimeType,
+    tamanoBytes: imagen.tamanoBytes,
+  };
+}
+
 function toCampaignResponse(c: LeanCampaign): ICampaignResponse {
   return {
     id: c._id.toString(),
@@ -56,6 +91,7 @@ function toCampaignResponse(c: LeanCampaign): ICampaignResponse {
     filtros: c.filtros,
     templateId: c.templateId.toString(),
     parametros: c.parametros,
+    imagen: toImagenResponse(c),
     totales: c.totales,
     presupuesto: c.presupuesto,
     programadaPara: c.programadaPara ? c.programadaPara.toISOString() : null,
@@ -282,11 +318,21 @@ export async function launchCampaign(
 
   await assertWithinQuota(tenantId, 'campanasMes');
 
-  // Revalida la plantilla en el momento del envío: pudo pasar a PAUSED entre el alta y el lanzamiento.
-  await buildTemplatePayload(tenantId, campana.templateId.toString(), campana.parametros);
+  // Revalida la plantilla en el momento del envío: pudo pasar a PAUSED entre el alta y el
+  // lanzamiento. Con imagen (HU-MARK-03) comprueba además que la plantilla sigue siendo de `IMAGE`.
+  await assertContenidoCompatible(
+    tenantId,
+    campana.templateId.toString(),
+    campana.parametros,
+    !!campana.contenido?.imagen,
+  );
 
   const presupuesto = await resolverPresupuesto(tenantId);
   assertPuedeLanzar(presupuesto);
+
+  // La imagen se sube a Meta ANTES de materializar a nadie (HU-MARK-03, criterio 6): si Meta no la
+  // acepta, la campaña falla sin haber creado destinatarios que luego habría que dar por omitidos.
+  await prepararImagenCabecera(tenantId, campana);
 
   const destinatarios = await materializarDestinatarios(tenantId, campana._id, campana.filtros);
 
@@ -330,6 +376,302 @@ export async function launchCampaign(
   });
 
   return toCampaignResponse(actualizada);
+}
+
+// ─── Programación con imagen (HU-MARK-03) ───────────────────────────────────────
+
+/**
+ * Vida útil que se le da a un `metaMediaId`. Meta lo conserva 30 días; se renueva a los 25 para que
+ * un lote que arranca el día 29 no se quede con un id que caduca a mitad del envío.
+ */
+const VIDA_MEDIA_META_MS = 25 * MS_24H;
+
+/** `jobId` del arranque exacto. Incluye la hora: reprogramar crea un job nuevo, no choca con el viejo. */
+export function campaignStartJobId(campaignId: string, programadaParaMs: number): string {
+  return `campaign-start-${campaignId}-${programadaParaMs}`;
+}
+
+/** Encola el arranque exacto a `programadaPara`. El barrido de 60 s sigue de red de seguridad. */
+export async function encolarArranque(
+  tenantId: string,
+  campaignId: string,
+  programadaPara: Date,
+): Promise<void> {
+  const programadaParaMs = programadaPara.getTime();
+  const data: CampaignStartJobData = { tenantId, campaignId, programadaParaMs };
+  await campaignQueue.add(CAMPAIGN_SCHEDULED_START_JOB, data, {
+    jobId: campaignStartJobId(campaignId, programadaParaMs),
+    delay: Math.max(programadaParaMs - Date.now(), 0),
+    removeOnComplete: 1000,
+    removeOnFail: 5000,
+  });
+}
+
+function esMimeImagenCampana(mime: string): mime is MimeImagenCampana {
+  return (MIMES_IMAGEN_CAMPANA as readonly string[]).includes(mime);
+}
+
+/** Tipo de la imagen. El tamaño ya lo cortó multer con 413 (`subirImagenCampana`). */
+function assertImagenValida(imagen: IImagenSubida): MimeImagenCampana {
+  const mime = imagen.mimeType.toLowerCase();
+  if (!esMimeImagenCampana(mime)) {
+    throw new AppError('La imagen debe ser JPG o PNG.', 400, { mimeType: imagen.mimeType });
+  }
+  return mime;
+}
+
+/** Guarda la imagen en nuestro almacenamiento, bajo el prefijo del tenant (criterio 10). */
+async function guardarImagen(
+  tenantId: TenantId,
+  campaignId: string,
+  imagen: IImagenSubida,
+  mimeType: MimeImagenCampana,
+): Promise<IImagenCampana> {
+  const guardado = await getMediaStorage().guardar({
+    key: construirCampaignMediaKey(tenantId.toString(), campaignId, mimeType),
+    contenido: imagen.buffer,
+    mimeType,
+    nombreArchivo: imagen.nombreArchivo,
+  });
+  return {
+    mediaKey: guardado.key,
+    mimeType,
+    tamanoBytes: guardado.tamanoBytes,
+    metaMediaId: null,
+    subidaMetaAt: null,
+  };
+}
+
+/** Borrado best-effort: un objeto huérfano es preferible a tapar el error real con otro. */
+function eliminarImagenSilenciosa(mediaKey: string): void {
+  void Promise.resolve()
+    .then(() => getMediaStorage().eliminar(mediaKey))
+    .catch((err: unknown) => {
+      logger.warn('No se pudo eliminar la imagen de campaña', { mediaKey, error: String(err) });
+    });
+}
+
+async function leerComoBuffer(mediaKey: string): Promise<Buffer> {
+  const { stream } = await getMediaStorage().leer(mediaKey);
+  const trozos: Buffer[] = [];
+  for await (const trozo of stream) {
+    trozos.push(Buffer.isBuffer(trozo) ? trozo : Buffer.from(trozo as Uint8Array));
+  }
+  return Buffer.concat(trozos);
+}
+
+/**
+ * Deja lista la imagen de cabecera para enviar y devuelve su `metaMediaId`, o `undefined` si la
+ * campaña es de solo texto.
+ *
+ * Sube a Meta solo si no hay id o si el que hay tiene más de `VIDA_MEDIA_META_MS`: una vez por
+ * campaña en el caso normal. El id se cachea en el documento para que los lotes lo reutilicen.
+ */
+export async function prepararImagenCabecera(
+  tenantId: TenantId,
+  campana: LeanCampaign,
+): Promise<{ metaMediaId: string } | undefined> {
+  const imagen = campana.contenido?.imagen;
+  if (!imagen) return undefined;
+
+  const subidaAt = imagen.subidaMetaAt ? new Date(imagen.subidaMetaAt).getTime() : null;
+  if (imagen.metaMediaId && subidaAt !== null && Date.now() - subidaAt < VIDA_MEDIA_META_MS) {
+    return { metaMediaId: imagen.metaMediaId };
+  }
+
+  let mediaId: string;
+  try {
+    const integration = await getIntegrationWithToken(tenantId);
+    const buffer = await leerComoBuffer(imagen.mediaKey);
+    const extension = imagen.mimeType === 'image/png' ? 'png' : 'jpg';
+    ({ mediaId } = await metaMediaClient.subir(integration.phoneNumberId, integration.accessToken, {
+      buffer,
+      mimeType: imagen.mimeType,
+      nombreArchivo: `campana-${campana._id.toString()}.${extension}`,
+    }));
+  } catch (err) {
+    logger.error('No se pudo subir la imagen de campaña a Meta', {
+      campaignId: campana._id.toString(),
+      error: String(err),
+    });
+    throw new AppError('No se pudo subir la imagen de la campaña a WhatsApp.', 502);
+  }
+
+  await findOneAndUpdateScoped(
+    Campaign,
+    tenantId,
+    { _id: campana._id },
+    {
+      $set: {
+        'contenido.imagen.metaMediaId': mediaId,
+        'contenido.imagen.subidaMetaAt': new Date(),
+      },
+    },
+  );
+
+  return { metaMediaId: mediaId };
+}
+
+/**
+ * Programa una campaña con fecha/hora, contenido e imagen (HU-MARK-03, criterios 1, 2, 4).
+ *
+ * **No consume `campanasMes`**: la cuota se cobra al arrancar, que es cuando la campaña gasta.
+ * Programar diez campañas para el mes que viene no debe bloquear este.
+ */
+export async function scheduleCampaign(
+  tenantId: TenantId,
+  actorId: string,
+  dto: ScheduleCampaignDTO,
+  imagen: IImagenSubida | undefined,
+): Promise<ICampaignResponse> {
+  const mimeType = imagen ? assertImagenValida(imagen) : null;
+
+  // Contenido ↔ plantilla ANTES de guardar nada: ni objeto en el bucket ni documento en Mongo.
+  await assertContenidoCompatible(tenantId, dto.templateId, dto.parametros, !!imagen);
+
+  // El id se genera aquí porque la clave de la imagen lo necesita antes de crear el documento.
+  const campaignId = new Types.ObjectId();
+  const imagenGuardada =
+    imagen && mimeType
+      ? await guardarImagen(tenantId, campaignId.toString(), imagen, mimeType)
+      : null;
+
+  const programadaPara = new Date(dto.programadaPara);
+
+  let campana: LeanCampaign;
+  try {
+    const creada = await createScoped(Campaign, tenantId, {
+      _id: campaignId,
+      nombre: dto.nombre,
+      filtros: dto.filtros,
+      templateId: new Types.ObjectId(dto.templateId),
+      parametros: dto.parametros,
+      contenido: { imagen: imagenGuardada },
+      estado: 'programada',
+      programadaPara,
+      creadaPor: new Types.ObjectId(actorId),
+    });
+    campana = creada.toObject() as LeanCampaign;
+  } catch (err) {
+    if (imagenGuardada) eliminarImagenSilenciosa(imagenGuardada.mediaKey);
+    throw err;
+  }
+
+  await encolarArranque(tenantId.toString(), campaignId.toString(), programadaPara);
+
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'campaign.schedule',
+    entidad: 'campaign',
+    entidadId: campaignId.toString(),
+    antes: {},
+    despues: {
+      nombre: campana.nombre,
+      estado: 'programada',
+      programadaPara: programadaPara.toISOString(),
+      conImagen: !!imagenGuardada,
+    },
+  });
+
+  return toCampaignResponse(campana);
+}
+
+/**
+ * Cambia la hora o el contenido de una campaña que aún espera (HU-MARK-03, criterio 5).
+ *
+ * El job de la hora anterior no se busca ni se borra: al dispararse verá que `programadaPara` ya no
+ * coincide y saldrá sin hacer nada (`processScheduledStart`). Es más simple y no depende de que el
+ * job siga alcanzable en Redis.
+ */
+export async function rescheduleCampaign(
+  tenantId: TenantId,
+  actorId: string,
+  campaignId: string,
+  dto: RescheduleCampaignDTO,
+  imagen: IImagenSubida | undefined,
+): Promise<ICampaignResponse> {
+  const campana = await getCampaignOrFail(tenantId, campaignId);
+  if (campana.estado !== 'programada') {
+    throw new AppError('Solo se puede reprogramar una campaña programada.', 409, {
+      estado: campana.estado,
+    });
+  }
+  if (imagen && dto.quitarImagen) {
+    throw new AppError('Elige una cosa: cambiar la imagen o quitarla.', 400);
+  }
+
+  const mimeType = imagen ? assertImagenValida(imagen) : null;
+  const imagenActual = campana.contenido?.imagen ?? null;
+  const llevaraImagen = imagen ? true : dto.quitarImagen ? false : !!imagenActual;
+
+  const templateId = dto.templateId ?? campana.templateId.toString();
+  const parametros = dto.parametros ?? campana.parametros;
+  await assertContenidoCompatible(tenantId, templateId, parametros, llevaraImagen);
+
+  const nuevaImagen =
+    imagen && mimeType ? await guardarImagen(tenantId, campaignId, imagen, mimeType) : null;
+
+  const set: Record<string, unknown> = {};
+  if (dto.nombre !== undefined) set['nombre'] = dto.nombre;
+  if (dto.filtros !== undefined) set['filtros'] = dto.filtros;
+  if (dto.templateId !== undefined) set['templateId'] = new Types.ObjectId(dto.templateId);
+  if (dto.parametros !== undefined) set['parametros'] = dto.parametros;
+  if (nuevaImagen) set['contenido.imagen'] = nuevaImagen;
+  else if (dto.quitarImagen) set['contenido.imagen'] = null;
+  const nuevaHora = dto.programadaPara ? new Date(dto.programadaPara) : null;
+  if (nuevaHora) set['programadaPara'] = nuevaHora;
+
+  // Update condicional: si entre la lectura y aquí la campaña arrancó, no se toca.
+  const actualizada = await findOneAndUpdateScoped(
+    Campaign,
+    tenantId,
+    { _id: campana._id, estado: 'programada' },
+    { $set: set },
+    { new: true },
+  ).lean<LeanCampaign | null>();
+
+  if (!actualizada) {
+    if (nuevaImagen) eliminarImagenSilenciosa(nuevaImagen.mediaKey);
+    throw new AppError('La campaña ya arrancó y no se puede reprogramar.', 409);
+  }
+
+  // La imagen anterior se borra DESPUÉS de persistir la nueva: si algo falla antes, la campaña
+  // sigue apuntando a un objeto que existe.
+  if (imagenActual && (nuevaImagen || dto.quitarImagen)) {
+    eliminarImagenSilenciosa(imagenActual.mediaKey);
+  }
+
+  if (nuevaHora && actualizada.programadaPara) {
+    await encolarArranque(tenantId.toString(), campaignId, actualizada.programadaPara);
+  }
+
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'campaign.reschedule',
+    entidad: 'campaign',
+    entidadId: campaignId,
+    antes: { programadaPara: campana.programadaPara?.toISOString() ?? null },
+    despues: {
+      programadaPara: actualizada.programadaPara?.toISOString() ?? null,
+      cambios: Object.keys(set),
+    },
+  });
+
+  return toCampaignResponse(actualizada);
+}
+
+/**
+ * Imagen de una campaña **dentro del tenant**, para servirla por la ruta firmada. Otro tenant o una
+ * campaña sin imagen dan el mismo 404: la diferencia sería un oráculo de ids.
+ */
+export async function resolverImagenCampana(
+  tenantId: TenantId,
+  campaignId: string,
+): Promise<IImagenCampana> {
+  const campana = await findByIdScoped(Campaign, tenantId, campaignId).lean<LeanCampaign | null>();
+  const imagen = campana?.contenido?.imagen;
+  if (!imagen) throw new AppError('Imagen no encontrada.', 404);
+  return imagen;
 }
 
 // ─── Transiciones ───────────────────────────────────────────────────────────────

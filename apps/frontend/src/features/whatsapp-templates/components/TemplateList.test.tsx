@@ -24,6 +24,7 @@ function makeTemplate(overrides: Partial<IWhatsAppTemplate> = {}): IWhatsAppTemp
     cuerpo: 'Hola {{1}}',
     ejemplos: ['Ana'],
     parametrosBody: 1,
+    cabecera: 'NINGUNA',
     obsoleta: false,
     syncedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

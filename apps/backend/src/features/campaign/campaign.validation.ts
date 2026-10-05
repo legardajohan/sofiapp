@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
-import { ESTADOS_CAMPANA, ESTADOS_DESTINATARIO } from './campaign.types.js';
+import { ESTADOS_CAMPANA, ESTADOS_DESTINATARIO, INTENCIONES_COMPRA } from './campaign.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
@@ -31,6 +31,7 @@ const segmentoFiltros = z
     rolContacto: z.array(catalogoKey).max(50).optional(),
     semaforoLead: z.array(catalogoKey).max(50).optional(),
     nivelInteres: z.array(catalogoKey).max(50).optional(),
+    intencionCompra: z.array(z.enum(INTENCIONES_COMPRA)).max(3).optional(),
     estadoComercial: z.array(z.enum(ESTADOS_COMERCIALES)).max(10).optional(),
     tagIds: z.array(objectId).max(50).optional(),
   })
@@ -75,6 +76,76 @@ export const createCampaignSchema = z.object({
   query: empty,
 });
 
+// ─── HU-MARK-03 — programación con imagen (multipart) ──────────────────────────
+
+/**
+ * En un multipart todo campo de texto llega como `string`: `filtros` y `parametros` viajan como
+ * JSON serializado. Un JSON roto se deja pasar tal cual para que falle el schema de debajo con un
+ * `400` legible en vez de reventar aquí con un `SyntaxError` → 500.
+ */
+function jsonDe<T extends z.ZodTypeAny>(schema: T): z.ZodType<z.infer<T>> {
+  return z.preprocess((valor) => {
+    if (typeof valor !== 'string') return valor;
+    try {
+      return JSON.parse(valor) as unknown;
+    } catch {
+      return valor;
+    }
+  }, schema) as unknown as z.ZodType<z.infer<T>>;
+}
+
+/**
+ * Antelación mínima al programar. Por debajo de un minuto no es "programar", es "lanzar tarde", y
+ * el job diferido podría dispararse antes de que termine la propia petición.
+ */
+export const ANTELACION_MINIMA_MS = 60_000;
+
+const programadaParaFutura = z
+  .string()
+  .datetime({ offset: true })
+  .refine((iso) => new Date(iso).getTime() - Date.now() >= ANTELACION_MINIMA_MS, {
+    message: 'Programa la campaña con al menos un minuto de antelación.',
+  });
+
+const scheduleBody = z
+  .object({
+    nombre: z.string().trim().min(1, 'El nombre es obligatorio.').max(120),
+    filtros: jsonDe(segmentoFiltros),
+    templateId: objectId,
+    parametros: jsonDe(z.array(z.string().max(1000)).max(20)),
+    programadaPara: programadaParaFutura,
+  })
+  .strict();
+
+/** `POST /api/campaigns/schedule`. La imagen no pasa por Zod: la deja multer en `req.file`. */
+export const scheduleCampaignSchema = z.object({
+  body: scheduleBody,
+  params: empty,
+  query: empty,
+});
+
+/**
+ * `PATCH /api/campaigns/:id/schedule`. Todo opcional; `quitarImagen` llega como texto de multipart,
+ * así que solo se acepta el literal `'true'` y se traduce a booleano.
+ */
+export const rescheduleCampaignSchema = z.object({
+  body: z
+    .object({
+      nombre: z.string().trim().min(1, 'El nombre es obligatorio.').max(120).optional(),
+      filtros: jsonDe(segmentoFiltros).optional(),
+      templateId: objectId.optional(),
+      parametros: jsonDe(z.array(z.string().max(1000)).max(20)).optional(),
+      programadaPara: programadaParaFutura.optional(),
+      quitarImagen: z
+        .literal('true')
+        .transform(() => true)
+        .optional(),
+    })
+    .strict(),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 export const listCampaignsSchema = z.object({
   body: empty,
   params: empty,
@@ -104,3 +175,5 @@ export type PreviewSegmentoBody = z.infer<typeof previewSegmentoSchema>['body'];
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>['body'];
 export type ListCampaignsQuery = z.infer<typeof listCampaignsSchema>['query'];
 export type ListRecipientsQuery = z.infer<typeof listRecipientsSchema>['query'];
+export type ScheduleCampaignBody = z.infer<typeof scheduleCampaignSchema>['body'];
+export type RescheduleCampaignBody = z.infer<typeof rescheduleCampaignSchema>['body'];

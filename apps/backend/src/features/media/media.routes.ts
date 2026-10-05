@@ -4,8 +4,12 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { getMediaController, retryMediaController } from './media.controller.js';
-import { getMediaSchema, retryMediaSchema } from './media.validation.js';
+import {
+  getCampaignImageController,
+  getMediaController,
+  retryMediaController,
+} from './media.controller.js';
+import { getCampaignImageSchema, getMediaSchema, retryMediaSchema } from './media.validation.js';
 
 const router = Router();
 
@@ -21,6 +25,17 @@ const router = Router();
  * `csrfGuard` deja pasar los métodos seguros, así que un `GET` no necesita nada más.
  */
 router.get('/:id', validate(getMediaSchema), asyncHandler(getMediaController));
+
+/**
+ * Imagen de cabecera de una campaña (HU-MARK-03), para la vista previa del programador y del
+ * detalle. Misma excepción que la ruta de arriba: la credencial es el HMAC del query, firmado sobre
+ * `campaign-<id>` — un token de mensaje no sirve aquí ni al revés.
+ */
+router.get(
+  '/campaigns/:id/imagen',
+  validate(getCampaignImageSchema),
+  asyncHandler(getCampaignImageController),
+);
 
 /**
  * Reintento manual de una descarga fallida. Esta SÍ es una acción del asesor, así que lleva la

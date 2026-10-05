@@ -19,6 +19,9 @@ vi.mock('@/features/contacts/hooks/useContactOptions', () => ({
     },
   }),
 }));
+vi.mock('@/features/tags/hooks/useTags', () => ({
+  useTags: () => ({ data: [{ id: 't1', nombre: 'VIP', color: '#7C3AED', semaforo: null }] }),
+}));
 vi.mock('@/features/semaforos', () => ({
   useSemaforos: () => ({
     data: [{ id: 's1', key: 'verde', label: 'Venta concretada', color: '#16A34A', orden: 0, activo: true, esDefecto: true }],
@@ -71,6 +74,7 @@ describe('CampaignWizard', () => {
           cuerpo: 'Hola, abrimos matrículas.',
           ejemplos: [],
           parametrosBody: 0,
+          cabecera: 'NINGUNA',
           obsoleta: false,
           syncedAt: new Date().toISOString(),
         },
@@ -153,23 +157,12 @@ describe('CampaignWizard', () => {
     expect(screen.getByRole('button', { name: 'Guardar borrador' })).toBeEnabled();
   });
 
-  it('el filtro por «grado» viaja como atributo personalizado, no como campo propio', async () => {
-    const user = userEvent.setup();
+  it('ya no ofrece rol del contacto ni datos propios de la ficha', async () => {
     renderWizard();
 
     await waitFor(() => expect(screen.getByText('120')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Añadir un dato/ }));
-    await user.type(screen.getByLabelText('Nombre del dato'), 'grado');
-    await user.type(screen.getByLabelText(/Valores aceptados/), '10, 11');
-
-    // Margen holgado: el wizard espera 400 ms sin teclear antes de consultar, así que la llamada
-    // con el valor definitivo no llega dentro del segundo por defecto de `waitFor`.
-    await waitFor(
-      () =>
-        expect(mockPreview).toHaveBeenCalledWith(
-          expect.objectContaining({ atributos: [{ key: 'grado', valores: ['10', '11'] }] }),
-        ),
-      { timeout: 3000 },
-    );
+    expect(screen.queryByText('Rol del contacto')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Añadir un dato/ })).not.toBeInTheDocument();
   });
+
 });
