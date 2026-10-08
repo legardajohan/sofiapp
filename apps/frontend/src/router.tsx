@@ -3,12 +3,17 @@ import { createBrowserRouter } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage.js';
 import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
+import { RequireReportes } from './components/RequireReportes.js';
 import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
 import { Loading } from './components/Loading.js';
 import { AppLayout } from './components/layout/AppLayout.js';
 
+// HU-REP-01: arrastra recharts, así que no entra al bundle inicial.
+const AdvisorReportPage = lazy(() =>
+  import('./features/reports/pages/AdvisorReportPage.js').then((m) => ({ default: m.AdvisorReportPage })),
+);
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
@@ -173,6 +178,18 @@ export const router = createBrowserRouter([
                 <Suspense fallback={<Loading />}>
                   <InboxPage />
                 </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/advisors',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <AdvisorReportPage />
+                  </Suspense>
+                </RequireReportes>
               </RequireRole>
             ),
           },

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Cell, Label, Pie, PieChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
-import { ChartCard, ChartEmpty } from './ChartCard.js';
+import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { formatEntero } from '../lib/format.js';
 import type { PlanDistribution } from '../types/index.js';
 
