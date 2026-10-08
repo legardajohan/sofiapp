@@ -111,11 +111,15 @@ body {
     --border: 235 25% 90.6%;
     --input: 231 20% 80.4%;
     --ring: 221 83.2% 53.3%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    /* Paleta categórica de gráficas (HU-SAAS-03): azul · naranja · aqua · ámbar · magenta, en ese
+       orden fijo (nunca ciclado). Validada para daltonismo (ΔE CVD ≥ 8 entre adyacentes) en light y
+       dark. Aqua/ámbar/magenta quedan < 3:1 sobre blanco: toda gráfica lleva leyenda o etiqueta
+       directa y una tabla con el mismo dato. */
+    --chart-1: 213 68% 50%;
+    --chart-2: 17 82% 56%;
+    --chart-3: 159 73% 40%;
+    --chart-4: 41 100% 46%;
+    --chart-5: 337 70% 70%;
     /* Paleta propia del plan ANUAL (HU-SAAS-02): violeta → magenta → ámbar → cian,
        distinta y más llamativa que la del semestral (que reusa tokens de marca). */
     /* Iconos del menú de adjuntar (HU-OMNI-06). Toman la gama de WhatsApp —violeta para la
@@ -174,11 +178,11 @@ body {
     --border: 228 16% 20%;
     --input: 228 16% 24%;
     --ring: 217 91% 60%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --chart-1: 213 77% 56%;
+    --chart-2: 17 70% 50%;
+    --chart-3: 159 73% 36%;
+    --chart-4: 40 100% 39%;
+    --chart-5: 338 61% 58%;
     /* En dark subimos luminosidad y saturación para que el resplandor "queme" más. */
     /* Más claros sobre el fondo oscuro: los valores de `:root` caerían por debajo de 3:1 contra
        `--popover` en dark y el icono dejaría de distinguirse. */
