@@ -19,4 +19,8 @@ const AuditEventSchema = new Schema<IAuditEventDocument>(
 
 AuditEventSchema.index({ tenantId: 1, entidad: 1, entidadId: 1, createdAt: -1 });
 
+// Lectura por acción en un rango de fechas (HU-REP-01: ventas fechadas por su paso a `pagado`).
+// El índice de arriba empieza por entidad/entidadId y no sirve para "todos los `lead.estado` del mes".
+AuditEventSchema.index({ tenantId: 1, accion: 1, createdAt: -1 });
+
 export const AuditEvent = model<IAuditEventDocument>('AuditEvent', AuditEventSchema);
