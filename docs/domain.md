@@ -244,6 +244,27 @@ Reglas de la escritura automática:
 - La clasificación corre dentro del ciclo de auto-reply, así que **solo con Sofi encendida**: tras un
   handoff el semáforo vuelve a ser de la persona que tomó la conversación.
 
+## 5bis. Productividad por asesor (HU-REP-01)
+
+Definiciones únicas que usa `GET /api/reports/by-advisor`. Cuadran con la bandeja y el pipeline:
+
+- **Conversación atendida por X en el periodo:** `Cliente` con `asesorId = X` (asesor **actual**),
+  que no es de demo (`metaUserId` sin prefijo `demo-`) y tiene al menos un `Message`
+  `sender: 'agent'` —respuesta humana, no de Sofi— con `createdAt` en el periodo.
+- **Asignadas activas:** `asesorId = X` y `ultimoMensajeAt` en el periodo, haya respondido o no.
+- **Venta cerrada por X en el periodo:** lead que **pasó a la etapa `pagado` dentro del periodo**
+  (evento de etapa en `audit_events`) y **sigue** en `pagado`; cuenta una vez y se atribuye a su
+  `responsableId`, no a quien movió la tarjeta. Es la misma clave `pagado` del tablero global
+  (HU-SAAS-03). El semáforo `verde` ("Venta concretada") es una señal, no la venta del reporte.
+- **Tasa de cierre:** ventas / conversaciones atendidas (0 sin atendidas). Indicador operativo: una
+  venta puede venir de un hilo atendido en otro periodo.
+- Lo que no tiene un usuario del tenant (asesor nulo o usuario borrado) se informa como **sin
+  asignar**, para que los totales cuadren.
+
+Limitación aceptada: `Message` no registra **qué** usuario respondió, así que una reasignación
+dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
+`admin` sin subrol (ADR 0011).
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

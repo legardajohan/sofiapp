@@ -4,7 +4,7 @@
 > la ejecución en `tasks.md`. Primer reporte **de tenant**: el gerente ve la productividad de los
 > asesores de **su** empresa. Reutiliza las piezas de dashboard que dejó HU-SAAS-03.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Historia
 
@@ -129,8 +129,8 @@ no un embudo estricto: una venta puede venir de un hilo atendido en otro periodo
 - Solo nombre del asesor (dato del propio tenant) y conteos: **sin** teléfonos, correos, nombres de
   contacto ni textos de mensajes.
 
-**Errores:** 401 sin JWT · 403 rol ≠ `admin`, subrol `coordinator`/`secretary`, o superadmin (sin
-tenant, `requireTenant`) · 400 query inválida (formato `docs/api-contract.md`).
+**Errores:** 401 sin JWT · 403 rol ≠ `admin` o subrol `coordinator`/`secretary` · el superadmin
+(sin tenant) lo corta `requireTenant` con 500, como en toda ruta de tenant · 400 query inválida (formato `docs/api-contract.md`).
 
 ## Diseño de la UI
 
@@ -156,7 +156,7 @@ tenant, `requireTenant`) · 400 query inválida (formato `docs/api-contract.md`)
 
 1. `GET /api/reports/by-advisor` usa `authenticateJWT → requireTenant → authorize(['admin']) →
    authorizeSubrol(['director','manager']) → validate → asyncHandler`. Sin JWT → 401; admin
-   `coordinator`/`secretary` → 403; superadmin → 403; admin sin subrol, `director` o `manager` → 200
+   `coordinator`/`secretary` → 403; superadmin → rechazado por `requireTenant` (500, igual que en toda ruta de tenant); admin sin subrol, `director` o `manager` → 200
    con la forma del contrato.
 2. Query inválida (`hasta < desde`, fecha mal formada, rango > 366 días) → 400 vía Zod. Sin query,
    el rango es los últimos 30 días.

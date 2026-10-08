@@ -665,6 +665,7 @@ cualquier intento de guardarlo es un 400.
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, entidad: 1, entidadId: 1, createdAt: -1 }
+//          { tenantId: 1, accion: 1, createdAt: -1 }   (HU-REP-01: acciones por rango de fechas)
 ```
 > Se estrena con `conversation.assign` (historial de reasignaciones, `GET
 > /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
@@ -678,6 +679,11 @@ cualquier intento de guardarlo es un 400.
 > **`lead.estado`** registra el cambio de etapa del pipeline. Es acción propia, y no `lead.update`,
 > para que el historial de etapa no tenga que colar las altas y las bajas; los cambios anteriores a
 > HU-PIPE-01 quedaron como `lead.update` y **no se migran**, se consultan.
+>
+> **Fecha de venta (HU-REP-01).** El paso de un lead a la etapa `pagado` se fecha con el evento
+> `lead.estado` (o `lead.update` legacy) cuyo `despues.estado` es `pagado`. `leads` no guarda esa
+> fecha; el reporte por asesor la lee de aquí con el índice `{ tenantId, accion, createdAt }`.
+> `recordAuditEvent` es *best-effort*: un evento perdido hace que esa venta no se cuente.
 >
 > **`lead.semaforo`** registra el cambio del semáforo comercial del lead (`antes`/`despues` con la
 > `key` del catálogo, `null` = sin clasificar). Es otro eje que `cliente.semaforo`, que vive sobre la
