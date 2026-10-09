@@ -685,6 +685,10 @@ cualquier intento de guardarlo es un 400.
 > fecha; el reporte por asesor la lee de aquí con el índice `{ tenantId, accion, createdAt }`.
 > `recordAuditEvent` es *best-effort*: un evento perdido hace que esa venta no se cuente.
 >
+> **Historial de handoff (HU-REP-02).** `conversation.handoff` (actor `null`) es la fuente de la tasa
+> de escalamiento: `clientes.handoffAt` solo guarda el estado actual y `setIaHabilitada(true)` lo
+> borra. Se lee con el mismo índice `{ tenantId, accion, createdAt }`.
+>
 > **`lead.semaforo`** registra el cambio del semáforo comercial del lead (`antes`/`despues` con la
 > `key` del catálogo, `null` = sin clasificar). Es otro eje que `cliente.semaforo`, que vive sobre la
 > conversación: uno es la oportunidad, el otro el hilo.

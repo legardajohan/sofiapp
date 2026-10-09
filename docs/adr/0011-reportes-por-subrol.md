@@ -44,3 +44,10 @@ excepción al criterio 4 de AUTH-02; todo lo demás sigue igual.
 - Un `coordinator`/`secretary` recibe `403` en el endpoint y no ve la entrada del menú.
 - Cuando exista UI para asignar subroles, los `admin` sin subrol seguirán viendo el reporte hasta
   que se les asigne uno.
+
+## Enmienda — HU-REP-02 (2026-10-08)
+
+La tasa de escalamiento IA → asesor (`GET /api/reports/handoff-rate`) es otro reporte del equipo del
+gerente y usa **el mismo gate**: `authorizeSubrol(SUBROLES_REPORTES)` tras `authorize(['admin'])`, y
+en la UI `RequireReportes` + `puedeVerReportes`. No es una excepción nueva al criterio 4 de AUTH-02:
+amplía la misma ("reportes del equipo"), así que no se crea una lista propia.

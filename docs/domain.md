@@ -265,6 +265,26 @@ Limitación aceptada: `Message` no registra **qué** usuario respondió, así qu
 dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
 `admin` sin subrol (ADR 0011).
 
+## 5ter. Tasa de escalamiento IA → asesor (HU-REP-02)
+
+Definiciones únicas que usa `GET /api/reports/handoff-rate`. Cuadran con los handoffs registrados:
+
+- **Handoff:** evento `audit_events` `conversation.handoff` (actor `null`, el sistema) que escribe
+  la transferencia automática de HU-IA-03/07. **No** se lee `Cliente.handoffAt`: es el estado actual
+  y desaparece cuando el asesor le devuelve el hilo a Sofi.
+- **Conversación transferida en el periodo:** `Cliente` del tenant, no demo, con al menos un handoff
+  con `createdAt` en el periodo. Se cuenta **una vez** aunque haya escalado varias veces (el total de
+  eventos se informa aparte); su motivo es el del último handoff del periodo.
+- **Conversación con IA en el periodo:** `Cliente` del tenant, no demo, con al menos un `Message`
+  `sender: 'bot'` en el periodo **o** transferido en el periodo (el handoff ocurre aunque el aviso de
+  transición no se pueda enviar). Un hilo que solo atendieron personas no entra.
+- **Tasa de escalamiento:** transferidas / conversaciones con IA (0 sin conversaciones con IA);
+  nunca supera 1. Es del periodo, no una cohorte.
+
+No son handoff: apagar la IA a mano (`setIaHabilitada(false)`) ni el aviso por fallo de la IA
+(`marcarParaAsesor`), que no deja evento. `recordAuditEvent` es *best-effort*: un evento perdido no
+se cuenta. Mismo acceso que el reporte por asesor (ADR 0011).
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.
