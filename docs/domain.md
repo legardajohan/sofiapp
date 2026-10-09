@@ -285,6 +285,30 @@ No son handoff: apagar la IA a mano (`setIaHabilitada(false)`) ni el aviso por f
 (`marcarParaAsesor`), que no deja evento. `recordAuditEvent` es *best-effort*: un evento perdido no
 se cuenta. Mismo acceso que el reporte por asesor (ADR 0011).
 
+## 5quater. Productos más consultados (HU-REP-03)
+
+Definiciones únicas que usa `GET /api/reports/top-products` (ADR 0012):
+
+- **Tema de la conversación:** el producto de la tarjeta «Productos y servicios» de la KB que el
+  cliente consulta, elegido por la IA de una lista **cerrada** (`Cliente.temaIA`). Uno por
+  conversación. Su clave es el nombre normalizado (minúsculas, sin acentos ni espacios repetidos).
+- **`otros`:** la conversación está clasificada, pero ningún producto encaja —o la IA no estaba
+  segura (`TEMA_MIN_CONFIANZA`)—. `temaIA.clave = null`.
+- **Sin clasificar:** la conversación no tiene `temaIA` todavía (la IA no la atendió, tiene pocos
+  mensajes o el tenant no ha cargado productos). Se recupera con el backfill `backfill:temas`.
+- **Consulta del periodo:** `Cliente` del tenant, no demo, con al menos un `Message`
+  `sender: 'user'` con `createdAt` en el periodo. Una conversación es una consulta, escriba lo que
+  escriba.
+- **Ranking:** las consultas agrupadas por su tema **actual**; `share` = conversaciones del producto /
+  clasificadas, con `clasificadas = consultas − sin clasificar`. Σ ranking + resto + otros =
+  clasificadas.
+- Un producto que ya no está en la KB sigue en el ranking con el nombre guardado y
+  `enCatalogo: false`.
+
+Limitación aceptada, igual que el asesor actual de 5bis: si el tema de un hilo cambió, el periodo
+anterior se atribuye al tema nuevo. `datosExtraidos.interes` (texto libre) **no** entra al ranking.
+Mismo acceso que los demás reportes (ADR 0011).
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

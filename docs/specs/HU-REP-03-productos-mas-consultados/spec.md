@@ -6,7 +6,7 @@
 > reporte. Alcance reducido (opción **1A**): el vocabulario son los productos que la empresa ya
 > cargó en su base de conocimiento, sin catálogo nuevo.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Historia
 

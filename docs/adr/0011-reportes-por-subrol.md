@@ -51,3 +51,9 @@ La tasa de escalamiento IA → asesor (`GET /api/reports/handoff-rate`) es otro 
 gerente y usa **el mismo gate**: `authorizeSubrol(SUBROLES_REPORTES)` tras `authorize(['admin'])`, y
 en la UI `RequireReportes` + `puedeVerReportes`. No es una excepción nueva al criterio 4 de AUTH-02:
 amplía la misma ("reportes del equipo"), así que no se crea una lista propia.
+
+## Enmienda — HU-REP-03 (2026-10-09)
+
+«Productos más consultados» (`GET /api/reports/top-products`) usa **el mismo gate**. No trae datos
+de personas, pero es un reporte de gestión del mismo público; separar su permiso sería una lista
+nueva sin un caso que la pida.
