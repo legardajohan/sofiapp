@@ -76,3 +76,25 @@ export interface TopProducts {
   otros: { conversaciones: number; share: number };
   restantes: { productos: number; conversaciones: number; share: number };
 }
+
+/** Volumen de un bucket (HU-REP-04). `entrantes` es la demanda: lo que escriben los clientes. */
+export interface MessageVolume {
+  total: number;
+  entrantes: number;
+  salientes: number;
+}
+
+/** Espejo de `IPeakHoursResponse` del backend (HU-REP-04). */
+export interface PeakHours {
+  generadoAt: string;
+  rango: { desde: string; hasta: string };
+  /** Zona IANA con la que el backend agrupó; las horas y los días se leen en ella. */
+  timezone: string;
+  totales: { mensajes: number; entrantes: number; salientes: number };
+  /** Siempre 24 filas, 0..23. */
+  porHora: Array<MessageVolume & { hora: number }>;
+  /** Un día por cada día del rango, `YYYY-MM-DD`. */
+  porDia: Array<MessageVolume & { fecha: string }>;
+  pico: { hora: number; entrantes: number } | null;
+  diaPico: { fecha: string; entrantes: number } | null;
+}

@@ -22,6 +22,10 @@ const HandoffRatePage = lazy(() =>
 const TopProductsPage = lazy(() =>
   import('./features/reports/pages/TopProductsPage.js').then((m) => ({ default: m.TopProductsPage })),
 );
+// HU-REP-04: idem.
+const PeakHoursPage = lazy(() =>
+  import('./features/reports/pages/PeakHoursPage.js').then((m) => ({ default: m.PeakHoursPage })),
+);
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
@@ -220,6 +224,18 @@ export const router = createBrowserRouter([
                 <RequireReportes>
                   <Suspense fallback={<Loading />}>
                     <TopProductsPage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/peak-hours',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <PeakHoursPage />
                   </Suspense>
                 </RequireReportes>
               </RequireRole>

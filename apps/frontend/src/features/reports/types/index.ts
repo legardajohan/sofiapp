@@ -4,7 +4,15 @@ export type {
   AdvisorReport,
   HandoffMotivoRow,
   HandoffRate,
+  MessageVolume,
+  PeakHours,
   TopProductRow,
   TopProducts,
 } from './domain.js';
-export type { AdvisorReportParams, HandoffRateParams, ReportRangeParams, TopProductsParams } from './api.js';
+export type {
+  AdvisorReportParams,
+  HandoffRateParams,
+  PeakHoursParams,
+  ReportRangeParams,
+  TopProductsParams,
+} from './api.js';

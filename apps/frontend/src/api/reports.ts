@@ -4,6 +4,8 @@ import type {
   AdvisorReportParams,
   HandoffRate,
   HandoffRateParams,
+  PeakHours,
+  PeakHoursParams,
   TopProducts,
   TopProductsParams,
 } from '../features/reports/types/index.js';
@@ -20,5 +22,10 @@ export const getHandoffRate = async (params: HandoffRateParams): Promise<Handoff
 
 export const getTopProducts = async (params: TopProductsParams): Promise<TopProducts> => {
   const res = await apiClient.get<TopProducts>('/reports/top-products', { params });
+  return res.data;
+};
+
+export const getPeakHours = async (params: PeakHoursParams): Promise<PeakHours> => {
+  const res = await apiClient.get<PeakHours>('/reports/peak-hours', { params });
   return res.data;
 };

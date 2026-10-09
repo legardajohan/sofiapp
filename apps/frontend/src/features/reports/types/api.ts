@@ -14,3 +14,8 @@ export type HandoffRateParams = ReportRangeParams;
 export interface TopProductsParams extends ReportRangeParams {
   top?: number;
 }
+
+/** Query de `GET /reports/peak-hours` (HU-REP-04). `tz`: zona IANA del navegador; sin ella, UTC. */
+export interface PeakHoursParams extends ReportRangeParams {
+  tz?: string;
+}
