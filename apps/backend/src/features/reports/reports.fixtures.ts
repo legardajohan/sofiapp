@@ -110,3 +110,23 @@ export async function crearLead(
   }
   return _id;
 }
+
+/** Un handoff automático (HU-IA-03) tal como lo audita `handoffConversation`: actor `null`. */
+export async function crearHandoff(
+  tenantId: Oid,
+  clienteId: Oid,
+  createdAt: Date,
+  motivo = 'explicit_request',
+  condicion: string | null = null,
+): Promise<void> {
+  await AuditEvent.collection.insertOne({
+    tenantId,
+    actorId: null,
+    accion: 'conversation.handoff',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes: { iaHabilitada: true, asignadoA: null },
+    despues: { iaHabilitada: false, asignadoA: null, motivo, condicion },
+    createdAt,
+  });
+}

@@ -5,8 +5,8 @@ import { authorize } from '../../middlewares/authorize.middleware.js';
 import { authorizeSubrol, SUBROLES_REPORTES } from '../../middlewares/authorize-subrol.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { advisorReportQuerySchema } from './reports.validation.js';
-import { getAdvisorReportController } from './reports.controller.js';
+import { advisorReportQuerySchema, handoffRateQuerySchema } from './reports.validation.js';
+import { getAdvisorReportController, getHandoffRateController } from './reports.controller.js';
 
 const router: ExpressRouter = Router();
 
@@ -20,6 +20,17 @@ router.get(
   authorizeSubrol(SUBROLES_REPORTES),
   validate(advisorReportQuerySchema),
   asyncHandler(getAdvisorReportController),
+);
+
+// HU-REP-02: tasa de escalamiento IA → asesor. Mismo gate que el reporte por asesor (ADR 0011).
+router.get(
+  '/handoff-rate',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  authorizeSubrol(SUBROLES_REPORTES),
+  validate(handoffRateQuerySchema),
+  asyncHandler(getHandoffRateController),
 );
 
 export default router;

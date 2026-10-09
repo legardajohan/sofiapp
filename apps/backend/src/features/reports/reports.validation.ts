@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { DIA_MS } from '../../utils/date-range.util.js';
 import { RANGO_MAX_DIAS } from './reports.types.js';
 
-export const advisorReportQuerySchema = z.object({
+/** Rango `desde`/`hasta` común a todos los reportes de tenant (HU-REP-01, HU-REP-02). */
+export const rangoReporteQuerySchema = z.object({
   query: z
     .object({
       desde: z.coerce.date().optional(),
@@ -18,4 +19,10 @@ export const advisorReportQuerySchema = z.object({
     ),
 });
 
-export type AdvisorReportQuery = z.infer<typeof advisorReportQuerySchema>['query'];
+export type RangoReporteQuery = z.infer<typeof rangoReporteQuerySchema>['query'];
+
+export const advisorReportQuerySchema = rangoReporteQuerySchema;
+export type AdvisorReportQuery = RangoReporteQuery;
+
+export const handoffRateQuerySchema = rangoReporteQuerySchema;
+export type HandoffRateQuery = RangoReporteQuery;

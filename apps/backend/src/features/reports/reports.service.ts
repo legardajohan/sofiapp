@@ -8,15 +8,18 @@ import { Lead } from '../lead/lead.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
 import { User } from '../users/user.model.js';
 import { KEY_ESTADO_VENTA } from '../estado/estado.types.js';
+import { MOTIVOS_HANDOFF, type HandoffMotivo } from '../ai/ai-handoff.types.js';
 import {
+  ACCION_HANDOFF,
   ACCIONES_ETAPA_LEAD,
   PREFIJO_CLIENTE_DEMO,
   RANGO_DEFAULT_DIAS,
   RANGO_MAX_DIAS,
   type IAdvisorReportResponse,
   type IAdvisorRow,
+  type IHandoffRateResponse,
 } from './reports.types.js';
-import type { AdvisorReportQuery } from './reports.validation.js';
+import type { AdvisorReportQuery, HandoffRateQuery, RangoReporteQuery } from './reports.validation.js';
 
 /*
  * HU-REP-01 — reporte de TENANT. Todas las lecturas pasan por `aggregateScoped`/`findScoped`, que
@@ -35,7 +38,7 @@ interface Conteo {
 }
 
 /** Rango efectivo: por defecto los últimos 30 días; `hasta` a medianoche = fin de ese día. */
-export function resolverRango(q: AdvisorReportQuery, now: Date): Rango {
+export function resolverRango(q: RangoReporteQuery, now: Date): Rango {
   const hasta = normalizeHasta(q.hasta ?? inicioDelDiaUtc(now));
   const desde = q.desde ?? new Date(inicioDelDiaUtc(hasta).getTime() - (RANGO_DEFAULT_DIAS - 1) * DIA_MS);
   if (hasta < desde) throw new AppError('`hasta` debe ser igual o posterior a `desde`.', 400);
@@ -196,5 +199,102 @@ export async function getAdvisorReport(
     },
     porAsesor,
     sinAsignar,
+  };
+}
+
+/* ─────────────────────────── HU-REP-02 — Tasa de escalamiento ─────────────────────────── */
+
+interface FilaMotivo {
+  _id: string | null;
+  conversaciones: number;
+  eventos: number;
+}
+
+/**
+ * Transferidas: conversaciones DISTINTAS con al menos un `conversation.handoff` en el rango, cada una
+ * con el motivo de su ÚLTIMO handoff del periodo. Un `entidadId` que no resuelve a un cliente del
+ * tenant (borrado o foráneo) no cuenta; los hilos demo tampoco.
+ */
+async function contarTransferidas(tenantOid: Types.ObjectId, r: Rango): Promise<FilaMotivo[]> {
+  return aggregateScoped<FilaMotivo>(AuditEvent, tenantOid, [
+    { $match: { accion: ACCION_HANDOFF, entidad: 'cliente', createdAt: { $gte: r.desde, $lte: r.hasta } } },
+    { $sort: { createdAt: 1, _id: 1 } },
+    { $group: { _id: '$entidadId', eventos: { $sum: 1 }, motivo: { $last: '$despues.motivo' } } },
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1 }, 'c'),
+    { $unwind: '$c' },
+    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $group: { _id: '$motivo', conversaciones: { $sum: 1 }, eventos: { $sum: '$eventos' } } },
+  ]);
+}
+
+/**
+ * Conversaciones con IA: hilos con alguna respuesta del bot en el rango ∪ hilos transferidos en el
+ * rango. La unión existe porque el handoff transfiere aunque el aviso de transición no salga (ventana
+ * de 24 h, cuota): sin ella, `transferidas` podría superar al denominador.
+ */
+async function contarConversacionesIa(tenantOid: Types.ObjectId, r: Rango): Promise<number> {
+  const rows = await aggregateScoped<{ n: number }>(Message, tenantOid, [
+    { $match: { sender: 'bot', createdAt: { $gte: r.desde, $lte: r.hasta } } },
+    { $group: { _id: '$clienteId' } },
+    {
+      $unionWith: {
+        coll: AuditEvent.collection.name,
+        // `aggregateScoped` solo antepone el `tenantId` a la colección de origen: la rama unida
+        // tiene que filtrarlo ella misma.
+        pipeline: [
+          {
+            $match: {
+              tenantId: tenantOid,
+              accion: ACCION_HANDOFF,
+              entidad: 'cliente',
+              createdAt: { $gte: r.desde, $lte: r.hasta },
+            },
+          },
+          { $group: { _id: '$entidadId' } },
+        ],
+      },
+    },
+    { $group: { _id: '$_id' } },
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1 }, 'c'),
+    { $unwind: '$c' },
+    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $count: 'n' },
+  ]);
+  return rows[0]?.n ?? 0;
+}
+
+function esMotivo(valor: string | null): valor is HandoffMotivo {
+  return (MOTIVOS_HANDOFF as readonly string[]).includes(valor ?? '');
+}
+
+export async function getHandoffRate(
+  tenantId: string,
+  q: HandoffRateQuery,
+  now: Date = new Date(),
+): Promise<IHandoffRateResponse> {
+  const rango = resolverRango(q, now);
+  const tenantOid = new Types.ObjectId(tenantId);
+
+  const [porMotivo, conversacionesIa] = await Promise.all([
+    contarTransferidas(tenantOid, rango),
+    contarConversacionesIa(tenantOid, rango),
+  ]);
+
+  const transferidas = porMotivo.reduce((s, f) => s + f.conversaciones, 0);
+  const handoffsRegistrados = porMotivo.reduce((s, f) => s + f.eventos, 0);
+  const conteo = new Map<HandoffMotivo, number>();
+  // `handoffConversation` siempre escribe un motivo válido; uno desconocido cuenta en
+  // `transferidas` pero no tiene barra propia en el desglose.
+  for (const f of porMotivo) if (esMotivo(f._id)) conteo.set(f._id, f.conversaciones);
+
+  return {
+    generadoAt: now.toISOString(),
+    rango: { desde: rango.desde.toISOString(), hasta: rango.hasta.toISOString() },
+    conversacionesIa,
+    transferidas,
+    resueltasPorIa: conversacionesIa - transferidas,
+    handoffsRegistrados,
+    tasaEscalamiento: ratio(transferidas, conversacionesIa),
+    transferidasPorMotivo: MOTIVOS_HANDOFF.map((motivo) => ({ motivo, conversaciones: conteo.get(motivo) ?? 0 })),
   };
 }
