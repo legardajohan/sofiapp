@@ -309,6 +309,25 @@ Limitación aceptada, igual que el asesor actual de 5bis: si el tema de un hilo 
 anterior se atribuye al tema nuevo. `datosExtraidos.interes` (texto libre) **no** entra al ranking.
 Mismo acceso que los demás reportes (ADR 0011).
 
+## 5quinquies. Horas pico de mensajería (HU-REP-04)
+
+Definiciones únicas que usa `GET /api/reports/peak-hours`:
+
+- **Volumen de un bucket:** mensajes del tenant con `createdAt` en ese bucket, de clientes que
+  existen y no son demo. Se separan en **entrantes** (`direccion: 'inbound'`, lo que escriben los
+  clientes) y **salientes** (respuestas del bot y de los asesores, y envíos de plantilla).
+- **Demanda = entrantes.** La hora pico y el día pico se calculan sobre los entrantes, no sobre el
+  total: una campaña (HU-MARK-01) guarda un mensaje saliente por destinatario, y un lanzamiento
+  masivo convertiría su hora en un "pico" que no es demanda. Empate: gana la hora (o el día) más
+  temprano; sin entrantes, no hay pico.
+- **Zona horaria del visor.** El navegador envía su zona IANA (`?tz=`) y el reporte agrupa las horas
+  **y** delimita los días del periodo en esa zona; sin ella, UTC (el criterio de `admin-metrics`).
+  Los instantes guardados no cambian: la zona es solo una lente de lectura. No hay zona por tenant.
+- **Por hora del día:** 24 buckets que suman todo el periodo. **Por día:** un bucket por día
+  calendario del periodo. Ambos traen los vacíos en 0.
+
+Mismo acceso que los demás reportes (ADR 0011).
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

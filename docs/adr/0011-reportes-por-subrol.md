@@ -57,3 +57,8 @@ amplía la misma ("reportes del equipo"), así que no se crea una lista propia.
 «Productos más consultados» (`GET /api/reports/top-products`) usa **el mismo gate**. No trae datos
 de personas, pero es un reporte de gestión del mismo público; separar su permiso sería una lista
 nueva sin un caso que la pida.
+
+## Enmienda — HU-REP-04 (2026-10-09)
+
+«Horas pico» (`GET /api/reports/peak-hours`) usa **el mismo gate**. Es un agregado de volumen sin
+datos de personas, pero sirve para dimensionar el equipo: es una decisión del mismo público.

@@ -311,6 +311,9 @@
 //                                                          (HU-OMNI-06: barrido de media atascada.
 //                                                          Parcial a propósito: un índice completo
 //                                                          pagaría por cada mensaje de texto)
+//          { tenantId: 1, createdAt: 1 }                  (HU-REP-04: reportes por rango de fechas
+//                                                          sin otro filtro —horas pico y los $match
+//                                                          por createdAt de HU-REP-01/02/03—)
 ```
 
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
