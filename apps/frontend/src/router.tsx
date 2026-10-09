@@ -14,6 +14,10 @@ import { AppLayout } from './components/layout/AppLayout.js';
 const AdvisorReportPage = lazy(() =>
   import('./features/reports/pages/AdvisorReportPage.js').then((m) => ({ default: m.AdvisorReportPage })),
 );
+// HU-REP-02: mismo motivo, comparte el chunk de recharts con el reporte por asesor.
+const HandoffRatePage = lazy(() =>
+  import('./features/reports/pages/HandoffRatePage.js').then((m) => ({ default: m.HandoffRatePage })),
+);
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
@@ -188,6 +192,18 @@ export const router = createBrowserRouter([
                 <RequireReportes>
                   <Suspense fallback={<Loading />}>
                     <AdvisorReportPage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/handoff-rate',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <HandoffRatePage />
                   </Suspense>
                 </RequireReportes>
               </RequireRole>
