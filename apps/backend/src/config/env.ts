@@ -86,6 +86,19 @@ const EnvSchema = z.object({
   // que una conversación real de meses, que no cabe en la ventana ni sale a cuenta.
   EXTRACT_MAX_MENSAJES: z.coerce.number().int().positive().default(60),
 
+  // Tema por conversación para «Productos más consultados» (HU-REP-03). Enum y no booleano, por el
+  // mismo motivo que SEMAFORO_AUTO. Apagarlo también frena el backfill: comparten el guard.
+  TEMA_AUTO: z.enum(['on', 'off']).default('on'),
+  // Mensajes del CLIENTE antes de clasificar. Con 1, un "hola" suelto acabaría siempre en `otros`.
+  TEMA_MIN_TURNOS_CLIENTE: z.coerce.number().int().positive().default(2),
+  // Por debajo, el tema se guarda como `otros`: un producto adivinado ensucia más el ranking que
+  // una conversación sin producto. Escala propia del modelo, igual que SEMAFORO_MIN_CONFIANZA.
+  TEMA_MIN_CONFIANZA: z.coerce.number().min(0).max(1).default(0.6),
+  // Freno de coste: mensajes nuevos del cliente desde la última clasificación antes de repetirla…
+  TEMA_RECLASIFICAR_CADA: z.coerce.number().int().positive().default(3),
+  // …y cuántos cuando el tema ya salió igual dos veces seguidas (`repeticiones >= 2`).
+  TEMA_RECLASIFICAR_ESTABLE: z.coerce.number().int().positive().default(15),
+
   // TRM oficial USD/COP — Superintendencia Financiera vía datos.gov.co (recurso 32sa-8pi3, SODA API).
   TRM_DATASET_URL: z
     .string()

@@ -1,7 +1,7 @@
 import { Schema, model, type Document, type Types } from 'mongoose';
 
 export interface IPromptSnapshot {
-  method: 'chat' | 'extract' | 'classify' | 'summary';
+  method: 'chat' | 'extract' | 'classify' | 'summary' | 'topic';
   version: string;
   systemPrompt: string;
 }
@@ -28,7 +28,7 @@ const AiResponseContextSchema = new Schema<IAiResponseContextDocument>(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     usageLogId: { type: Schema.Types.ObjectId, required: true, ref: 'AiUsageLog' },
     promptSnapshot: {
-      method: { type: String, enum: ['chat', 'extract', 'classify', 'summary'], required: true },
+      method: { type: String, enum: ['chat', 'extract', 'classify', 'summary', 'topic'], required: true },
       version: { type: String, required: true },
       systemPrompt: { type: String, required: true },
     },

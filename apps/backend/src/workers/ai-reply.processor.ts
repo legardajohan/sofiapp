@@ -1,9 +1,8 @@
 import { Types } from 'mongoose';
 import { logger } from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
-import { findByIdScoped, findScoped } from '../repositories/base.repository.js';
+import { findByIdScoped } from '../repositories/base.repository.js';
 import { Cliente } from '../features/cliente/cliente.model.js';
-import { Message } from '../features/message/message.model.js';
 import {
   handoffConversation,
   marcarParaAsesor,
@@ -20,14 +19,9 @@ import type { AiResult } from '../services/ai/ai-service.types.js';
 import type { ChatTurn } from '../integrations/llm/llm-provider.types.js';
 import { clasificarYAplicarSemaforo } from '../features/ai/ai-semaforo.service.js';
 import { extraerDatosSiHaceFalta } from '../features/ai/ai-extract.service.js';
+import { clasificarTemaSiHaceFalta } from '../features/ai/ai-topic.service.js';
+import { construirHistorial } from '../features/ai/ai-shared.js';
 import { MENSAJE_FALLO } from './ai-reply.messages.js';
-
-/**
- * Cuántos mensajes recientes se le dan a Gemini como contexto conversacional. Suficiente para que
- * entienda de qué se viene hablando sin inflar el prompt (y su coste) en hilos largos; el
- * conocimiento de la empresa no sale de aquí, sale del RAG.
- */
-const HISTORIAL_MAX = 10;
 
 /**
  * El texto entrante NO viaja en el job: cuando se encola ya está persistido como `Message`, así que
@@ -156,6 +150,11 @@ export async function processAiReplyJob(data: AiReplyJobData): Promise<void> {
   // la extracción —recuperable en la siguiente ráfaga o con el botón de la ficha— que el semáforo,
   // que es lo que mueve la conversación en la bandeja. Tampoco lanza.
   await extraerDatosSiHaceFalta(data.tenantId, data.clienteId, historial);
+
+  // Tema de la conversación para «Productos más consultados» (HU-REP-03). Último porque es lo menos
+  // urgente: alimenta un reporte, no la bandeja. Tampoco lanza, y su freno de coste hace que la
+  // mayoría de ráfagas no lleguen al modelo.
+  await clasificarTemaSiHaceFalta(data.tenantId, data.clienteId, historial);
 }
 
 /**
@@ -226,29 +225,4 @@ async function avisarDeFalloYEscalar(tenantId: string, clienteId: string): Promi
     }
   }
   await marcarParaAsesor(tenantId, clienteId);
-}
-
-/**
- * Últimos `HISTORIAL_MAX` mensajes en orden cronológico. Mismo mapeo de roles que
- * `generateConversationSummary`: lo que escribe el cliente es `user`; lo que sale de la empresa
- * (bot o asesor) es `model`.
- *
- * Los mensajes sin texto (imágenes, audios) se descartan en vez de traducirse a un placeholder: al
- * modelo no le aportan nada y solo gastarían tokens.
- */
-async function construirHistorial(tenantId: string, clienteId: string): Promise<ChatTurn[]> {
-  const docs = await findScoped(Message, tenantId, { clienteId: new Types.ObjectId(clienteId) })
-    // `_id` desempata: dos mensajes del mismo milisegundo (habitual en ráfagas de WhatsApp)
-    // ordenarían de forma arbitraria solo por `createdAt`, y el hilo llegaría descolocado.
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(HISTORIAL_MAX)
-    .lean();
-
-  return docs
-    .reverse()
-    .filter((m) => !!m.texto)
-    .map((m) => ({
-      role: m.sender === 'user' ? 'user' : 'model',
-      content: m.texto as string,
-    }));
 }

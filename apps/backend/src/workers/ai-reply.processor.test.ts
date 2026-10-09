@@ -10,6 +10,7 @@ const {
   mockGetHandoffSettings,
   mockClasificarSemaforo,
   mockExtraerDatos,
+  mockClassifyTopic,
 } = vi.hoisted(() => ({
   mockChat: vi.fn(),
   mockClassify: vi.fn(),
@@ -19,10 +20,11 @@ const {
   mockGetHandoffSettings: vi.fn(),
   mockClasificarSemaforo: vi.fn(),
   mockExtraerDatos: vi.fn(),
+  mockClassifyTopic: vi.fn(),
 }));
 
 vi.mock('../services/ai/ai-service.singleton.js', () => ({
-  getAIService: () => ({ chat: mockChat, classify: mockClassify }),
+  getAIService: () => ({ chat: mockChat, classify: mockClassify, classifyTopic: mockClassifyTopic }),
 }));
 
 vi.mock('../features/conversation/conversation.service.js', () => ({
@@ -64,6 +66,8 @@ import { Message } from '../features/message/message.model.js';
 import type { IClienteDocument } from '../features/cliente/cliente.types.js';
 import { logger } from '../utils/logger.js';
 import { MENSAJE_FALLO } from './ai-reply.messages.js';
+import { KbDocument } from '../features/kb/kb-document.model.js';
+import { AuditEvent } from '../features/audit/audit.model.js';
 
 const RESPUESTA = 'Atendemos de 8:00 a 18:00.';
 
@@ -825,5 +829,84 @@ describe('processAiReplyJob — condiciones propias de transferencia (HU-IA-07)'
     await processAiReplyJob(job(clienteId));
 
     expect(mockHandoffConversation.mock.calls[0]![4]).toBe('menor_carga');
+  });
+});
+
+// HU-REP-03. Aquí corre el clasificador de tema DE VERDAD —sin mock— para fijar el criterio 4 de
+// punta a punta: un fallo del proveedor se registra y el job termina bien.
+describe('processAiReplyJob — tema de la conversación (HU-REP-03)', () => {
+  let tenantId: Types.ObjectId;
+
+  beforeEach(async () => {
+    tenantId = new Types.ObjectId();
+    mockChat.mockReset().mockResolvedValue({
+      data: RESPUESTA,
+      cacheHit: false,
+      fromFaq: false,
+      retrievedChunks: [],
+      promptTokens: 1,
+      completionTokens: 1,
+      totalTokens: 2,
+      durationMs: 1,
+    });
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockClasificarSemaforo.mockReset().mockResolvedValue(undefined);
+    mockExtraerDatos.mockReset().mockResolvedValue(undefined);
+    mockClassifyTopic.mockReset();
+    await Cliente.deleteMany({});
+    await Message.deleteMany({});
+    await AuditEvent.deleteMany({});
+    await createScoped(KbDocument, tenantId, {
+      titulo: 'Productos y servicios',
+      contenido: 'x',
+      estructura: {
+        schemaVersion: 1,
+        schemaId: 'productos',
+        campos: { catalogo: { tipo: 'repetible', items: [{ nombre: 'Curso sabatino', descripcion: 'Sábados' }] } },
+        adicional: '',
+      },
+    });
+  });
+
+  const job = (clienteId: Types.ObjectId): { tenantId: string; clienteId: string; recibidoEn: number } => ({
+    tenantId: tenantId.toString(),
+    clienteId: clienteId.toString(),
+    recibidoEn: Date.now(),
+  });
+
+  async function hiloConDosMensajes(): Promise<Types.ObjectId> {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', 'hola');
+    await crearMensaje(tenantId, clienteId, 'bot', 'hola, ¿en qué te ayudo?');
+    await crearMensaje(tenantId, clienteId, 'user', '¿cuánto vale el curso sabatino?');
+    return clienteId;
+  }
+
+  it('tras responder, clasifica el tema con el historial del ciclo y lo guarda', async () => {
+    mockClassifyTopic.mockResolvedValue({ data: { tema: 'Curso sabatino', confianza: 0.9 } });
+    const clienteId = await hiloConDosMensajes();
+
+    await processAiReplyJob(job(clienteId));
+
+    expect(mockReplyFromIa).toHaveBeenCalledTimes(1);
+    expect(mockClassifyTopic).toHaveBeenCalledTimes(1);
+    expect(mockClassifyTopic.mock.calls[0]![0].historial).toEqual(mockChat.mock.calls[0]![0].historial);
+    expect(mockReplyFromIa.mock.invocationCallOrder[0]!).toBeLessThan(mockClassifyTopic.mock.invocationCallOrder[0]!);
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.temaIA).toMatchObject({ clave: 'curso sabatino', nombre: 'Curso sabatino', mensajesCliente: 2 });
+  });
+
+  it('un 429 del proveedor se registra como warn y el job termina bien (criterio 4)', async () => {
+    const err429 = Object.assign(new Error('[429 Too Many Requests] quota'), { status: 429 });
+    mockClassifyTopic.mockRejectedValue(err429);
+    const warn = vi.spyOn(logger, 'warn');
+    const clienteId = await hiloConDosMensajes();
+
+    await expect(processAiReplyJob(job(clienteId))).resolves.toBeUndefined();
+
+    expect(mockReplyFromIa).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('Tema: falló la clasificación de la conversación', expect.anything());
+    expect((await Cliente.findById(clienteId).lean())?.temaIA).toBeUndefined();
+    warn.mockRestore();
   });
 });

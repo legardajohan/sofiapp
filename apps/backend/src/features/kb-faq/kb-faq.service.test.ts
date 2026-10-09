@@ -34,6 +34,7 @@ function makeProvider(): ILlmProvider {
     generateReply: vi.fn(),
     extractSlots: vi.fn(),
     classifyLead: vi.fn(),
+    classifyTopic: vi.fn(),
     embedTexts: vi.fn().mockResolvedValue({ result: [VECTOR], usage: ZERO_USAGE }),
   } as unknown as ILlmProvider;
 }
