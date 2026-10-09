@@ -187,7 +187,13 @@ export interface ISendMessageDto {
 export type ContenidoOutbound =
   | { modo: 'auto'; texto: string; plantillaFallback?: { templateId: string; parametros: string[] } }
   | { modo: 'texto'; texto: string }
-  | { modo: 'plantilla'; templateId: string; parametros: string[] }
+  | {
+      modo: 'plantilla';
+      templateId: string;
+      parametros: string[];
+      /** Imagen de cabecera ya subida a Meta (HU-MARK-03). Solo para plantillas con `HEADER` IMAGE. */
+      imagenCabecera?: { metaMediaId: string };
+    }
   /**
    * Archivo YA guardado en nuestro almacenamiento y YA subido a Meta (HU-OMNI-06). `sendOutbound`
    * no sube nada: recibe el `metaMediaId` hecho, decide si la ventana permite el envío y persiste.

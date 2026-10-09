@@ -4,12 +4,15 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
+import { subirImagenCampana } from '../../middlewares/upload.middleware.js';
 import {
   campaignIdSchema,
   createCampaignSchema,
   listCampaignsSchema,
   listRecipientsSchema,
   previewSegmentoSchema,
+  rescheduleCampaignSchema,
+  scheduleCampaignSchema,
   transicionSchema,
 } from './campaign.validation.js';
 import {
@@ -21,7 +24,9 @@ import {
   listRecipientsController,
   pauseCampaignController,
   previewSegmentController,
+  rescheduleCampaignController,
   resumeCampaignController,
+  scheduleCampaignController,
 } from './campaign.controller.js';
 
 const router = Router();
@@ -38,6 +43,30 @@ router.post(
   campaignRoles,
   validate(previewSegmentoSchema),
   asyncHandler(previewSegmentController),
+);
+
+// HU-MARK-03 — programar con fecha/hora e imagen. Multipart: `subirImagenCampana` va entre
+// `authorize` y `validate` (la excepción documentada en `apps/backend/CLAUDE.md`), porque los
+// campos de texto no existen en `req.body` hasta que multer consume el stream. Ruta literal: ANTES
+// de `/:id`.
+router.post(
+  '/schedule',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  subirImagenCampana,
+  validate(scheduleCampaignSchema),
+  asyncHandler(scheduleCampaignController),
+);
+
+router.patch(
+  '/:id/schedule',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  subirImagenCampana,
+  validate(rescheduleCampaignSchema),
+  asyncHandler(rescheduleCampaignController),
 );
 
 router.get(

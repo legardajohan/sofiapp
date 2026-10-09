@@ -76,3 +76,19 @@ export function construirMediaKey(
   const ext = EXTENSION_POR_MIME[mimeType.toLowerCase()] ?? 'bin';
   return `${tenantId}/${messageId}/${randomUUID()}.${ext}`;
 }
+
+/**
+ * Clave de la imagen de una campaña (HU-MARK-03): `<tenantId>/campaigns/<campaignId>/<uuid>.<ext>`.
+ *
+ * Misma regla que `construirMediaKey`: el tenant va primero y ningún trozo viene del cliente. La
+ * carpeta `campaigns/` separa estos objetos de la media de los mensajes, que se purga con otra
+ * política (la imagen vive lo que vive la campaña).
+ */
+export function construirCampaignMediaKey(
+  tenantId: string,
+  campaignId: string,
+  mimeType: string,
+): MediaKey {
+  const ext = EXTENSION_POR_MIME[mimeType.toLowerCase()] ?? 'bin';
+  return `${tenantId}/campaigns/${campaignId}/${randomUUID()}.${ext}`;
+}

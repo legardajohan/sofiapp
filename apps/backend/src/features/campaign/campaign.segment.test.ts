@@ -5,8 +5,10 @@ import { Cliente } from '../cliente/cliente.model.js';
 import { Lead } from '../lead/lead.model.js';
 import { construirFiltroContacto, previewSegmento } from './campaign.segment.service.js';
 import type { ISegmentoFiltros } from './campaign.types.js';
+import type { NivelInteres } from '../../integrations/llm/llm-provider.types.js';
 
 const tenantId = new Types.ObjectId();
+const etiquetaVip = new Types.ObjectId();
 
 interface ContactoSeed {
   nombre: string;
@@ -16,6 +18,9 @@ interface ContactoSeed {
   marketingOptOut?: boolean;
   /** Si se indica, se crea además un lead con ese semáforo. */
   semaforoLead?: string;
+  /** Intención de compra que clasificó la IA (HU-IA-05). */
+  intencion?: NivelInteres;
+  tagIds?: Types.ObjectId[];
 }
 
 async function sembrar(tenantId: Types.ObjectId, seed: ContactoSeed): Promise<Types.ObjectId> {
@@ -28,6 +33,20 @@ async function sembrar(tenantId: Types.ObjectId, seed: ContactoSeed): Promise<Ty
     rolContacto: seed.rolContacto,
     marketingOptOut: seed.marketingOptOut ?? false,
     atributos: (seed.atributos ?? []).map((a) => ({ ...a, sensible: false })),
+    tagIds: seed.tagIds ?? [],
+    ...(seed.intencion
+      ? {
+          semaforoIA: {
+            slug: 'verde',
+            confianza: 0.9,
+            motivo: 'prueba',
+            nivelInteres: seed.intencion,
+            objecion: null,
+            at: new Date(),
+            aplicado: null,
+          },
+        }
+      : {}),
   });
 
   if (seed.semaforoLead) {
@@ -68,6 +87,8 @@ describe('HU-MARK-01 — constructor de segmentos', () => {
       rolContacto: 'estudiante',
       atributos: [{ key: 'grado', label: 'Grado', valor: '11' }],
       semaforoLead: 'verde',
+      intencion: 'caliente',
+      tagIds: [etiquetaVip],
     });
     await sembrar(tenantId, {
       nombre: 'Bruno',
@@ -78,6 +99,7 @@ describe('HU-MARK-01 — constructor de segmentos', () => {
         { key: 'colegio', label: 'Colegio', valor: 'San Jose' },
       ],
       semaforoLead: 'rojo',
+      intencion: 'frio',
     });
     await sembrar(tenantId, {
       nombre: 'Carla',
@@ -120,6 +142,20 @@ describe('HU-MARK-01 — constructor de segmentos', () => {
       'Bruno',
       'Carla',
     ]);
+  });
+
+  it('filtra por intención de compra clasificada por la IA (HU-IA-05)', async () => {
+    expect(await nombresDelSegmento({ intencionCompra: ['caliente'] })).toEqual(['Ana']);
+    expect(await nombresDelSegmento({ intencionCompra: ['caliente', 'frio'] })).toEqual([
+      'Ana',
+      'Bruno',
+    ]);
+    // Quien la IA nunca clasificó no casa con ningún nivel.
+    expect(await nombresDelSegmento({ intencionCompra: ['tibio'] })).toEqual([]);
+  });
+
+  it('filtra por etiquetas de la conversación', async () => {
+    expect(await nombresDelSegmento({ tagIds: [etiquetaVip.toString()] })).toEqual(['Ana']);
   });
 
   it('filtra por semáforo COMERCIAL, resolviendo el salto Cliente ← Lead', async () => {

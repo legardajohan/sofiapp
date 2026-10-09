@@ -1,15 +1,15 @@
-import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { useId } from 'react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { tagColors } from '@/features/tags/lib/tag-color';
+import { useTags } from '@/features/tags/hooks/useTags';
 import { useContactOptions } from '@/features/contacts/hooks/useContactOptions';
+import { ESTADO_LABEL, ESTADOS } from '@/features/leads/lib/format';
 import { useSemaforos } from '@/features/semaforos';
-import type { FiltroAtributo, SegmentoFiltros } from '../types.js';
+import type { IntencionCompra, SegmentoFiltros } from '../types.js';
 
 interface Props {
   valor: SegmentoFiltros;
@@ -21,6 +21,15 @@ interface Opcion {
   label: string;
   color?: string;
 }
+
+/** Escala cerrada de la IA (HU-IA-05), de más frío a más caliente: el orden en que se lee. */
+const INTENCIONES: Array<Opcion & { key: IntencionCompra }> = [
+  { key: 'frio', label: 'Frío', color: '#2563EB' },
+  { key: 'tibio', label: 'Tibio', color: '#D97706' },
+  { key: 'caliente', label: 'Caliente', color: '#DC2626' },
+];
+
+const ESTADOS_OPCIONES: Opcion[] = ESTADOS.map((e) => ({ key: e, label: ESTADO_LABEL[e] }));
 
 /**
  * Selector de varias claves de un catálogo del tenant.
@@ -40,8 +49,10 @@ function FiltroCatalogo({
   opciones: Opcion[];
   seleccion: string[];
   onChange: (keys: string[]) => void;
-  vacio: string;
+  /** Solo para catálogos del tenant, que pueden venir vacíos. Las escalas fijas nunca lo están. */
+  vacio?: string;
 }): React.ReactElement {
+  const id = useId();
   const { resolvedTheme } = useTheme();
   const tema = resolvedTheme === 'dark' ? 'dark' : 'light';
 
@@ -58,10 +69,13 @@ function FiltroCatalogo({
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-muted-foreground">{etiqueta}</Label>
+      <Label htmlFor={id} className="text-muted-foreground">
+        {etiqueta}
+      </Label>
       <Popover>
         <PopoverTrigger asChild>
           <Button
+            id={id}
             variant="outline"
             className="w-full justify-start font-normal transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
           >
@@ -105,120 +119,12 @@ function FiltroCatalogo({
 }
 
 /**
- * Filtro por atributo personalizado del contacto.
- *
- * Aquí es donde entra «grado», y por eso el control pide la **clave** además del valor: el proyecto
- * no tiene un campo `grado` y no debe tenerlo (HU-CRM-02 sacó del modelo los supuestos del vertical
- * Pre-ICFES). El mismo control sirve para «colegio», «EPS» o lo que cada empresa capture.
- */
-function FilaAtributo({
-  atributo,
-  onChange,
-  onQuitar,
-}: {
-  atributo: FiltroAtributo;
-  onChange: (parche: Partial<FiltroAtributo>) => void;
-  onQuitar: () => void;
-}): React.ReactElement {
-  /**
-   * El texto de los valores se guarda aparte, tal cual se escribe.
-   *
-   * Es lo que hace que se pueda teclear una coma: si el input se pintara desde
-   * `valores.join(', ')`, cada coma desaparecería en el mismo render en que se escribe —el array
-   * no la conserva— y sería imposible separar dos valores. Arriba solo sube la lista ya partida.
-   */
-  const [texto, setTexto] = useState(atributo.valores.join(', '));
-
-  function escribir(valor: string): void {
-    setTexto(valor);
-    onChange({
-      valores: valor
-        .split(',')
-        .map((v) => v.trim())
-        .filter(Boolean),
-    });
-  }
-
-  return (
-    <li className="flex flex-wrap items-center gap-2">
-      <Input
-        value={atributo.key}
-        onChange={(e) => onChange({ key: e.target.value })}
-        placeholder="grado"
-        aria-label="Nombre del dato"
-        className="w-36"
-      />
-      <span className="text-sm text-muted-foreground">es</span>
-      <Input
-        value={texto}
-        onChange={(e) => escribir(e.target.value)}
-        placeholder="10, 11"
-        aria-label="Valores aceptados, separados por comas"
-        className="w-44 flex-1"
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label={`Quitar el filtro de ${atributo.key || 'este dato'}`}
-        onClick={onQuitar}
-      >
-        <X className="h-4 w-4" />
-      </Button>
-    </li>
-  );
-}
-
-function FiltroAtributos({
-  atributos,
-  onChange,
-}: {
-  atributos: FiltroAtributo[];
-  onChange: (a: FiltroAtributo[]) => void;
-}): React.ReactElement {
-  function actualizar(indice: number, parche: Partial<FiltroAtributo>): void {
-    onChange(atributos.map((a, i) => (i === indice ? { ...a, ...parche } : a)));
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-muted-foreground">Datos propios del contacto</Label>
-
-      {atributos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Filtra por lo que tu empresa registra en cada ficha, como el grado o el colegio.
-        </p>
-      ) : null}
-
-      <ul className="space-y-2">
-        {atributos.map((atributo, i) => (
-          // El índice como clave es correcto aquí: las filas no se reordenan, solo se añaden y
-          // se quitan por el final, así que el índice identifica establemente a cada una.
-          <FilaAtributo
-            key={i}
-            atributo={atributo}
-            onChange={(parche) => actualizar(i, parche)}
-            onQuitar={() => onChange(atributos.filter((_, j) => j !== i))}
-          />
-        ))}
-      </ul>
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => onChange([...atributos, { key: '', valores: [] }])}
-        className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
-      >
-        <Plus className="mr-1.5 h-4 w-4" />
-        Añadir un dato
-      </Button>
-    </div>
-  );
-}
-
-/**
  * Los ejes por los que se arma un segmento.
+ *
+ * Solo ejes que el CRM llena solo o que el equipo ya usa a diario (semáforo, intención de la IA,
+ * estado, etiquetas). El rol del contacto y los datos propios de la ficha se quitaron del
+ * constructor: casi nadie los carga, y filtrar por ellos devolvía segmentos vacíos. El backend los
+ * sigue aceptando para no romper campañas ya guardadas con esos filtros.
  *
  * El semáforo que se ofrece es el **comercial** (el del lead, HU-CRM-04), no la etiqueta de salud
  * de la conversación: una campaña se dirige a oportunidades. Un contacto que nunca se convirtió en
@@ -227,10 +133,7 @@ function FiltroAtributos({
 export function SegmentFilters({ valor, onChange }: Props): React.ReactElement {
   const { data: opciones } = useContactOptions();
   const { data: semaforos } = useSemaforos();
-
-  const roles: Opcion[] = (opciones?.rol ?? [])
-    .filter((o) => o.activo)
-    .map((o) => ({ key: o.key, label: o.label, color: o.color }));
+  const { data: tags } = useTags();
 
   const intereses: Opcion[] = (opciones?.interes ?? [])
     .filter((o) => o.activo)
@@ -238,6 +141,8 @@ export function SegmentFilters({ valor, onChange }: Props): React.ReactElement {
 
   // Se incluyen los archivados: un lead clasificado antes de archivarlo sigue llevando esa clave,
   // y no poder segmentarlo dejaría gente inalcanzable por un cambio de catálogo.
+  const etiquetas: Opcion[] = (tags ?? []).map((t) => ({ key: t.id, label: t.nombre, color: t.color }));
+
   const semaforosOpciones: Opcion[] = (semaforos ?? []).map((s) => ({
     key: s.key,
     label: s.label,
@@ -249,34 +154,39 @@ export function SegmentFilters({ valor, onChange }: Props): React.ReactElement {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FiltroCatalogo
-          etiqueta="Rol del contacto"
-          opciones={roles}
-          seleccion={valor.rolContacto ?? []}
-          onChange={(rolContacto) => parchear({ rolContacto })}
-          vacio="Tu empresa todavía no tiene roles configurados."
-        />
-        <FiltroCatalogo
-          etiqueta="Semáforo del lead"
-          opciones={semaforosOpciones}
-          seleccion={valor.semaforoLead ?? []}
-          onChange={(semaforoLead) => parchear({ semaforoLead })}
-          vacio="Tu empresa todavía no tiene semáforos configurados."
-        />
-        <FiltroCatalogo
-          etiqueta="Nivel de interés"
-          opciones={intereses}
-          seleccion={valor.nivelInteres ?? []}
-          onChange={(nivelInteres) => parchear({ nivelInteres })}
-          vacio="Tu empresa todavía no tiene niveles de interés configurados."
-        />
-      </div>
-
-      <FiltroAtributos
-        atributos={valor.atributos ?? []}
-        onChange={(atributos) => parchear({ atributos })}
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <FiltroCatalogo
+        etiqueta="Semáforo del lead"
+        opciones={semaforosOpciones}
+        seleccion={valor.semaforoLead ?? []}
+        onChange={(semaforoLead) => parchear({ semaforoLead })}
+        vacio="Tu empresa todavía no tiene semáforos configurados."
+      />
+      <FiltroCatalogo
+        etiqueta="Intención de compra"
+        opciones={INTENCIONES}
+        seleccion={valor.intencionCompra ?? []}
+        onChange={(keys) => parchear({ intencionCompra: keys as IntencionCompra[] })}
+      />
+      <FiltroCatalogo
+        etiqueta="Estado comercial"
+        opciones={ESTADOS_OPCIONES}
+        seleccion={valor.estadoComercial ?? []}
+        onChange={(estadoComercial) => parchear({ estadoComercial })}
+      />
+      <FiltroCatalogo
+        etiqueta="Etiquetas"
+        opciones={etiquetas}
+        seleccion={valor.tagIds ?? []}
+        onChange={(tagIds) => parchear({ tagIds })}
+        vacio="Tu empresa todavía no tiene etiquetas. Créalas en Etiquetas."
+      />
+      <FiltroCatalogo
+        etiqueta="Nivel de interés"
+        opciones={intereses}
+        seleccion={valor.nivelInteres ?? []}
+        onChange={(nivelInteres) => parchear({ nivelInteres })}
+        vacio="Tu empresa todavía no tiene niveles de interés configurados."
       />
     </div>
   );

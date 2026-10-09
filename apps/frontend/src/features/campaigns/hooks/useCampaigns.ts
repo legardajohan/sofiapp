@@ -19,7 +19,9 @@ import {
   launchCampaign,
   pauseCampaign,
   previewSegmento,
+  rescheduleCampaign,
   resumeCampaign,
+  scheduleCampaign,
 } from '../api.js';
 import type {
   CampaignDTO,
@@ -29,6 +31,8 @@ import type {
   EstadoCampana,
   EstadoDestinatario,
   PagedDTO,
+  RescheduleCampaignPayload,
+  ScheduleCampaignPayload,
   SegmentPreviewDTO,
   SegmentoFiltros,
   TotalesCampana,
@@ -114,6 +118,47 @@ export function useCreateCampaign(): UseMutationResult<
       toast.success(texto);
     },
     onError: (error) => toast.error(motivo(error, 'No se pudo crear la campaña.')),
+  });
+}
+
+/** «el jueves 12 de nov. a las 9:00», para que el toast confirme la hora que quedó, no solo que quedó. */
+function cuando(iso: string | null): string {
+  if (!iso) return '';
+  const fecha = new Date(iso);
+  const dia = fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' });
+  const hora = fecha.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' });
+  return ` para el ${dia} a las ${hora}`;
+}
+
+export function useScheduleCampaign(): UseMutationResult<
+  CampaignDTO,
+  unknown,
+  ScheduleCampaignPayload
+> {
+  const invalidar = useInvalidarCampanas();
+  return useMutation({
+    mutationFn: (payload: ScheduleCampaignPayload) => scheduleCampaign(payload),
+    onSuccess: (campana) => {
+      invalidar();
+      toast.success(`«${campana.nombre}» quedó programada${cuando(campana.programadaPara)}`);
+    },
+    onError: (error) => toast.error(motivo(error, 'No se pudo programar la campaña.')),
+  });
+}
+
+export function useRescheduleCampaign(): UseMutationResult<
+  CampaignDTO,
+  unknown,
+  RescheduleCampaignPayload
+> {
+  const invalidar = useInvalidarCampanas();
+  return useMutation({
+    mutationFn: (payload: RescheduleCampaignPayload) => rescheduleCampaign(payload),
+    onSuccess: (campana) => {
+      invalidar();
+      toast.success(`«${campana.nombre}» se reprogramó${cuando(campana.programadaPara)}`);
+    },
+    onError: (error) => toast.error(motivo(error, 'No se pudo reprogramar la campaña.')),
   });
 }
 

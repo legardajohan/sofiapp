@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Megaphone, Plus } from 'lucide-react';
+import { CalendarClock, Megaphone, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -19,13 +19,30 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
+import { CampaignScheduler } from '../components/CampaignScheduler.js';
 import { CampaignWizard } from '../components/CampaignWizard.js';
-import { useCampaignRealtime, useCampaigns, useCreateCampaign } from '../hooks/useCampaigns.js';
+import {
+  useCampaignRealtime,
+  useCampaigns,
+  useCreateCampaign,
+  useScheduleCampaign,
+} from '../hooks/useCampaigns.js';
 import { ETIQUETA_ESTADO, formatearNumero, porcentaje } from '../lib/pacing.js';
 import { ESTADOS_CAMPANA, type EstadoCampana } from '../types.js';
 
 /** Radix `Select` prohíbe `value=""`, así que el "sin filtro" necesita un centinela. */
 const TODOS = '__todos__';
+
+/** «jue 12 nov, 9:00». Para la hora de salida de una programada, donde el día de la semana importa. */
+function salida(iso: string): string {
+  return new Date(iso).toLocaleString('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 function fecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CO', {
@@ -45,6 +62,7 @@ function fecha(iso: string): string {
 export function CampaignsPage(): React.ReactElement {
   const [params, setParams] = useSearchParams();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [programadorOpen, setProgramadorOpen] = useState(false);
 
   const estadoParam = params.get('estado');
   const estado = ESTADOS_CAMPANA.includes(estadoParam as EstadoCampana)
@@ -54,6 +72,7 @@ export function CampaignsPage(): React.ReactElement {
 
   const { data, isPending } = useCampaigns({ page, ...(estado ? { estado } : {}) });
   const crear = useCreateCampaign();
+  const programar = useScheduleCampaign();
   useCampaignRealtime();
 
   const campanas = data?.data ?? [];
@@ -73,17 +92,28 @@ export function CampaignsPage(): React.ReactElement {
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold text-foreground">Campañas</h1>
           <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Escribe a un grupo de contactos con una plantilla aprobada. SofiApp reparte el envío
-            para no pasarse del límite diario de tu número de WhatsApp.
+            Escribe a un grupo de contactos con una plantilla aprobada, ahora o a la hora que
+            elijas. SofiApp reparte el envío para no pasarse del límite diario de tu número de
+            WhatsApp.
           </p>
         </div>
-        <Button
-          onClick={() => setWizardOpen(true)}
-          className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Nueva campaña
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setProgramadorOpen(true)}
+            className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
+          >
+            <CalendarClock className="mr-1.5 h-4 w-4" aria-hidden />
+            Programar seguimiento
+          </Button>
+          <Button
+            onClick={() => setWizardOpen(true)}
+            className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
+          >
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+            Nueva campaña
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -161,6 +191,11 @@ export function CampaignsPage(): React.ReactElement {
                     >
                       {c.nombre}
                     </Link>
+                    {c.estado === 'programada' && c.programadaPara ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Sale el {salida(c.programadaPara)}
+                      </p>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <CampaignStatusBadge estado={c.estado} />
@@ -191,6 +226,15 @@ export function CampaignsPage(): React.ReactElement {
         pending={crear.isPending}
         onOpenChange={setWizardOpen}
         onSubmit={(payload) => crear.mutate(payload, { onSuccess: () => setWizardOpen(false) })}
+      />
+
+      <CampaignScheduler
+        open={programadorOpen}
+        pending={programar.isPending}
+        onOpenChange={setProgramadorOpen}
+        onSubmit={(payload) =>
+          programar.mutate(payload, { onSuccess: () => setProgramadorOpen(false) })
+        }
       />
     </div>
   );
