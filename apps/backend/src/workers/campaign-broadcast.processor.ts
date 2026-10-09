@@ -12,11 +12,13 @@ import { CampaignRecipient } from '../features/campaign/campaign-recipient.model
 import {
   encolarLote,
   launchCampaign,
+  prepararImagenCabecera,
   resolverPresupuesto,
 } from '../features/campaign/campaign.service.js';
 import { sendOutbound } from '../features/message/message.service.js';
 import type {
   CampaignJobData,
+  CampaignStartJobData,
   LeanCampaign,
   LeanCampaignRecipient,
 } from '../features/campaign/campaign.types.js';
@@ -126,6 +128,11 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
     return;
   }
 
+  // HU-MARK-03 — imagen de cabecera. No-op si ya hay un id vigente; se renueva si caducaría a
+  // mitad del envío. Si Meta no la acepta, el error sube y BullMQ reintenta el lote: sin imagen no
+  // se puede enviar la plantilla, así que tampoco tiene sentido marcar a nadie como fallido.
+  const imagenCabecera = await prepararImagenCabecera(tenantId, campana);
+
   let enviados = 0;
   let fallidos = 0;
 
@@ -135,6 +142,7 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
         modo: 'plantilla',
         templateId: campana.templateId.toString(),
         parametros: campana.parametros,
+        ...(imagenCabecera ? { imagenCabecera } : {}),
       });
 
       await findOneAndUpdateScoped(
@@ -187,6 +195,30 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
 }
 
 /**
+ * Arranca una campaña `programada` en nombre de quien la creó. Si no puede arrancar (cuota agotada,
+ * calidad en rojo, plantilla retirada, imagen rechazada por Meta) la marca `fallida` con el motivo
+ * en vez de dejarla esperando para siempre. Lo comparten el barrido y el arranque exacto.
+ */
+async function lanzarProgramada(
+  tenantId: Types.ObjectId | string,
+  campana: LeanCampaign,
+): Promise<void> {
+  const campaignId = campana._id.toString();
+  try {
+    await launchCampaign(tenantId.toString(), campana.creadaPor.toString(), campaignId);
+    logger.info('Campaña programada lanzada', { campaignId });
+  } catch (err) {
+    await findOneAndUpdateScoped(
+      Campaign,
+      tenantId,
+      { _id: campana._id },
+      { $set: { estado: 'fallida', finalizadaAt: new Date(), motivo: motivoDeError(err) } },
+    );
+    logger.error('No se pudo lanzar una campaña programada', { campaignId, error: String(err) });
+  }
+}
+
+/**
  * Barrido de campañas programadas cuya hora ya llegó.
  *
  * **Excepción cross-tenant documentada** (`docs/multi-tenancy.md` §5), la misma forma que el
@@ -204,24 +236,40 @@ export async function processCampaignSweep(): Promise<void> {
     .lean<Array<{ _id: Types.ObjectId; tenantId: Types.ObjectId }>>();
 
   for (const { _id, tenantId } of vencidas) {
-    try {
-      const campana = await findByIdScoped(Campaign, tenantId, _id.toString()).lean<LeanCampaign | null>();
-      if (!campana) continue;
-      await launchCampaign(tenantId.toString(), campana.creadaPor.toString(), _id.toString());
-      logger.info('Campaña programada lanzada', { campaignId: _id.toString() });
-    } catch (err) {
-      // Una campaña que no arranca (cuota agotada, calidad en rojo) se marca fallida y no bloquea
-      // al resto del barrido.
-      await findOneAndUpdateScoped(
-        Campaign,
-        tenantId,
-        { _id },
-        { $set: { estado: 'fallida', finalizadaAt: new Date(), motivo: motivoDeError(err) } },
-      );
-      logger.error('No se pudo lanzar una campaña programada', {
-        campaignId: _id.toString(),
-        error: String(err),
-      });
-    }
+    const campana = await findByIdScoped(Campaign, tenantId, _id.toString()).lean<
+      LeanCampaign | null
+    >();
+    if (!campana) continue;
+    await lanzarProgramada(tenantId, campana);
   }
+}
+
+/**
+ * Arranque **exacto** de una campaña programada (HU-MARK-03, criterios 4 y 5).
+ *
+ * Tres salidas sin hacer nada, y las tres son el funcionamiento normal:
+ *
+ * 1. La campaña no existe en ese tenant.
+ * 2. Ya no está `programada`: la lanzó el barrido, la cancelaron o la lanzaron a mano.
+ * 3. `programadaPara` ya no coincide con la del job: se reprogramó y este es el job de la hora
+ *    anterior. El de la hora nueva ya está encolado con otro `jobId`.
+ *
+ * Job y barrido comparten la cola `campaign-broadcast`, que corre con `concurrency: 1`: nunca se
+ * ejecutan a la vez, así que el segundo en llegar siempre ve la campaña ya `en_curso` (salida 2).
+ */
+export async function processScheduledStart(data: CampaignStartJobData): Promise<void> {
+  const { tenantId, campaignId, programadaParaMs } = data;
+
+  const campana = await findByIdScoped(Campaign, tenantId, campaignId).lean<LeanCampaign | null>();
+  if (!campana) {
+    logger.warn('Arranque programado sin campaña', { campaignId, tenantId });
+    return;
+  }
+  if (campana.estado !== 'programada') return;
+  if (!campana.programadaPara || campana.programadaPara.getTime() !== programadaParaMs) {
+    logger.info('Arranque programado obsoleto: la campaña se reprogramó', { campaignId });
+    return;
+  }
+
+  await lanzarProgramada(tenantId, campana);
 }

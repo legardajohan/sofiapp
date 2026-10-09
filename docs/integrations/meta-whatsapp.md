@@ -197,6 +197,28 @@ persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 
 - **Riesgo operativo:** una infracción de políticas puede suspender la WABA del tenant. Probar
   con números sandbox antes de producción. Por eso `Cliente.marketingOptOut` se excluye siempre del
   segmento: un reporte de spam degrada la calidad, que es justo lo que el pacing intenta proteger.
+- **Campañas programadas con imagen (HU-MARK-03).** Fuera de la ventana de 24 h la única forma de
+  mandar texto + imagen es una plantilla `APPROVED` con `HEADER.format = IMAGE`: la imagen concreta
+  viaja **en el envío** como parámetro de cabecera, y el texto en los parámetros del `BODY`.
+
+  ```json
+  "components": [
+    { "type": "header", "parameters": [{ "type": "image", "image": { "id": "<metaMediaId>" } }] },
+    { "type": "body",   "parameters": [{ "type": "text", "text": "…" }] }
+  ]
+  ```
+
+  Lo arma `buildTemplatePayload(…, cabecera?)`; sin el cuarto argumento el payload es el de siempre.
+  La imagen se guarda en nuestro almacenamiento al programar y se sube a Meta (`POST
+  /{phoneNumberId}/media`) **al arrancar**, una vez por campaña: el `media id` caduca a los 30 días,
+  y se renueva a los 25 si el envío se alarga. Si la subida falla, la campaña queda `fallida` sin
+  haber escrito a nadie. Las plantillas con cabecera `DOCUMENT`/`VIDEO` y **crear** plantillas con
+  imagen desde SofiApp (subida reanudable de Meta) siguen fuera de alcance: se crean en Business
+  Manager y entran por el sync, que ya persiste los `components`.
+- **Arranque exacto.** Programar encola un job con `delay` hasta la hora indicada
+  (`campaign-start-<id>-<ms>`); el barrido de `CAMPAIGN_SWEEP_INTERVAL_MS` solo levanta las que
+  Redis haya perdido. Job y barrido comparten la cola (`concurrency: 1`), así que nunca lanzan la
+  misma campaña dos veces.
 
 ## 6. Media: descarga de entrantes y subida de salientes (HU-OMNI-06)
 

@@ -34,12 +34,18 @@ export interface FiltroAtributo {
   valores: string[];
 }
 
+/** Intención de compra que clasifica la IA (HU-IA-05). Escala cerrada, no catálogo del tenant. */
+export type IntencionCompra = 'frio' | 'tibio' | 'caliente';
+
 export interface SegmentoFiltros {
+  /** Ya no se ofrece en el constructor; se conserva para leer campañas antiguas. */
   atributos?: FiltroAtributo[];
+  /** Ya no se ofrece en el constructor; se conserva para leer campañas antiguas. */
   rolContacto?: string[];
   /** Keys del catálogo de semáforos: el eje comercial del lead, no la etiqueta del hilo. */
   semaforoLead?: string[];
   nivelInteres?: string[];
+  intencionCompra?: IntencionCompra[];
   estadoComercial?: string[];
   tagIds?: string[];
 }
@@ -75,6 +81,13 @@ export interface TotalesCampana {
   omitidos: number;
 }
 
+/** Imagen de cabecera de la campaña (HU-MARK-03). `url` es relativa a la base del API. */
+export interface ImagenCampanaDTO {
+  url: string;
+  mimeType: 'image/jpeg' | 'image/png';
+  tamanoBytes: number;
+}
+
 export interface CampaignDTO {
   id: string;
   nombre: string;
@@ -82,6 +95,7 @@ export interface CampaignDTO {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  imagen: ImagenCampanaDTO | null;
   totales: TotalesCampana;
   presupuesto: {
     tier: MessagingTier;
@@ -124,4 +138,22 @@ export interface CreateCampaignPayload {
   parametros: string[];
   lanzar?: boolean;
   programadaPara?: string;
+}
+
+/** Programar una campaña (HU-MARK-03). Viaja como multipart: la imagen es un archivo aparte. */
+export interface ScheduleCampaignPayload {
+  nombre: string;
+  filtros: SegmentoFiltros;
+  templateId: string;
+  parametros: string[];
+  /** ISO-8601 con offset. */
+  programadaPara: string;
+  imagen: File | null;
+}
+
+/** Cambios sobre una campaña programada. Lo que no viene, no cambia. */
+export interface RescheduleCampaignPayload {
+  id: string;
+  programadaPara?: string;
+  imagen?: File;
 }

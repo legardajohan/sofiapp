@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { MESSAGING_TIERS, QUALITY_RATINGS } from '../channel/channel.types.js';
-import { ESTADOS_CAMPANA } from './campaign.types.js';
+import { ESTADOS_CAMPANA, MIMES_IMAGEN_CAMPANA } from './campaign.types.js';
 import type { ICampaignDocument } from './campaign.types.js';
 
 /**
@@ -25,6 +25,7 @@ const FiltrosSchema = new Schema(
     rolContacto: { type: [String], default: [] },
     semaforoLead: { type: [String], default: [] },
     nivelInteres: { type: [String], default: [] },
+    intencionCompra: { type: [String], default: [] },
     estadoComercial: { type: [String], default: [] },
     tagIds: { type: [Schema.Types.ObjectId], default: [] },
   },
@@ -56,6 +57,22 @@ const TotalesSchema = new Schema(
   { _id: false },
 );
 
+const ImagenSchema = new Schema(
+  {
+    mediaKey: { type: String, required: true },
+    mimeType: { type: String, enum: MIMES_IMAGEN_CAMPANA, required: true },
+    tamanoBytes: { type: Number, required: true },
+    metaMediaId: { type: String, default: null },
+    subidaMetaAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+const ContenidoSchema = new Schema(
+  { imagen: { type: ImagenSchema, default: null } },
+  { _id: false },
+);
+
 const CampaignSchema = new Schema<ICampaignDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
@@ -63,6 +80,8 @@ const CampaignSchema = new Schema<ICampaignDocument>(
     filtros: { type: FiltrosSchema, required: true, default: () => ({}) },
     templateId: { type: Schema.Types.ObjectId, ref: 'WhatsAppTemplate', required: true },
     parametros: { type: [String], required: true, default: [] },
+    // HU-MARK-03. Default con imagen nula: las campañas de solo texto de MARK-01 se leen igual.
+    contenido: { type: ContenidoSchema, required: true, default: () => ({ imagen: null }) },
     estado: { type: String, enum: ESTADOS_CAMPANA, required: true, default: 'borrador' },
     programadaPara: { type: Date, default: null },
     totales: { type: TotalesSchema, required: true, default: () => ({}) },

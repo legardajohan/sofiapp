@@ -8,13 +8,18 @@ import {
   listRecipients,
   pauseCampaign,
   previewSegment,
+  rescheduleCampaign,
   resumeCampaign,
+  scheduleCampaign,
 } from './campaign.service.js';
+import type { IImagenSubida } from './campaign.types.js';
 import type {
   CreateCampaignBody,
   ListCampaignsQuery,
   ListRecipientsQuery,
   PreviewSegmentoBody,
+  RescheduleCampaignBody,
+  ScheduleCampaignBody,
 } from './campaign.validation.js';
 
 export const previewSegmentController: RequestHandler = async (req, res) => {
@@ -71,4 +76,25 @@ export const cancelCampaignController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
   res.status(200).json(await cancelCampaign(tenantId, req.user!.sub, id));
+};
+
+/** Archivo de multer → tipo del dominio. El service no conoce Express. */
+function imagenDe(file: Express.Multer.File | undefined): IImagenSubida | undefined {
+  if (!file) return undefined;
+  return { buffer: file.buffer, mimeType: file.mimetype, nombreArchivo: file.originalname };
+}
+
+export const scheduleCampaignController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const body = req.body as ScheduleCampaignBody;
+  res.status(201).json(await scheduleCampaign(tenantId, req.user!.sub, body, imagenDe(req.file)));
+};
+
+export const rescheduleCampaignController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const body = req.body as RescheduleCampaignBody;
+  res
+    .status(200)
+    .json(await rescheduleCampaign(tenantId, req.user!.sub, id, body, imagenDe(req.file)));
 };
