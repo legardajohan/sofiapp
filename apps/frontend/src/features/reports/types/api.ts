@@ -9,3 +9,8 @@ export type AdvisorReportParams = ReportRangeParams;
 
 /** Query de `GET /reports/handoff-rate` (HU-REP-02). */
 export type HandoffRateParams = ReportRangeParams;
+
+/** Query de `GET /reports/top-products` (HU-REP-03). `top` 1..50; sin él, el backend usa 10. */
+export interface TopProductsParams extends ReportRangeParams {
+  top?: number;
+}

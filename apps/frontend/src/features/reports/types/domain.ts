@@ -51,3 +51,28 @@ export interface HandoffRate {
   /** Los 5 motivos, siempre presentes, en orden de prioridad. */
   transferidasPorMotivo: HandoffMotivoRow[];
 }
+
+/** Espejo de `ITopProductRow` del backend (HU-REP-03). */
+export interface TopProductRow {
+  clave: string;
+  nombre: string;
+  /** `false` = el producto ya no está en la base de conocimiento. */
+  enCatalogo: boolean;
+  conversaciones: number;
+  /** Fracción 0–1 sobre las conversaciones clasificadas. */
+  share: number;
+}
+
+/** Espejo de `ITopProductsResponse` del backend (HU-REP-03). */
+export interface TopProducts {
+  generadoAt: string;
+  rango: { desde: string; hasta: string };
+  /** La base de conocimiento tiene productos cargados. Sin ellos no se clasifica nada. */
+  catalogoDisponible: boolean;
+  totalConsultas: number;
+  clasificadas: number;
+  sinClasificar: number;
+  ranking: TopProductRow[];
+  otros: { conversaciones: number; share: number };
+  restantes: { productos: number; conversaciones: number; share: number };
+}

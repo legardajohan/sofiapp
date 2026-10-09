@@ -4,6 +4,8 @@ import type {
   AdvisorReportParams,
   HandoffRate,
   HandoffRateParams,
+  TopProducts,
+  TopProductsParams,
 } from '../features/reports/types/index.js';
 
 export const getAdvisorReport = async (params: AdvisorReportParams): Promise<AdvisorReport> => {
@@ -13,5 +15,10 @@ export const getAdvisorReport = async (params: AdvisorReportParams): Promise<Adv
 
 export const getHandoffRate = async (params: HandoffRateParams): Promise<HandoffRate> => {
   const res = await apiClient.get<HandoffRate>('/reports/handoff-rate', { params });
+  return res.data;
+};
+
+export const getTopProducts = async (params: TopProductsParams): Promise<TopProducts> => {
+  const res = await apiClient.get<TopProducts>('/reports/top-products', { params });
   return res.data;
 };

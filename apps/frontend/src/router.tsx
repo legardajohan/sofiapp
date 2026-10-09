@@ -18,6 +18,10 @@ const AdvisorReportPage = lazy(() =>
 const HandoffRatePage = lazy(() =>
   import('./features/reports/pages/HandoffRatePage.js').then((m) => ({ default: m.HandoffRatePage })),
 );
+// HU-REP-03: idem.
+const TopProductsPage = lazy(() =>
+  import('./features/reports/pages/TopProductsPage.js').then((m) => ({ default: m.TopProductsPage })),
+);
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
@@ -204,6 +208,18 @@ export const router = createBrowserRouter([
                 <RequireReportes>
                   <Suspense fallback={<Loading />}>
                     <HandoffRatePage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/top-products',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <TopProductsPage />
                   </Suspense>
                 </RequireReportes>
               </RequireRole>
