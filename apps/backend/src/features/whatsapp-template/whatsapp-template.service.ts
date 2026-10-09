@@ -14,6 +14,8 @@ import { metaTemplateClient } from '../../integrations/meta/meta-template.client
 import { WhatsAppTemplate } from './whatsapp-template.model.js';
 import type {
   CreateTemplateBody,
+  FormatoCabecera,
+  ICabeceraEnvio,
   IPlantillaComponente,
   IWhatsAppTemplateDocument,
   IWhatsAppTemplateResponse,
@@ -51,6 +53,13 @@ function bodyTextOf(components: IPlantillaComponente[]): string | null {
   return bodyComponentOf(components)?.text ?? null;
 }
 
+/** Formato de la cabecera según los `components` persistidos. Sin `HEADER` → `NINGUNA`. */
+export function formatoCabecera(tpl: Pick<LeanWhatsAppTemplate, 'components'>): FormatoCabecera {
+  const header = tpl.components.find((c) => c.type === 'HEADER');
+  if (!header) return 'NINGUNA';
+  return header.format ?? 'TEXT';
+}
+
 function mapToResponse(doc: LeanWhatsAppTemplate): IWhatsAppTemplateResponse {
   return {
     id: doc._id.toString(),
@@ -61,6 +70,7 @@ function mapToResponse(doc: LeanWhatsAppTemplate): IWhatsAppTemplateResponse {
     cuerpo: bodyTextOf(doc.components),
     ejemplos: bodyComponentOf(doc.components)?.example?.body_text?.[0] ?? [],
     parametrosBody: doc.parametrosBody,
+    cabecera: formatoCabecera(doc),
     obsoleta: doc.obsoleta,
     syncedAt: doc.syncedAt.toISOString(),
   };
@@ -187,15 +197,18 @@ export async function createTemplate(
 }
 
 /**
- * Resuelve la plantilla y construye los `components` de envío posicionales que espera la Graph
- * API. No envía nada: eso es responsabilidad de `message.service.sendOutbound`. Único punto donde
- * se validan los criterios 5 y 6 del spec (estado aprobado y conteo de parámetros).
+ * Resuelve la plantilla y comprueba que es enviable con estos parámetros y esta media de cabecera.
+ *
+ * Orden fijo: existe (404) → `APPROVED` (422) → nº de parámetros (400) → cabecera. Lo comparten el
+ * envío (`buildTemplatePayload`) y el programador de campañas (`assertContenidoCompatible`), que
+ * valida **antes** de tener un `metaMediaId`: solo sabe si habrá imagen o no.
  */
-export async function buildTemplatePayload(
+async function resolverPlantillaEnviable(
   tenantId: TenantId,
   templateId: string,
   parametros: string[],
-): Promise<{ name: string; langCode: string; components: unknown[] }> {
+  llevaImagen: boolean,
+): Promise<LeanWhatsAppTemplate> {
   const tpl = await findByIdScoped(WhatsAppTemplate, tenantId, templateId)
     .lean<LeanWhatsAppTemplate | null>()
     .exec();
@@ -211,10 +224,65 @@ export async function buildTemplatePayload(
     });
   }
 
-  const components =
-    parametros.length > 0
-      ? [{ type: 'body', parameters: parametros.map((text) => ({ type: 'text', text })) }]
-      : [];
+  // HU-MARK-03 — media de cabecera. `DOCUMENT` y `VIDEO` quedan fuera de alcance: Meta exigiría el
+  // archivo en el envío y no hay forma de adjuntarlo, así que el envío fallaría en cada destinatario.
+  const cabecera = formatoCabecera(tpl);
+  if (cabecera === 'DOCUMENT' || cabecera === 'VIDEO') {
+    throw new AppError('Las plantillas con documento o vídeo en la cabecera aún no se admiten.', 422, {
+      cabecera,
+    });
+  }
+  if (cabecera === 'IMAGE' && !llevaImagen) {
+    throw new AppError('Esta plantilla lleva una imagen en la cabecera: adjunta la imagen.', 422, {
+      cabecera,
+    });
+  }
+  if (cabecera !== 'IMAGE' && llevaImagen) {
+    throw new AppError('Esta plantilla no admite imagen en la cabecera.', 400, { cabecera });
+  }
+
+  return tpl;
+}
+
+/**
+ * Valida contenido ↔ plantilla sin armar el payload (HU-MARK-03). Lo usa el programador de
+ * campañas al guardar, cuando la imagen aún no se ha subido a Meta.
+ */
+export async function assertContenidoCompatible(
+  tenantId: TenantId,
+  templateId: string,
+  parametros: string[],
+  llevaImagen: boolean,
+): Promise<void> {
+  await resolverPlantillaEnviable(tenantId, templateId, parametros, llevaImagen);
+}
+
+/**
+ * Resuelve la plantilla y construye los `components` de envío posicionales que espera la Graph
+ * API. No envía nada: eso es responsabilidad de `message.service.sendOutbound`. Único punto donde
+ * se validan los criterios 5 y 6 del spec (estado aprobado y conteo de parámetros).
+ *
+ * `cabecera` (HU-MARK-03) es opcional y retrocompatible: sin ella, y con una plantilla sin media en
+ * la cabecera, el resultado es el mismo de siempre.
+ */
+export async function buildTemplatePayload(
+  tenantId: TenantId,
+  templateId: string,
+  parametros: string[],
+  cabecera?: ICabeceraEnvio,
+): Promise<{ name: string; langCode: string; components: unknown[] }> {
+  const tpl = await resolverPlantillaEnviable(tenantId, templateId, parametros, !!cabecera);
+
+  const components: unknown[] = [];
+  if (cabecera) {
+    components.push({
+      type: 'header',
+      parameters: [{ type: 'image', image: { id: cabecera.metaMediaId } }],
+    });
+  }
+  if (parametros.length > 0) {
+    components.push({ type: 'body', parameters: parametros.map((text) => ({ type: 'text', text })) });
+  }
 
   return { name: tpl.name, langCode: tpl.language, components };
 }

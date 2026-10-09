@@ -21,20 +21,16 @@ function techoGlobal(): number {
   );
 }
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: techoGlobal(), files: 1, fields: 4 },
-});
-
-/**
- * Nota de voz (HU-OMNI-07): su propio techo, el de audio, y no el global. Así una grabación de
- * 16 MB se corta en multer en vez de llegar a memoria completa para descubrir después que el
- * tenant solo admite 2 MB (ese segundo filtro, más fino, está en `media.service`).
- */
-const uploadAudio = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: env.MEDIA_MAX_BYTES_AUDIO, files: 1, fields: 4 },
-});
+/** Opciones de una subida de un solo archivo. */
+export interface IOpcionesSubidaUnica {
+  /** Nombre del campo del multipart que trae el archivo. */
+  campo: string;
+  maxBytes: number;
+  /** Campos de texto admitidos junto al archivo. multer corta con 400 si llegan más. */
+  maxCampos: number;
+  /** Texto del 400 cuando llega más de un archivo o en otro campo. */
+  mensajeVariosArchivos: string;
+}
 
 /**
  * Traduce los errores de multer a `AppError`.
@@ -43,36 +39,69 @@ const uploadAudio = multer({
  * pasa cada vez que alguien adjunta algo grande— llega al `errorHandler` como un error desconocido
  * y sale como **500 opaco**, cuando es un 413 perfectamente explicable.
  */
-function traducirErrorMulter(err: unknown): unknown {
+function traducirErrorMulter(err: unknown, mensajeVariosArchivos: string): unknown {
   if (!(err instanceof MulterError)) return err;
   if (err.code === 'LIMIT_FILE_SIZE') {
     return new AppError('El archivo supera el tamaño permitido.', 413);
   }
   if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
-    return new AppError('Solo se puede adjuntar un archivo por mensaje.', 400);
+    return new AppError(mensajeVariosArchivos, 400);
   }
   return new AppError(`No se pudo procesar el archivo: ${err.message}`, 400);
 }
 
-function unArchivo(instancia: multer.Multer, campo: string): RequestHandler {
-  return (req, res, next) => {
-    instancia.single(campo)(req, res, (err: unknown) => {
-      if (!err) {
-        next();
-        return;
-      }
-      next(traducirErrorMulter(err));
-    });
-  };
-}
-
 /**
- * Recibe **un** archivo del campo `archivo` (HU-OMNI-06).
+ * Construye un middleware que recibe **un** archivo del campo indicado y traduce los errores de
+ * multer a `AppError`.
  *
  * Es la única excepción admitida a la cadena fija de middlewares, y va **entre `authorize` y
  * `validate`**: `validate` necesita `req.body` ya poblado con los campos de texto del multipart.
  */
-export const subirArchivo: RequestHandler = unArchivo(upload, 'archivo');
+export function crearSubidaUnica(opciones: IOpcionesSubidaUnica): RequestHandler {
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: opciones.maxBytes, files: 1, fields: opciones.maxCampos },
+  });
 
-/** Recibe **una** grabación del campo `audio` (HU-OMNI-07). Misma posición en la cadena. */
-export const subirAudio: RequestHandler = unArchivo(uploadAudio, 'audio');
+  return (req, res, next) => {
+    upload.single(opciones.campo)(req, res, (err: unknown) => {
+      if (!err) {
+        next();
+        return;
+      }
+      next(traducirErrorMulter(err, opciones.mensajeVariosArchivos));
+    });
+  };
+}
+
+/** Adjuntos del hilo (HU-OMNI-06): campo `archivo`. */
+export const subirArchivo: RequestHandler = crearSubidaUnica({
+  campo: 'archivo',
+  maxBytes: techoGlobal(),
+  maxCampos: 4,
+  mensajeVariosArchivos: 'Solo se puede adjuntar un archivo por mensaje.',
+});
+
+/**
+ * Nota de voz (HU-OMNI-07): campo `audio`, con su propio techo —el de audio— y no el global. Así una
+ * grabación de 16 MB se corta en multer en vez de llegar a memoria completa para descubrir después
+ * que el tenant solo admite 2 MB (ese segundo filtro, más fino, está en `media.service`).
+ */
+export const subirAudio: RequestHandler = crearSubidaUnica({
+  campo: 'audio',
+  maxBytes: env.MEDIA_MAX_BYTES_AUDIO,
+  maxCampos: 4,
+  mensajeVariosArchivos: 'Solo se puede adjuntar un archivo por mensaje.',
+});
+
+/**
+ * Imagen de cabecera de una campaña programada (HU-MARK-03): campo `imagen`, con el techo de
+ * imágenes de Meta (5 MB). Admite más campos de texto que el hilo: nombre, filtros, plantilla,
+ * parámetros, fecha y la marca de quitar imagen.
+ */
+export const subirImagenCampana: RequestHandler = crearSubidaUnica({
+  campo: 'imagen',
+  maxBytes: Math.min(env.MEDIA_MAX_BYTES_IMAGEN, 5 * 1024 * 1024),
+  maxCampos: 8,
+  mensajeVariosArchivos: 'Solo se puede adjuntar una imagen por campaña.',
+});

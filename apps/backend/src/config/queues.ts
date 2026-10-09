@@ -29,6 +29,11 @@ export const CAMPAIGN_BATCH_JOB = 'batch';
 /** Barrido de campañas `programada` cuya hora ya llegó. */
 export const CAMPAIGN_START_JOB = 'start-scheduled';
 export const CAMPAIGN_SWEEP_SCHEDULER_ID = 'campaign-sweep';
+/**
+ * Arranque **exacto** de una campaña programada (HU-MARK-03): job con `delay` hasta la hora
+ * indicada. El barrido de `CAMPAIGN_START_JOB` queda como red de seguridad si Redis lo pierde.
+ */
+export const CAMPAIGN_SCHEDULED_START_JOB = 'start-exact';
 
 const connection = { url: env.REDIS_URL };
 

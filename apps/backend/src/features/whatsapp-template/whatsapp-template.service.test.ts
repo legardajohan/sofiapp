@@ -11,7 +11,13 @@ vi.mock('../../integrations/meta/meta-template.client.js', () => ({
 }));
 
 import { metaTemplateClient } from '../../integrations/meta/meta-template.client.js';
-import { buildTemplatePayload, createTemplate, syncTemplates } from './whatsapp-template.service.js';
+import {
+  assertContenidoCompatible,
+  buildTemplatePayload,
+  createTemplate,
+  formatoCabecera,
+  syncTemplates,
+} from './whatsapp-template.service.js';
 
 function bodyComponent(cuerpo: string): IPlantillaComponente[] {
   return [{ type: 'BODY', text: cuerpo }];
@@ -171,5 +177,95 @@ describe('createTemplate', () => {
 
     const doc = await WhatsAppTemplate.findOne({ tenantId, name: 'rechazada' }).lean();
     expect(doc).toBeNull();
+  });
+});
+
+describe('HU-MARK-03 — cabecera IMAGE en buildTemplatePayload', () => {
+  async function crearConCabecera(
+    tenantId: Types.ObjectId,
+    format: 'IMAGE' | 'DOCUMENT' | 'TEXT' | null,
+    parametrosBody = 1,
+  ): Promise<string> {
+    const components: IPlantillaComponente[] = [
+      ...(format ? [{ type: 'HEADER' as const, format }] : []),
+      { type: 'BODY', text: parametrosBody > 0 ? 'Hola {{1}}' : 'Hola' },
+    ];
+    const creada = await createScoped(WhatsAppTemplate, tenantId, {
+      metaTemplateId: `meta-${format ?? 'sin'}-${parametrosBody}`,
+      name: `cabecera_${(format ?? 'sin').toLowerCase()}`,
+      language: 'es',
+      category: 'MARKETING',
+      status: 'APPROVED',
+      components,
+      parametrosBody,
+      syncedAt: new Date(),
+      obsoleta: false,
+    });
+    return String(creada._id);
+  }
+
+  it('sin cabecera de media y sin imagen → payload idéntico al de siempre (retrocompatible)', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, null);
+
+    const payload = await buildTemplatePayload(tenantId, id, ['Ana']);
+
+    expect(payload.components).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+  });
+
+  it('IMAGE con metaMediaId → componente header con image.id antes del body', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, 'IMAGE');
+
+    const payload = await buildTemplatePayload(tenantId, id, ['Ana'], {
+      tipo: 'image',
+      metaMediaId: 'media-123',
+    });
+
+    expect(payload.components).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'media-123' } }] },
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+  });
+
+  it('IMAGE sin imagen → 422', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, 'IMAGE');
+    await expect(buildTemplatePayload(tenantId, id, ['Ana'])).rejects.toMatchObject({
+      statusCode: 422,
+    });
+  });
+
+  it('imagen con una plantilla sin cabecera de media → 400', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, 'TEXT');
+    await expect(
+      buildTemplatePayload(tenantId, id, ['Ana'], { tipo: 'image', metaMediaId: 'm' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('cabecera DOCUMENT → 422 (fuera de alcance), también al validar sin payload', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, 'DOCUMENT');
+    await expect(assertContenidoCompatible(tenantId, id, ['Ana'], false)).rejects.toMatchObject({
+      statusCode: 422,
+    });
+  });
+
+  it('el conteo de parámetros se valida antes que la cabecera (400 con el detalle)', async () => {
+    const tenantId = new Types.ObjectId();
+    const id = await crearConCabecera(tenantId, 'IMAGE');
+    await expect(assertContenidoCompatible(tenantId, id, [], true)).rejects.toMatchObject({
+      statusCode: 400,
+      details: { esperados: 1, recibidos: 0 },
+    });
+  });
+
+  it('formatoCabecera: sin HEADER → NINGUNA; HEADER sin format → TEXT', () => {
+    expect(formatoCabecera({ components: [{ type: 'BODY', text: 'x' }] })).toBe('NINGUNA');
+    expect(formatoCabecera({ components: [{ type: 'HEADER', text: 'Hola' }] })).toBe('TEXT');
+    expect(formatoCabecera({ components: [{ type: 'HEADER', format: 'IMAGE' }] })).toBe('IMAGE');
   });
 });

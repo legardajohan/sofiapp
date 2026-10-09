@@ -28,9 +28,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TemplatePreview } from '@/features/whatsapp-templates/components/TemplatePreview';
+import { apiUrl } from '@/api/apiClient';
 import { CampaignProgress } from '../components/CampaignProgress.js';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
+import { MessagePreview } from '../components/MessagePreview.js';
+import { RescheduleDialog } from '../components/RescheduleDialog.js';
 import {
   useCampaign,
   useCampaignRealtime,
@@ -38,6 +40,7 @@ import {
   useLaunchCampaign,
   usePauseCampaign,
   useRecipients,
+  useRescheduleCampaign,
   useResumeCampaign,
 } from '../hooks/useCampaigns.js';
 import { ETIQUETA_DESTINATARIO } from '../lib/pacing.js';
@@ -65,6 +68,7 @@ export function CampaignDetailPage(): React.ReactElement {
   const { id } = useParams<{ id: string }>();
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoDestinatario | undefined>();
   const [confirmarCancelar, setConfirmarCancelar] = useState(false);
+  const [reprogramarOpen, setReprogramarOpen] = useState(false);
 
   const { data: campana, isPending } = useCampaign(id);
   const { data: destinatarios } = useRecipients(id, {
@@ -77,6 +81,7 @@ export function CampaignDetailPage(): React.ReactElement {
   const pausar = usePauseCampaign();
   const reanudar = useResumeCampaign();
   const cancelar = useCancelCampaign();
+  const reprogramar = useRescheduleCampaign();
 
   if (isPending || !campana) {
     return (
@@ -90,8 +95,13 @@ export function CampaignDetailPage(): React.ReactElement {
   const enMarcha = campana.estado === 'en_curso';
   const pausada = campana.estado === 'pausada';
   const cancelable = enMarcha || pausada || campana.estado === 'programada';
+  const programada = campana.estado === 'programada';
   const ocupado =
-    lanzar.isPending || pausar.isPending || reanudar.isPending || cancelar.isPending;
+    lanzar.isPending ||
+    pausar.isPending ||
+    reanudar.isPending ||
+    cancelar.isPending ||
+    reprogramar.isPending;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
@@ -129,6 +139,16 @@ export function CampaignDetailPage(): React.ReactElement {
               Enviar ahora
             </Button>
           ) : null}
+          {programada ? (
+            <Button
+              variant="outline"
+              disabled={ocupado}
+              onClick={() => setReprogramarOpen(true)}
+              className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
+            >
+              Reprogramar
+            </Button>
+          ) : null}
           {enMarcha ? (
             <Button variant="outline" disabled={ocupado} onClick={() => pausar.mutate(campana.id)}>
               Pausar
@@ -157,8 +177,16 @@ export function CampaignDetailPage(): React.ReactElement {
 
       {campana.plantilla ? (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-foreground">Mensaje enviado</h2>
-          <TemplatePreview cuerpo={campana.plantilla.cuerpo} ejemplos={campana.parametros} />
+          <h2 className="text-sm font-medium text-foreground">
+            {programada ? 'Mensaje que se enviará' : 'Mensaje enviado'}
+          </h2>
+          <MessagePreview
+            cuerpo={campana.plantilla.cuerpo}
+            parametros={campana.parametros}
+            imagenUrl={campana.imagen ? apiUrl(campana.imagen.url) : null}
+            conImagen={campana.imagen !== null}
+            hora={campana.programadaPara ? new Date(campana.programadaPara) : null}
+          />
         </section>
       ) : null}
 
@@ -232,6 +260,18 @@ export function CampaignDetailPage(): React.ReactElement {
           </p>
         ) : null}
       </section>
+
+      {programada ? (
+        <RescheduleDialog
+          campana={campana}
+          open={reprogramarOpen}
+          pending={reprogramar.isPending}
+          onOpenChange={setReprogramarOpen}
+          onSubmit={(payload) =>
+            reprogramar.mutate(payload, { onSuccess: () => setReprogramarOpen(false) })
+          }
+        />
+      ) : null}
 
       <AlertDialog open={confirmarCancelar} onOpenChange={setConfirmarCancelar}>
         <AlertDialogContent>

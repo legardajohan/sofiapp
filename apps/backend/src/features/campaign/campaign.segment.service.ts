@@ -32,6 +32,11 @@ export function construirFiltroContacto(filtros: ISegmentoFiltros): FilterQuery<
   const interes = inSiHay(filtros.nivelInteres);
   if (interes) filtro.nivelInteres = interes;
 
+  // Sin índice a propósito: `semaforoIA` no se indexa (cliente.model.ts) y segmentar es una
+  // consulta rara, acotada ya por el índice de `tenantId`.
+  const intencion = inSiHay(filtros.intencionCompra);
+  if (intencion) filtro['semaforoIA.nivelInteres'] = intencion;
+
   const estado = inSiHay(filtros.estadoComercial);
   if (estado) filtro.estadoComercial = estado;
 

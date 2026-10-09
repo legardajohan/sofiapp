@@ -27,7 +27,10 @@ export type AuditAccion =
   | 'campaign.launch'
   | 'campaign.pause'
   | 'campaign.resume'
-  | 'campaign.cancel';
+  | 'campaign.cancel'
+  // HU-MARK-03 — programación con fecha/hora e imagen.
+  | 'campaign.schedule'
+  | 'campaign.reschedule';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.

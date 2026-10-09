@@ -16,6 +16,7 @@ import {
   REMINDER_SWEEP_SCHEDULER_ID,
   CAMPAIGN_QUEUE_NAME,
   CAMPAIGN_START_JOB,
+  CAMPAIGN_SCHEDULED_START_JOB,
   CAMPAIGN_SWEEP_SCHEDULER_ID,
   MEDIA_INGEST_QUEUE_NAME,
   campaignQueue,
@@ -28,11 +29,15 @@ import { processFlowRuntimeJob } from './workers/flow-runtime.processor.js';
 import {
   processCampaignJob,
   processCampaignSweep,
+  processScheduledStart,
 } from './workers/campaign-broadcast.processor.js';
 import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
 import type { FlowJobData } from './features/flow/flow.types.js';
-import type { CampaignJobData } from './features/campaign/campaign.types.js';
+import type {
+  CampaignJobData,
+  CampaignStartJobData,
+} from './features/campaign/campaign.types.js';
 
 const redisConnection = { url: env.REDIS_URL };
 
@@ -66,11 +71,15 @@ const outboundWorker = new Worker(
 // definición: dos lotes en paralelo se saltarían el intervalo entre envíos y, entre los dos,
 // podrían pasarse del cupo del número. El `limiter` es la red de seguridad frente al límite de
 // ~80 msg/s de la Graph API (meta-whatsapp.md §5), muy por debajo a propósito.
-const campaignWorker = new Worker<CampaignJobData | Record<string, never>>(
+const campaignWorker = new Worker<CampaignJobData | CampaignStartJobData | Record<string, never>>(
   CAMPAIGN_QUEUE_NAME,
   async (job) => {
     if (job.name === CAMPAIGN_START_JOB) {
       await processCampaignSweep();
+      return;
+    }
+    if (job.name === CAMPAIGN_SCHEDULED_START_JOB) {
+      await processScheduledStart(job.data as CampaignStartJobData);
       return;
     }
     await processCampaignJob(job.data as CampaignJobData);

@@ -25,6 +25,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSegmentPreview } from '../hooks/useCampaigns.js';
 import { formatearNumero } from '../lib/pacing.js';
 import { AudienceMeter } from './AudienceMeter.js';
+import { SegmentCount } from './SegmentCount.js';
 import { SegmentFilters } from './SegmentFilters.js';
 import type { CreateCampaignPayload, SegmentoFiltros } from '../types.js';
 
@@ -56,9 +57,8 @@ function borradorVacio(): {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
-  programadaPara: string;
 } {
-  return { nombre: '', filtros: {}, templateId: '', parametros: [], programadaPara: '' };
+  return { nombre: '', filtros: {}, templateId: '', parametros: [] };
 }
 
 /**
@@ -100,7 +100,12 @@ export function CampaignWizard({
   });
 
   const aprobadas = useMemo(
-    () => (plantillas?.data ?? []).filter((t) => !t.obsoleta),
+    // Las de imagen/documento/vídeo en la cabecera no se pueden enviar sin el archivo: esas se
+    // programan desde el programador de campañas (HU-MARK-03), que sí sabe adjuntarlo.
+    () =>
+      (plantillas?.data ?? []).filter(
+        (t) => !t.obsoleta && (t.cabecera === 'NINGUNA' || t.cabecera === 'TEXT'),
+      ),
     [plantillas],
   );
   const plantilla = aprobadas.find((t) => t.id === borrador.templateId) ?? null;
@@ -136,9 +141,6 @@ export function CampaignWizard({
       templateId: borrador.templateId,
       parametros: borrador.parametros,
       ...(lanzar ? { lanzar: true } : {}),
-      ...(borrador.programadaPara
-        ? { programadaPara: new Date(borrador.programadaPara).toISOString() }
-        : {}),
     });
   }
 
@@ -160,30 +162,7 @@ export function CampaignWizard({
                 onChange={(filtros) => setBorrador((b) => ({ ...b, filtros }))}
               />
 
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                {preview.isPending ? (
-                  <Skeleton className="h-5 w-40" />
-                ) : total === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Ningún contacto cumple estos filtros. Prueba a quitar alguno.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-foreground">
-                      <span className="font-semibold tabular-nums">{formatearNumero(total)}</span>{' '}
-                      {total === 1 ? 'contacto entra' : 'contactos entran'} en este segmento.
-                    </p>
-                    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                      {preview.data?.muestra.slice(0, 4).map((c) => (
-                        <li key={c.id} className="truncate">
-                          {c.nombre ?? c.telefono}
-                        </li>
-                      ))}
-                      {total > 4 ? <li aria-hidden>y {formatearNumero(total - 4)} más</li> : null}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              <SegmentCount cargando={preview.isPending} preview={preview.data} />
             </div>
           ) : null}
 
@@ -275,16 +254,6 @@ export function CampaignWizard({
                 <Skeleton className="h-32 w-full" />
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="programada">Enviar más tarde (opcional)</Label>
-                <Input
-                  id="programada"
-                  type="datetime-local"
-                  value={borrador.programadaPara}
-                  onChange={(e) => setBorrador((b) => ({ ...b, programadaPara: e.target.value }))}
-                  className="w-auto"
-                />
-              </div>
             </div>
           ) : null}
         </div>
@@ -313,14 +282,10 @@ export function CampaignWizard({
               <Button
                 type="button"
                 disabled={pending || !puedeAvanzar.revision}
-                onClick={() => enviar(!borrador.programadaPara)}
+                onClick={() => enviar(true)}
                 className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
               >
-                {pending
-                  ? 'Enviando…'
-                  : borrador.programadaPara
-                    ? 'Programar campaña'
-                    : `Enviar a ${formatearNumero(total)}`}
+                {pending ? 'Enviando…' : `Enviar a ${formatearNumero(total)}`}
               </Button>
             </div>
           ) : (

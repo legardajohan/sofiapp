@@ -7,7 +7,9 @@ import {
   resolverRangoBytes,
   verificarTokenMedia,
 } from './media.service.js';
-import type { GetMediaQuery } from './media.validation.js';
+import { recursoImagenCampana } from './media.token.js';
+import { resolverImagenCampana } from '../campaign/campaign.service.js';
+import type { GetCampaignImageQuery, GetMediaQuery } from './media.validation.js';
 
 /**
  * Tipos que se pueden mostrar dentro del hilo. Todo lo demás se descarga.
@@ -91,4 +93,35 @@ export const retryMediaController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   await reintentarIngesta(tenantId, req.params['id'] as string);
   res.status(202).json({ estado: 'pendiente' });
+};
+
+/**
+ * Sirve la imagen de cabecera de una campaña (HU-MARK-03).
+ *
+ * El token se verifica contra `campaign-<id>`, y el aislamiento lo da `resolverImagenCampana`, que
+ * resuelve con `findByIdScoped` en el tenant firmado: un id de otra empresa es un 404.
+ */
+export const getCampaignImageController: RequestHandler = async (req, res) => {
+  const campaignId = req.params['id'] as string;
+  const { t } = req.validatedQuery as unknown as GetCampaignImageQuery;
+
+  const { tenantId } = verificarTokenMedia(t, recursoImagenCampana(campaignId));
+  const imagen = await resolverImagenCampana(tenantId, campaignId);
+  const storage = getMediaStorage();
+
+  const url = await storage.urlFirmada(imagen.mediaKey, env.MEDIA_SIGNED_URL_TTL_S);
+  if (url) {
+    res.redirect(302, url);
+    return;
+  }
+
+  const { stream } = await storage.leer(imagen.mediaKey);
+  res.setHeader('Content-Type', imagen.mimeType);
+  res.setHeader('Content-Length', String(imagen.tamanoBytes));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('Content-Disposition', 'inline');
+
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
 };

@@ -95,7 +95,8 @@ const ClienteSchema = new Schema<IClienteDocument>(
     // llegó a clasificar la conversación. SIN `enum` en `slug`/`nivelInteres`/`objecion`, por
     // coherencia con el resto del modelo; los tipos los garantiza `ISemaforoIA` y el único
     // productor es `ai-semaforo.service`. Deliberadamente SIN índice: se proyecta al abrir una
-    // conversación, nadie filtra la bandeja por esto.
+    // conversación, nadie filtra la bandeja por esto. Las campañas sí segmentan por
+    // `semaforoIA.nivelInteres`, pero es una consulta rara y ya acotada por `tenantId`.
     semaforoIA: {
       type: new Schema(
         {

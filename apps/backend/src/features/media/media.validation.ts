@@ -14,6 +14,13 @@ export const getMediaSchema = z.object({
   }),
 });
 
+/** Imagen de cabecera de una campaña (HU-MARK-03). Misma credencial HMAC que la media del hilo. */
+export const getCampaignImageSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({ t: z.string().min(1, 'Falta el token del archivo.') }),
+});
+
 export const retryMediaSchema = z.object({
   body: empty,
   params: z.object({ id: objectId }),
@@ -31,3 +38,4 @@ export const sendMediaSchema = z.object({
 });
 
 export type GetMediaQuery = z.infer<typeof getMediaSchema>['query'];
+export type GetCampaignImageQuery = z.infer<typeof getCampaignImageSchema>['query'];
