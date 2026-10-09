@@ -8,11 +8,13 @@ import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
   advisorReportQuerySchema,
   handoffRateQuerySchema,
+  peakHoursQuerySchema,
   topProductsQuerySchema,
 } from './reports.validation.js';
 import {
   getAdvisorReportController,
   getHandoffRateController,
+  getPeakHoursController,
   getTopProductsController,
 } from './reports.controller.js';
 
@@ -50,6 +52,17 @@ router.get(
   authorizeSubrol(SUBROLES_REPORTES),
   validate(topProductsQuerySchema),
   asyncHandler(getTopProductsController),
+);
+
+// HU-REP-04: horas pico de mensajería. Mismo gate que el resto de reportes (ADR 0011).
+router.get(
+  '/peak-hours',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  authorizeSubrol(SUBROLES_REPORTES),
+  validate(peakHoursQuerySchema),
+  asyncHandler(getPeakHoursController),
 );
 
 export default router;

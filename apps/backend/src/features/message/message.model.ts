@@ -89,6 +89,10 @@ MessageSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
 // número con plantillas. Se consulta antes de cada lote de campaña, así que el filtro por `tipo` y
 // el rango de `createdAt` tienen que resolverse con un índice y no recorriendo la colección.
 MessageSchema.index({ tenantId: 1, tipo: 1, createdAt: -1 });
+// Reportes de tenant por rango de fechas (HU-REP-04, y los `$match` por `createdAt` de HU-REP-01/02/
+// 03). Los dos índices de arriba exigen `clienteId` o `tipo`: sin este, cada reporte recorrería
+// todos los mensajes del tenant. Cuesta una entrada más por escritura; lo pagan cuatro reportes.
+MessageSchema.index({ tenantId: 1, createdAt: 1 });
 // Media que todavía no se ha descargado (HU-OMNI-06). PARCIAL a propósito: solo interesa lo
 // pendiente —unas decenas de documentos en régimen normal— y un índice completo sobre `media.estado`
 // pagaría por cada mensaje de texto del sistema a cambio de nada.

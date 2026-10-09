@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DIA_MS } from '../../utils/date-range.util.js';
-import { RANGO_MAX_DIAS, TOP_DEFAULT, TOP_MAX } from './reports.types.js';
+import { RANGO_MAX_DIAS, TOP_DEFAULT, TOP_MAX, TZ_DEFAULT } from './reports.types.js';
 
 const rangoQueryBase = z.object({
   desde: z.coerce.date().optional(),
@@ -41,3 +41,24 @@ export const topProductsQuerySchema = z.object({
   ),
 });
 export type TopProductsQuery = z.infer<typeof topProductsQuerySchema>['query'];
+
+/**
+ * Zonas que acepta `?tz=` (HU-REP-04): nombres IANA que conoce el runtime, más `UTC`, que
+ * `Intl.supportedValuesOf` no lista. Sin offsets como `-05:00`: con horario de verano el desfase no
+ * es constante dentro del periodo y el pico se correría una hora en parte del rango.
+ */
+const ZONAS_VALIDAS: ReadonlySet<string> = new Set([...Intl.supportedValuesOf('timeZone'), TZ_DEFAULT]);
+
+export const peakHoursQuerySchema = z.object({
+  query: conReglasDeRango(
+    rangoQueryBase.extend({
+      tz: z
+        .string()
+        .trim()
+        .max(64)
+        .refine((tz) => ZONAS_VALIDAS.has(tz), { message: 'Zona horaria desconocida. Usa un nombre IANA como America/Bogota.' })
+        .default(TZ_DEFAULT),
+    }),
+  ),
+});
+export type PeakHoursQuery = z.infer<typeof peakHoursQuerySchema>['query'];

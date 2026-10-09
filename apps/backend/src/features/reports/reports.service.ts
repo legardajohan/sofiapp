@@ -13,18 +13,23 @@ import { listarProductosKb } from '../kb/kb-productos.reader.js';
 import {
   ACCION_HANDOFF,
   ACCIONES_ETAPA_LEAD,
+  DESFASE_MAX_MS,
   PREFIJO_CLIENTE_DEMO,
   RANGO_DEFAULT_DIAS,
   RANGO_MAX_DIAS,
   type IAdvisorReportResponse,
   type IAdvisorRow,
   type IHandoffRateResponse,
+  type IPeakDayRow,
+  type IPeakHourRow,
+  type IPeakHoursResponse,
   type ITopProductRow,
   type ITopProductsResponse,
 } from './reports.types.js';
 import type {
   AdvisorReportQuery,
   HandoffRateQuery,
+  PeakHoursQuery,
   RangoReporteQuery,
   TopProductsQuery,
 } from './reports.validation.js';
@@ -408,5 +413,124 @@ export async function getTopProducts(
       conversaciones: restantesConversaciones,
       share: ratio(restantesConversaciones, clasificadas),
     },
+  };
+}
+
+/* ─────────────────────────── HU-REP-04 — Horas pico de mensajería ─────────────────────────── */
+
+interface FilaHoraria {
+  _id: { dia: string; hora: number };
+  entrantes: number;
+  salientes: number;
+}
+
+const HORAS_DEL_DIA = 24;
+
+/** `YYYY-MM-DD` del instante, leído en UTC: así representa `resolverRango` los días calendario. */
+const diaIso = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** Todos los días calendario del rango, en orden, para rellenar los vacíos con 0. */
+function diasDelRango(r: Rango): string[] {
+  const dias: string[] = [];
+  for (let t = inicioDelDiaUtc(r.desde).getTime(); t <= r.hasta.getTime(); t += DIA_MS) {
+    dias.push(diaIso(new Date(t)));
+  }
+  return dias;
+}
+
+/**
+ * Mensajes por `{ día, hora }` en la zona `tz`, de clientes que existen y no son demo.
+ *
+ * Los días del rango se interpretan EN la zona: el `$match` inicial usa el índice
+ * `{ tenantId, createdAt }` con una ventana UTC ensanchada ±14 h, y el filtro fino es por día local.
+ * El `$lookup` va tras un primer `$group` por cliente para que lo acoten los pares cliente-hora y no
+ * el volumen de mensajes.
+ */
+async function contarMensajesPorHora(tenantOid: Types.ObjectId, r: Rango, tz: string): Promise<FilaHoraria[]> {
+  return aggregateScoped<FilaHoraria>(Message, tenantOid, [
+    {
+      $match: {
+        createdAt: {
+          $gte: new Date(r.desde.getTime() - DESFASE_MAX_MS),
+          $lte: new Date(r.hasta.getTime() + DESFASE_MAX_MS),
+        },
+      },
+    },
+    {
+      $addFields: {
+        dia: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: tz } },
+        hora: { $hour: { date: '$createdAt', timezone: tz } },
+      },
+    },
+    { $match: { dia: { $gte: diaIso(r.desde), $lte: diaIso(r.hasta) } } },
+    {
+      $group: {
+        _id: { c: '$clienteId', dia: '$dia', hora: '$hora' },
+        entrantes: { $sum: { $cond: [{ $eq: ['$direccion', 'inbound'] }, 1, 0] } },
+        salientes: { $sum: { $cond: [{ $eq: ['$direccion', 'inbound'] }, 0, 1] } },
+      },
+    },
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id.c', { metaUserId: 1 }, 'c'),
+    { $unwind: '$c' },
+    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    {
+      $group: {
+        _id: { dia: '$_id.dia', hora: '$_id.hora' },
+        entrantes: { $sum: '$entrantes' },
+        salientes: { $sum: '$salientes' },
+      },
+    },
+  ]);
+}
+
+/** El índice de la fila con más entrantes; empate → la primera. `-1` si ninguna tiene entrantes. */
+function indiceDelPico(filas: Array<{ entrantes: number }>): number {
+  let mejor = -1;
+  filas.forEach((f, i) => {
+    if (f.entrantes > 0 && (mejor === -1 || f.entrantes > (filas[mejor]?.entrantes ?? 0))) mejor = i;
+  });
+  return mejor;
+}
+
+export async function getPeakHours(
+  tenantId: string,
+  q: PeakHoursQuery,
+  now: Date = new Date(),
+): Promise<IPeakHoursResponse> {
+  const rango = resolverRango(q, now);
+  const filas = await contarMensajesPorHora(new Types.ObjectId(tenantId), rango, q.tz);
+
+  const porHora: IPeakHourRow[] = Array.from({ length: HORAS_DEL_DIA }, (_, hora) => ({
+    hora,
+    total: 0,
+    entrantes: 0,
+    salientes: 0,
+  }));
+  const porDia: IPeakDayRow[] = diasDelRango(rango).map((fecha) => ({ fecha, total: 0, entrantes: 0, salientes: 0 }));
+  const diaPorFecha = new Map(porDia.map((d) => [d.fecha, d]));
+
+  for (const { _id, entrantes, salientes } of filas) {
+    for (const fila of [porHora[_id.hora], diaPorFecha.get(_id.dia)]) {
+      if (!fila) continue;
+      fila.entrantes += entrantes;
+      fila.salientes += salientes;
+      fila.total += entrantes + salientes;
+    }
+  }
+
+  const iHora = indiceDelPico(porHora);
+  const iDia = indiceDelPico(porDia);
+  const entrantes = porHora.reduce((s, f) => s + f.entrantes, 0);
+  const salientes = porHora.reduce((s, f) => s + f.salientes, 0);
+
+  return {
+    generadoAt: now.toISOString(),
+    rango: { desde: rango.desde.toISOString(), hasta: rango.hasta.toISOString() },
+    timezone: q.tz,
+    totales: { mensajes: entrantes + salientes, entrantes, salientes },
+    porHora,
+    porDia,
+    pico: iHora === -1 ? null : { hora: iHora, entrantes: porHora[iHora]!.entrantes },
+    diaPico: iDia === -1 ? null : { fecha: porDia[iDia]!.fecha, entrantes: porDia[iDia]!.entrantes },
   };
 }

@@ -117,3 +117,53 @@ export interface ITopProductsResponse {
   /** Lo que queda fuera del corte `top`. */
   restantes: { productos: number; conversaciones: number; share: number };
 }
+
+/*
+ * HU-REP-04 — Horas pico de mensajería. Definiciones de "demanda" y de la zona horaria:
+ * `docs/domain.md` § Horas pico y `docs/specs/HU-REP-04-horas-pico-mensajeria/spec.md`.
+ */
+
+/** Zona por defecto: la misma lente que `admin-metrics` (los `createdAt` están en UTC). */
+export const TZ_DEFAULT = 'UTC';
+
+/**
+ * El mayor desfase de una zona IANA respecto de UTC (Kiribati, +14 h). Ensancha la ventana UTC del
+ * `$match` para que ningún día calendario de la zona quede cortado antes de filtrarlo por día local.
+ */
+export const DESFASE_MAX_MS = 14 * 60 * 60 * 1000;
+
+export interface IVolumenMensajes {
+  /** `entrantes + salientes`. */
+  total: number;
+  /** `direccion: 'inbound'`: lo que escriben los clientes. Es la demanda. */
+  entrantes: number;
+  /** `direccion: 'outbound'`: respuestas del bot y de los asesores, y envíos de plantilla. */
+  salientes: number;
+}
+
+export interface IPeakHourRow extends IVolumenMensajes {
+  /** Hora del día en `timezone`, 0..23. */
+  hora: number;
+}
+
+export interface IPeakDayRow extends IVolumenMensajes {
+  /** Día calendario en `timezone`, `YYYY-MM-DD`. */
+  fecha: string;
+}
+
+export interface IPeakHoursResponse {
+  generadoAt: string;
+  /** Días calendario de `timezone`, expresados como medianoche y fin de día. */
+  rango: { desde: string; hasta: string };
+  /** La zona IANA con la que se agrupó. */
+  timezone: string;
+  totales: { mensajes: number; entrantes: number; salientes: number };
+  /** Siempre 24 filas, 0..23, con las horas vacías en 0. */
+  porHora: IPeakHourRow[];
+  /** Un día por cada día del rango, con los vacíos en 0. */
+  porDia: IPeakDayRow[];
+  /** Hora con más entrantes (empate: la más temprana); `null` sin entrantes. */
+  pico: { hora: number; entrantes: number } | null;
+  /** Día con más entrantes (empate: el primero); `null` sin entrantes. */
+  diaPico: { fecha: string; entrantes: number } | null;
+}
