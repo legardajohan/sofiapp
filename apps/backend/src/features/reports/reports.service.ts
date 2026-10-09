@@ -9,6 +9,7 @@ import { AuditEvent } from '../audit/audit.model.js';
 import { User } from '../users/user.model.js';
 import { KEY_ESTADO_VENTA } from '../estado/estado.types.js';
 import { MOTIVOS_HANDOFF, type HandoffMotivo } from '../ai/ai-handoff.types.js';
+import { listarProductosKb } from '../kb/kb-productos.reader.js';
 import {
   ACCION_HANDOFF,
   ACCIONES_ETAPA_LEAD,
@@ -18,8 +19,15 @@ import {
   type IAdvisorReportResponse,
   type IAdvisorRow,
   type IHandoffRateResponse,
+  type ITopProductRow,
+  type ITopProductsResponse,
 } from './reports.types.js';
-import type { AdvisorReportQuery, HandoffRateQuery, RangoReporteQuery } from './reports.validation.js';
+import type {
+  AdvisorReportQuery,
+  HandoffRateQuery,
+  RangoReporteQuery,
+  TopProductsQuery,
+} from './reports.validation.js';
 
 /*
  * HU-REP-01 — reporte de TENANT. Todas las lecturas pasan por `aggregateScoped`/`findScoped`, que
@@ -296,5 +304,109 @@ export async function getHandoffRate(
     handoffsRegistrados,
     tasaEscalamiento: ratio(transferidas, conversacionesIa),
     transferidasPorMotivo: MOTIVOS_HANDOFF.map((motivo) => ({ motivo, conversaciones: conteo.get(motivo) ?? 0 })),
+  };
+}
+
+/* ─────────────────────────── HU-REP-03 — Productos más consultados ─────────────────────────── */
+
+/** Grupos reservados de la agregación: nunca colisionan con una clave real (`normalizarClave`). */
+const GRUPO_SIN_CLASIFICAR = '__sin';
+const GRUPO_OTROS = '__otros';
+
+interface FilaTema {
+  _id: string;
+  n: number;
+  nombre: string | null;
+}
+
+/**
+ * Consultas por tema: conversaciones con al menos un mensaje del CLIENTE en el rango, agrupadas por
+ * su tema ACTUAL (`Cliente.temaIA`); sin demo ni huérfanos. Mismo molde que `contarAtendidas`, y la
+ * misma limitación aceptada: si el tema de un hilo cambió, el periodo anterior va al tema nuevo.
+ */
+async function contarConsultasPorTema(tenantOid: Types.ObjectId, r: Rango): Promise<FilaTema[]> {
+  return aggregateScoped<FilaTema>(Message, tenantOid, [
+    { $match: { sender: 'user', createdAt: { $gte: r.desde, $lte: r.hasta } } },
+    { $group: { _id: '$clienteId' } },
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1, temaIA: 1 }, 'c'),
+    { $unwind: '$c' },
+    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    {
+      $group: {
+        _id: {
+          $cond: [
+            { $ifNull: ['$c.temaIA', false] },
+            { $ifNull: ['$c.temaIA.clave', GRUPO_OTROS] },
+            GRUPO_SIN_CLASIFICAR,
+          ],
+        },
+        n: { $sum: 1 },
+        nombre: { $last: '$c.temaIA.nombre' },
+      },
+    },
+  ]);
+}
+
+function compararProductos(a: ITopProductRow, b: ITopProductRow): number {
+  return b.conversaciones - a.conversaciones || a.nombre.localeCompare(b.nombre, 'es');
+}
+
+export async function getTopProducts(
+  tenantId: string,
+  q: TopProductsQuery,
+  now: Date = new Date(),
+): Promise<ITopProductsResponse> {
+  const rango = resolverRango(q, now);
+  const tenantOid = new Types.ObjectId(tenantId);
+
+  const [filas, { productos }] = await Promise.all([
+    contarConsultasPorTema(tenantOid, rango),
+    listarProductosKb(tenantId),
+  ]);
+
+  // El nombre vigente manda: si la empresa corrigió una tilde, el ranking la refleja ya. Lo que no
+  // está en la KB conserva el nombre con el que se clasificó y se marca `enCatalogo: false`.
+  const nombreVigente = new Map(productos.map((p) => [p.clave, p.nombre]));
+  let sinClasificar = 0;
+  let otros = 0;
+  const porProducto: ITopProductRow[] = [];
+  for (const f of filas) {
+    if (f._id === GRUPO_SIN_CLASIFICAR) sinClasificar += f.n;
+    else if (f._id === GRUPO_OTROS) otros += f.n;
+    else {
+      const vigente = nombreVigente.get(f._id);
+      porProducto.push({
+        clave: f._id,
+        nombre: vigente ?? f.nombre ?? f._id,
+        enCatalogo: vigente !== undefined,
+        conversaciones: f.n,
+        share: 0,
+      });
+    }
+  }
+
+  const totalConsultas = filas.reduce((s, f) => s + f.n, 0);
+  const clasificadas = totalConsultas - sinClasificar;
+  porProducto.sort(compararProductos);
+  for (const fila of porProducto) fila.share = ratio(fila.conversaciones, clasificadas);
+
+  const ranking = porProducto.slice(0, q.top);
+  const fuera = porProducto.slice(q.top);
+  const restantesConversaciones = fuera.reduce((s, f) => s + f.conversaciones, 0);
+
+  return {
+    generadoAt: now.toISOString(),
+    rango: { desde: rango.desde.toISOString(), hasta: rango.hasta.toISOString() },
+    catalogoDisponible: productos.length > 0,
+    totalConsultas,
+    clasificadas,
+    sinClasificar,
+    ranking,
+    otros: { conversaciones: otros, share: ratio(otros, clasificadas) },
+    restantes: {
+      productos: fuera.length,
+      conversaciones: restantesConversaciones,
+      share: ratio(restantesConversaciones, clasificadas),
+    },
   };
 }

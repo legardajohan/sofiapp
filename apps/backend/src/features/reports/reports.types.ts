@@ -78,3 +78,42 @@ export interface IHandoffRateResponse {
   /** Los motivos en el orden de `MOTIVOS_HANDOFF`, todos presentes; Σ = `transferidas`. */
   transferidasPorMotivo: IHandoffMotivoRow[];
 }
+
+/*
+ * HU-REP-03 — Productos más consultados. Definiciones de "consulta" y "tema": `docs/domain.md`
+ * § Productos más consultados y `docs/specs/HU-REP-03-productos-mas-consultados/spec.md`.
+ */
+
+export const TOP_DEFAULT = 10;
+export const TOP_MAX = 50;
+
+export interface ITopProductRow {
+  /** Nombre normalizado del producto: su identidad, porque las filas de la KB no tienen id. */
+  clave: string;
+  /** El nombre vigente en la KB; si el producto ya no está, el que se guardó al clasificar. */
+  nombre: string;
+  /** `false` = el producto ya no está en la KB (retirado o renombrado). */
+  enCatalogo: boolean;
+  conversaciones: number;
+  /** `conversaciones / clasificadas`, 4 decimales. */
+  share: number;
+}
+
+export interface ITopProductsResponse {
+  generadoAt: string;
+  rango: { desde: string; hasta: string };
+  /** La KB del tenant tiene productos: sin ellos no hay vocabulario y nada se clasifica. */
+  catalogoDisponible: boolean;
+  /** Conversaciones con al menos un mensaje del cliente en el rango. */
+  totalConsultas: number;
+  /** `totalConsultas − sinClasificar`. Denominador de todos los `share`. */
+  clasificadas: number;
+  /** Conversaciones sin `temaIA` todavía. */
+  sinClasificar: number;
+  /** Los `top` productos con más conversaciones. Σ ranking + restantes + otros = clasificadas. */
+  ranking: ITopProductRow[];
+  /** Clasificadas sin producto que encaje. */
+  otros: { conversaciones: number; share: number };
+  /** Lo que queda fuera del corte `top`. */
+  restantes: { productos: number; conversaciones: number; share: number };
+}

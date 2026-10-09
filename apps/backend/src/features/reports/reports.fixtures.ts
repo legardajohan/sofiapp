@@ -4,6 +4,8 @@ import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from '../message/message.model.js';
 import { Lead } from '../lead/lead.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
+import { KbDocument } from '../kb/kb-document.model.js';
+import { normalizarClave } from '../kb/kb-productos.reader.js';
 
 /*
  * Fixtures de los tests de HU-REP-01 (solo tests). Se insertan con `Model.collection` —el driver,
@@ -129,4 +131,42 @@ export async function crearHandoff(
     despues: { iaHabilitada: false, asignadoA: null, motivo, condicion },
     createdAt,
   });
+}
+
+/** La tarjeta «Productos y servicios» de la KB (HU-KB-09) con estos nombres (HU-REP-03). */
+export async function crearProductosKb(tenantId: Oid, nombres: string[]): Promise<void> {
+  await KbDocument.collection.insertOne({
+    tenantId,
+    titulo: 'Productos y servicios',
+    contenido: 'x',
+    oculto: false,
+    estructura: {
+      schemaVersion: 1,
+      schemaId: 'productos',
+      campos: { catalogo: { tipo: 'repetible', items: nombres.map((nombre) => ({ nombre, descripcion: '' })) } },
+      adicional: '',
+    },
+    createdAt: new Date(),
+  });
+}
+
+/** Deja el hilo clasificado con ese producto, o como `otros` con `nombre: null` (HU-REP-03). */
+export async function clasificarHilo(tenantId: Oid, clienteId: Oid, nombre: string | null): Promise<void> {
+  await Cliente.collection.updateOne(
+    { _id: clienteId, tenantId },
+    {
+      $set: {
+        temaIA: {
+          clave: nombre === null ? null : normalizarClave(nombre),
+          nombre,
+          confianza: 0.9,
+          at: new Date(),
+          mensajesCliente: 2,
+          repeticiones: 1,
+          catalogoVersion: 'v',
+          modelo: 'gemini',
+        },
+      },
+    },
+  );
 }

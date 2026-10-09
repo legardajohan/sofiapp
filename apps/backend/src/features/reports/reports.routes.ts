@@ -5,8 +5,16 @@ import { authorize } from '../../middlewares/authorize.middleware.js';
 import { authorizeSubrol, SUBROLES_REPORTES } from '../../middlewares/authorize-subrol.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { advisorReportQuerySchema, handoffRateQuerySchema } from './reports.validation.js';
-import { getAdvisorReportController, getHandoffRateController } from './reports.controller.js';
+import {
+  advisorReportQuerySchema,
+  handoffRateQuerySchema,
+  topProductsQuerySchema,
+} from './reports.validation.js';
+import {
+  getAdvisorReportController,
+  getHandoffRateController,
+  getTopProductsController,
+} from './reports.controller.js';
 
 const router: ExpressRouter = Router();
 
@@ -31,6 +39,17 @@ router.get(
   authorizeSubrol(SUBROLES_REPORTES),
   validate(handoffRateQuerySchema),
   asyncHandler(getHandoffRateController),
+);
+
+// HU-REP-03: productos más consultados. Mismo gate que los dos anteriores (ADR 0011).
+router.get(
+  '/top-products',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  authorizeSubrol(SUBROLES_REPORTES),
+  validate(topProductsQuerySchema),
+  asyncHandler(getTopProductsController),
 );
 
 export default router;
