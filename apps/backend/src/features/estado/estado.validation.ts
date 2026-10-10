@@ -43,6 +43,7 @@ export const updateEstadoSchema = z.object({
       color: colorHex.optional(),
       activo: z.boolean().optional(),
       esSalida: z.boolean().optional(),
+      esConversion: z.boolean().optional(),
       orden: z.number().int().min(0).max(999).optional(),
     })
     .strict()

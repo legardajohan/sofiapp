@@ -26,6 +26,7 @@ import type { IWhatsAppMessage, IWhatsAppWebhookPayload } from '../features/webh
 import { esTipoConTexto, mapTipoMensajeMeta } from '../features/message/message.types.js';
 import { clasificarTexto } from '../features/media/media.service.js';
 import { mediaIngestJobId } from './media-ingest.processor.js';
+import { registrarRespuestaCampana } from '../features/campaign/campaign.metrics.service.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
 
 export interface InboundJobData {
@@ -98,6 +99,15 @@ async function acusarNoTexto(tenantId: string, clienteId: string): Promise<void>
 }
 
 /**
+ * Cuándo escribió el contacto según Meta (`timestamp` en segundos), no cuándo lo procesamos: con la
+ * cola atrasada, la diferencia podría sacar de la ventana de atribución una respuesta legítima.
+ */
+function momentoDelMensaje(msg: IWhatsAppMessage): Date {
+  const segundos = Number(msg.timestamp);
+  return Number.isFinite(segundos) && segundos > 0 ? new Date(segundos * 1000) : new Date();
+}
+
+/**
  * Ingesta de un webhook entrante de WhatsApp: persiste los mensajes, refresca la bandeja en vivo y
  * decide si Sofi debe responder. Función pura respecto de BullMQ —el `Worker` se construye en
  * `worker.ts`— para que la decisión de auto-responder se pueda testear sin Redis.
@@ -163,6 +173,18 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
 
         // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
         await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);
+
+        // HU-MARK-04: ¿responde a una campaña? Va después de persistir y notificar, y aislado: una
+        // métrica nunca puede costar la ingesta, ni reintentar el job entero por un fallo ajeno.
+        try {
+          await registrarRespuestaCampana(tenantId, clienteId.toString(), momentoDelMensaje(msg));
+        } catch (err: unknown) {
+          logger.error('No se pudo atribuir la respuesta a una campaña', {
+            tenantId,
+            clienteId: clienteId.toString(),
+            error: String(err),
+          });
+        }
 
         // La descarga va en su propia cola: el mensaje ya está guardado y en la bandeja, y bajar
         // 16 MB dentro de ESTE job convertiría una ingesta de 200 ms en una de varios segundos,

@@ -51,6 +51,7 @@ const etapa = {
   activo: true,
   esDefecto: true,
   esSalida: false,
+  esConversion: false,
 };
 
 /** Espía la URL, que es donde vive la vista para poder compartirse por enlace. */
