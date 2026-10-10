@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { FileStack } from 'lucide-react';
 import { CreateTemplateDialog } from '../components/CreateTemplateDialog.js';
 import { TemplateList } from '../components/TemplateList.js';
+import { useTemplateRealtime } from '../hooks/useTemplateRealtime.js';
 
 export function TemplatesPage(): React.ReactElement {
   const [dialogAbierto, setDialogAbierto] = useState(false);
+  useTemplateRealtime();
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

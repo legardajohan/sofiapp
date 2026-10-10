@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CampaignWizard } from './CampaignWizard.js';
@@ -75,6 +75,9 @@ describe('CampaignWizard', () => {
           ejemplos: [],
           parametrosBody: 0,
           cabecera: 'NINGUNA',
+          pie: null,
+          imagen: null,
+          motivoRechazo: null,
           obsoleta: false,
           syncedAt: new Date().toISOString(),
         },
@@ -155,6 +158,54 @@ describe('CampaignWizard', () => {
     expect(screen.getByRole('button', { name: /Enviar a 120/ })).toBeDisabled();
     // Guardar el borrador SÍ se permite: el trabajo del wizard no se pierde por un número enfermo.
     expect(screen.getByRole('button', { name: 'Guardar borrador' })).toBeEnabled();
+  });
+
+  it('HT-WA-04: ofrece la plantilla con imagen, muestra la de por defecto y manda el reemplazo', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:reemplazo');
+    URL.revokeObjectURL = vi.fn();
+    mockTemplates.mockResolvedValue({
+      data: [
+        {
+          id: 't9',
+          name: 'promo_img',
+          language: 'es',
+          category: 'MARKETING',
+          status: 'APPROVED',
+          cuerpo: 'Abrimos matrículas',
+          ejemplos: [],
+          parametrosBody: 0,
+          cabecera: 'IMAGE',
+          pie: null,
+          imagen: { url: '/media/templates/t9/imagen?t=x', mimeType: 'image/png', tamanoBytes: 1 },
+          motivoRechazo: null,
+          obsoleta: false,
+          syncedAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 100,
+    });
+    const user = userEvent.setup();
+    const { onSubmit } = renderWizard();
+
+    await waitFor(() => expect(screen.getByText('120')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.click(await screen.findByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: /promo_img/ }));
+
+    expect(screen.getByText('Imagen por defecto')).toBeInTheDocument();
+    const png = new File(['x'], 'otra.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('imagen-mensaje-input'), { target: { files: [png] } });
+    expect(screen.getByText('Imagen personalizada')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.type(screen.getByLabelText('Nombre de la campaña'), 'Con otra imagen');
+    await user.click(screen.getByRole('button', { name: /Enviar a 120/ }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ templateId: 't9', imagen: png, lanzar: true }),
+    );
   });
 
   it('ya no ofrece rol del contacto ni datos propios de la ficha', async () => {

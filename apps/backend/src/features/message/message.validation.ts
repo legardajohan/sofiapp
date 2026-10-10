@@ -14,5 +14,10 @@ export const sendTemplateSchema = z.object({
     clienteId: z.string().min(1),
     templateId: z.string().regex(/^[0-9a-f]{24}$/i, 'ID inválido'),
     parametros: z.array(z.string()).default([]),
+    /**
+     * HT-WA-04: imagen de reemplazo subida con `POST /campaigns/media`. Sin ella, una plantilla de
+     * imagen se envía con su imagen por defecto.
+     */
+    imagenHeaderUploadId: z.string().regex(/^[0-9a-f]{24}$/i, 'ID inválido').optional(),
   }),
 });

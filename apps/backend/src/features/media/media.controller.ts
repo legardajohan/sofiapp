@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Response } from 'express';
 import { env } from '../../config/env.js';
 import { getMediaStorage } from '../../integrations/storage/index.js';
 import {
@@ -7,8 +7,9 @@ import {
   resolverRangoBytes,
   verificarTokenMedia,
 } from './media.service.js';
-import { recursoImagenCampana } from './media.token.js';
+import { recursoImagenCampana, recursoImagenPlantilla } from './media.token.js';
 import { resolverImagenCampana } from '../campaign/campaign.service.js';
+import { resolverImagenPlantilla } from '../whatsapp-template/whatsapp-template.service.js';
 import type { GetCampaignImageQuery, GetMediaQuery } from './media.validation.js';
 
 /**
@@ -106,7 +107,27 @@ export const getCampaignImageController: RequestHandler = async (req, res) => {
   const { t } = req.validatedQuery as unknown as GetCampaignImageQuery;
 
   const { tenantId } = verificarTokenMedia(t, recursoImagenCampana(campaignId));
-  const imagen = await resolverImagenCampana(tenantId, campaignId);
+  await servirImagen(res, await resolverImagenCampana(tenantId, campaignId));
+};
+
+/**
+ * Sirve la imagen por defecto de una plantilla (HT-WA-04). Misma mecánica que la de una campaña: el
+ * token se verifica contra `template-<id>` y `resolverImagenPlantilla` resuelve scoped al tenant
+ * firmado, así que un id de otra empresa es un 404.
+ */
+export const getTemplateImageController: RequestHandler = async (req, res) => {
+  const templateId = req.params['id'] as string;
+  const { t } = req.validatedQuery as unknown as GetCampaignImageQuery;
+
+  const { tenantId } = verificarTokenMedia(t, recursoImagenPlantilla(templateId));
+  await servirImagen(res, await resolverImagenPlantilla(tenantId, templateId));
+};
+
+/** Redirige a la URL firmada del bucket o, en disco local, sirve el stream con cabeceras seguras. */
+async function servirImagen(
+  res: Response,
+  imagen: { mediaKey: string; mimeType: string; tamanoBytes: number },
+): Promise<void> {
   const storage = getMediaStorage();
 
   const url = await storage.urlFirmada(imagen.mediaKey, env.MEDIA_SIGNED_URL_TTL_S);

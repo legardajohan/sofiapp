@@ -4,7 +4,7 @@ import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { subirImagenCampana } from '../../middlewares/upload.middleware.js';
+import { subirImagenCabecera, subirImagenCampana } from '../../middlewares/upload.middleware.js';
 import {
   campaignIdSchema,
   createCampaignSchema,
@@ -14,6 +14,7 @@ import {
   rescheduleCampaignSchema,
   scheduleCampaignSchema,
   transicionSchema,
+  uploadCampaignMediaSchema,
 } from './campaign.validation.js';
 import {
   cancelCampaignController,
@@ -27,6 +28,7 @@ import {
   rescheduleCampaignController,
   resumeCampaignController,
   scheduleCampaignController,
+  uploadCampaignMediaController,
 } from './campaign.controller.js';
 
 const router = Router();
@@ -43,6 +45,18 @@ router.post(
   campaignRoles,
   validate(previewSegmentoSchema),
   asyncHandler(previewSegmentController),
+);
+
+// HT-WA-04 — imagen de reemplazo en dos pasos: responde un `uploadId` que consume `POST /campaigns`
+// o `POST /messages/template`. Multipart, ruta literal: ANTES de `/:id`.
+router.post(
+  '/media',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  subirImagenCabecera,
+  validate(uploadCampaignMediaSchema),
+  asyncHandler(uploadCampaignMediaController),
 );
 
 // HU-MARK-03 — programar con fecha/hora e imagen. Multipart: `subirImagenCampana` va entre

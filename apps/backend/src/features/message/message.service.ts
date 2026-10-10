@@ -9,7 +9,16 @@ import { AppError } from '../../utils/AppError.js';
 import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
-import { buildTemplatePayload } from '../whatsapp-template/whatsapp-template.service.js';
+import {
+  assertContenidoCompatible,
+  buildTemplatePayload,
+} from '../whatsapp-template/whatsapp-template.service.js';
+import { asegurarMetaMediaId, extensionImagen } from '../media/media-meta-cache.js';
+import {
+  aImagenAlmacenada,
+  consumirSubida,
+  liberarSubida,
+} from '../media/media-upload.service.js';
 import { applyDeliveryStatusToRecipient } from '../campaign/campaign.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from './message.model.js';
@@ -37,6 +46,34 @@ export async function saveMessage(
   }
 
   return createScoped(Message, tenantId, dto as unknown as Record<string, unknown>);
+}
+
+/**
+ * Imagen de reemplazo de un envío suelto (HT-WA-04, criterio 12): valida plantilla ↔ imagen ANTES
+ * de consumir la subida —un 422 no debe gastar la imagen— y la sube a Meta. Si Meta la rechaza, la
+ * subida vuelve a quedar disponible para reintentar.
+ *
+ * No se cachea el `media id`: un envío suelto lo usa una vez. Las campañas sí lo cachean.
+ */
+async function subirImagenReemplazo(
+  tenantId: TenantId,
+  contenido: Extract<ContenidoOutbound, { modo: 'plantilla' }>,
+): Promise<{ metaMediaId: string }> {
+  const uploadId = contenido.imagenHeaderUploadId as string;
+  await assertContenidoCompatible(tenantId, contenido.templateId, contenido.parametros, true);
+
+  const subida = await consumirSubida(tenantId, uploadId, 'cabecera-reemplazo');
+  try {
+    const metaMediaId = await asegurarMetaMediaId(tenantId, aImagenAlmacenada(subida), {
+      nombreArchivo: `envio-${uploadId}.${extensionImagen(subida.mimeType)}`,
+      mensajeError: 'No se pudo subir la imagen del mensaje a WhatsApp.',
+      persistir: async () => {},
+    });
+    return { metaMediaId };
+  } catch (err) {
+    await liberarSubida(tenantId, uploadId);
+    throw err;
+  }
 }
 
 /**
@@ -126,10 +163,15 @@ export async function sendOutbound(
     }
   } else {
     // 'plantilla': permitido dentro y fuera de la ventana, Meta lo acepta en ambos casos.
+    const imagenCabecera =
+      contenido.imagenCabecera ??
+      (contenido.imagenHeaderUploadId
+        ? await subirImagenReemplazo(tenantId, contenido)
+        : undefined);
     plantilla = {
       templateId: contenido.templateId,
       parametros: contenido.parametros,
-      ...(contenido.imagenCabecera ? { imagenCabecera: contenido.imagenCabecera } : {}),
+      ...(imagenCabecera ? { imagenCabecera } : {}),
     };
   }
 

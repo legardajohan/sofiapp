@@ -17,6 +17,14 @@ const CONFIG: Record<EstadoPlantilla, { label: string; className: string; dotCla
     className: 'bg-destructive-subtle text-destructive border-destructive/30',
     dotClassName: 'bg-destructive',
   },
+  // HT-WA-04: Meta revisa de nuevo tras apelar el rechazo. Mismo tono que «Esperando a Meta»:
+  // para quien la mira, es otra espera.
+  IN_APPEAL: {
+    label: 'En apelación',
+    className:
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/50',
+    dotClassName: 'bg-amber-500',
+  },
   PAUSED: {
     label: 'Pausada',
     className: 'bg-muted text-muted-foreground border-border',

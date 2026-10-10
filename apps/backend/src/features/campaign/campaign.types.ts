@@ -206,6 +206,8 @@ export interface CreateCampaignDTO {
   lanzar?: boolean;
   /** ISO-8601. Deja la campaña en `programada`; la levanta el barrido al llegar la hora. */
   programadaPara?: string;
+  /** HT-WA-04: imagen de reemplazo (`POST /campaigns/media`). Sin ella, la de la plantilla. */
+  imagenHeaderUploadId?: string;
 }
 
 /** Alta de una campaña programada (HU-MARK-03). La imagen llega aparte, como archivo multipart. */

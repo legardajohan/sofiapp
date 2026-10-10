@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getWhatsAppTemplate } from '@/api/whatsapp-templates';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -38,16 +40,27 @@ export function RescheduleDialog({
 }: Props): React.ReactElement {
   const [fecha, setFecha] = useState<Date | null>(null);
   const [imagen, setImagen] = useState<File | null>(null);
+  // HT-WA-04: volver a la imagen por defecto de la plantilla (`quitarImagen` en el backend).
+  const [restaurar, setRestaurar] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setFecha(campana.programadaPara ? new Date(campana.programadaPara) : null);
     setImagen(null);
+    setRestaurar(false);
   }, [open, campana.programadaPara]);
+
+  // Solo hace falta la plantilla si la campaña lleva imagen propia: es lo que se puede restaurar.
+  const { data: plantilla } = useQuery({
+    queryKey: ['whatsapp-templates', 'detalle', campana.templateId],
+    queryFn: () => getWhatsAppTemplate(campana.templateId),
+    enabled: open && campana.imagen !== null,
+  });
+  const imagenDefectoUrl = plantilla?.imagen ? apiUrl(plantilla.imagen.url) : null;
 
   const horaOriginal = campana.programadaPara ? new Date(campana.programadaPara).getTime() : null;
   const cambioHora = fecha !== null && fecha.getTime() !== horaOriginal;
-  const hayCambios = cambioHora || imagen !== null;
+  const hayCambios = cambioHora || imagen !== null || restaurar;
   const horaValida = problemaConHora(fecha) === null;
 
   function guardar(): void {
@@ -55,6 +68,7 @@ export function RescheduleDialog({
       id: campana.id,
       ...(cambioHora && fecha ? { programadaPara: fecha.toISOString() } : {}),
       ...(imagen ? { imagen } : {}),
+      ...(restaurar ? { quitarImagen: true } : {}),
     });
   }
 
@@ -74,12 +88,46 @@ export function RescheduleDialog({
           {campana.imagen ? (
             <div className="space-y-1.5">
               <Label>Imagen</Label>
-              <ImageDropzone
-                valor={imagen}
-                onChange={setImagen}
-                urlExistente={apiUrl(campana.imagen.url)}
-                obligatoria
-              />
+              {restaurar && imagenDefectoUrl ? (
+                <figure className="overflow-hidden rounded-lg border border-border bg-card">
+                  <img
+                    src={imagenDefectoUrl}
+                    alt="Imagen por defecto de la plantilla"
+                    className="aspect-[1.91/1] w-full bg-muted object-cover motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+                  />
+                  <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+                    <span className="min-w-0 flex-1 text-sm text-muted-foreground">
+                      Se enviará la imagen por defecto de la plantilla.
+                    </span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setRestaurar(false)}>
+                      Deshacer
+                    </Button>
+                  </figcaption>
+                </figure>
+              ) : (
+                <>
+                  <ImageDropzone
+                    valor={imagen}
+                    onChange={setImagen}
+                    urlExistente={apiUrl(campana.imagen.url)}
+                    obligatoria
+                  />
+                  {imagenDefectoUrl ? (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto px-0"
+                      onClick={() => {
+                        setImagen(null);
+                        setRestaurar(true);
+                      }}
+                    >
+                      Restaurar imagen por defecto
+                    </Button>
+                  ) : null}
+                </>
+              )}
             </div>
           ) : null}
         </div>

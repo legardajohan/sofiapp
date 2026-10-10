@@ -9,6 +9,8 @@ import { InboxError } from '../components/InboxError.js';
 import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
+import { SendTemplateDialog } from '../components/SendTemplateDialog.js';
+import { useAuthStore } from '@/stores/authStore';
 import { HandoffBanner } from '../components/HandoffBanner.js';
 import { SofiToggle } from '../components/SofiToggle.js';
 import { AssignMenu } from '../components/AssignMenu.js';
@@ -134,6 +136,9 @@ export function InboxPage(): React.ReactElement {
 
   // ─── Conversión en lead (HU-CRM-01) ───────────────────────────────────────────
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
+  // HT-WA-04: enviar una plantilla con la ventana cerrada. Solo `admin`, como `POST /messages/template`.
+  const [plantillaOpen, setPlantillaOpen] = useState(false);
+  const esAdmin = useAuthStore((s) => s.user?.rol === 'admin');
   const [leadDuplicado, setLeadDuplicado] = useState<string | null>(null);
 
   /** Ante un 409 el diálogo se cierra y la ficha se abre en el lead que ya existía. */
@@ -372,7 +377,11 @@ export function InboxPage(): React.ReactElement {
                 condicion={active.handoff.condicion}
               />
             )}
-            {!active.ventana24hAbierta && <WindowClosedBanner />}
+            {!active.ventana24hAbierta && (
+              <WindowClosedBanner
+                {...(esAdmin ? { onEnviarPlantilla: () => setPlantillaOpen(true) } : {})}
+              />
+            )}
             {/* `key` por conversación (HU-OMNI-07): cambiar de conversación a mitad de una
                 grabación la descarta y libera el micrófono, en vez de dejarla viva y enviarla a
                 la conversación que se abrió después. */}
@@ -441,6 +450,15 @@ export function InboxPage(): React.ReactElement {
               },
             );
           }}
+        />
+      )}
+
+      {active && esAdmin && (
+        <SendTemplateDialog
+          open={plantillaOpen}
+          onOpenChange={setPlantillaOpen}
+          clienteId={active.id}
+          nombre={active.nombre ?? active.telefono}
         />
       )}
     </div>

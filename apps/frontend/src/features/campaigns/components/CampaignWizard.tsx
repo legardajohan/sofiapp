@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiUrl } from '@/api/apiClient';
 import { getWhatsAppTemplates } from '@/api/whatsapp-templates';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,11 +21,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TemplatePreview } from '@/features/whatsapp-templates/components/TemplatePreview';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSegmentPreview } from '../hooks/useCampaigns.js';
 import { formatearNumero } from '../lib/pacing.js';
 import { AudienceMeter } from './AudienceMeter.js';
+import { HeaderImageField } from './HeaderImageField.js';
+import { MessagePreview } from './MessagePreview.js';
 import { SegmentCount } from './SegmentCount.js';
 import { SegmentFilters } from './SegmentFilters.js';
 import type { CreateCampaignPayload, SegmentoFiltros } from '../types.js';
@@ -57,8 +59,10 @@ function borradorVacio(): {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  /** HT-WA-04: imagen de reemplazo. `null` = la imagen por defecto de la plantilla. */
+  imagen: File | null;
 } {
-  return { nombre: '', filtros: {}, templateId: '', parametros: [] };
+  return { nombre: '', filtros: {}, templateId: '', parametros: [], imagen: null };
 }
 
 /**
@@ -100,15 +104,29 @@ export function CampaignWizard({
   });
 
   const aprobadas = useMemo(
-    // Las de imagen/documento/vídeo en la cabecera no se pueden enviar sin el archivo: esas se
-    // programan desde el programador de campañas (HU-MARK-03), que sí sabe adjuntarlo.
+    // Documento y vídeo en la cabecera siguen sin poder enviarse (no hay cómo adjuntarlos). Las de
+    // imagen sí desde HT-WA-04: salen con su imagen por defecto o con la que se elija aquí.
     () =>
       (plantillas?.data ?? []).filter(
-        (t) => !t.obsoleta && (t.cabecera === 'NINGUNA' || t.cabecera === 'TEXT'),
+        (t) => !t.obsoleta && ['NINGUNA', 'TEXT', 'IMAGE'].includes(t.cabecera),
       ),
     [plantillas],
   );
   const plantilla = aprobadas.find((t) => t.id === borrador.templateId) ?? null;
+  const llevaImagen = plantilla?.cabecera === 'IMAGE';
+  const imagenDefectoUrl = plantilla?.imagen ? apiUrl(plantilla.imagen.url) : null;
+
+  // Una sola URL de objeto para la vista previa, ligada a la imagen de reemplazo.
+  const [urlReemplazo, setUrlReemplazo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!borrador.imagen) {
+      setUrlReemplazo(null);
+      return;
+    }
+    const url = URL.createObjectURL(borrador.imagen);
+    setUrlReemplazo(url);
+    return () => URL.revokeObjectURL(url);
+  }, [borrador.imagen]);
 
   const total = preview.data?.total ?? 0;
   const presupuesto = preview.data?.presupuesto ?? null;
@@ -119,7 +137,11 @@ export function CampaignWizard({
 
   const puedeAvanzar: Record<Paso, boolean> = {
     segmento: total > 0,
-    plantilla: plantilla !== null && parametrosCompletos,
+    plantilla:
+      plantilla !== null &&
+      parametrosCompletos &&
+      // Sin imagen por defecto, la de reemplazo es obligatoria: el backend respondería 422.
+      (!llevaImagen || imagenDefectoUrl !== null || borrador.imagen !== null),
     revision: borrador.nombre.trim().length > 0 && !(presupuesto?.bloqueado ?? false),
   };
 
@@ -131,6 +153,8 @@ export function CampaignWizard({
       // Los huecos se reinician al cambiar de plantilla: conservarlos dejaría los valores de una
       // plantilla metidos en los huecos de otra, que casi nunca significan lo mismo.
       parametros: Array.from({ length: elegida?.parametrosBody ?? 0 }, () => ''),
+      // La imagen elegida era para la plantilla anterior: se vuelve a la por defecto de la nueva.
+      imagen: null,
     }));
   }
 
@@ -140,6 +164,7 @@ export function CampaignWizard({
       filtros: borrador.filtros,
       templateId: borrador.templateId,
       parametros: borrador.parametros,
+      ...(llevaImagen && borrador.imagen ? { imagen: borrador.imagen } : {}),
       ...(lanzar ? { lanzar: true } : {}),
     });
   }
@@ -219,14 +244,28 @@ export function CampaignWizard({
                     </div>
                   ) : null}
 
-                  <TemplatePreview
-                    cuerpo={plantilla.cuerpo}
-                    ejemplos={
-                      borrador.parametros.some((p) => p.trim())
-                        ? borrador.parametros
-                        : plantilla.ejemplos
-                    }
-                  />
+                  {llevaImagen ? (
+                    <HeaderImageField
+                      imagenDefectoUrl={imagenDefectoUrl}
+                      valor={borrador.imagen}
+                      onChange={(imagen) => setBorrador((b) => ({ ...b, imagen }))}
+                    />
+                  ) : null}
+
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-foreground">Así lo verán</p>
+                    <MessagePreview
+                      cuerpo={plantilla.cuerpo}
+                      parametros={
+                        borrador.parametros.some((p) => p.trim())
+                          ? borrador.parametros
+                          : plantilla.ejemplos
+                      }
+                      imagenUrl={urlReemplazo ?? imagenDefectoUrl}
+                      conImagen={llevaImagen}
+                      pie={plantilla.pie}
+                    />
+                  </div>
                 </>
               ) : null}
             </div>

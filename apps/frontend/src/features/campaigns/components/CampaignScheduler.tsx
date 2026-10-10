@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiUrl } from '@/api/apiClient';
 import { getWhatsAppTemplates } from '@/api/whatsapp-templates';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,7 +27,7 @@ import { useSegmentPreview } from '../hooks/useCampaigns.js';
 import { problemaConHora } from '../lib/programacion.js';
 import { AudienceMeter } from './AudienceMeter.js';
 import { DateTimePicker } from './DateTimePicker.js';
-import { ImageDropzone } from './ImageDropzone.js';
+import { HeaderImageField } from './HeaderImageField.js';
 import { MessagePreview } from './MessagePreview.js';
 import { SegmentCount } from './SegmentCount.js';
 import { SegmentFilters } from './SegmentFilters.js';
@@ -132,6 +133,7 @@ export function CampaignScheduler({
   const disponibles = useMemo(() => programables(plantillas?.data ?? []), [plantillas]);
   const plantilla = disponibles.find((t) => t.id === borrador.templateId) ?? null;
   const llevaImagen = plantilla?.cabecera === 'IMAGE';
+  const imagenDefectoUrl = plantilla?.imagen ? apiUrl(plantilla.imagen.url) : null;
 
   const total = preview.data?.total ?? 0;
   const presupuesto = preview.data?.presupuesto ?? null;
@@ -142,7 +144,10 @@ export function CampaignScheduler({
 
   const puedeAvanzar: Record<Paso, boolean> = {
     segmento: total > 0,
-    contenido: parametrosCompletos && (!llevaImagen || borrador.imagen !== null),
+    // HT-WA-04: con imagen por defecto no hace falta elegir otra; sin ella, sí.
+    contenido:
+      parametrosCompletos &&
+      (!llevaImagen || imagenDefectoUrl !== null || borrador.imagen !== null),
     horario:
       borrador.nombre.trim().length > 0 && problemaConHora(borrador.programadaPara) === null,
   };
@@ -153,9 +158,8 @@ export function CampaignScheduler({
       ...b,
       templateId: id,
       parametros: Array.from({ length: elegida?.parametrosBody ?? 0 }, () => ''),
-      // Una plantilla sin imagen no la admite: se descarta para no mandar algo que el servidor
-      // rechazaría con un 400.
-      imagen: elegida?.cabecera === 'IMAGE' ? b.imagen : null,
+      // La imagen elegida era para la plantilla anterior: se vuelve a la por defecto de la nueva.
+      imagen: null,
     }));
   }
 
@@ -202,8 +206,8 @@ export function CampaignScheduler({
                   <Skeleton className="h-10 w-full" />
                 ) : disponibles.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No tienes plantillas aprobadas. Crea en Meta una plantilla con imagen en la
-                    cabecera, sincronízala desde Configuración, Plantillas, y vuelve aquí.
+                    No tienes plantillas aprobadas. Crea una con imagen desde Configuración,
+                    Plantillas, y vuelve aquí cuando Meta la apruebe.
                   </p>
                 ) : (
                   <div className="space-y-1.5">
@@ -248,13 +252,11 @@ export function CampaignScheduler({
                 ) : null}
 
                 {llevaImagen ? (
-                  <div className="space-y-1.5">
-                    <Label>Imagen</Label>
-                    <ImageDropzone
-                      valor={borrador.imagen}
-                      onChange={(imagen) => setBorrador((b) => ({ ...b, imagen }))}
-                    />
-                  </div>
+                  <HeaderImageField
+                    imagenDefectoUrl={imagenDefectoUrl}
+                    valor={borrador.imagen}
+                    onChange={(imagen) => setBorrador((b) => ({ ...b, imagen }))}
+                  />
                 ) : plantilla ? (
                   <p className="text-sm text-muted-foreground">
                     Esta plantilla no lleva imagen. Para enviar una, elige una plantilla con imagen
@@ -272,8 +274,9 @@ export function CampaignScheduler({
                       ? borrador.parametros
                       : (plantilla?.ejemplos ?? [])
                   }
-                  imagenUrl={urlImagen}
+                  imagenUrl={urlImagen ?? imagenDefectoUrl}
                   conImagen={llevaImagen}
+                  pie={plantilla?.pie ?? null}
                   hora={borrador.programadaPara}
                 />
               </div>
