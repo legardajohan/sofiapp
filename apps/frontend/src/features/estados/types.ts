@@ -17,6 +17,11 @@ export interface EstadoDTO {
    */
   esSalida: boolean;
   /**
+   * Cuenta como venta en las métricas de campañas (HU-MARK-04): un lead que entra aquí poco después
+   * de recibir una campaña la suma como conversión. De fábrica, «Pagado».
+   */
+  esConversion: boolean;
+  /**
    * Cuántos leads la tienen grabada. Solo llega con `fetchEstados({ uso: true })`, que es lo que
    * pide la pantalla de gestión: es la cifra que explica por qué una etapa no se puede eliminar.
    * `undefined` = no se preguntó, que no es lo mismo que cero.
@@ -40,6 +45,7 @@ export interface UpdateEstadoPayload {
   /** `false` archiva la etapa (sale del tablero y de los selectores); `true` la recupera. */
   activo?: boolean;
   esSalida?: boolean;
+  esConversion?: boolean;
 }
 
 /**

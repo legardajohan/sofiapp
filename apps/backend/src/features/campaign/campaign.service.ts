@@ -33,6 +33,7 @@ import { Campaign } from './campaign.model.js';
 import { CampaignRecipient } from './campaign-recipient.model.js';
 import { assertPuedeLanzar, calcularPresupuesto } from './campaign.pacing.js';
 import { construirFiltroSegmento, previewSegmento } from './campaign.segment.service.js';
+import { marcarEntregado, registrarLectura } from './campaign.metrics.service.js';
 import type { ICliente } from '../cliente/cliente.types.js';
 import type { LeanWhatsAppTemplate } from '../whatsapp-template/whatsapp-template.types.js';
 import type { MessageStatus } from '../message/message.types.js';
@@ -899,18 +900,15 @@ export async function listRecipients(
 
 // ─── Puente con el webhook de entrega ───────────────────────────────────────────
 
-/** Estados de Meta que interesan al destinatario. `sent` ya se marcó al enviar; `read` no cambia nada. */
-const ESTADO_POR_STATUS: Partial<Record<MessageStatus, EstadoDestinatario>> = {
-  delivered: 'entregado',
-  failed: 'fallido',
-};
-
 /**
- * Propaga el `status` del webhook al destinatario de campaña (criterio 10).
+ * Propaga el `status` del webhook al destinatario de campaña (criterio 10 de MARK-01).
  *
  * Lo llama `updateDeliveryStatus` (`message.service.ts`), que es el único camino por el que entran
  * los `statuses` de Meta. Si el `metaMessageId` no pertenece a ninguna campaña, es un no-op: la
  * inmensa mayoría de los mensajes del sistema no lo son.
+ *
+ * Desde HU-MARK-04 `delivered` deja su marca de tiempo y `read` deja de ignorarse: es la
+ * "apertura" de las métricas. Las dos escrituras viven en `campaign.metrics.service.ts`.
  *
  * El `tenantId` entra por argumento y filtra la búsqueda: resolver un `metaMessageId` sin tenant es
  * exactamente la fuga que cerró HT-WA-01-V2.
@@ -920,26 +918,36 @@ export async function applyDeliveryStatusToRecipient(
   metaMessageId: string,
   status: MessageStatus,
 ): Promise<void> {
-  const destino = ESTADO_POR_STATUS[status];
-  if (!destino) return;
+  const ahora = new Date();
+
+  if (status === 'delivered') {
+    await marcarEntregado(tenantId, { metaMessageId }, ahora);
+    return;
+  }
+
+  if (status === 'read') {
+    await registrarLectura(tenantId, metaMessageId, ahora);
+    return;
+  }
+
+  if (status !== 'failed') return;
 
   const actualizado = await findOneAndUpdateScoped(
     CampaignRecipient,
     tenantId,
-    // Solo desde `enviado`: un `delivered` que llegue tarde no puede resucitar un `omitido` de una
-    // campaña cancelada ni pisar un `fallido` ya registrado.
+    // Solo desde `enviado`: un `failed` que llegue tarde no pisa un `omitido` de una campaña
+    // cancelada.
     { metaMessageId, estado: 'enviado' },
-    { $set: { estado: destino } },
+    { $set: { estado: 'fallido' } },
     { new: true },
   ).lean<LeanCampaignRecipient | null>();
 
   if (!actualizado) return;
 
-  const campo = destino === 'entregado' ? 'totales.entregados' : 'totales.fallidos';
   await findOneAndUpdateScoped(
     Campaign,
     tenantId,
     { _id: actualizado.campaignId },
-    { $inc: { [campo]: 1 } },
+    { $inc: { 'totales.fallidos': 1 } },
   );
 }

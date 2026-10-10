@@ -84,6 +84,15 @@ function Contenido({ estado }: { estado: EstadoDTO }): React.ReactElement {
             Salida
           </Badge>
         )}
+        {estado.esConversion && (
+          <Badge
+            variant="outline"
+            className="shrink-0 font-medium"
+            title="Cuenta como venta en los resultados de las campañas"
+          >
+            Venta
+          </Badge>
+        )}
       </div>
 
       <span className="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground">

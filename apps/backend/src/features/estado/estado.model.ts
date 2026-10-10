@@ -16,6 +16,8 @@ const EstadoSchema = new Schema<IEstadoDocument>(
     esDefecto: { type: Boolean, required: true, default: false },
     // Sin índice: nadie filtra por él, es un dato de pintado (HU-PIPE-01).
     esSalida: { type: Boolean, required: true, default: false },
+    // HU-MARK-04. Sin índice: se lee por `key`, que ya está indexada.
+    esConversion: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
 );

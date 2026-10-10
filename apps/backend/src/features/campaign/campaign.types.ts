@@ -164,6 +164,17 @@ export interface ICampaignRecipient {
   metaMessageId: string | null;
   error: string | null;
   enviadoAt: Date | null;
+  /**
+   * Marcas de los eventos que alimentan las métricas (HU-MARK-04). `null` = no ocurrió, o la fila
+   * es anterior a la medición. Se escriben **una vez**: cada escritura va condicionada a `null`.
+   */
+  entregadoAt: Date | null;
+  /** `status: read` de Meta. Cota inferior: no llega si el contacto apagó las confirmaciones. */
+  leidoAt: Date | null;
+  /** Primer inbound del contacto dentro de `CAMPAIGN_REPLY_WINDOW_HOURS` tras el envío. */
+  respondidoAt: Date | null;
+  /** El lead entró a una etapa `esConversion` dentro de `CAMPAIGN_CONVERSION_WINDOW_DAYS`. */
+  convertidoAt: Date | null;
 }
 
 export interface ICampaignRecipientDocument extends ICampaignRecipient, Document {
@@ -292,6 +303,80 @@ export interface ICampaignRecipientResponse {
   estado: EstadoDestinatario;
   error: string | null;
   enviadoAt: string | null;
+}
+
+// ─── Métricas (HU-MARK-04) ──────────────────────────────────────────────────────
+
+/** Conteos de un conjunto de destinatarios. Salen de agregar `campaign_recipients`, no de contadores. */
+export interface IConteosMetricas {
+  destinatarios: number;
+  /** Aceptados por Meta y no fallidos después: `estado ∈ { enviado, entregado }`. */
+  enviados: number;
+  entregados: number;
+  leidos: number;
+  respondidos: number;
+  convertidos: number;
+  fallidos: number;
+}
+
+/** Fracciones en [0, 1] con 4 decimales; `null` si el denominador es 0. */
+export interface ITasasMetricas {
+  /** entregados / enviados */
+  entrega: number | null;
+  /** leidos / entregados — cota inferior (ver `leidoAt`). */
+  apertura: number | null;
+  /** respondidos / entregados */
+  respuesta: number | null;
+  /** convertidos / entregados */
+  conversion: number | null;
+}
+
+export interface ICampaignMetrics extends IConteosMetricas {
+  tasas: ITasasMetricas;
+}
+
+export interface IVentanasAtribucion {
+  respuestaHoras: number;
+  conversionDias: number;
+}
+
+/**
+ * Actividad de un día: cuántos envíos, respuestas y conversiones **ocurrieron** ese día (cada uno
+ * por su propia marca de tiempo), en la zona horaria pedida. Los días sin actividad van con ceros:
+ * una serie con huecos se dibuja como si no hubiera pasado el tiempo.
+ */
+export interface IPuntoSerie {
+  /** `YYYY-MM-DD` en la zona horaria de la petición. */
+  dia: string;
+  enviados: number;
+  respondidos: number;
+  convertidos: number;
+}
+
+export interface ICampaignMetricsResponse extends ICampaignMetrics {
+  campaignId: string;
+  ventanas: IVentanasAtribucion;
+  serie: IPuntoSerie[];
+  calculadoAt: string;
+}
+
+export interface ICampaignMetricsResumen extends ICampaignMetrics {
+  id: string;
+  nombre: string;
+  estado: EstadoCampana;
+  iniciadaAt: string | null;
+}
+
+/** Agregado de las campañas iniciadas en un rango: la base del resumen de `/campanas`. */
+export interface ICampaignsOverviewResponse extends ICampaignMetrics {
+  desde: string;
+  hasta: string;
+  totalCampanas: number;
+  /** Hasta 5, por tasa de respuesta descendente. */
+  campanas: ICampaignMetricsResumen[];
+  ventanas: IVentanasAtribucion;
+  serie: IPuntoSerie[];
+  calculadoAt: string;
 }
 
 export interface IPaged<T> {

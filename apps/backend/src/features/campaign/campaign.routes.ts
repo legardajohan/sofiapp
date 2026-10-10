@@ -7,6 +7,8 @@ import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { subirImagenCampana } from '../../middlewares/upload.middleware.js';
 import {
   campaignIdSchema,
+  campaignMetricsSchema,
+  campaignsOverviewSchema,
   createCampaignSchema,
   listCampaignsSchema,
   listRecipientsSchema,
@@ -19,6 +21,8 @@ import {
   cancelCampaignController,
   createCampaignController,
   getCampaignController,
+  getCampaignMetricsController,
+  getCampaignsOverviewController,
   launchCampaignController,
   listCampaignsController,
   listRecipientsController,
@@ -69,6 +73,16 @@ router.patch(
   asyncHandler(rescheduleCampaignController),
 );
 
+// HU-MARK-04 — resumen de métricas del período. Ruta literal: ANTES de `/:id`.
+router.get(
+  '/metrics',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(campaignsOverviewSchema),
+  asyncHandler(getCampaignsOverviewController),
+);
+
 router.get(
   '/',
   authenticateJWT,
@@ -94,6 +108,15 @@ router.get(
   campaignRoles,
   validate(campaignIdSchema),
   asyncHandler(getCampaignController),
+);
+
+router.get(
+  '/:id/metrics',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(campaignMetricsSchema),
+  asyncHandler(getCampaignMetricsController),
 );
 
 router.get(

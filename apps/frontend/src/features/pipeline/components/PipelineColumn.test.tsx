@@ -33,6 +33,7 @@ function columna(over: Partial<PipelineColumnDTO> = {}): PipelineColumnDTO {
       activo: true,
       esDefecto: true,
       esSalida: false,
+      esConversion: false,
     },
     total: 1,
     leads: [lead('l1', 'Ana Pérez')],

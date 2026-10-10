@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
+import { CampaignsOverview, PERIODOS, type Periodo } from '../components/CampaignsOverview.js';
 import { CampaignScheduler } from '../components/CampaignScheduler.js';
 import { CampaignWizard } from '../components/CampaignWizard.js';
 import {
@@ -69,6 +70,11 @@ export function CampaignsPage(): React.ReactElement {
     ? (estadoParam as EstadoCampana)
     : undefined;
   const page = Number(params.get('page') ?? '1') || 1;
+  // En la URL como el filtro de estado: «mira cómo nos fue este trimestre» se comparte con un enlace.
+  const periodoParam = Number(params.get('periodo'));
+  const periodo: Periodo = PERIODOS.includes(periodoParam as Periodo)
+    ? (periodoParam as Periodo)
+    : 30;
 
   const { data, isPending } = useCampaigns({ page, ...(estado ? { estado } : {}) });
   const crear = useCreateCampaign();
@@ -77,6 +83,13 @@ export function CampaignsPage(): React.ReactElement {
 
   const campanas = data?.data ?? [];
   const hayFiltro = estado !== undefined;
+
+  function cambiarPeriodo(p: Periodo): void {
+    const siguiente = new URLSearchParams(params);
+    if (p === 30) siguiente.delete('periodo');
+    else siguiente.set('periodo', String(p));
+    setParams(siguiente);
+  }
 
   function filtrar(valor: string): void {
     const siguiente = new URLSearchParams(params);
@@ -115,6 +128,8 @@ export function CampaignsPage(): React.ReactElement {
           </Button>
         </div>
       </header>
+
+      <CampaignsOverview periodo={periodo} onPeriodoChange={cambiarPeriodo} />
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-52 space-y-1.5">

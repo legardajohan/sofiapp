@@ -12,8 +12,11 @@ import {
   resumeCampaign,
   scheduleCampaign,
 } from './campaign.service.js';
+import { getCampaignMetrics, getCampaignsOverview } from './campaign.metrics.service.js';
 import type { IImagenSubida } from './campaign.types.js';
 import type {
+  CampaignMetricsQuery,
+  CampaignsOverviewQuery,
   CreateCampaignBody,
   ListCampaignsQuery,
   ListRecipientsQuery,
@@ -97,4 +100,19 @@ export const rescheduleCampaignController: RequestHandler = async (req, res) => 
   res
     .status(200)
     .json(await rescheduleCampaign(tenantId, req.user!.sub, id, body, imagenDe(req.file)));
+};
+
+// ─── Métricas (HU-MARK-04) ──────────────────────────────────────────────────────
+
+export const getCampaignMetricsController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  const { zona } = req.validatedQuery as CampaignMetricsQuery;
+  res.status(200).json(await getCampaignMetrics(tenantId, id, zona));
+};
+
+export const getCampaignsOverviewController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const query = req.validatedQuery as CampaignsOverviewQuery;
+  res.status(200).json(await getCampaignsOverview(tenantId, query));
 };

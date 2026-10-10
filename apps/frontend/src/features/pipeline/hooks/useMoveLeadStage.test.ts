@@ -30,6 +30,7 @@ function columna(key: string, leads: LeadListItemDTO[], total = leads.length): P
       activo: true,
       esDefecto: true,
       esSalida: false,
+      esConversion: false,
     },
     total,
     leads,

@@ -23,7 +23,8 @@ import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import type { AuditAccion } from '../audit/audit.types.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { Lead } from './lead.model.js';
-import { existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
+import { registrarConversionCampana } from '../campaign/campaign.metrics.service.js';
+import { clavesDeConversion, existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
 import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
 import {
   existeSemaforo,
@@ -595,6 +596,8 @@ export async function updateLeadEstado(
     despues: { estado },
   });
 
+  await atribuirConversion(tenantId, lead, estado);
+
   const actualizado = await getLeadById(tenantId, leadId);
 
   // Después de persistir y auditar: el evento es una consecuencia del cambio, no parte de él.
@@ -609,6 +612,31 @@ export async function updateLeadEstado(
   });
 
   return actualizado;
+}
+
+/**
+ * HU-MARK-04: si el lead **entró** en una etapa de conversión —venía de una que no lo era—, se le
+ * apunta a la última campaña que le escribió. Pasar de una etapa de conversión a otra no recuenta.
+ *
+ * Aislado como la respuesta automática en el inbound: el asesor movió la tarjeta y eso ya ocurrió;
+ * que la métrica falle no puede devolverle un error.
+ */
+async function atribuirConversion(
+  tenantId: TenantId,
+  lead: ILeadLean,
+  destino: string,
+): Promise<void> {
+  try {
+    const conversion = await clavesDeConversion(tenantId, [lead.estado, destino]);
+    if (!conversion.has(destino) || conversion.has(lead.estado)) return;
+    await registrarConversionCampana(tenantId, lead.clienteId.toString(), new Date());
+  } catch (err: unknown) {
+    logger.error('No se pudo atribuir la conversión a una campaña', {
+      tenantId: String(tenantId),
+      leadId: String(lead._id),
+      error: String(err),
+    });
+  }
 }
 
 /**

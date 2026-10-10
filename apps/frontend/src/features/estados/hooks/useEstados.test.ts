@@ -12,6 +12,7 @@ function etapa(id: string, orden: number): EstadoDTO {
     activo: true,
     esDefecto: false,
     esSalida: false,
+    esConversion: false,
   };
 }
 

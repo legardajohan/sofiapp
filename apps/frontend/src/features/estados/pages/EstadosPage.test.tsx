@@ -27,6 +27,7 @@ function etapa(parcial: Partial<EstadoDTO> & Pick<EstadoDTO, 'id' | 'key' | 'lab
     activo: true,
     esDefecto: false,
     esSalida: false,
+    esConversion: false,
     leads: 0,
     ...parcial,
   };

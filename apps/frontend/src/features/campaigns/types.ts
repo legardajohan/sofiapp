@@ -157,3 +157,68 @@ export interface RescheduleCampaignPayload {
   programadaPara?: string;
   imagen?: File;
 }
+
+// ─── Métricas (HU-MARK-04) ──────────────────────────────────────────────────────
+
+/** Fracciones en [0, 1]; `null` cuando no hay base para calcularlas (p. ej. nada entregado aún). */
+export interface TasasMetricas {
+  /** entregados / enviados */
+  entrega: number | null;
+  /** leídos / entregados — mínima: no cuenta a quien apagó las confirmaciones de lectura. */
+  apertura: number | null;
+  /** respondidos / entregados */
+  respuesta: number | null;
+  /** convertidos / entregados */
+  conversion: number | null;
+}
+
+export interface MetricasCampana {
+  destinatarios: number;
+  enviados: number;
+  entregados: number;
+  leidos: number;
+  respondidos: number;
+  convertidos: number;
+  fallidos: number;
+  tasas: TasasMetricas;
+}
+
+export interface VentanasAtribucion {
+  respuestaHoras: number;
+  conversionDias: number;
+}
+
+/** Lo que ocurrió un día, cada evento por su propia fecha, en la zona horaria del navegador. */
+export interface PuntoSerie {
+  /** `YYYY-MM-DD` */
+  dia: string;
+  enviados: number;
+  respondidos: number;
+  convertidos: number;
+}
+
+export interface CampaignMetricsDTO extends MetricasCampana {
+  campaignId: string;
+  ventanas: VentanasAtribucion;
+  /** De su arranque al cierre de la ventana de conversión. Vacía si no ha arrancado. */
+  serie: PuntoSerie[];
+  calculadoAt: string;
+}
+
+export interface CampaignMetricsResumenDTO extends MetricasCampana {
+  id: string;
+  nombre: string;
+  estado: EstadoCampana;
+  iniciadaAt: string | null;
+}
+
+export interface CampaignsOverviewDTO extends MetricasCampana {
+  desde: string;
+  hasta: string;
+  totalCampanas: number;
+  /** Hasta 5, de mayor a menor tasa de respuesta. */
+  campanas: CampaignMetricsResumenDTO[];
+  ventanas: VentanasAtribucion;
+  serie: PuntoSerie[];
+  calculadoAt: string;
+}

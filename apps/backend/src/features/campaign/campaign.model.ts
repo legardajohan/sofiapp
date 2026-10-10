@@ -97,6 +97,8 @@ const CampaignSchema = new Schema<ICampaignDocument>(
 // Listado, con el orden por defecto incorporado para que filtro y orden salgan del mismo índice.
 CampaignSchema.index({ tenantId: 1, createdAt: -1 });
 CampaignSchema.index({ tenantId: 1, estado: 1, createdAt: -1 });
+// Resumen de métricas del período (HU-MARK-04): campañas iniciadas en un rango.
+CampaignSchema.index({ tenantId: 1, iniciadaAt: -1 });
 
 // Disparador de las campañas programadas. **No empieza por `tenantId`, y es deliberado**: el
 // barrido es cross-tenant por naturaleza (una pasada para toda la plataforma), igual que el de

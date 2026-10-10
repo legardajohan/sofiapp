@@ -2,6 +2,8 @@ import { apiClient } from '../../api/apiClient.js';
 import type {
   CampaignDTO,
   CampaignDetalleDTO,
+  CampaignMetricsDTO,
+  CampaignsOverviewDTO,
   CampaignRecipientDTO,
   CreateCampaignPayload,
   EstadoCampana,
@@ -108,3 +110,21 @@ export const launchCampaign = (id: string): Promise<CampaignDTO> => transicion(i
 export const pauseCampaign = (id: string): Promise<CampaignDTO> => transicion(id, 'pause');
 export const resumeCampaign = (id: string): Promise<CampaignDTO> => transicion(id, 'resume');
 export const cancelCampaign = (id: string): Promise<CampaignDTO> => transicion(id, 'cancel');
+
+/** Resultados de una campaña: envío, entrega, lectura, respuesta y conversión (HU-MARK-04). */
+export async function fetchCampaignMetrics(id: string, zona: string): Promise<CampaignMetricsDTO> {
+  const { data } = await apiClient.get<CampaignMetricsDTO>(`/campaigns/${id}/metrics`, {
+    params: { zona },
+  });
+  return data;
+}
+
+/** Lo mismo, sumado sobre las campañas que arrancaron en el período. */
+export async function fetchCampaignsOverview(params: {
+  desde: string;
+  hasta?: string;
+  zona: string;
+}): Promise<CampaignsOverviewDTO> {
+  const { data } = await apiClient.get<CampaignsOverviewDTO>('/campaigns/metrics', { params });
+  return data;
+}

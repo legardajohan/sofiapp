@@ -171,9 +171,63 @@ export const transicionSchema = z.object({
   query: empty,
 });
 
+// ─── Métricas (HU-MARK-04) ──────────────────────────────────────────────────────
+
+/**
+ * Zona horaria IANA del navegador, para cortar la serie diaria por días **del usuario**: en UTC, lo
+ * que en Bogotá pasa a las 8 p. m. caería en el día siguiente. Inválida → 400, no UTC en silencio.
+ */
+const zonaHoraria = z
+  .string()
+  .max(64)
+  .refine(
+    (zona) => {
+      try {
+        new Intl.DateTimeFormat('en-CA', { timeZone: zona });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Zona horaria inválida.' },
+  )
+  .default('UTC');
+
+export const campaignMetricsSchema = z.object({
+  body: empty,
+  params: z.object({ id: objectId }),
+  query: z.object({ zona: zonaHoraria }),
+});
+
+/** Tope del rango del resumen: un año. Más es una auditoría, no un tablero. */
+const RANGO_MAXIMO_MS = 366 * 86_400_000;
+
+export const campaignsOverviewSchema = z.object({
+  body: empty,
+  params: empty,
+  query: z
+    .object({
+      desde: z.coerce.date(),
+      // Ausente = ahora: "los últimos N días" es el caso de la pantalla.
+      hasta: z.coerce.date().optional(),
+      zona: zonaHoraria,
+    })
+    .transform((q) => ({ desde: q.desde, hasta: q.hasta ?? new Date(), zona: q.zona }))
+    .refine((q) => q.hasta.getTime() >= q.desde.getTime(), {
+      message: '`hasta` debe ser posterior a `desde`.',
+      path: ['hasta'],
+    })
+    .refine((q) => q.hasta.getTime() - q.desde.getTime() <= RANGO_MAXIMO_MS, {
+      message: 'El rango no puede superar 366 días.',
+      path: ['desde'],
+    }),
+});
+
 export type PreviewSegmentoBody = z.infer<typeof previewSegmentoSchema>['body'];
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>['body'];
 export type ListCampaignsQuery = z.infer<typeof listCampaignsSchema>['query'];
 export type ListRecipientsQuery = z.infer<typeof listRecipientsSchema>['query'];
 export type ScheduleCampaignBody = z.infer<typeof scheduleCampaignSchema>['body'];
 export type RescheduleCampaignBody = z.infer<typeof rescheduleCampaignSchema>['body'];
+export type CampaignsOverviewQuery = z.infer<typeof campaignsOverviewSchema>['query'];
+export type CampaignMetricsQuery = z.infer<typeof campaignMetricsSchema>['query'];
