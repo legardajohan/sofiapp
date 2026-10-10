@@ -20,6 +20,10 @@ import {
   type MetricsSortField,
 } from './admin-metrics.types.js';
 import type { GlobalMetricsQueryInput } from './admin-metrics.validation.js';
+import { DIA_MS, normalizeHasta, ratio } from '../../utils/date-range.util.js';
+
+// Re-export: los tests de HU-SAAS-03 los importan desde aquí.
+export { normalizeHasta, ratio };
 
 /*
  * Excepción superadmin cross-tenant (docs/multi-tenancy.md §5.3).
@@ -30,7 +34,6 @@ import type { GlobalMetricsQueryInput } from './admin-metrics.validation.js';
 
 const ESTADOS_TENANT: readonly EstadoTenant[] = ['activo', 'suspendido', 'prueba'];
 const SIN_PLAN = 'Sin plan';
-const DIA_MS = 24 * 60 * 60 * 1000;
 
 type CreatedAtMatch = { createdAt?: { $gte?: Date; $lte?: Date } };
 
@@ -48,16 +51,6 @@ interface CountsMensajes { inbound: number; outbound: number }
 interface CountsLeads { leads: number; ventas: number }
 
 // ── Helpers puros ────────────────────────────────────────────────────────────────────────────
-
-/** `hasta` sin hora (medianoche UTC exacta) se interpreta como "hasta el final de ese día". */
-export function normalizeHasta(hasta: Date): Date {
-  const esMedianoche =
-    hasta.getUTCHours() === 0 &&
-    hasta.getUTCMinutes() === 0 &&
-    hasta.getUTCSeconds() === 0 &&
-    hasta.getUTCMilliseconds() === 0;
-  return esMedianoche ? new Date(hasta.getTime() + DIA_MS - 1) : hasta;
-}
 
 function buildCreatedAtMatch(desde: Date | undefined, hasta: Date | undefined): CreatedAtMatch {
   if (!desde && !hasta) return {};
@@ -80,10 +73,6 @@ export function ultimosPeriodos(fin: Date, n: number): string[] {
     periodos.push(periodoDe(new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() - i, 1))));
   }
   return periodos;
-}
-
-export function ratio(ventas: number, leads: number): number {
-  return leads > 0 ? Math.round((ventas / leads) * 10000) / 10000 : 0;
 }
 
 function zeroCampanas(): Record<EstadoCampana, number> {

@@ -47,6 +47,26 @@ export interface ClassifyLeadOutput {
   motivo: string;
 }
 
+/**
+ * Tema de una conversación (HU-REP-03): qué producto de la KB del tenant consulta el cliente.
+ * `tema` es uno de los nombres ofrecidos, literal, o `'otros'`. El proveedor lo restringe con un
+ * `enum`, pero el llamador vuelve a comprobarlo: lo que devuelve el modelo es una sugerencia.
+ */
+export interface ClassifyTopicOutput {
+  tema: string;
+  /** Seguridad del modelo, en `[0, 1]`. */
+  confianza: number;
+}
+
+/** Una opción de la lista cerrada del clasificador de tema. */
+export interface TopicOption {
+  nombre: string;
+  descripcion?: string;
+}
+
+/** Valor reservado del clasificador de tema: ningún producto de la lista encaja. */
+export const TEMA_OTROS = 'otros';
+
 export interface ILlmProvider {
   extractSlots(input: {
     historial: ChatTurn[];
@@ -70,6 +90,17 @@ export interface ILlmProvider {
      */
     instrucciones: string;
   }): Promise<LlmCallResult<ClassifyLeadOutput>>;
+
+  /**
+   * HU-REP-03. `opciones` es la lista cerrada de productos de la KB del tenant: el proveedor la
+   * anexa a las instrucciones y la convierte en el `enum` de la salida, con `'otros'` añadido.
+   */
+  classifyTopic(input: {
+    historial: ChatTurn[];
+    /** `systemPrompt` de la plantilla `topic`. Obligatorio por lo mismo que en `classifyLead`. */
+    instrucciones: string;
+    opciones: TopicOption[];
+  }): Promise<LlmCallResult<ClassifyTopicOutput>>;
 
   generateReply(input: {
     historial: ChatTurn[];

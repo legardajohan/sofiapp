@@ -1,22 +1,11 @@
 import type { EstadoTenant } from '../../admin-tenants/types/index.js';
+import { formatEntero, formatPorcentaje } from '@/lib/format';
 
-const entero = new Intl.NumberFormat('es-CO');
-const porcentaje = new Intl.NumberFormat('es-CO', {
-  style: 'percent',
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
+// Formato numérico compartido con otros reportes (HU-REP-01); se re-exporta para no tocar imports.
+export { formatEntero, formatPorcentaje };
+
 const mesCorto = new Intl.DateTimeFormat('es-CO', { month: 'short', timeZone: 'UTC' });
 const mesLargo = new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-
-export function formatEntero(n: number): string {
-  return entero.format(n);
-}
-
-/** `0.159` → `15,9 %`. */
-export function formatPorcentaje(fraccion: number): string {
-  return porcentaje.format(fraccion);
-}
 
 function fechaDePeriodo(periodo: string): Date {
   const [anio, mes] = periodo.split('-').map(Number);

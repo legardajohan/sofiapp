@@ -28,6 +28,7 @@ import platformSettingsRoutes from './features/platform-settings/platform-settin
 import exchangeRateRoutes from './features/exchange-rate/exchange-rate.routes.js';
 import costCatalogRoutes from './features/cost-catalog/cost-catalog.routes.js';
 import adminMetricsRoutes from './features/admin-metrics/admin-metrics.routes.js';
+import reportsRoutes from './features/reports/reports.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
@@ -116,6 +117,7 @@ app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportsRoutes);
 
 app.use(errorHandler);
 

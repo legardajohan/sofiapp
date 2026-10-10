@@ -6,8 +6,8 @@ import type { EstadoCampana } from '../campaign/campaign.types.js';
  * Ver `docs/specs/HU-SAAS-03-metricas-globales/spec.md` § Contrato del endpoint.
  */
 
-/** Etapa del pipeline de leads que cuenta como venta (sembrada por `seed-estados`). */
-export const KEY_ESTADO_VENTA = 'pagado';
+/** Etapa del pipeline de leads que cuenta como venta (fuente única en `estado.types.ts`). */
+export { KEY_ESTADO_VENTA } from '../estado/estado.types.js';
 
 /** Meses de la serie temporal del tablero. */
 export const MESES_SERIE = 6;

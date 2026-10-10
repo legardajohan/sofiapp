@@ -9,7 +9,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChartCard, ChartEmpty } from './ChartCard.js';
+import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { formatEntero, formatMesCorto, formatMesLargo } from '../lib/format.js';
 import type { MonthlyPoint } from '../types/index.js';
 

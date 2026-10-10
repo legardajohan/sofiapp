@@ -136,6 +136,29 @@ export interface ISemaforoIA {
   aplicado: SemaforoSlug | null;
 }
 
+/**
+ * Tema de la conversación: qué producto de la KB consulta el cliente (HU-REP-03, ADR 0012).
+ *
+ * Alimenta «Productos más consultados». Guarda también el estado del freno de coste
+ * (`mensajesCliente`, `repeticiones`, `catalogoVersion`) para decidir sin consultar nada más si
+ * vale la pena volver a pagar la clasificación.
+ */
+export interface ITemaIA {
+  /** Nombre normalizado del producto (`normalizarClave`). `null` = `otros`: ningún producto encaja. */
+  clave: string | null;
+  /** Nombre del producto tal como estaba en la KB al clasificar; `null` con `clave: null`. */
+  nombre: string | null;
+  confianza: number;
+  at: Date;
+  /** Mensajes del cliente en el hilo cuando se clasificó. */
+  mensajesCliente: number;
+  /** Veces seguidas que salió esta misma `clave`. Con 2 o más el tema es estable. */
+  repeticiones: number;
+  /** `version` de la lista de productos con la que se clasificó. */
+  catalogoVersion: string;
+  modelo: string;
+}
+
 export interface ICliente {
   tenantId: Types.ObjectId;
   metaUserId: string;
@@ -175,6 +198,8 @@ export interface ICliente {
   /** Última clasificación de intención de compra (HU-IA-05). */
   semaforoIA?: ISemaforoIA;
   datosExtraidos?: IDatosExtraidos;
+  /** Tema de la conversación (HU-REP-03). */
+  temaIA?: ITemaIA;
   // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por subrol al leerlos ───
   /**
    * Correo registrado a mano por el asesor. El sufijo `Enc` es histórico: el cifrado en reposo está

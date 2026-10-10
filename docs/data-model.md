@@ -180,6 +180,18 @@
     at: ISODate,
     aplicado: "azul" | "rojo" | "naranja" | "verde" | null   // null = solo se propuso
   },
+  // Tema de la conversación: producto de la KB que consulta el cliente (HU-REP-03, ADR 0012).
+  // Sin índice: el reporte llega por $lookup desde `messages`. Único productor: ai-topic.service.
+  temaIA: {                       // subdoc con _id: false; ausente = sin clasificar
+    clave: String | null,         // nombre normalizado del producto; null = "otros"
+    nombre: String | null,        // nombre tal como estaba en la KB al clasificar
+    confianza: Number,            // [0, 1] reportada por el modelo
+    at: ISODate,
+    mensajesCliente: Number,      // freno de coste: mensajes del cliente al clasificar
+    repeticiones: Number,         // veces seguidas con la misma clave (>= 2 = estable)
+    catalogoVersion: String,      // hash de la lista de productos usada
+    modelo: String
+  },
   // Datos de contacto leídos de la conversación por la IA (HU-OMNI-03, ampliado por HU-IA-06).
   // Viven APARTE de `nombre`/`telefono`/`correoEnc` a propósito: son una sugerencia hasta que una
   // persona la confirma. Sin índice: se proyectan al abrir la ficha, nadie filtra por esto.
@@ -299,6 +311,9 @@
 //                                                          (HU-OMNI-06: barrido de media atascada.
 //                                                          Parcial a propósito: un índice completo
 //                                                          pagaría por cada mensaje de texto)
+//          { tenantId: 1, createdAt: 1 }                  (HU-REP-04: reportes por rango de fechas
+//                                                          sin otro filtro —horas pico y los $match
+//                                                          por createdAt de HU-REP-01/02/03—)
 ```
 
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
@@ -604,6 +619,8 @@ cualquier intento de guardarlo es un 400.
   proposito: String?,             // V2: guía de qué escribir (placeholder), típico de los presets
   error: String?,                 // motivo si estadoIndexacion = "fallido"
   estructura: Mixed?,             // HU-KB-07: conocimiento capturado campo a campo (JSON opaco)
+                                  // HU-REP-03: la de schemaId "productos" tiene un LECTOR en backend
+                                  // (kb-productos.reader.ts, ids congelados por HU-KB-09; ADR 0012)
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
@@ -680,6 +697,7 @@ cualquier intento de guardarlo es un 400.
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, entidad: 1, entidadId: 1, createdAt: -1 }
+//          { tenantId: 1, accion: 1, createdAt: -1 }   (HU-REP-01: acciones por rango de fechas)
 ```
 > Se estrena con `conversation.assign` (historial de reasignaciones, `GET
 > /api/conversations/:id/assignments`); pensada para reutilizarse en futuros eventos auditables
@@ -688,11 +706,24 @@ cualquier intento de guardarlo es un 400.
 > Acciones registradas hoy: `conversation.assign`, `lead.create` y `lead.delete` (HU-CRM-01);
 > `cliente.update` y `contact-note.create` (HU-CRM-02); `lead.estado` (HU-PIPE-01); `lead.semaforo`
 > (HU-CRM-04); `conversation.handoff` (HU-IA-03); `cliente.semaforo` (HU-IA-05); `cliente.extract` y
-> `cliente.extract-confirm` (HU-IA-06).
+> `cliente.extract-confirm` (HU-IA-06); `cliente.tema` (HU-REP-03).
+>
+> **`cliente.tema`** (actor `null`) registra que la IA cambió el producto consultado de la
+> conversación: `antes: { clave, nombre }` (vacío en la primera clasificación),
+> `despues: { clave, nombre, confianza }`; `clave: null` = `otros`. Solo cuando la clave cambia.
 >
 > **`lead.estado`** registra el cambio de etapa del pipeline. Es acción propia, y no `lead.update`,
 > para que el historial de etapa no tenga que colar las altas y las bajas; los cambios anteriores a
 > HU-PIPE-01 quedaron como `lead.update` y **no se migran**, se consultan.
+>
+> **Fecha de venta (HU-REP-01).** El paso de un lead a la etapa `pagado` se fecha con el evento
+> `lead.estado` (o `lead.update` legacy) cuyo `despues.estado` es `pagado`. `leads` no guarda esa
+> fecha; el reporte por asesor la lee de aquí con el índice `{ tenantId, accion, createdAt }`.
+> `recordAuditEvent` es *best-effort*: un evento perdido hace que esa venta no se cuente.
+>
+> **Historial de handoff (HU-REP-02).** `conversation.handoff` (actor `null`) es la fuente de la tasa
+> de escalamiento: `clientes.handoffAt` solo guarda el estado actual y `setIaHabilitada(true)` lo
+> borra. Se lee con el mismo índice `{ tenantId, accion, createdAt }`.
 >
 > **`lead.semaforo`** registra el cambio del semáforo comercial del lead (`antes`/`despues` con la
 > `key` del catálogo, `null` = sin clasificar). Es otro eje que `cliente.semaforo`, que vive sobre la
@@ -889,7 +920,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 {
   _id: ObjectId,
   tenantId: ObjectId | null,       // null = plantilla GLOBAL de fábrica (fallback del producto)
-  method: "chat" | "extract" | "classify" | "summary",
+  method: "chat" | "extract" | "classify" | "summary" | "topic",   // topic: HU-REP-03
   version: String,                 // sube en cada guardado del admin; entra en la clave de caché
   systemPrompt: String,            // qué debe y qué no debe hacer el asistente
   tono: String | undefined,        // HU-IA-01 — opcional; undefined = tono por defecto del código
@@ -908,15 +939,15 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 >
 > **Subir `version` en cada guardado es lo que invalida la caché** (la clave de IA es
 > `template.version:kbVersion`): sin ese bump, cambiar el prompt seguiría sirviendo respuestas
-> generadas con el anterior. Las globales `chat`, `summary` y `extract` las siembra
-> `seed-prompt-templates.ts` de forma idempotente; sin la de `chat`, el chatbot lanza `AppError(500)`.
+> generadas con el anterior. Las globales `chat`, `summary`, `classify`, `extract` y
+> `topic` (HU-REP-03) las siembra `seed-prompt-templates.ts` de forma idempotente; sin la de `chat`, el chatbot lanza `AppError(500)`.
 
 ## ai_usage_logs  (métricas de cada llamada a AIService — HT-AI-01)
 ```js
 {
   _id: ObjectId,
   tenantId: ObjectId,
-  method: "chat" | "extract" | "classify" | "summary",
+  method: "chat" | "extract" | "classify" | "summary" | "topic",
   llmModel: String,               // p.ej. "gemini-1.5-flash" (env.GEMINI_MODEL)
   promptTokens: Number,
   completionTokens: Number,
@@ -932,7 +963,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 ```
 > Es la entidad "respuesta de IA" que expone `GET /api/ai/responses` y el `:id` de
 > `GET /api/ai/responses/:id/context` (HU-KB-04): se crea una fila por cada llamada a
-> `AIService.chat/extract/classify/summarize`, exista o no trace de auditoría asociado.
+> `AIService.chat/extract/classify/classifyTopic/summarize`, exista o no trace de auditoría asociado.
 
 ## ai_response_contexts  (trazabilidad de fuentes/contexto — HU-KB-04)
 ```js
@@ -941,7 +972,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   tenantId: ObjectId,
   usageLogId: ObjectId,            // ref AiUsageLog — 1:1, la llamada que este trace documenta
   promptSnapshot: {
-    method: "chat" | "extract" | "classify" | "summary",
+    method: "chat" | "extract" | "classify" | "summary" | "topic",
     version: String,               // versión del PromptTemplate VIGENTE en el momento de generar
     systemPrompt: String,          // texto completo del prompt de sistema usado
   },

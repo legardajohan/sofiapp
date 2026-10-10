@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
-import { ChartCard, ChartEmpty } from './ChartCard.js';
+import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { ESTADO_TENANT_LABEL, ESTADOS_TENANT, formatEntero } from '../lib/format.js';
 import type { GlobalMetricsConsolidado } from '../types/index.js';
 

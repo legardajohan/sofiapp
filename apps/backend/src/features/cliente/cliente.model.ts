@@ -138,6 +138,26 @@ const ClienteSchema = new Schema<IClienteDocument>(
       ),
       required: false,
     },
+    // Tema de la conversación (HU-REP-03): producto de la KB que consulta el cliente. Opcional y SIN
+    // índice: el reporte llega aquí por `$lookup` desde `messages`, nunca filtra clientes por tema.
+    // El único productor es `ai-topic.service`.
+    temaIA: {
+      type: new Schema(
+        {
+          // `null` = `otros`. Sin `required`: null ES un valor con significado.
+          clave: { type: String, default: null },
+          nombre: { type: String, default: null },
+          confianza: { type: Number, required: true },
+          at: { type: Date, required: true },
+          mensajesCliente: { type: Number, required: true },
+          repeticiones: { type: Number, required: true },
+          catalogoVersion: { type: String, required: true },
+          modelo: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { timestamps: true },
 );

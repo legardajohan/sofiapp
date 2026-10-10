@@ -14,7 +14,7 @@ import type { FaqMatcher, KnowledgeRetriever, RetrievedChunk } from './ai-servic
 // Mongo en memoria provisto por tests/globalSetup.ts + tests/setup.ts (conexión global).
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-async function seedGlobalTemplate(method: 'chat' | 'extract' | 'classify'): Promise<void> {
+async function seedGlobalTemplate(method: 'chat' | 'extract' | 'classify' | 'topic'): Promise<void> {
   await PromptTemplateModel.create({
     tenantId: null,
     method,
@@ -44,6 +44,10 @@ function makeProvider(): ILlmProvider {
       .mockResolvedValue({ result: { slots: { nombre: 'Juan' }, incompletos: [] }, usage: USAGE }),
     classifyLead: vi.fn().mockResolvedValue({
       result: { nivelInteres: 'tibio', objecion: 'precio', confianza: 0.8, motivo: 'compara precios' },
+      usage: USAGE,
+    }),
+    classifyTopic: vi.fn().mockResolvedValue({
+      result: { tema: 'Curso intensivo', confianza: 0.85 },
       usage: USAGE,
     }),
     embedTexts: vi
@@ -634,6 +638,70 @@ describe('AIService.classify()', () => {
 
     expect(data.confianza).toBe(0);
     expect(data.motivo).toBe('');
+  });
+});
+
+// ─── classifyTopic() — HU-REP-03 ──────────────────────────────────────────────
+describe('AIService.classifyTopic()', () => {
+  const OPCIONES = [{ nombre: 'Curso intensivo', descripcion: 'Seis semanas' }, { nombre: 'Asesoría' }];
+
+  it('pasa la plantilla `topic` y las opciones al proveedor', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('topic');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock());
+
+    const { data } = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'v1' });
+
+    expect(provider.classifyTopic).toHaveBeenCalledWith({
+      historial: HISTORIAL,
+      instrucciones: 'Plantilla global de prueba para topic',
+      opciones: OPCIONES,
+    });
+    expect(data).toEqual({ tema: 'Curso intensivo', confianza: 0.85 });
+  });
+
+  it('cachea por historial + versión del catálogo: otra versión vuelve al modelo', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('topic');
+    const provider = makeProvider();
+    const service = new AIService(provider, makeRedisMock(new Map()));
+
+    const r1 = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'v1' });
+    const r2 = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'v1' });
+    const r3 = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'v2' });
+
+    expect([r1.cacheHit, r2.cacheHit, r3.cacheHit]).toEqual([false, true, false]);
+    expect(provider.classifyTopic).toHaveBeenCalledTimes(2);
+  });
+
+  it('sanea la confianza a [0, 1] y una ausente a 0', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('topic');
+    const provider = makeProvider();
+    const mock = provider.classifyTopic as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValueOnce({ result: { tema: 'Asesoría', confianza: 3 }, usage: USAGE });
+    mock.mockResolvedValueOnce({ result: { tema: 'Asesoría' }, usage: USAGE });
+    const service = new AIService(provider, makeRedisMock());
+
+    const alta = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'a' });
+    const ausente = await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'b' });
+
+    expect(alta.data.confianza).toBe(1);
+    expect(ausente.data.confianza).toBe(0);
+  });
+
+  it('registra el uso con method: topic', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('topic');
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    await service.classifyTopic({ tenantId, historial: HISTORIAL, opciones: OPCIONES, catalogoVersion: 'v1' });
+
+    await vi.waitFor(async () => {
+      const logs = await findScoped(AiUsageLogModel, tenantId, { method: 'topic' }).lean<IAiUsageLog[]>();
+      expect(logs).toHaveLength(1);
+    });
   });
 });
 

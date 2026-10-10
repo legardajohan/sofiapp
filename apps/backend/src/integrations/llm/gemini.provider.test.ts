@@ -159,6 +159,61 @@ describe('GeminiProvider.classifyLead', () => {
   });
 });
 
+describe('GeminiProvider.classifyTopic — HU-REP-03', () => {
+  const OPCIONES = [{ nombre: 'Curso intensivo', descripcion: 'Seis semanas' }, { nombre: 'Asesoría' }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('el responseSchema lleva el enum de nombres + otros', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ tema: 'Asesoría', confianza: 0.9 }) },
+    });
+    const provider = new GeminiProvider();
+    await provider.classifyTopic({ historial: HISTORIAL, instrucciones: INSTRUCCIONES, opciones: OPCIONES });
+
+    expect(mockGetGenerativeModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationConfig: expect.objectContaining({
+          responseSchema: expect.objectContaining({
+            properties: expect.objectContaining({
+              tema: expect.objectContaining({ enum: ['Curso intensivo', 'Asesoría', 'otros'] }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('anexa la lista de productos a las instrucciones', async () => {
+    mockGenerateContent.mockResolvedValue({
+      response: { text: () => JSON.stringify({ tema: 'otros', confianza: 0.7 }) },
+    });
+    const provider = new GeminiProvider();
+    await provider.classifyTopic({ historial: HISTORIAL, instrucciones: INSTRUCCIONES, opciones: OPCIONES });
+
+    const { systemInstruction } = mockGenerateContent.mock.calls[0]![0] as { systemInstruction: string };
+    expect(systemInstruction.startsWith(INSTRUCCIONES)).toBe(true);
+    expect(systemInstruction).toContain('- Curso intensivo: Seis semanas');
+    expect(systemInstruction).toContain('- Asesoría');
+  });
+
+  it('devuelve tema y confianza; sin ellos, otros y 0', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      response: { text: () => JSON.stringify({ tema: 'Asesoría', confianza: 0.81 }) },
+    });
+    mockGenerateContent.mockResolvedValueOnce({ response: { text: () => '{}' } });
+    const provider = new GeminiProvider();
+
+    const a = await provider.classifyTopic({ historial: HISTORIAL, instrucciones: INSTRUCCIONES, opciones: OPCIONES });
+    const b = await provider.classifyTopic({ historial: HISTORIAL, instrucciones: INSTRUCCIONES, opciones: OPCIONES });
+
+    expect(a.result).toEqual({ tema: 'Asesoría', confianza: 0.81 });
+    expect(b.result).toEqual({ tema: 'otros', confianza: 0 });
+  });
+});
+
 describe('GeminiProvider.embedTexts', () => {
   beforeEach(() => {
     vi.clearAllMocks();

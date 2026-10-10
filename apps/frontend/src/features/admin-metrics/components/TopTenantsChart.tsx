@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Bar, BarChart, LabelList, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChartCard, ChartEmpty } from './ChartCard.js';
+import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { useGlobalMetrics } from '../hooks/useGlobalMetrics.js';
 import { formatEntero } from '../lib/format.js';
 import type { GlobalMetricsParams } from '../types/index.js';

@@ -35,3 +35,13 @@ export function puedeVerDatosSensibles(
 
 /** Copy único para explicar por qué un dato está oculto. Se repite en tooltip y en el diálogo. */
 export const MOTIVO_DATOS_SENSIBLES = 'Solo Dirección y Gerencia pueden ver este dato.';
+
+/** Subroles que ven los reportes de productividad del equipo (HU-REP-01, ADR 0011). */
+export const SUBROLES_REPORTES: AdminSubrol[] = ['director', 'manager'];
+
+/** Gemelo de `authorizeSubrol(SUBROLES_REPORTES)`. Un `admin` sin `subrol` conserva acceso. */
+export function puedeVerReportes(user: { rol: UserRol; subrol?: AdminSubrol } | null): boolean {
+  if (!user || user.rol !== 'admin') return false;
+  if (!user.subrol) return true;
+  return SUBROLES_REPORTES.includes(user.subrol);
+}

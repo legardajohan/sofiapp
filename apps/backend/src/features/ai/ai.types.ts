@@ -14,7 +14,7 @@ export interface IAiResponseContextLean extends IAiResponseContext {
 
 export interface AiResponseSummaryDTO {
   id: string;
-  method: 'chat' | 'extract' | 'classify' | 'summary';
+  method: 'chat' | 'extract' | 'classify' | 'summary' | 'topic';
   model: string;
   cacheHit: boolean;
   fromFaq: boolean;
@@ -37,7 +37,7 @@ export interface Paginated<T> {
   total: number;
 }
 
-export type AiUsageMethod = 'chat' | 'extract' | 'classify' | 'summary';
+export type AiUsageMethod = 'chat' | 'extract' | 'classify' | 'summary' | 'topic';
 
 export interface ListAiResponsesQuery {
   page: number;

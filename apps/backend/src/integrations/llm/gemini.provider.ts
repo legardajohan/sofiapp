@@ -10,6 +10,8 @@ import type {
   ILlmProvider,
   ChatTurn,
   ClassifyLeadOutput,
+  ClassifyTopicOutput,
+  TopicOption,
   SlotSpec,
   SlotResult,
   NivelInteres,
@@ -18,6 +20,7 @@ import type {
   LlmUsage,
   LlmCallResult,
 } from './llm-provider.types.js';
+import { TEMA_OTROS } from './llm-provider.types.js';
 
 const ZERO_USAGE: LlmUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
@@ -98,6 +101,27 @@ const CLASSIFY_SCHEMA: Schema = {
   // `objecion` sigue fuera de `required` porque su ausencia ES la respuesta "no planteó ninguna".
   required: ['nivelInteres', 'confianza', 'motivo'],
 };
+
+/**
+ * Schema de salida del clasificador de tema (HU-REP-03). El `enum` se construye por llamada con los
+ * nombres del tenant: es lo que impide que el modelo invente un producto o reformule uno.
+ */
+function topicSchema(opciones: TopicOption[]): Schema {
+  return {
+    type: SchemaType.OBJECT,
+    properties: {
+      tema: { type: SchemaType.STRING, format: 'enum', enum: [...opciones.map((o) => o.nombre), TEMA_OTROS] },
+      confianza: { type: SchemaType.NUMBER },
+    },
+    required: ['tema', 'confianza'],
+  };
+}
+
+/** La lista de productos, una por línea, tal como el modelo la tiene que copiar. */
+function bloqueOpciones(opciones: TopicOption[]): string {
+  const lineas = opciones.map((o) => `- ${o.nombre}${o.descripcion ? `: ${o.descripcion}` : ''}`);
+  return `\n\n--- PRODUCTOS DE LA EMPRESA ---\n${lineas.join('\n')}\n--- FIN PRODUCTOS ---`;
+}
 
 export class GeminiProvider implements ILlmProvider {
   private readonly genAI: GoogleGenerativeAI;
@@ -186,6 +210,32 @@ export class GeminiProvider implements ILlmProvider {
           confianza: raw.confianza ?? 0,
           motivo: raw.motivo ?? '',
         },
+        usage: usageFromResponse(result.response),
+      };
+    });
+  }
+
+  async classifyTopic(input: {
+    historial: ChatTurn[];
+    instrucciones: string;
+    opciones: TopicOption[];
+  }): Promise<LlmCallResult<ClassifyTopicOutput>> {
+    return this.callWithRetry(async (signal) => {
+      const model = this.genAI.getGenerativeModel({
+        model: env.GEMINI_MODEL,
+        generationConfig: { responseMimeType: 'application/json', responseSchema: topicSchema(input.opciones) },
+      });
+      const result = await model.generateContent(
+        {
+          contents: chatTurnsToContents(input.historial),
+          systemInstruction: input.instrucciones + bloqueOpciones(input.opciones),
+        },
+        { signal },
+      );
+      const raw = JSON.parse(result.response.text()) as { tema?: string; confianza?: number };
+      // Sin sanear, como `classifyLead`: el recorte de `confianza` vive en `AIService.classifyTopic`.
+      return {
+        result: { tema: raw.tema ?? TEMA_OTROS, confianza: raw.confianza ?? 0 },
         usage: usageFromResponse(result.response),
       };
     });
