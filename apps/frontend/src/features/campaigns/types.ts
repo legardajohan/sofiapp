@@ -138,6 +138,11 @@ export interface CreateCampaignPayload {
   parametros: string[];
   lanzar?: boolean;
   programadaPara?: string;
+  /**
+   * HT-WA-04: imagen de reemplazo. No viaja en el JSON: `createCampaign` la sube antes con
+   * `POST /campaigns/media` y manda su `imagenHeaderUploadId`. Sin ella, la imagen por defecto.
+   */
+  imagen?: File | null;
 }
 
 /** Programar una campaña (HU-MARK-03). Viaja como multipart: la imagen es un archivo aparte. */
@@ -156,4 +161,6 @@ export interface RescheduleCampaignPayload {
   id: string;
   programadaPara?: string;
   imagen?: File;
+  /** HT-WA-04: vuelve a la imagen por defecto de la plantilla. Excluyente con `imagen`. */
+  quitarImagen?: boolean;
 }

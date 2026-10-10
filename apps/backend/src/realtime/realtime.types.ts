@@ -1,6 +1,10 @@
 import type { IConversationResponse, IMessageResponse } from '../features/conversation/conversation.types.js';
 import type { ILeadResponse } from '../features/lead/lead.types.js';
 import type { EstadoCampana, ITotalesCampana } from '../features/campaign/campaign.types.js';
+import type {
+  EstadoPlantilla,
+  IMotivoRechazoResponse,
+} from '../features/whatsapp-template/whatsapp-template.types.js';
 
 /** Canal Redis pub/sub que puentea el proceso worker con el gateway del proceso web. */
 export const REALTIME_CHANNEL = 'realtime';
@@ -78,4 +82,16 @@ export type RealtimeEvent =
       campaignId: string;
       estado: EstadoCampana;
       totales: ITotalesCampana;
+    }
+  | {
+      /**
+       * Meta cambió el estado de una plantilla (HT-WA-04): llega por el webhook
+       * `message_template_status_update` o por la sincronización de respaldo. Va al room del
+       * tenant: el catálogo de plantillas es una vista compartida entre administradores.
+       */
+      type: 'template:status-updated';
+      tenantId: string;
+      templateId: string;
+      status: EstadoPlantilla;
+      motivoRechazo: IMotivoRechazoResponse | null;
     };

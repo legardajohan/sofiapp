@@ -1,3 +1,4 @@
+import { uploadHeaderImage } from '../../api/whatsapp-templates.js';
 import { apiClient } from '../../api/apiClient.js';
 import type {
   CampoExtraido,
@@ -236,6 +237,27 @@ export async function confirmarDatosExtraidos(
   const { data } = await apiClient.post<ConfirmarExtraccionDTO>(
     `/clientes/${clienteId}/extract/confirm`,
     { campos },
+  );
+  return data;
+}
+
+/**
+ * Envía una plantilla aprobada al contacto de la conversación (HT-WA-04, criterio 12). Es la única
+ * forma de escribirle con la ventana de 24 h cerrada. `imagen` es la de reemplazo: si viene, se sube
+ * antes y viaja solo su `uploadId`; si no, sale la imagen por defecto de la plantilla.
+ */
+export async function sendTemplateMessage(params: {
+  clienteId: string;
+  templateId: string;
+  parametros: string[];
+  imagen?: File | null;
+}): Promise<{ id: string; status: string }> {
+  const { imagen, ...cuerpo } = params;
+  const imagenHeaderUploadId = imagen ? (await uploadHeaderImage(imagen)).uploadId : undefined;
+  const { data } = await apiClient.post<{ id: string; status: string }>(
+    '/messages/template',
+    { ...cuerpo, ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}) },
+    { timeout: TIMEOUT_SUBIDA_MS },
   );
   return data;
 }

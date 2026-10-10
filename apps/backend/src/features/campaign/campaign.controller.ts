@@ -11,6 +11,7 @@ import {
   rescheduleCampaign,
   resumeCampaign,
   scheduleCampaign,
+  subirImagenReemplazo,
 } from './campaign.service.js';
 import type { IImagenSubida } from './campaign.types.js';
 import type {
@@ -76,6 +77,12 @@ export const cancelCampaignController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
   res.status(200).json(await cancelCampaign(tenantId, req.user!.sub, id));
+};
+
+/** Imagen de reemplazo (HT-WA-04). Responde el `uploadId` que consume el alta o el envío. */
+export const uploadCampaignMediaController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  res.status(201).json(await subirImagenReemplazo(tenantId, imagenDe(req.file)));
 };
 
 /** Archivo de multer → tipo del dominio. El service no conoce Express. */

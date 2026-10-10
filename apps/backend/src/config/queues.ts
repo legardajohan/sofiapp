@@ -35,6 +35,14 @@ export const CAMPAIGN_SWEEP_SCHEDULER_ID = 'campaign-sweep';
  */
 export const CAMPAIGN_SCHEDULED_START_JOB = 'start-exact';
 
+// HT-WA-04 — estado de las plantillas en Meta: eventos del webhook `message_template_status_update`
+// y la sincronización de respaldo, que pregunta a Meta por los tenants con plantillas en revisión.
+export const TEMPLATE_QUEUE_NAME = 'whatsapp-templates';
+export const TEMPLATE_STATUS_JOB = 'status-update';
+export const TEMPLATE_SYNC_SWEEP_JOB = 'sync-sweep';
+export const TEMPLATE_SYNC_TENANT_JOB = 'sync-tenant';
+export const TEMPLATE_SYNC_SCHEDULER_ID = 'template-sync-sweep';
+
 const connection = { url: env.REDIS_URL };
 
 export const inboundQueue = new Queue(INBOUND_QUEUE_NAME, { connection });
@@ -43,3 +51,4 @@ export const aiReplyQueue = new Queue(AI_REPLY_QUEUE_NAME, { connection });
 export const flowRuntimeQueue = new Queue(FLOW_RUNTIME_QUEUE_NAME, { connection });
 export const campaignQueue = new Queue(CAMPAIGN_QUEUE_NAME, { connection });
 export const mediaIngestQueue = new Queue(MEDIA_INGEST_QUEUE_NAME, { connection });
+export const templateQueue = new Queue(TEMPLATE_QUEUE_NAME, { connection });

@@ -16,16 +16,25 @@ import {
   campaignQueue,
 } from '../../config/queues.js';
 import { construirCampaignMediaKey, getMediaStorage } from '../../integrations/storage/index.js';
-import { metaMediaClient } from '../../integrations/meta/meta-media.client.js';
 import { logger } from '../../utils/logger.js';
 import { firmarUrlMedia, recursoImagenCampana } from '../media/media.token.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
 import {
   assertContenidoCompatible,
-  buildTemplatePayload,
+  prepararImagenPorDefecto,
 } from '../whatsapp-template/whatsapp-template.service.js';
+import { asegurarMetaMediaId, extensionImagen } from '../media/media-meta-cache.js';
+import {
+  aImagenAlmacenada,
+  consumirSubida,
+  exigirImagen,
+  registrarSubida,
+  toUploadResponse,
+  validarImagenCabecera,
+} from '../media/media-upload.service.js';
+import type { IUploadResponse } from '../media/media.types.js';
 import { WhatsAppTemplate } from '../whatsapp-template/whatsapp-template.model.js';
-import { getChannelCapacity, getIntegrationWithToken } from '../channel/channel.service.js';
+import { getChannelCapacity } from '../channel/channel.service.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from '../message/message.model.js';
@@ -227,13 +236,25 @@ export async function createCampaign(
 ): Promise<ICampaignResponse> {
   // Se valida la plantilla ANTES de crear nada: una campaña en borrador apuntando a una plantilla
   // rechazada es una trampa que solo explota al lanzar, cuando ya se invirtió tiempo en el wizard.
-  await buildTemplatePayload(tenantId, dto.templateId, dto.parametros);
+  await assertContenidoCompatible(
+    tenantId,
+    dto.templateId,
+    dto.parametros,
+    !!dto.imagenHeaderUploadId,
+  );
+
+  // HT-WA-04: la imagen de reemplazo se consume una sola vez y pasa a ser de ESTA campaña. Cambiarla
+  // luego no toca la plantilla ni las demás campañas que la usan (criterio 11).
+  const reemplazo = dto.imagenHeaderUploadId
+    ? await consumirSubida(tenantId, dto.imagenHeaderUploadId, 'cabecera-reemplazo')
+    : null;
 
   const creada = await createScoped(Campaign, tenantId, {
     nombre: dto.nombre,
     filtros: dto.filtros,
     templateId: new Types.ObjectId(dto.templateId),
     parametros: dto.parametros,
+    contenido: { imagen: reemplazo ? aImagenAlmacenada(reemplazo) : null },
     estado: dto.programadaPara ? 'programada' : 'borrador',
     programadaPara: dto.programadaPara ? new Date(dto.programadaPara) : null,
     creadaPor: new Types.ObjectId(actorId),
@@ -380,12 +401,6 @@ export async function launchCampaign(
 
 // ─── Programación con imagen (HU-MARK-03) ───────────────────────────────────────
 
-/**
- * Vida útil que se le da a un `metaMediaId`. Meta lo conserva 30 días; se renueva a los 25 para que
- * un lote que arranca el día 29 no se quede con un id que caduca a mitad del envío.
- */
-const VIDA_MEDIA_META_MS = 25 * MS_24H;
-
 /** `jobId` del arranque exacto. Incluye la hora: reprogramar crea un job nuevo, no choca con el viejo. */
 export function campaignStartJobId(campaignId: string, programadaParaMs: number): string {
   return `campaign-start-${campaignId}-${programadaParaMs}`;
@@ -451,65 +466,51 @@ function eliminarImagenSilenciosa(mediaKey: string): void {
     });
 }
 
-async function leerComoBuffer(mediaKey: string): Promise<Buffer> {
-  const { stream } = await getMediaStorage().leer(mediaKey);
-  const trozos: Buffer[] = [];
-  for await (const trozo of stream) {
-    trozos.push(Buffer.isBuffer(trozo) ? trozo : Buffer.from(trozo as Uint8Array));
-  }
-  return Buffer.concat(trozos);
-}
-
 /**
  * Deja lista la imagen de cabecera para enviar y devuelve su `metaMediaId`, o `undefined` si la
- * campaña es de solo texto.
+ * campaña se envía sin imagen.
  *
- * Sube a Meta solo si no hay id o si el que hay tiene más de `VIDA_MEDIA_META_MS`: una vez por
- * campaña en el caso normal. El id se cachea en el documento para que los lotes lo reutilicen.
+ * Regla de resolución (HT-WA-04): imagen de reemplazo de la campaña si existe; si no, la imagen por
+ * defecto de la plantilla. El id se cachea en el documento dueño de la imagen —la campaña o la
+ * plantilla—, así que la subida a Meta ocurre una vez y los lotes la reutilizan.
  */
 export async function prepararImagenCabecera(
   tenantId: TenantId,
   campana: LeanCampaign,
 ): Promise<{ metaMediaId: string } | undefined> {
   const imagen = campana.contenido?.imagen;
-  if (!imagen) return undefined;
-
-  const subidaAt = imagen.subidaMetaAt ? new Date(imagen.subidaMetaAt).getTime() : null;
-  if (imagen.metaMediaId && subidaAt !== null && Date.now() - subidaAt < VIDA_MEDIA_META_MS) {
-    return { metaMediaId: imagen.metaMediaId };
+  if (!imagen) {
+    const porDefecto = await prepararImagenPorDefecto(tenantId, campana.templateId.toString());
+    return porDefecto ? { metaMediaId: porDefecto.metaMediaId } : undefined;
   }
 
-  let mediaId: string;
-  try {
-    const integration = await getIntegrationWithToken(tenantId);
-    const buffer = await leerComoBuffer(imagen.mediaKey);
-    const extension = imagen.mimeType === 'image/png' ? 'png' : 'jpg';
-    ({ mediaId } = await metaMediaClient.subir(integration.phoneNumberId, integration.accessToken, {
-      buffer,
-      mimeType: imagen.mimeType,
-      nombreArchivo: `campana-${campana._id.toString()}.${extension}`,
-    }));
-  } catch (err) {
-    logger.error('No se pudo subir la imagen de campaña a Meta', {
-      campaignId: campana._id.toString(),
-      error: String(err),
-    });
-    throw new AppError('No se pudo subir la imagen de la campaña a WhatsApp.', 502);
-  }
-
-  await findOneAndUpdateScoped(
-    Campaign,
-    tenantId,
-    { _id: campana._id },
-    {
-      $set: {
-        'contenido.imagen.metaMediaId': mediaId,
-        'contenido.imagen.subidaMetaAt': new Date(),
-      },
+  const metaMediaId = await asegurarMetaMediaId(tenantId, imagen, {
+    nombreArchivo: `campana-${campana._id.toString()}.${extensionImagen(imagen.mimeType)}`,
+    mensajeError: 'No se pudo subir la imagen de la campaña a WhatsApp.',
+    persistir: async (id, at) => {
+      await findOneAndUpdateScoped(
+        Campaign,
+        tenantId,
+        { _id: campana._id },
+        { $set: { 'contenido.imagen.metaMediaId': id, 'contenido.imagen.subidaMetaAt': at } },
+      );
     },
-  );
+  });
+  return { metaMediaId };
+}
 
-  return { metaMediaId: mediaId };
+/**
+ * Primer paso de la imagen de reemplazo (HT-WA-04, criterio 10): valida (JPG/PNG ≤ 5 MB), la guarda
+ * bajo el prefijo del tenant y devuelve el `uploadId`. No pasa por Meta: la imagen de un envío no
+ * se revisa, solo la muestra de la plantilla.
+ */
+export async function subirImagenReemplazo(
+  tenantId: TenantId,
+  archivo: IImagenSubida | undefined,
+): Promise<IUploadResponse> {
+  const imagen = exigirImagen(archivo);
+  const mimeType = validarImagenCabecera(imagen);
+  return toUploadResponse(await registrarSubida(tenantId, imagen, mimeType, 'cabecera-reemplazo'));
 }
 
 /**

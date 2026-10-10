@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, FileStack, Plus, RefreshCw } from 'lucide-react';
+import { Eye, FileStack, ImageIcon, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,8 +25,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { getWhatsAppTemplates, syncWhatsAppTemplates, templateErrorMessage } from '../../../api/whatsapp-templates.js';
-import { TemplatePreview } from './TemplatePreview.js';
+import { apiUrl } from '@/api/apiClient';
+import { MessagePreview } from '@/features/campaigns/components/MessagePreview';
+import {
+  getWhatsAppTemplates,
+  syncWhatsAppTemplate,
+  syncWhatsAppTemplates,
+  templateErrorMessage,
+} from '../../../api/whatsapp-templates.js';
 import { TemplateStatusBadge } from './TemplateStatusBadge.js';
 import {
   CATEGORIAS_PLANTILLA,
@@ -49,6 +55,7 @@ const ESTADO_LABEL: Record<EstadoPlantilla, string> = {
   REJECTED: 'Rechazada',
   PAUSED: 'Pausada',
   DISABLED: 'Deshabilitada',
+  IN_APPEAL: 'En apelación',
 };
 
 interface Props {
@@ -83,6 +90,18 @@ export function TemplateList({ onCreate }: Props): React.ReactElement {
     },
     onError: (err: Error) => {
       toast.error(templateErrorMessage(err, 'No se pudo sincronizar el catálogo.'));
+    },
+  });
+
+  // «Actualizar estado» de una fila (HT-WA-04): pregunta a Meta por esa plantilla y nada más.
+  const syncOneMutation = useMutation({
+    mutationFn: syncWhatsAppTemplate,
+    onSuccess: (tpl) => {
+      void queryClient.invalidateQueries({ queryKey: ['whatsapp-templates'] });
+      toast.success(`Estado de ${tpl.name} actualizado`);
+    },
+    onError: (err: Error) => {
+      toast.error(templateErrorMessage(err, 'No se pudo consultar el estado en Meta.'));
     },
   });
 
@@ -202,7 +221,9 @@ export function TemplateList({ onCreate }: Props): React.ReactElement {
                 <TableHead className="w-32">Categoría</TableHead>
                 <TableHead className="w-40">Estado</TableHead>
                 <TableHead>Cuerpo</TableHead>
-                <TableHead className="w-24 text-right">Vista previa</TableHead>
+                <TableHead className="w-28 text-right">
+                  <span className="sr-only">Acciones</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -213,6 +234,12 @@ export function TemplateList({ onCreate }: Props): React.ReactElement {
                     {tpl.obsoleta && (
                       <span className="ml-1.5 text-xs text-muted-foreground">(obsoleta)</span>
                     )}
+                    {tpl.cabecera === 'IMAGE' && (
+                      <span className="mt-1 flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                        <ImageIcon className="size-3.5" aria-hidden="true" />
+                        Con imagen
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="align-top text-secondary-foreground">{tpl.language}</TableCell>
                   <TableCell className="align-top text-secondary-foreground">
@@ -220,13 +247,37 @@ export function TemplateList({ onCreate }: Props): React.ReactElement {
                   </TableCell>
                   <TableCell className="align-top">
                     <TemplateStatusBadge status={tpl.status} />
+                    {tpl.motivoRechazo && (
+                      <p
+                        className="mt-1.5 line-clamp-3 text-xs text-destructive"
+                        title={`${tpl.motivoRechazo.mensaje} (${tpl.motivoRechazo.codigo})`}
+                      >
+                        {tpl.motivoRechazo.mensaje}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="align-top text-secondary-foreground">
                     <span className="line-clamp-2" title={tpl.cuerpo ?? undefined}>
                       {tpl.cuerpo ?? '—'}
                     </span>
                   </TableCell>
-                  <TableCell className="align-top text-right">
+                  <TableCell className="align-top whitespace-nowrap text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actualizar el estado de ${tpl.name}`}
+                      title="Actualizar estado"
+                      disabled={syncOneMutation.isPending && syncOneMutation.variables === tpl.id}
+                      onClick={() => syncOneMutation.mutate(tpl.id)}
+                    >
+                      <RefreshCw
+                        className={`size-4 ${
+                          syncOneMutation.isPending && syncOneMutation.variables === tpl.id
+                            ? 'animate-spin'
+                            : ''
+                        }`}
+                      />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -249,7 +300,22 @@ export function TemplateList({ onCreate }: Props): React.ReactElement {
           <DialogHeader>
             <DialogTitle>{preview?.name}</DialogTitle>
           </DialogHeader>
-          {preview && <TemplatePreview cuerpo={preview.cuerpo} ejemplos={preview.ejemplos} />}
+          {preview && (
+            <MessagePreview
+              cuerpo={preview.cuerpo}
+              parametros={preview.ejemplos}
+              imagenUrl={preview.imagen ? apiUrl(preview.imagen.url) : null}
+              conImagen={preview.cabecera === 'IMAGE'}
+              pie={preview.pie}
+              textoVacio="Sin contenido"
+            />
+          )}
+          {preview?.cabecera === 'IMAGE' && !preview.imagen && (
+            <p className="text-sm text-muted-foreground">
+              Esta plantilla se creó fuera de SofiApp y no tiene imagen por defecto: cada campaña o
+              envío tendrá que llevar la suya.
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </section>

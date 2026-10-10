@@ -174,6 +174,9 @@ const EnvSchema = z.object({
   // Cadencia del barrido que levanta las campañas programadas. Un minuto: es la resolución con la
   // que el usuario elige la hora de inicio.
   CAMPAIGN_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  // HT-WA-04 — cada cuánto se pregunta a Meta por las plantillas que siguen en revisión (respaldo
+  // del webhook `message_template_status_update`). 30 min por defecto.
+  TEMPLATE_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(1_800_000),
 
   // ─── Media de la conversación (HU-OMNI-06, ADR-0008) ─────────────────────────────
   // `local` por defecto: el entorno de desarrollo no necesita credenciales ni infraestructura

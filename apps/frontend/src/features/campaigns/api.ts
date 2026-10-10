@@ -1,4 +1,5 @@
 import { apiClient } from '../../api/apiClient.js';
+import { uploadHeaderImage } from '../../api/whatsapp-templates.js';
 import type {
   CampaignDTO,
   CampaignDetalleDTO,
@@ -53,8 +54,19 @@ export async function fetchRecipients(
   return data;
 }
 
-export async function createCampaign(payload: CreateCampaignPayload): Promise<CampaignDTO> {
-  const { data } = await apiClient.post<CampaignDTO>('/campaigns', payload);
+/**
+ * Crea una campaña. Con imagen de reemplazo (HT-WA-04) la sube primero y manda solo su
+ * `uploadId`: el alta sigue siendo JSON y la imagen queda ligada a esta campaña.
+ */
+export async function createCampaign({
+  imagen,
+  ...payload
+}: CreateCampaignPayload): Promise<CampaignDTO> {
+  const imagenHeaderUploadId = imagen ? (await uploadHeaderImage(imagen)).uploadId : undefined;
+  const { data } = await apiClient.post<CampaignDTO>('/campaigns', {
+    ...payload,
+    ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
+  });
   return data;
 }
 
@@ -87,10 +99,12 @@ export async function rescheduleCampaign({
   id,
   programadaPara,
   imagen,
+  quitarImagen,
 }: RescheduleCampaignPayload): Promise<CampaignDTO> {
   const form = new FormData();
   if (programadaPara) form.append('programadaPara', programadaPara);
   if (imagen) form.append('imagen', imagen);
+  if (quitarImagen) form.append('quitarImagen', 'true');
 
   const { data } = await apiClient.patch<CampaignDTO>(`/campaigns/${id}/schedule`, form, {
     timeout: TIMEOUT_SUBIDA_MS,

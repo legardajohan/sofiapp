@@ -107,6 +107,9 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
 
   for (const entry of payload.entry) {
     for (const change of entry.changes) {
+      // HT-WA-04: el payload puede traer cambios de otros campos (estado de plantillas). Esos van por
+      // su propia cola y no tienen `metadata`: aquí solo se ingieren mensajes.
+      if (change.field !== 'messages') continue;
       const value = change.value;
       const phoneNumberId = value.metadata.phone_number_id;
 
