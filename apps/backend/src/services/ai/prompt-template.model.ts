@@ -3,7 +3,7 @@ import { Schema, model, type Document, type Types } from 'mongoose';
 export interface IPromptTemplate {
   // null = plantilla global (fallback cuando no existe una específica del tenant)
   tenantId: Types.ObjectId | null;
-  method: 'chat' | 'extract' | 'classify' | 'summary';
+  method: 'chat' | 'extract' | 'classify' | 'summary' | 'topic';
   version: string;
   systemPrompt: string;
   /**
@@ -23,7 +23,7 @@ export interface IPromptTemplateDocument extends IPromptTemplate, Document {}
 const PromptTemplateSchema = new Schema<IPromptTemplateDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null, index: true },
-    method: { type: String, enum: ['chat', 'extract', 'classify', 'summary'], required: true },
+    method: { type: String, enum: ['chat', 'extract', 'classify', 'summary', 'topic'], required: true },
     version: { type: String, required: true },
     systemPrompt: { type: String, required: true },
     tono: { type: String },

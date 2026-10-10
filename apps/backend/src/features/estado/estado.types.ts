@@ -23,6 +23,12 @@ export const COLOR_ESTADO_DEFECTO = '#475569';
  */
 export const KEY_ESTADO_ENTRADA = 'nuevo';
 
+/**
+ * Etapa sembrada que cuenta como **venta** en los reportes (HU-SAAS-03, HU-REP-01). Una sola
+ * fuente para que el tablero global y el reporte por asesor hablen de la misma venta.
+ */
+export const KEY_ESTADO_VENTA = 'pagado';
+
 export interface IEstado {
   tenantId: Types.ObjectId;
   /**

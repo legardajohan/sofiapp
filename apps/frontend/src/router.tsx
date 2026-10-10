@@ -3,12 +3,29 @@ import { createBrowserRouter } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage.js';
 import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
+import { RequireReportes } from './components/RequireReportes.js';
 import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
 import { Loading } from './components/Loading.js';
 import { AppLayout } from './components/layout/AppLayout.js';
 
+// HU-REP-01: arrastra recharts, así que no entra al bundle inicial.
+const AdvisorReportPage = lazy(() =>
+  import('./features/reports/pages/AdvisorReportPage.js').then((m) => ({ default: m.AdvisorReportPage })),
+);
+// HU-REP-02: mismo motivo, comparte el chunk de recharts con el reporte por asesor.
+const HandoffRatePage = lazy(() =>
+  import('./features/reports/pages/HandoffRatePage.js').then((m) => ({ default: m.HandoffRatePage })),
+);
+// HU-REP-03: idem.
+const TopProductsPage = lazy(() =>
+  import('./features/reports/pages/TopProductsPage.js').then((m) => ({ default: m.TopProductsPage })),
+);
+// HU-REP-04: idem.
+const PeakHoursPage = lazy(() =>
+  import('./features/reports/pages/PeakHoursPage.js').then((m) => ({ default: m.PeakHoursPage })),
+);
 const ChannelConfigPage = lazy(() =>
   import('./features/channels/index.js').then((m) => ({ default: m.ChannelConfigPage })),
 );
@@ -173,6 +190,54 @@ export const router = createBrowserRouter([
                 <Suspense fallback={<Loading />}>
                   <InboxPage />
                 </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/advisors',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <AdvisorReportPage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/handoff-rate',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <HandoffRatePage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/top-products',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <TopProductsPage />
+                  </Suspense>
+                </RequireReportes>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/reports/peak-hours',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireReportes>
+                  <Suspense fallback={<Loading />}>
+                    <PeakHoursPage />
+                  </Suspense>
+                </RequireReportes>
               </RequireRole>
             ),
           },

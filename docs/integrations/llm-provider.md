@@ -17,6 +17,8 @@ export interface ILlmProvider {
   extractSlots(input: { historial: ChatTurn[]; camposObjetivo: SlotSpec[] }): Promise<LlmCallResult<SlotResult>>;
   // Clasificación de nivel de interés y objeción
   classifyLead(input: { historial: ChatTurn[] }): Promise<LlmCallResult<{ nivelInteres: NivelInteres; objecion: Objecion | null }>>;
+  // Tema de la conversación contra la lista cerrada de productos de la KB (HU-REP-03)
+  classifyTopic(input: { historial: ChatTurn[]; instrucciones: string; opciones: TopicOption[] }): Promise<LlmCallResult<{ tema: string; confianza: number }>>;
   // Respuesta conversacional: la usan `AIService.chat()` (nodo `kb`) y `AIService.summarize()`
   generateReply(input: { historial: ChatTurn[]; tono: string; instrucciones: string }): Promise<LlmCallResult<string>>;
   // Embeddings para RAG (HU-KB-01): un vector por texto de entrada
@@ -71,6 +73,32 @@ El nodo `ia` del constructor visual (`docs/data-model.md` → `flows`) es el ún
 - `nivelInteres`: `frio | tibio | caliente`, inferido del lenguaje y la urgencia.
 - `objecionPrincipal`: `precio | tiempo | confianza | otra`.
 - Alimentan la segmentación de campañas (gastar presupuesto Meta solo en tibios/calientes).
+
+## 3bis. Tema de la conversación — `classifyTopic` (HU-REP-03)
+
+Alimenta «Productos más consultados» (ADR 0012).
+
+- **Entrada:** el historial, el `systemPrompt` de la plantilla `topic` y `opciones`: los productos de
+  la tarjeta «Productos y servicios» de la KB del tenant (`{ nombre, descripcion? }`, máx. 12).
+- **Gemini:** la lista se anexa a `systemInstruction` y el `responseSchema` lleva
+  `tema: { type: STRING, enum: [...nombres, 'otros'] }` y `confianza: NUMBER`. El `enum` se construye
+  por llamada: es lo que impide que el modelo invente o reformule un producto.
+- **`AIService.classifyTopic`:** resuelve la plantilla `topic` (global sembrada, `1.0.0`), cachea con
+  la clave `topic` + historial + versión de la lista de productos (TTL `AI_CACHE_TTL_CLASSIFY_S`),
+  recorta `confianza` a `[0, 1]` y registra el uso con `method: 'topic'`.
+- **Clasificador (`features/ai/ai-topic.service.ts`):** corre al final del auto-reply y en el
+  backfill (`pnpm --filter @sofiapp/api backfill:temas`), con el mismo guard y freno de coste. Nunca
+  lanza. Un nombre fuera de la lista o una confianza bajo `TEMA_MIN_CONFIANZA` se guarda como `otros`.
+
+```
+TEMA_AUTO=on                  # on | off — apaga clasificador en línea y backfill
+TEMA_MIN_TURNOS_CLIENTE=2     # mensajes del cliente antes de clasificar
+TEMA_MIN_CONFIANZA=0.6        # por debajo, el tema es "otros"
+TEMA_RECLASIFICAR_CADA=3      # mensajes nuevos del cliente para volver a clasificar
+TEMA_RECLASIFICAR_ESTABLE=15  # ídem cuando el tema salió igual dos veces seguidas
+```
+
+Coste esperado: 1–2 llamadas de ~1.000 tokens por conversación.
 
 ## 4. Worker `llm-process`
 

@@ -44,7 +44,7 @@ export function AppSidebar(): React.ReactElement | null {
   const location = useLocation();
   if (!user) return null;
 
-  const groups = navGroupsForRole(user.rol);
+  const groups = navGroupsForRole(user.rol, user.subrol);
 
   function subActive(to: string): boolean {
     const [path, search] = to.split('?');

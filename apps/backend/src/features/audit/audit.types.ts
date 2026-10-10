@@ -6,6 +6,8 @@ export type AuditAccion =
   | 'cliente.update'
   /** Clasificación de intención de compra que movió (o propuso mover) el semáforo — HU-IA-05. */
   | 'cliente.semaforo'
+  /** La IA cambió el tema (producto consultado) de la conversación — HU-REP-03. Actor `null`. */
+  | 'cliente.tema'
   // HU-IA-06. `cliente.extract`: la IA escribió `datosExtraidos` (actor `null` si fue el worker).
   // `cliente.extract-confirm`: una persona pasó esos datos a la ficha. En ambos el correo viaja
   // como `[oculto]`: `audit_events` no tiene gate por subrol.

@@ -1,6 +1,12 @@
 import type { Types } from 'mongoose';
 import type { ZodSchema } from 'zod';
-import type { ChatTurn, SlotSpec, ClassifyLeadOutput } from '../../integrations/llm/llm-provider.types.js';
+import type {
+  ChatTurn,
+  SlotSpec,
+  ClassifyLeadOutput,
+  ClassifyTopicOutput,
+  TopicOption,
+} from '../../integrations/llm/llm-provider.types.js';
 
 export interface AiResult<T> {
   data: T;
@@ -87,3 +93,14 @@ export interface AiSummarizeParams {
  * reexporta en vez de duplicarlo— porque el servicio no añade campos, solo garantiza rangos.
  */
 export type ClassifyResult = ClassifyLeadOutput;
+
+/** HU-REP-03. `catalogoVersion` versiona la caché: editar la KB no reutiliza una respuesta vieja. */
+export interface AiClassifyTopicParams {
+  tenantId: Types.ObjectId;
+  historial: ChatTurn[];
+  opciones: TopicOption[];
+  catalogoVersion: string;
+}
+
+/** Salida de `AIService.classifyTopic` con `confianza` ya recortada a `[0, 1]`. */
+export type ClassifyTopicResult = ClassifyTopicOutput;

@@ -16,6 +16,8 @@ marca al anterior como *Reemplazado*.
 | [0008](0008-almacenamiento-de-media.md) | Almacenamiento de media de conversación tras un puerto con dos adaptadores | Aceptada |
 | [0009](0009-transcodificacion-de-audio.md) | Transcodificación de notas de voz con ffmpeg en el backend | Aceptada |
 | [0010](0010-modelo-tech-provider.md) | SofiApp opera como Tech Provider frente a Meta, por ahora | Aceptada |
+| [0011](0011-reportes-por-subrol.md) | Los reportes de productividad del equipo se restringen por `subrol` | Aceptada |
+| [0012](0012-tema-por-conversacion.md) | El tema de cada conversación lo clasifica la IA contra los productos de la KB | Aceptada |
 
 ## Convención
 

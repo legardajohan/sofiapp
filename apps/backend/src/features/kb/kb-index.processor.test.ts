@@ -14,6 +14,7 @@ function makeProvider(): ILlmProvider {
     generateReply: vi.fn(),
     extractSlots: vi.fn(),
     classifyLead: vi.fn(),
+    classifyTopic: vi.fn(),
     embedTexts: vi.fn(({ texts }: { texts: string[] }) =>
       Promise.resolve({ result: texts.map(() => [0.1, 0.2, 0.3]), usage: ZERO_USAGE }),
     ),

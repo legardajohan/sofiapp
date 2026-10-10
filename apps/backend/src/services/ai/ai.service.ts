@@ -19,8 +19,10 @@ import type {
   AiChatParams,
   AiExtractParams,
   AiClassifyParams,
+  AiClassifyTopicParams,
   AiSummarizeParams,
   ClassifyResult,
+  ClassifyTopicResult,
   FaqMatcher,
   KnowledgeRetriever,
   RetrievedChunk,
@@ -181,6 +183,41 @@ export class AIService {
     const durationMs = Date.now() - start;
     this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: classifyResult, cacheHit: false, fromFaq: false, ...usage, durationMs };
+  }
+
+  /**
+   * Tema de la conversación contra la lista cerrada de productos de la KB (HU-REP-03).
+   *
+   * Cachea como `classify`: la clave incluye `catalogoVersion`, así que la misma conversación con
+   * la lista de productos cambiada vuelve al modelo. El backfill y el clasificador en línea sobre
+   * el mismo historial comparten la respuesta.
+   */
+  async classifyTopic(params: AiClassifyTopicParams): Promise<AiResult<ClassifyTopicResult>> {
+    const start = Date.now();
+    const template = await this.resolveTemplate(params.tenantId, 'topic');
+    const cacheInput = JSON.stringify({ historial: params.historial, version: params.catalogoVersion });
+    const cacheKey = buildCacheKey(params.tenantId.toString(), 'topic', cacheInput, template.version);
+
+    const cached = await getCached<ClassifyTopicResult>(this.redis, cacheKey);
+    if (cached !== null) {
+      this.logUsage({ tenantId: params.tenantId, method: 'topic', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      return { data: cached, cacheHit: true, fromFaq: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
+    }
+
+    const { result: raw, usage } = await this.provider.classifyTopic({
+      historial: params.historial,
+      instrucciones: template.systemPrompt,
+      opciones: params.opciones,
+    });
+    const topicResult: ClassifyTopicResult = {
+      tema: typeof raw.tema === 'string' ? raw.tema : '',
+      // Mismo default seguro que `classify`: una confianza rara cuenta como 0 y acaba en `otros`.
+      confianza: Math.min(1, Math.max(0, Number(raw.confianza) || 0)),
+    };
+    await setCached(this.redis, cacheKey, topicResult, env.AI_CACHE_TTL_CLASSIFY_S);
+    const durationMs = Date.now() - start;
+    this.logUsage({ tenantId: params.tenantId, method: 'topic', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    return { data: topicResult, cacheHit: false, fromFaq: false, ...usage, durationMs };
   }
 
   /**

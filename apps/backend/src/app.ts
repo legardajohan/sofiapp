@@ -27,6 +27,8 @@ import planAdminRoutes from './features/plan/plan.routes.js';
 import platformSettingsRoutes from './features/platform-settings/platform-settings.routes.js';
 import exchangeRateRoutes from './features/exchange-rate/exchange-rate.routes.js';
 import costCatalogRoutes from './features/cost-catalog/cost-catalog.routes.js';
+import adminMetricsRoutes from './features/admin-metrics/admin-metrics.routes.js';
+import reportsRoutes from './features/reports/reports.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
@@ -81,6 +83,7 @@ app.use('/api/admin/plans', planAdminRoutes);
 app.use('/api/admin/platform-settings', platformSettingsRoutes);
 app.use('/api/admin/exchange-rate', exchangeRateRoutes);
 app.use('/api/admin/cost-items', costCatalogRoutes);
+app.use('/api/admin/metrics', adminMetricsRoutes);
 
 // Rutas tenant-aware (fase 2+)
 app.use('/api/channels/whatsapp', channelRoutes);
@@ -114,6 +117,7 @@ app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportsRoutes);
 
 app.use(errorHandler);
 

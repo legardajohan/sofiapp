@@ -14,6 +14,12 @@ import type { AdminSubrol } from '../features/users/user.types.js';
 export const SUBROLES_DATOS_SENSIBLES: readonly AdminSubrol[] = ['director', 'manager'];
 
 /**
+ * Subroles que ven los reportes de productividad del equipo (HU-REP-01, ADR 0011). Lista propia
+ * aunque hoy coincida con la de datos sensibles: son decisiones distintas que pueden separarse.
+ */
+export const SUBROLES_REPORTES: readonly AdminSubrol[] = ['director', 'manager'];
+
+/**
  * Un `admin` **sin** `subrol` conserva acceso total. No es un descuido: hoy ningún usuario tiene
  * `subrol` asignado (AUTH-02 lo dejó como metadata y nunca hubo UI para asignarlo), así que exigirlo
  * dejaría a todos los tenants fuera de sus propios datos el día del despliegue.

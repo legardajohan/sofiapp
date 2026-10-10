@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
-const aiMethod = z.enum(['chat', 'extract', 'classify', 'summary']);
+const aiMethod = z.enum(['chat', 'extract', 'classify', 'summary', 'topic']);
 
 export const getAiResponseContextSchema = z.object({
   body: empty,

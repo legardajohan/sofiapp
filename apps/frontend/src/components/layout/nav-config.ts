@@ -1,5 +1,6 @@
 import {
   ArrowRightLeft,
+  BarChart3,
   BookText,
   Bot,
   Building2,
@@ -12,6 +13,9 @@ import {
   MessageSquareText,
   Megaphone,
   Package,
+  PieChart,
+  PackageSearch,
+  Clock,
   ScanSearch,
   Sparkles,
   Tags,
@@ -22,7 +26,8 @@ import {
   Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { UserRol } from '@/stores/authStore';
+import type { AdminSubrol, UserRol } from '@/stores/authStore';
+import { SUBROLES_REPORTES } from '@/lib/roles';
 
 export interface NavSubItem {
   label: string;
@@ -35,6 +40,11 @@ export interface NavItem {
   to: string;
   icon: LucideIcon;
   roles: UserRol[];
+  /**
+   * Restringe el ítem a estos subroles (ADR 0006/0011). Un usuario **sin** subrol lo ve igual:
+   * mismo criterio que el backend. Es solo ocultar; la ruta y el API deciden.
+   */
+  subroles?: readonly AdminSubrol[];
   disabled?: boolean;
   children?: NavSubItem[];
 }
@@ -55,7 +65,6 @@ export const navGroups: NavGroup[] = [
         to: '/admin/metrics',
         icon: LineChart,
         roles: ['superadmin'],
-        disabled: true,
       },
     ],
   },
@@ -86,6 +95,39 @@ export const navGroups: NavGroup[] = [
         disabled: true,
       },
       { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['admin'] },
+    ],
+  },
+  {
+    label: 'Reportes',
+    items: [
+      {
+        label: 'Productividad por asesor',
+        to: '/reports/advisors',
+        icon: BarChart3,
+        roles: ['admin'],
+        subroles: SUBROLES_REPORTES,
+      },
+      {
+        label: 'Tasa de escalamiento',
+        to: '/reports/handoff-rate',
+        icon: PieChart,
+        roles: ['admin'],
+        subroles: SUBROLES_REPORTES,
+      },
+      {
+        label: 'Productos más consultados',
+        to: '/reports/top-products',
+        icon: PackageSearch,
+        roles: ['admin'],
+        subroles: SUBROLES_REPORTES,
+      },
+      {
+        label: 'Horas pico',
+        to: '/reports/peak-hours',
+        icon: Clock,
+        roles: ['admin'],
+        subroles: SUBROLES_REPORTES,
+      },
     ],
   },
   {
@@ -145,8 +187,13 @@ export const navGroups: NavGroup[] = [
   },
 ];
 
-export function navGroupsForRole(rol: UserRol): NavGroup[] {
+function visiblePara(item: NavItem, rol: UserRol, subrol?: AdminSubrol): boolean {
+  if (!item.roles.includes(rol)) return false;
+  return !item.subroles || !subrol || item.subroles.includes(subrol);
+}
+
+export function navGroupsForRole(rol: UserRol, subrol?: AdminSubrol): NavGroup[] {
   return navGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => item.roles.includes(rol)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => visiblePara(item, rol, subrol)) }))
     .filter((group) => group.items.length > 0);
 }

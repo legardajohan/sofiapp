@@ -24,6 +24,7 @@ function makeProvider(vectores: number[][] = [[0.1, 0.2, 0.3]]): ILlmProvider {
     generateReply: vi.fn(),
     extractSlots: vi.fn(),
     classifyLead: vi.fn(),
+    classifyTopic: vi.fn(),
   } as unknown as ILlmProvider;
 }
 

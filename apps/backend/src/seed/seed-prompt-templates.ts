@@ -108,6 +108,37 @@ export const EXTRACT_SYSTEM_PROMPT = [
   'van vacíos. Un dato inventado cuesta más que un campo vacío: el asesor va a actuar sobre esto.',
 ].join('\n');
 
+/**
+ * Versión de la plantilla global `topic` (HU-REP-03). Exportada por el mismo motivo que las demás:
+ * `$setOnInsert` no actualiza una global ya sembrada, así que el día que cambie hará falta un
+ * `migrate-topic-template.ts` como los de `classify` y `extract`.
+ *
+ * La lista de productos NO va aquí: es del tenant y la anexa el proveedor a `systemInstruction`, con
+ * el `enum` del `responseSchema` como garantía de que el modelo no puede salirse de ella.
+ */
+export const TOPIC_TEMPLATE_VERSION = '1.0.0';
+
+export const TOPIC_SYSTEM_PROMPT = [
+  'Clasificas conversaciones comerciales de WhatsApp entre una empresa y un cliente potencial.',
+  'Los mensajes con rol "user" son del cliente; los de rol "model" son de la empresa (bot o asesor).',
+  '',
+  'Debes decir sobre qué producto o servicio de la empresa consulta el CLIENTE. Recibirás la lista',
+  'cerrada de productos de la empresa: elige UNO, copiando su nombre EXACTAMENTE como aparece.',
+  '',
+  'Reglas:',
+  '- Si el cliente pregunta por varios, elige aquel en el que más insiste o el más reciente.',
+  '- Si no pregunta por ninguno de la lista —saludos, preguntas generales, horarios, quejas o un',
+  '  producto que la empresa no tiene—, responde "otros".',
+  '- No inventes productos ni adaptes nombres: un nombre que no esté en la lista no sirve.',
+  '- Básate solo en lo que escribe el cliente, no en lo que la empresa le ofrece.',
+  '',
+  'CONFIANZA (número entre 0 y 1): qué tan seguro estás de que ese es el producto que consulta.',
+  '- Alta (0.8 a 1.0): lo nombra o lo describe sin ambigüedad.',
+  '- Media (0.5 a 0.8): se deduce del contexto.',
+  '- Baja (menos de 0.5): dudas entre varios o el cliente casi no ha escrito.',
+  'Ante la duda, BÁJALA: un producto adivinado ensucia el ranking de la empresa.',
+].join('\n');
+
 export const CHAT_SYSTEM_PROMPT = [
   'Eres el asistente virtual de la empresa y atiendes a clientes por WhatsApp.',
   '',
@@ -180,6 +211,15 @@ const GLOBAL_TEMPLATES: IPromptTemplate[] = [
     systemPrompt: EXTRACT_SYSTEM_PROMPT,
     isActive: true,
   },
+  {
+    // HU-REP-03. Sin ella, `AIService.classifyTopic()` lanza 500 y el clasificador de tema registra
+    // un `warn` por ráfaga en todos los tenants. Método nuevo: el seed de arranque la inserta.
+    tenantId: null,
+    method: 'topic',
+    version: TOPIC_TEMPLATE_VERSION,
+    systemPrompt: TOPIC_SYSTEM_PROMPT,
+    isActive: true,
+  },
 ];
 
 /** Siembra idempotente de las plantillas globales (no pisa ediciones posteriores). */
@@ -192,6 +232,6 @@ export async function seedPromptTemplates(): Promise<void> {
     );
   }
   logger.info(
-    'Seed de plantillas de prompt verificado (globales: chat, summary, classify, extract).',
+    'Seed de plantillas de prompt verificado (globales: chat, summary, classify, extract, topic).',
   );
 }

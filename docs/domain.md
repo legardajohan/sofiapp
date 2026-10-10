@@ -246,6 +246,90 @@ Reglas de la escritura automática:
 - La clasificación corre dentro del ciclo de auto-reply, así que **solo con Sofi encendida**: tras un
   handoff el semáforo vuelve a ser de la persona que tomó la conversación.
 
+## 5bis. Productividad por asesor (HU-REP-01)
+
+Definiciones únicas que usa `GET /api/reports/by-advisor`. Cuadran con la bandeja y el pipeline:
+
+- **Conversación atendida por X en el periodo:** `Cliente` con `asesorId = X` (asesor **actual**),
+  que no es de demo (`metaUserId` sin prefijo `demo-`) y tiene al menos un `Message`
+  `sender: 'agent'` —respuesta humana, no de Sofi— con `createdAt` en el periodo.
+- **Asignadas activas:** `asesorId = X` y `ultimoMensajeAt` en el periodo, haya respondido o no.
+- **Venta cerrada por X en el periodo:** lead que **pasó a la etapa `pagado` dentro del periodo**
+  (evento de etapa en `audit_events`) y **sigue** en `pagado`; cuenta una vez y se atribuye a su
+  `responsableId`, no a quien movió la tarjeta. Es la misma clave `pagado` del tablero global
+  (HU-SAAS-03). El semáforo `verde` ("Venta concretada") es una señal, no la venta del reporte.
+- **Tasa de cierre:** ventas / conversaciones atendidas (0 sin atendidas). Indicador operativo: una
+  venta puede venir de un hilo atendido en otro periodo.
+- Lo que no tiene un usuario del tenant (asesor nulo o usuario borrado) se informa como **sin
+  asignar**, para que los totales cuadren.
+
+Limitación aceptada: `Message` no registra **qué** usuario respondió, así que una reasignación
+dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
+`admin` sin subrol (ADR 0011).
+
+## 5ter. Tasa de escalamiento IA → asesor (HU-REP-02)
+
+Definiciones únicas que usa `GET /api/reports/handoff-rate`. Cuadran con los handoffs registrados:
+
+- **Handoff:** evento `audit_events` `conversation.handoff` (actor `null`, el sistema) que escribe
+  la transferencia automática de HU-IA-03/07. **No** se lee `Cliente.handoffAt`: es el estado actual
+  y desaparece cuando el asesor le devuelve el hilo a Sofi.
+- **Conversación transferida en el periodo:** `Cliente` del tenant, no demo, con al menos un handoff
+  con `createdAt` en el periodo. Se cuenta **una vez** aunque haya escalado varias veces (el total de
+  eventos se informa aparte); su motivo es el del último handoff del periodo.
+- **Conversación con IA en el periodo:** `Cliente` del tenant, no demo, con al menos un `Message`
+  `sender: 'bot'` en el periodo **o** transferido en el periodo (el handoff ocurre aunque el aviso de
+  transición no se pueda enviar). Un hilo que solo atendieron personas no entra.
+- **Tasa de escalamiento:** transferidas / conversaciones con IA (0 sin conversaciones con IA);
+  nunca supera 1. Es del periodo, no una cohorte.
+
+No son handoff: apagar la IA a mano (`setIaHabilitada(false)`) ni el aviso por fallo de la IA
+(`marcarParaAsesor`), que no deja evento. `recordAuditEvent` es *best-effort*: un evento perdido no
+se cuenta. Mismo acceso que el reporte por asesor (ADR 0011).
+
+## 5quater. Productos más consultados (HU-REP-03)
+
+Definiciones únicas que usa `GET /api/reports/top-products` (ADR 0012):
+
+- **Tema de la conversación:** el producto de la tarjeta «Productos y servicios» de la KB que el
+  cliente consulta, elegido por la IA de una lista **cerrada** (`Cliente.temaIA`). Uno por
+  conversación. Su clave es el nombre normalizado (minúsculas, sin acentos ni espacios repetidos).
+- **`otros`:** la conversación está clasificada, pero ningún producto encaja —o la IA no estaba
+  segura (`TEMA_MIN_CONFIANZA`)—. `temaIA.clave = null`.
+- **Sin clasificar:** la conversación no tiene `temaIA` todavía (la IA no la atendió, tiene pocos
+  mensajes o el tenant no ha cargado productos). Se recupera con el backfill `backfill:temas`.
+- **Consulta del periodo:** `Cliente` del tenant, no demo, con al menos un `Message`
+  `sender: 'user'` con `createdAt` en el periodo. Una conversación es una consulta, escriba lo que
+  escriba.
+- **Ranking:** las consultas agrupadas por su tema **actual**; `share` = conversaciones del producto /
+  clasificadas, con `clasificadas = consultas − sin clasificar`. Σ ranking + resto + otros =
+  clasificadas.
+- Un producto que ya no está en la KB sigue en el ranking con el nombre guardado y
+  `enCatalogo: false`.
+
+Limitación aceptada, igual que el asesor actual de 5bis: si el tema de un hilo cambió, el periodo
+anterior se atribuye al tema nuevo. `datosExtraidos.interes` (texto libre) **no** entra al ranking.
+Mismo acceso que los demás reportes (ADR 0011).
+
+## 5quinquies. Horas pico de mensajería (HU-REP-04)
+
+Definiciones únicas que usa `GET /api/reports/peak-hours`:
+
+- **Volumen de un bucket:** mensajes del tenant con `createdAt` en ese bucket, de clientes que
+  existen y no son demo. Se separan en **entrantes** (`direccion: 'inbound'`, lo que escriben los
+  clientes) y **salientes** (respuestas del bot y de los asesores, y envíos de plantilla).
+- **Demanda = entrantes.** La hora pico y el día pico se calculan sobre los entrantes, no sobre el
+  total: una campaña (HU-MARK-01) guarda un mensaje saliente por destinatario, y un lanzamiento
+  masivo convertiría su hora en un "pico" que no es demanda. Empate: gana la hora (o el día) más
+  temprano; sin entrantes, no hay pico.
+- **Zona horaria del visor.** El navegador envía su zona IANA (`?tz=`) y el reporte agrupa las horas
+  **y** delimita los días del periodo en esa zona; sin ella, UTC (el criterio de `admin-metrics`).
+  Los instantes guardados no cambian: la zona es solo una lente de lectura. No hay zona por tenant.
+- **Por hora del día:** 24 buckets que suman todo el periodo. **Por día:** un bucket por día
+  calendario del periodo. Ambos traen los vacíos en 0.
+
+Mismo acceso que los demás reportes (ADR 0011).
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.
