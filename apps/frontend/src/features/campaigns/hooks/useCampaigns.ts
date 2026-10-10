@@ -13,11 +13,13 @@ import { getSocket } from '../../../lib/socket.js';
 import {
   cancelCampaign,
   createCampaign,
+  fetchAudiencia,
   fetchCampaign,
   fetchCampaignMetrics,
   fetchCampaignsOverview,
   fetchCampaigns,
   fetchRecipients,
+  fetchSegmentFacetas,
   launchCampaign,
   pauseCampaign,
   previewSegmento,
@@ -26,6 +28,7 @@ import {
   scheduleCampaign,
 } from '../api.js';
 import type {
+  AudienciaContactoDTO,
   CampaignDTO,
   CampaignDetalleDTO,
   CampaignMetricsDTO,
@@ -37,6 +40,7 @@ import type {
   PagedDTO,
   RescheduleCampaignPayload,
   ScheduleCampaignPayload,
+  SegmentFacetasDTO,
   SegmentPreviewDTO,
   SegmentoFiltros,
   TotalesCampana,
@@ -131,6 +135,34 @@ export function useSegmentPreview(
   return useQuery({
     queryKey: ['campaign-segment', filtros],
     queryFn: () => previewSegmento(filtros),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Cuántos contactos hay por etapa y etiqueta. Cambia despacio: un minuto de caché sobra. */
+export function useSegmentFacetas(enabled: boolean): UseQueryResult<SegmentFacetasDTO> {
+  return useQuery({
+    queryKey: ['campaign-segment', 'facetas'],
+    queryFn: fetchSegmentFacetas,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Una página de la audiencia. Los filtros llegan **sin** las exclusiones a mano: quitar o devolver a
+ * alguien no cambia quién aparece en la lista (solo su casilla), así que no debe volver a pedirla.
+ */
+export function useAudiencia(
+  filtros: SegmentoFiltros,
+  busqueda: string,
+  page: number,
+  enabled: boolean,
+): UseQueryResult<PagedDTO<AudienciaContactoDTO>> {
+  return useQuery({
+    queryKey: ['campaign-segment', 'audiencia', filtros, busqueda, page],
+    queryFn: () => fetchAudiencia({ filtros, busqueda: busqueda || undefined, page, limit: 20 }),
     enabled,
     placeholderData: keepPreviousData,
   });

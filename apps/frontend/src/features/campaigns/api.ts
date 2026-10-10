@@ -8,7 +8,9 @@ import type {
   CreateCampaignPayload,
   EstadoCampana,
   EstadoDestinatario,
+  AudienciaContactoDTO,
   PagedDTO,
+  SegmentFacetasDTO,
   RescheduleCampaignPayload,
   ScheduleCampaignPayload,
   SegmentPreviewDTO,
@@ -27,6 +29,26 @@ export async function previewSegmento(filtros: SegmentoFiltros): Promise<Segment
   const { data } = await apiClient.post<SegmentPreviewDTO>('/campaigns/segmento/preview', {
     filtros,
   });
+  return data;
+}
+
+/** Contactos alcanzables (sin baja) por etapa y por etiqueta, para pintarlos junto a cada opción. */
+export async function fetchSegmentFacetas(): Promise<SegmentFacetasDTO> {
+  const { data } = await apiClient.get<SegmentFacetasDTO>('/campaigns/segmento/facetas');
+  return data;
+}
+
+/** La audiencia de unos filtros, paginada y con búsqueda por nombre o teléfono. */
+export async function fetchAudiencia(params: {
+  filtros: SegmentoFiltros;
+  busqueda?: string;
+  page: number;
+  limit?: number;
+}): Promise<PagedDTO<AudienciaContactoDTO>> {
+  const { data } = await apiClient.post<PagedDTO<AudienciaContactoDTO>>(
+    '/campaigns/segmento/contactos',
+    params,
+  );
   return data;
 }
 

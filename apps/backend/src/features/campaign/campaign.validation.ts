@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
-import { ESTADOS_CAMPANA, ESTADOS_DESTINATARIO, INTENCIONES_COMPRA } from './campaign.types.js';
+import {
+  COMBINACIONES_SEGMENTO,
+  ESTADOS_CAMPANA,
+  ESTADOS_DESTINATARIO,
+  INTENCIONES_COMPRA,
+  MAX_EXCLUSIONES_SEGMENTO,
+} from './campaign.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
@@ -34,6 +40,9 @@ const segmentoFiltros = z
     intencionCompra: z.array(z.enum(INTENCIONES_COMPRA)).max(3).optional(),
     estadoComercial: z.array(z.enum(ESTADOS_COMERCIALES)).max(10).optional(),
     tagIds: z.array(objectId).max(50).optional(),
+    etapas: z.array(catalogoKey).max(50).optional(),
+    combinacion: z.enum(COMBINACIONES_SEGMENTO).optional(),
+    excluirClienteIds: z.array(objectId).max(MAX_EXCLUSIONES_SEGMENTO).optional(),
   })
   .strict();
 
@@ -44,6 +53,26 @@ const paginacion = {
 
 export const previewSegmentoSchema = z.object({
   body: z.object({ filtros: segmentoFiltros }).strict(),
+  params: empty,
+  query: empty,
+});
+
+/** `GET /api/campaigns/segmento/facetas`: sin parámetros, cuenta sobre toda la base alcanzable. */
+export const segmentoFacetasSchema = z.object({ body: empty, params: empty, query: empty });
+
+/**
+ * `POST /api/campaigns/segmento/contactos`: la audiencia de unos filtros, paginada y con búsqueda
+ * por nombre o teléfono. `POST` por lo mismo que la vista previa: los filtros son un objeto anidado.
+ */
+export const audienciaSegmentoSchema = z.object({
+  body: z
+    .object({
+      filtros: segmentoFiltros,
+      busqueda: z.string().trim().max(80).optional(),
+      page: z.number().int().positive().default(1),
+      limit: z.number().int().positive().max(50).default(20),
+    })
+    .strict(),
   params: empty,
   query: empty,
 });
@@ -224,6 +253,7 @@ export const campaignsOverviewSchema = z.object({
 });
 
 export type PreviewSegmentoBody = z.infer<typeof previewSegmentoSchema>['body'];
+export type AudienciaSegmentoBody = z.infer<typeof audienciaSegmentoSchema>['body'];
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>['body'];
 export type ListCampaignsQuery = z.infer<typeof listCampaignsSchema>['query'];
 export type ListRecipientsQuery = z.infer<typeof listRecipientsSchema>['query'];

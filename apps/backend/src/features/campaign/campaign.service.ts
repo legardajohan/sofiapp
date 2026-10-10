@@ -32,7 +32,12 @@ import { Message } from '../message/message.model.js';
 import { Campaign } from './campaign.model.js';
 import { CampaignRecipient } from './campaign-recipient.model.js';
 import { assertPuedeLanzar, calcularPresupuesto } from './campaign.pacing.js';
-import { construirFiltroSegmento, previewSegmento } from './campaign.segment.service.js';
+import {
+  construirFiltroSegmento,
+  facetasSegmento,
+  listarAudiencia,
+  previewSegmento,
+} from './campaign.segment.service.js';
 import { marcarEntregado, registrarLectura } from './campaign.metrics.service.js';
 import type { ICliente } from '../cliente/cliente.types.js';
 import type { LeanWhatsAppTemplate } from '../whatsapp-template/whatsapp-template.types.js';
@@ -53,6 +58,8 @@ import type {
   IPaged,
   IPresupuestoResponse,
   ISegmentPreviewResponse,
+  ISegmentFacetasResponse,
+  IAudienciaResponse,
   ISegmentoFiltros,
   LeanCampaign,
   LeanCampaignRecipient,
@@ -187,6 +194,20 @@ export async function previewSegment(
   return { ...segmento, presupuesto };
 }
 
+/** Contactos alcanzables por etapa y por etiqueta, para el constructor de audiencias. */
+export function getSegmentFacetas(tenantId: TenantId): Promise<ISegmentFacetasResponse> {
+  return facetasSegmento(tenantId);
+}
+
+/** La audiencia de unos filtros, paginada y con búsqueda. */
+export function listSegmentAudience(
+  tenantId: TenantId,
+  filtros: ISegmentoFiltros,
+  opciones: { busqueda?: string; page: number; limit: number },
+): Promise<IAudienciaResponse> {
+  return listarAudiencia(tenantId, filtros, opciones);
+}
+
 // ─── Alta y lanzamiento ─────────────────────────────────────────────────────────
 
 /**
@@ -276,6 +297,10 @@ async function materializarDestinatarios(
 
   let pendientes: Record<string, unknown>[] = [];
   let total = 0;
+  // Un mensaje por teléfono: dos fichas con el mismo número (p. ej. un contacto duplicado al
+  // importar) recibirían la campaña dos veces. Es la misma regla con la que la vista previa cuenta
+  // los «válidos», así que lo que se promete en el wizard es lo que sale.
+  const telefonosVistos = new Set<string>();
 
   const volcar = async (): Promise<void> => {
     if (pendientes.length === 0) return;
@@ -284,6 +309,8 @@ async function materializarDestinatarios(
   };
 
   for await (const contacto of cursor) {
+    if (telefonosVistos.has(contacto.telefono)) continue;
+    telefonosVistos.add(contacto.telefono);
     pendientes.push({
       // `insertMany` no pasa por `createScoped`, así que el tenant se inyecta aquí de forma
       // explícita — y siempre el del argumento, nunca uno que venga del contacto.

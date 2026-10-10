@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { MESSAGING_TIERS, QUALITY_RATINGS } from '../channel/channel.types.js';
-import { ESTADOS_CAMPANA, MIMES_IMAGEN_CAMPANA } from './campaign.types.js';
+import { COMBINACIONES_SEGMENTO, ESTADOS_CAMPANA, MIMES_IMAGEN_CAMPANA } from './campaign.types.js';
 import type { ICampaignDocument } from './campaign.types.js';
 
 /**
@@ -28,6 +28,11 @@ const FiltrosSchema = new Schema(
     intencionCompra: { type: [String], default: [] },
     estadoComercial: { type: [String], default: [] },
     tagIds: { type: [Schema.Types.ObjectId], default: [] },
+    // Constructor de audiencias. Sin `enum` en `etapas` por lo mismo que `semaforoLead`: catálogo
+    // por tenant (`estados`). `combinacion` sí es estructura: solo hay dos formas de juntar ejes.
+    etapas: { type: [String], default: [] },
+    combinacion: { type: String, enum: COMBINACIONES_SEGMENTO, default: 'y' },
+    excluirClienteIds: { type: [Schema.Types.ObjectId], default: [] },
   },
   { _id: false },
 );

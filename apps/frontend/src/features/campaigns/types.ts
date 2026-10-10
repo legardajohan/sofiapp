@@ -46,8 +46,38 @@ export interface SegmentoFiltros {
   semaforoLead?: string[];
   nivelInteres?: string[];
   intencionCompra?: IntencionCompra[];
+  /** Enum fijo anterior a las etapas configurables. Ya no se ofrece; se conserva para campañas antiguas. */
   estadoComercial?: string[];
   tagIds?: string[];
+  /** Keys del catálogo de etapas del CRM (`Lead.estado`). */
+  etapas?: string[];
+  /** Cómo se juntan etapas y etiquetas cuando vienen las dos. Ausente = `y`. */
+  combinacion?: CombinacionSegmento;
+  /** Contactos quitados a mano de la audiencia. Solo restan. */
+  excluirClienteIds?: string[];
+}
+
+export type CombinacionSegmento = 'y' | 'o';
+
+/** Tope de exclusiones a mano que acepta el backend. */
+export const MAX_EXCLUSIONES = 1000;
+
+/** De dónde sale el total: `coinciden = validos + bajas + excluidosAMano + duplicados`. */
+export interface ResumenSegmentoDTO {
+  coinciden: number;
+  bajas: number;
+  excluidosAMano: number;
+  duplicados: number;
+  validos: number;
+}
+
+export interface SegmentFacetasDTO {
+  etapas: Array<{ key: string; contactos: number }>;
+  etiquetas: Array<{ tagId: string; contactos: number }>;
+}
+
+export interface AudienciaContactoDTO extends ContactoResumenDTO {
+  excluido: boolean;
 }
 
 export interface PresupuestoDTO {
@@ -68,8 +98,11 @@ export interface ContactoResumenDTO {
 }
 
 export interface SegmentPreviewDTO {
+  /** Teléfonos únicos a los que se escribirá. Igual a `resumen.validos`. */
   total: number;
   muestra: ContactoResumenDTO[];
+  /** Opcional solo para tolerar un backend anterior al constructor de audiencias. */
+  resumen?: ResumenSegmentoDTO;
   presupuesto: PresupuestoDTO;
 }
 

@@ -7,6 +7,8 @@ import {
   listCampaigns,
   listRecipients,
   pauseCampaign,
+  getSegmentFacetas,
+  listSegmentAudience,
   previewSegment,
   rescheduleCampaign,
   resumeCampaign,
@@ -15,6 +17,7 @@ import {
 import { getCampaignMetrics, getCampaignsOverview } from './campaign.metrics.service.js';
 import type { IImagenSubida } from './campaign.types.js';
 import type {
+  AudienciaSegmentoBody,
   CampaignMetricsQuery,
   CampaignsOverviewQuery,
   CreateCampaignBody,
@@ -29,6 +32,17 @@ export const previewSegmentController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const { filtros } = req.body as PreviewSegmentoBody;
   res.status(200).json(await previewSegment(tenantId, filtros));
+};
+
+export const getSegmentFacetasController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  res.status(200).json(await getSegmentFacetas(tenantId));
+};
+
+export const listSegmentAudienceController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const { filtros, busqueda, page, limit } = req.body as AudienciaSegmentoBody;
+  res.status(200).json(await listSegmentAudience(tenantId, filtros, { busqueda, page, limit }));
 };
 
 export const createCampaignController: RequestHandler = async (req, res) => {

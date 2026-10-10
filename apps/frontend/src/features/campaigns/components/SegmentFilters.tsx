@@ -9,11 +9,25 @@ import { useTags } from '@/features/tags/hooks/useTags';
 import { useContactOptions } from '@/features/contacts/hooks/useContactOptions';
 import { ESTADO_LABEL, ESTADOS } from '@/features/leads/lib/format';
 import { useSemaforos } from '@/features/semaforos';
+import { INTENCIONES } from '../lib/segmento.js';
 import type { IntencionCompra, SegmentoFiltros } from '../types.js';
+
+/** Ejes que este bloque sabe pintar. Etapas y etiquetas tienen su propio constructor (`AudienceBuilder`). */
+type EjeFiltro = 'semaforoLead' | 'intencionCompra' | 'estadoComercial' | 'tagIds' | 'nivelInteres';
+
+const TODOS_LOS_EJES: EjeFiltro[] = [
+  'semaforoLead',
+  'intencionCompra',
+  'estadoComercial',
+  'tagIds',
+  'nivelInteres',
+];
 
 interface Props {
   valor: SegmentoFiltros;
   onChange: (filtros: SegmentoFiltros) => void;
+  /** Qué ejes mostrar. Por defecto todos; el constructor de audiencias pide solo los secundarios. */
+  ejes?: EjeFiltro[];
 }
 
 interface Opcion {
@@ -21,13 +35,6 @@ interface Opcion {
   label: string;
   color?: string;
 }
-
-/** Escala cerrada de la IA (HU-IA-05), de más frío a más caliente: el orden en que se lee. */
-const INTENCIONES: Array<Opcion & { key: IntencionCompra }> = [
-  { key: 'frio', label: 'Frío', color: '#2563EB' },
-  { key: 'tibio', label: 'Tibio', color: '#D97706' },
-  { key: 'caliente', label: 'Caliente', color: '#DC2626' },
-];
 
 const ESTADOS_OPCIONES: Opcion[] = ESTADOS.map((e) => ({ key: e, label: ESTADO_LABEL[e] }));
 
@@ -130,7 +137,11 @@ function FiltroCatalogo({
  * de la conversación: una campaña se dirige a oportunidades. Un contacto que nunca se convirtió en
  * lead queda fuera cuando se usa ese filtro, y eso es lo correcto.
  */
-export function SegmentFilters({ valor, onChange }: Props): React.ReactElement {
+export function SegmentFilters({
+  valor,
+  onChange,
+  ejes = TODOS_LOS_EJES,
+}: Props): React.ReactElement {
   const { data: opciones } = useContactOptions();
   const { data: semaforos } = useSemaforos();
   const { data: tags } = useTags();
@@ -155,39 +166,49 @@ export function SegmentFilters({ valor, onChange }: Props): React.ReactElement {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <FiltroCatalogo
-        etiqueta="Semáforo del lead"
-        opciones={semaforosOpciones}
-        seleccion={valor.semaforoLead ?? []}
-        onChange={(semaforoLead) => parchear({ semaforoLead })}
-        vacio="Tu empresa todavía no tiene semáforos configurados."
-      />
-      <FiltroCatalogo
-        etiqueta="Intención de compra"
-        opciones={INTENCIONES}
-        seleccion={valor.intencionCompra ?? []}
-        onChange={(keys) => parchear({ intencionCompra: keys as IntencionCompra[] })}
-      />
-      <FiltroCatalogo
-        etiqueta="Estado comercial"
-        opciones={ESTADOS_OPCIONES}
-        seleccion={valor.estadoComercial ?? []}
-        onChange={(estadoComercial) => parchear({ estadoComercial })}
-      />
-      <FiltroCatalogo
-        etiqueta="Etiquetas"
-        opciones={etiquetas}
-        seleccion={valor.tagIds ?? []}
-        onChange={(tagIds) => parchear({ tagIds })}
-        vacio="Tu empresa todavía no tiene etiquetas. Créalas en Etiquetas."
-      />
-      <FiltroCatalogo
-        etiqueta="Nivel de interés"
-        opciones={intereses}
-        seleccion={valor.nivelInteres ?? []}
-        onChange={(nivelInteres) => parchear({ nivelInteres })}
-        vacio="Tu empresa todavía no tiene niveles de interés configurados."
-      />
+      {ejes.includes('semaforoLead') ? (
+        <FiltroCatalogo
+          etiqueta="Semáforo del lead"
+          opciones={semaforosOpciones}
+          seleccion={valor.semaforoLead ?? []}
+          onChange={(semaforoLead) => parchear({ semaforoLead })}
+          vacio="Tu empresa todavía no tiene semáforos configurados."
+        />
+      ) : null}
+      {ejes.includes('intencionCompra') ? (
+        <FiltroCatalogo
+          etiqueta="Intención de compra"
+          opciones={INTENCIONES}
+          seleccion={valor.intencionCompra ?? []}
+          onChange={(keys) => parchear({ intencionCompra: keys as IntencionCompra[] })}
+        />
+      ) : null}
+      {ejes.includes('estadoComercial') ? (
+        <FiltroCatalogo
+          etiqueta="Estado comercial"
+          opciones={ESTADOS_OPCIONES}
+          seleccion={valor.estadoComercial ?? []}
+          onChange={(estadoComercial) => parchear({ estadoComercial })}
+        />
+      ) : null}
+      {ejes.includes('tagIds') ? (
+        <FiltroCatalogo
+          etiqueta="Etiquetas"
+          opciones={etiquetas}
+          seleccion={valor.tagIds ?? []}
+          onChange={(tagIds) => parchear({ tagIds })}
+          vacio="Tu empresa todavía no tiene etiquetas. Créalas en Etiquetas."
+        />
+      ) : null}
+      {ejes.includes('nivelInteres') ? (
+        <FiltroCatalogo
+          etiqueta="Nivel de interés"
+          opciones={intereses}
+          seleccion={valor.nivelInteres ?? []}
+          onChange={(nivelInteres) => parchear({ nivelInteres })}
+          vacio="Tu empresa todavía no tiene niveles de interés configurados."
+        />
+      ) : null}
     </div>
   );
 }

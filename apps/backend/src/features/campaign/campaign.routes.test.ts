@@ -112,6 +112,56 @@ describe('HU-MARK-01 — contrato HTTP de /api/campaigns', () => {
     expect(res.body.presupuesto).toMatchObject({ tier: 'TIER_1K', calidad: 'GREEN' });
   });
 
+  it('la vista previa trae el resumen de válidos y excluidos', async () => {
+    const res = await auth(
+      request(app).post('/api/campaigns/segmento/preview'),
+      tenantId.toString(),
+    ).send({ filtros: { combinacion: 'o', etapas: [], tagIds: [] } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.resumen).toEqual({
+      coinciden: 1,
+      bajas: 0,
+      excluidosAMano: 0,
+      duplicados: 0,
+      validos: 1,
+    });
+  });
+
+  it('`/segmento/facetas` y `/segmento/contactos` son rutas literales del constructor de audiencias', async () => {
+    const facetas = await auth(
+      request(app).get('/api/campaigns/segmento/facetas'),
+      tenantId.toString(),
+    );
+    expect(facetas.status).toBe(200);
+    expect(facetas.body).toEqual({ etapas: [], etiquetas: [] });
+
+    const contactos = await auth(
+      request(app).post('/api/campaigns/segmento/contactos'),
+      tenantId.toString(),
+    ).send({ filtros: {}, busqueda: 'an' });
+    expect(contactos.status).toBe(200);
+    expect(contactos.body).toMatchObject({ page: 1, limit: 20, total: 1 });
+    expect(contactos.body.data[0]).toMatchObject({ nombre: 'Ana', excluido: false });
+  });
+
+  it('una exclusión con un id mal formado o una combinación desconocida → 400', async () => {
+    const res = await auth(
+      request(app).post('/api/campaigns/segmento/preview'),
+      tenantId.toString(),
+    ).send({ filtros: { excluirClienteIds: ['no-es-un-id'], combinacion: 'xor' } });
+    expect(res.status).toBe(400);
+  });
+
+  it('el constructor de audiencias es cosa de administración: un asesor → 403', async () => {
+    const res = await auth(
+      request(app).get('/api/campaigns/segmento/facetas'),
+      tenantId.toString(),
+      'asesor',
+    );
+    expect(res.status).toBe(403);
+  });
+
   it('un cuerpo con `lanzar` y `programadaPara` a la vez → 400 con el detalle de Zod', async () => {
     const res = await auth(request(app).post('/api/campaigns'), tenantId.toString()).send({
       nombre: 'Promo',
