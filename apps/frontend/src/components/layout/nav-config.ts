@@ -55,7 +55,6 @@ export const navGroups: NavGroup[] = [
         to: '/admin/metrics',
         icon: LineChart,
         roles: ['superadmin'],
-        disabled: true,
       },
     ],
   },

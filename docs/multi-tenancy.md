@@ -102,6 +102,11 @@ propio código:
 3. **Superadmin** — opera **cross-tenant** por diseño. Sus rutas saltan `requireTenant` y usan
    funciones de repositorio NO scoped, restringidas por `authorize(['superadmin'])`. Las
    agregaciones globales se documentan como tales.
+   La única que existe es el tablero de métricas globales (HU-SAAS-03):
+   `admin-metrics.service.ts` lee `Tenant`, `Plan`, `User`, `Cliente`, `Message`, `Lead` y
+   `Campaign` sin `*Scoped`, pero **solo devuelve conteos agrupados por `tenantId`** (nunca
+   documentos, contactos ni textos). Es el único archivo de la feature con lecturas directas.
+   Test de aislamiento: `admin-metrics.isolation.test.ts`.
 4. **Barrido de recordatorios de inactividad (HU-FLOW-02)** — `flow.reminder.service.ts:buscarCandidatos`
    consulta `Cliente.find({...})` sin `tenantId` en el filtro: el barrido periódico (job `sweep` de
    la cola `flow-runtime`) es cross-tenant por naturaleza, una sola pasada para toda la plataforma.

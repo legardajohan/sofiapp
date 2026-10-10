@@ -75,7 +75,7 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | PATCH | `/api/admin/plans/:id` | superadmin | Editar límites/precio/estado de un plan. |
 | PATCH | `/api/admin/tenants/:id/plan` | superadmin | Asignar un plan (activo) a una empresa. |
 | GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
-| GET | `/api/admin/metrics` | superadmin | Métricas globales cross-tenant. |
+| GET | `/api/admin/metrics/global` | superadmin | Tablero global (HU-SAAS-03): `consolidado`, `serieMensual` (6 meses) y `porEmpresa` paginado. Query: `desde`, `hasta`, `page`, `limit` (≤100), `sort`, `order`, `search`, `estado`. Solo conteos, sin PII. Ver `docs/specs/HU-SAAS-03-metricas-globales/spec.md`. |
 | GET | `/api/users` | admin | Admins activos del tenant (`?activo&rol`); alimenta el selector de asignación (HU-OMNI-02). |
 | GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<key del catálogo>` (ya no es un enum cerrado: las etapas son un catálogo por tenant, ver `GET /api/estados`; una clave que no exista en el tenant → **página vacía**, no `400`), `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
