@@ -29,6 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiUrl } from '@/api/apiClient';
+import { CampaignMetricsPanel } from '../components/CampaignMetricsPanel.js';
 import { CampaignProgress } from '../components/CampaignProgress.js';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
 import { MessagePreview } from '../components/MessagePreview.js';
@@ -44,6 +45,7 @@ import {
   useResumeCampaign,
 } from '../hooks/useCampaigns.js';
 import { ETIQUETA_DESTINATARIO } from '../lib/pacing.js';
+import { tieneResultados } from '../lib/metricas.js';
 import { ESTADOS_DESTINATARIO, type EstadoDestinatario } from '../types.js';
 
 const TODOS = '__todos__';
@@ -174,6 +176,8 @@ export function CampaignDetailPage(): React.ReactElement {
       <section className="rounded-lg border border-border bg-card p-5">
         <CampaignProgress campana={campana} />
       </section>
+
+      {tieneResultados(campana.estado) ? <CampaignMetricsPanel campana={campana} /> : null}
 
       {campana.plantilla ? (
         <section className="space-y-2">

@@ -22,6 +22,7 @@ export interface ValoresEtapa {
   label: string;
   color: string;
   esSalida: boolean;
+  esConversion: boolean;
 }
 
 interface Props {
@@ -55,6 +56,7 @@ export function EstadoFormDialog({
   const [label, setLabel] = useState('');
   const [color, setColor] = useState(COLOR_ETAPA_DEFECTO);
   const [esSalida, setEsSalida] = useState(false);
+  const [esConversion, setEsConversion] = useState(false);
 
   // Se recarga al abrir, no al montar: el diálogo vive montado entre aperturas y sin esto la
   // segunda edición llegaría con los valores de la primera.
@@ -63,6 +65,7 @@ export function EstadoFormDialog({
     setLabel(estado?.label ?? '');
     setColor(estado?.color ?? COLOR_ETAPA_DEFECTO);
     setEsSalida(estado?.esSalida ?? false);
+    setEsConversion(estado?.esConversion ?? false);
   }, [open, estado]);
 
   const limpio = label.trim();
@@ -72,7 +75,7 @@ export function EstadoFormDialog({
   function enviar(e: React.FormEvent): void {
     e.preventDefault();
     if (!limpio) return;
-    onSubmit({ label: limpio, color, esSalida });
+    onSubmit({ label: limpio, color, esSalida, esConversion });
   }
 
   return (
@@ -158,6 +161,28 @@ export function EstadoFormDialog({
                   checked={esSalida}
                   onCheckedChange={setEsSalida}
                   aria-label="Cierra el embudo"
+                />
+              </div>
+            )}
+
+            {/* HU-MARK-04. Mismo criterio que «Cierra el embudo»: se decide sobre una etapa que ya
+                existe, no al darla de alta. */}
+            {editando && (
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border px-3 py-3">
+                <div className="min-w-0">
+                  <Label htmlFor="etapa-conversion" className="cursor-pointer">
+                    Cuenta como venta
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Si un lead llega aquí poco después de recibir una campaña, esa campaña suma una
+                    conversión en sus resultados.
+                  </p>
+                </div>
+                <Switch
+                  id="etapa-conversion"
+                  checked={esConversion}
+                  onCheckedChange={setEsConversion}
+                  aria-label="Cuenta como venta"
                 />
               </div>
             )}

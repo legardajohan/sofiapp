@@ -20,13 +20,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { TemplatePreview } from '@/features/whatsapp-templates/components/TemplatePreview';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSegmentPreview } from '../hooks/useCampaigns.js';
 import { formatearNumero } from '../lib/pacing.js';
 import { AudienceMeter } from './AudienceMeter.js';
-import { SegmentCount } from './SegmentCount.js';
-import { SegmentFilters } from './SegmentFilters.js';
+import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
+import { ResumenAudiencia } from './audiencia/ResumenAudiencia.js';
 import type { CreateCampaignPayload, SegmentoFiltros } from '../types.js';
 
 interface Props {
@@ -46,7 +47,7 @@ const TITULO: Record<Paso, string> = {
 };
 
 const DESCRIPCION: Record<Paso, string> = {
-  segmento: 'Combina los filtros que quieras. El contador de abajo se actualiza solo.',
+  segmento: 'Elige por etapas del CRM, etiquetas o las dos. El total se actualiza con cada cambio.',
   plantilla: 'Solo aparecen las plantillas que Meta ya aprobó.',
   revision: 'Comprueba el alcance y el cupo de tu número antes de lanzar.',
 };
@@ -148,7 +149,14 @@ export function CampaignWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto sm:max-w-2xl">
+      <DialogContent
+        // El paso de la audiencia pide dos columnas (criterios y resultado); el resto son
+        // formularios que se leen mejor estrechos.
+        className={cn(
+          'max-h-[90vh] gap-0 overflow-y-auto sm:max-w-2xl',
+          paso === 'segmento' && 'lg:max-w-5xl',
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{TITULO[paso]}</DialogTitle>
           <DialogDescription>{DESCRIPCION[paso]}</DialogDescription>
@@ -157,12 +165,15 @@ export function CampaignWizard({
         <div className="py-5">
           {paso === 'segmento' ? (
             <div className="space-y-6">
-              <SegmentFilters
+              <AudienceBuilder
                 valor={borrador.filtros}
                 onChange={(filtros) => setBorrador((b) => ({ ...b, filtros }))}
+                preview={preview.data}
+                cargando={preview.isPending}
+                // También mientras corre el debounce: la cifra en pantalla ya no es la de los criterios.
+                actualizando={preview.isFetching || filtrosDebounced !== borrador.filtros}
+                enabled={open}
               />
-
-              <SegmentCount cargando={preview.isPending} preview={preview.data} />
             </div>
           ) : null}
 
@@ -247,6 +258,8 @@ export function CampaignWizard({
                   Solo lo ves tú, en el historial de campañas.
                 </p>
               </div>
+
+              <ResumenAudiencia filtros={borrador.filtros} preview={preview.data} />
 
               {presupuesto ? (
                 <AudienceMeter destinatarios={total} presupuesto={presupuesto} />

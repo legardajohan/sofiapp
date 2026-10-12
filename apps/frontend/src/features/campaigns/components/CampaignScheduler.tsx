@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import type { IWhatsAppTemplate } from '@/features/whatsapp-templates/types';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useSegmentPreview } from '../hooks/useCampaigns.js';
@@ -28,8 +29,8 @@ import { AudienceMeter } from './AudienceMeter.js';
 import { DateTimePicker } from './DateTimePicker.js';
 import { ImageDropzone } from './ImageDropzone.js';
 import { MessagePreview } from './MessagePreview.js';
-import { SegmentCount } from './SegmentCount.js';
-import { SegmentFilters } from './SegmentFilters.js';
+import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
+import { ResumenAudiencia } from './audiencia/ResumenAudiencia.js';
 import type { ScheduleCampaignPayload, SegmentoFiltros } from '../types.js';
 
 interface Props {
@@ -175,7 +176,14 @@ export function CampaignScheduler({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        // El paso de la audiencia pide dos columnas (criterios y resultado); el resto son
+        // formularios que se leen mejor estrechos.
+        className={cn(
+          'max-h-[90vh] gap-0 overflow-y-auto sm:max-w-3xl',
+          paso === 'segmento' && 'lg:max-w-5xl',
+        )}
+      >
         <DialogHeader>
           <p className="text-sm text-muted-foreground">
             Paso {indice + 1} de {PASOS.length}
@@ -187,11 +195,15 @@ export function CampaignScheduler({
         <div className="py-5">
           {paso === 'segmento' ? (
             <div className="space-y-6">
-              <SegmentFilters
+              <AudienceBuilder
                 valor={borrador.filtros}
                 onChange={(filtros) => setBorrador((b) => ({ ...b, filtros }))}
+                preview={preview.data}
+                cargando={preview.isPending}
+                // También mientras corre el debounce: la cifra en pantalla ya no es la de los criterios.
+                actualizando={preview.isFetching || filtrosDebounced !== borrador.filtros}
+                enabled={open}
               />
-              <SegmentCount cargando={preview.isPending} preview={preview.data} />
             </div>
           ) : null}
 
@@ -282,6 +294,8 @@ export function CampaignScheduler({
 
           {paso === 'horario' ? (
             <div className="space-y-6">
+              <ResumenAudiencia filtros={borrador.filtros} preview={preview.data} />
+
               <DateTimePicker
                 valor={borrador.programadaPara}
                 onChange={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}

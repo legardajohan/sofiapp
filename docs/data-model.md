@@ -526,12 +526,25 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   metaMessageId: String|null,     // puente con los `statuses` del webhook
   error: String?,
   enviadoAt: ISODate?,
+  // HU-MARK-04 — eventos que alimentan las métricas. `null` = no ocurrió (o fila anterior a la
+  // medición). Se escriben una sola vez: cada escritura va condicionada a que sigan en `null`.
+  entregadoAt: ISODate|null,      // `status: delivered` (o implícito por un read/respuesta)
+  leidoAt: ISODate|null,          // `status: read` — cota inferior: no llega si el contacto apagó las confirmaciones
+  respondidoAt: ISODate|null,     // primer inbound dentro de CAMPAIGN_REPLY_WINDOW_HOURS (72 h), last-touch
+  convertidoAt: ISODate|null,     // lead entra a una etapa `esConversion` dentro de CAMPAIGN_CONVERSION_WINDOW_DAYS (14 d)
   createdAt, updatedAt
 }
-// Índices: { tenantId: 1, campaignId: 1, estado: 1 }               ← "dame el próximo lote"
+// Índices: { tenantId: 1, campaignId: 1, estado: 1 }               ← "dame el próximo lote" y métricas
 //          { tenantId: 1, campaignId: 1, clienteId: 1 } unique     ← un contacto, un envío
 //          { tenantId: 1, metaMessageId: 1 } sparse                ← statuses del webhook
+//          { tenantId: 1, clienteId: 1, enviadoAt: -1 }            ← atribución (HU-MARK-04)
 ```
+
+> **Métricas (HU-MARK-04).** `GET /api/campaigns/:id/metrics` agrega estas marcas sobre
+> `campaign_recipients`; no lee `Campaign.totales`, que sigue siendo solo el progreso en vivo. Una
+> respuesta o una conversión se atribuye a la **última** campaña que le escribió al contacto
+> (`enviadoAt` más reciente con `estado ∈ {enviado, entregado}`) dentro de su ventana; si esa ya la
+> tiene marcada, no se cae a una anterior.
 
 > `omitido` **no es un fallo**: es "no se le llegó a escribir" (la campaña se canceló antes de
 > alcanzarlo). Distinguirlo de `fallido` importa porque un `fallido` es una señal de salud del
@@ -1029,6 +1042,7 @@ del modelo en `contact_options`.
 | `activo` | boolean | `false` = archivado: no se ofrece para filtrar, pero sigue resolviendo su etiqueta. |
 | `esDefecto` | boolean | Sembrado al crear el tenant. Informativo. |
 | `esSalida` | boolean | Etapa terminal del embudo (HU-PIPE-01). **Descriptivo, no restrictivo**: marca qué columnas cierran el recorrido para que la UI las señale, sin bloquear ninguna transición. |
+| `esConversion` | boolean | Cuenta como **conversión** en las métricas de campañas (HU-MARK-04): un lead que **entra** aquí (desde una etapa que no lo es) dentro de la ventana de atribución convierte para la última campaña que le escribió. De fábrica, `pagado` en tenants nuevos; los existentes lo marcan en `/etapas`. Descriptivo como `esSalida`. |
 
 Índices: `{ tenantId, key }` **único** (incluye los archivados, para no duplicar una clave que los
 leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálogo.

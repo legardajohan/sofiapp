@@ -159,7 +159,12 @@ export function EstadosPage(): React.ReactElement {
       actualizar.mutate(
         {
           id: editando.id,
-          payload: { label: valores.label, color: valores.color, esSalida: valores.esSalida },
+          payload: {
+            label: valores.label,
+            color: valores.color,
+            esSalida: valores.esSalida,
+            esConversion: valores.esConversion,
+          },
         },
         { onSuccess: () => setFormOpen(false) },
       );

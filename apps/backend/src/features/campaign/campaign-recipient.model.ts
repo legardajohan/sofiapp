@@ -15,6 +15,12 @@ const CampaignRecipientSchema = new Schema<ICampaignRecipientDocument>(
     metaMessageId: { type: String, default: null },
     error: { type: String, default: null },
     enviadoAt: { type: Date, default: null },
+    // HU-MARK-04 — eventos que alimentan las métricas. Default `null`: las filas anteriores a la
+    // medición se leen igual y cuentan como "no ocurrió".
+    entregadoAt: { type: Date, default: null },
+    leidoAt: { type: Date, default: null },
+    respondidoAt: { type: Date, default: null },
+    convertidoAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
@@ -31,6 +37,10 @@ CampaignRecipientSchema.index({ tenantId: 1, campaignId: 1, clienteId: 1 }, { un
 // **encabezado por `tenantId`** a propósito: HT-WA-01-V2 cerró una fuga donde el `metaMessageId` se
 // resolvía sin tenant, y esa puerta no se vuelve a abrir aquí.
 CampaignRecipientSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
+
+// Atribución de HU-MARK-04: "el último envío de campaña a este contacto". La búsqueda nace de un
+// inbound o de un cambio de etapa del lead, siempre con su tenant: por eso va delante.
+CampaignRecipientSchema.index({ tenantId: 1, clienteId: 1, enviadoAt: -1 });
 
 export const CampaignRecipient = model<ICampaignRecipientDocument>(
   'CampaignRecipient',

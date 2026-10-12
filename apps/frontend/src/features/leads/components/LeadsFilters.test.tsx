@@ -53,10 +53,10 @@ function renderFilters(filtros: Partial<LeadsFiltros> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockFetchEstados.mockResolvedValue([
-    { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true, esSalida: false },
-    { id: 'e2', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true, esSalida: false },
+    { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#64748B', orden: 0, activo: true, esDefecto: true, esSalida: false, esConversion: false },
+    { id: 'e2', key: 'pagado', label: 'Pagado', color: '#16A34A', orden: 3, activo: true, esDefecto: true, esSalida: false, esConversion: false },
     // Archivado: sigue existiendo pero no debe ofrecerse para filtrar.
-    { id: 'e3', key: 'antiguo', label: 'Antiguo', color: '#475569', orden: 9, activo: false, esDefecto: false, esSalida: false },
+    { id: 'e3', key: 'antiguo', label: 'Antiguo', color: '#475569', orden: 9, activo: false, esDefecto: false, esSalida: false, esConversion: false },
   ]);
   mockFetchSemaforos.mockResolvedValue([
     { id: 's1', key: 'verde', label: 'Venta concretada', color: '#16A34A', orden: 2, activo: true, esDefecto: true },

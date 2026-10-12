@@ -70,7 +70,7 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 | **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. Etapas configurables por tenant (HU-CRM-03) y **embudo con tablero Kanban y drag&drop** (HU-PIPE-01, ver ADR 0007). |
 | **M04 — Motor de IA (Gemini)** | MVP | Slot filling, lead scoring (frío/tibio/caliente), detección de objeción, actualización dinámica, worker BullMQ. |
 | **M08 — Catálogo (productos/servicios)** | MVP | CRUD genérico de ítems del catálogo (antes "cursos"), asociación al prospecto. |
-| **M07 — Campañas de Remarketing** | Fase 3 — **implementado** (HU-MARK-01) | Segmentación por atributo personalizado, rol y semáforo comercial; encolamiento masivo (BullMQ) con pacing atado al tier y la calidad del número de WhatsApp; wizard de 3 pasos, historial y progreso en vivo. |
+| **M07 — Campañas de Remarketing** | Fase 3 — **implementado** (HU-MARK-01) | Segmentación por atributo personalizado, rol y semáforo comercial; encolamiento masivo (BullMQ) con pacing atado al tier y la calidad del número de WhatsApp; wizard de 3 pasos, historial y progreso en vivo. Programación con imagen (HU-MARK-03). Métricas de entrega, apertura, respuesta y conversión por campaña y resumen del período (HU-MARK-04). |
 | **M06 — Constructor Visual de Flujos** | **Fase 3 (recomendado)** | Canvas React Flow + runtime server-side. Mayor riesgo técnico; se difiere para no comprometer el MVP. |
 
 > **Nota sobre fases:** la columna "Estado" usa la numeración de fases de §7. "MVP" agrupa las

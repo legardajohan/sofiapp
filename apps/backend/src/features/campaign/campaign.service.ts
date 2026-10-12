@@ -32,7 +32,13 @@ import { Message } from '../message/message.model.js';
 import { Campaign } from './campaign.model.js';
 import { CampaignRecipient } from './campaign-recipient.model.js';
 import { assertPuedeLanzar, calcularPresupuesto } from './campaign.pacing.js';
-import { construirFiltroSegmento, previewSegmento } from './campaign.segment.service.js';
+import {
+  construirFiltroSegmento,
+  facetasSegmento,
+  listarAudiencia,
+  previewSegmento,
+} from './campaign.segment.service.js';
+import { marcarEntregado, registrarLectura } from './campaign.metrics.service.js';
 import type { ICliente } from '../cliente/cliente.types.js';
 import type { LeanWhatsAppTemplate } from '../whatsapp-template/whatsapp-template.types.js';
 import type { MessageStatus } from '../message/message.types.js';
@@ -52,6 +58,8 @@ import type {
   IPaged,
   IPresupuestoResponse,
   ISegmentPreviewResponse,
+  ISegmentFacetasResponse,
+  IAudienciaResponse,
   ISegmentoFiltros,
   LeanCampaign,
   LeanCampaignRecipient,
@@ -186,6 +194,20 @@ export async function previewSegment(
   return { ...segmento, presupuesto };
 }
 
+/** Contactos alcanzables por etapa y por etiqueta, para el constructor de audiencias. */
+export function getSegmentFacetas(tenantId: TenantId): Promise<ISegmentFacetasResponse> {
+  return facetasSegmento(tenantId);
+}
+
+/** La audiencia de unos filtros, paginada y con búsqueda. */
+export function listSegmentAudience(
+  tenantId: TenantId,
+  filtros: ISegmentoFiltros,
+  opciones: { busqueda?: string; page: number; limit: number },
+): Promise<IAudienciaResponse> {
+  return listarAudiencia(tenantId, filtros, opciones);
+}
+
 // ─── Alta y lanzamiento ─────────────────────────────────────────────────────────
 
 /**
@@ -275,6 +297,10 @@ async function materializarDestinatarios(
 
   let pendientes: Record<string, unknown>[] = [];
   let total = 0;
+  // Un mensaje por teléfono: dos fichas con el mismo número (p. ej. un contacto duplicado al
+  // importar) recibirían la campaña dos veces. Es la misma regla con la que la vista previa cuenta
+  // los «válidos», así que lo que se promete en el wizard es lo que sale.
+  const telefonosVistos = new Set<string>();
 
   const volcar = async (): Promise<void> => {
     if (pendientes.length === 0) return;
@@ -283,6 +309,8 @@ async function materializarDestinatarios(
   };
 
   for await (const contacto of cursor) {
+    if (telefonosVistos.has(contacto.telefono)) continue;
+    telefonosVistos.add(contacto.telefono);
     pendientes.push({
       // `insertMany` no pasa por `createScoped`, así que el tenant se inyecta aquí de forma
       // explícita — y siempre el del argumento, nunca uno que venga del contacto.
@@ -899,18 +927,15 @@ export async function listRecipients(
 
 // ─── Puente con el webhook de entrega ───────────────────────────────────────────
 
-/** Estados de Meta que interesan al destinatario. `sent` ya se marcó al enviar; `read` no cambia nada. */
-const ESTADO_POR_STATUS: Partial<Record<MessageStatus, EstadoDestinatario>> = {
-  delivered: 'entregado',
-  failed: 'fallido',
-};
-
 /**
- * Propaga el `status` del webhook al destinatario de campaña (criterio 10).
+ * Propaga el `status` del webhook al destinatario de campaña (criterio 10 de MARK-01).
  *
  * Lo llama `updateDeliveryStatus` (`message.service.ts`), que es el único camino por el que entran
  * los `statuses` de Meta. Si el `metaMessageId` no pertenece a ninguna campaña, es un no-op: la
  * inmensa mayoría de los mensajes del sistema no lo son.
+ *
+ * Desde HU-MARK-04 `delivered` deja su marca de tiempo y `read` deja de ignorarse: es la
+ * "apertura" de las métricas. Las dos escrituras viven en `campaign.metrics.service.ts`.
  *
  * El `tenantId` entra por argumento y filtra la búsqueda: resolver un `metaMessageId` sin tenant es
  * exactamente la fuga que cerró HT-WA-01-V2.
@@ -920,26 +945,36 @@ export async function applyDeliveryStatusToRecipient(
   metaMessageId: string,
   status: MessageStatus,
 ): Promise<void> {
-  const destino = ESTADO_POR_STATUS[status];
-  if (!destino) return;
+  const ahora = new Date();
+
+  if (status === 'delivered') {
+    await marcarEntregado(tenantId, { metaMessageId }, ahora);
+    return;
+  }
+
+  if (status === 'read') {
+    await registrarLectura(tenantId, metaMessageId, ahora);
+    return;
+  }
+
+  if (status !== 'failed') return;
 
   const actualizado = await findOneAndUpdateScoped(
     CampaignRecipient,
     tenantId,
-    // Solo desde `enviado`: un `delivered` que llegue tarde no puede resucitar un `omitido` de una
-    // campaña cancelada ni pisar un `fallido` ya registrado.
+    // Solo desde `enviado`: un `failed` que llegue tarde no pisa un `omitido` de una campaña
+    // cancelada.
     { metaMessageId, estado: 'enviado' },
-    { $set: { estado: destino } },
+    { $set: { estado: 'fallido' } },
     { new: true },
   ).lean<LeanCampaignRecipient | null>();
 
   if (!actualizado) return;
 
-  const campo = destino === 'entregado' ? 'totales.entregados' : 'totales.fallidos';
   await findOneAndUpdateScoped(
     Campaign,
     tenantId,
     { _id: actualizado.campaignId },
-    { $inc: { [campo]: 1 } },
+    { $inc: { 'totales.fallidos': 1 } },
   );
 }
