@@ -13,9 +13,13 @@ import { getSocket } from '../../../lib/socket.js';
 import {
   cancelCampaign,
   createCampaign,
+  fetchAudiencia,
   fetchCampaign,
+  fetchCampaignMetrics,
+  fetchCampaignsOverview,
   fetchCampaigns,
   fetchRecipients,
+  fetchSegmentFacetas,
   launchCampaign,
   pauseCampaign,
   previewSegmento,
@@ -24,8 +28,11 @@ import {
   scheduleCampaign,
 } from '../api.js';
 import type {
+  AudienciaContactoDTO,
   CampaignDTO,
   CampaignDetalleDTO,
+  CampaignMetricsDTO,
+  CampaignsOverviewDTO,
   CampaignRecipientDTO,
   CreateCampaignPayload,
   EstadoCampana,
@@ -33,6 +40,7 @@ import type {
   PagedDTO,
   RescheduleCampaignPayload,
   ScheduleCampaignPayload,
+  SegmentFacetasDTO,
   SegmentPreviewDTO,
   SegmentoFiltros,
   TotalesCampana,
@@ -47,6 +55,48 @@ export function useCampaigns(
     queryKey: [...CAMPAIGNS_KEY, filtros],
     queryFn: () => fetchCampaigns({ page: filtros.page, limit: 20, estado: filtros.estado }),
     // Cambiar de página o de filtro no debe vaciar la tabla: se conserva lo anterior mientras llega.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Resultados de una campaña (HU-MARK-04).
+ *
+ * Mientras está viva se refresca sola cada 30 s: las lecturas y respuestas llegan durante horas
+ * después del envío y no emiten evento de progreso. Ya cerrada, una vez basta.
+ */
+export function useCampaignMetrics(
+  id: string | undefined,
+  viva: boolean,
+): UseQueryResult<CampaignMetricsDTO> {
+  return useQuery({
+    queryKey: [...CAMPAIGNS_KEY, id, 'metrics'],
+    queryFn: () => fetchCampaignMetrics(id as string, zonaDelNavegador()),
+    enabled: Boolean(id),
+    refetchInterval: viva ? 30_000 : false,
+  });
+}
+
+const MS_DIA = 86_400_000;
+
+/** Las gráficas diarias cortan por los días de quien mira, no por los de UTC. */
+function zonaDelNavegador(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/**
+ * Resumen de los últimos `dias`. El `desde` se redondea al inicio del día: así la clave de la query
+ * no cambia en cada render y el período se lee como lo dice la pantalla («últimos 30 días»).
+ */
+export function useCampaignsOverview(dias: number): UseQueryResult<CampaignsOverviewDTO> {
+  const inicio = new Date(Date.now() - dias * MS_DIA);
+  inicio.setHours(0, 0, 0, 0);
+  const desde = inicio.toISOString();
+
+  return useQuery({
+    queryKey: [...CAMPAIGNS_KEY, 'metrics', desde],
+    queryFn: () => fetchCampaignsOverview({ desde, zona: zonaDelNavegador() }),
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
 }
@@ -85,6 +135,34 @@ export function useSegmentPreview(
   return useQuery({
     queryKey: ['campaign-segment', filtros],
     queryFn: () => previewSegmento(filtros),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Cuántos contactos hay por etapa y etiqueta. Cambia despacio: un minuto de caché sobra. */
+export function useSegmentFacetas(enabled: boolean): UseQueryResult<SegmentFacetasDTO> {
+  return useQuery({
+    queryKey: ['campaign-segment', 'facetas'],
+    queryFn: fetchSegmentFacetas,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Una página de la audiencia. Los filtros llegan **sin** las exclusiones a mano: quitar o devolver a
+ * alguien no cambia quién aparece en la lista (solo su casilla), así que no debe volver a pedirla.
+ */
+export function useAudiencia(
+  filtros: SegmentoFiltros,
+  busqueda: string,
+  page: number,
+  enabled: boolean,
+): UseQueryResult<PagedDTO<AudienciaContactoDTO>> {
+  return useQuery({
+    queryKey: ['campaign-segment', 'audiencia', filtros, busqueda, page],
+    queryFn: () => fetchAudiencia({ filtros, busqueda: busqueda || undefined, page, limit: 20 }),
     enabled,
     placeholderData: keepPreviousData,
   });

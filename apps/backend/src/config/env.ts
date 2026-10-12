@@ -177,6 +177,11 @@ const EnvSchema = z.object({
   // HT-WA-04 — cada cuánto se pregunta a Meta por las plantillas que siguen en revisión (respaldo
   // del webhook `message_template_status_update`). 30 min por defecto.
   TEMPLATE_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(1_800_000),
+  // HU-MARK-04 — ventanas de atribución *last-touch*. Una respuesta o una conversión se le apunta a
+  // la campaña más reciente que le escribió al contacto solo si ocurre dentro de la ventana: sin
+  // ella, quien vuelve seis meses después contaría como éxito de una campaña ya olvidada.
+  CAMPAIGN_REPLY_WINDOW_HOURS: z.coerce.number().int().positive().default(72),
+  CAMPAIGN_CONVERSION_WINDOW_DAYS: z.coerce.number().int().positive().default(14),
 
   // ─── Media de la conversación (HU-OMNI-06, ADR-0008) ─────────────────────────────
   // `local` por defecto: el entorno de desarrollo no necesita credenciales ni infraestructura

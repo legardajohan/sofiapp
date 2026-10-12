@@ -8,7 +8,25 @@ import { getWhatsAppTemplates } from '@/api/whatsapp-templates';
 import type { IWhatsAppTemplate } from '@/features/whatsapp-templates/types';
 import type { SegmentPreviewDTO } from '../types.js';
 
-vi.mock('../api.js', () => ({ previewSegmento: vi.fn() }));
+vi.mock('../api.js', () => ({
+  previewSegmento: vi.fn(),
+  // El constructor de audiencias pide además los conteos por etapa/etiqueta y la lista.
+  fetchSegmentFacetas: vi.fn().mockResolvedValue({ etapas: [{ key: 'nuevo', contactos: 7 }], etiquetas: [] }),
+  fetchAudiencia: vi.fn().mockResolvedValue({
+    data: [{ id: 'c1', nombre: 'Ana', telefono: '573001110001', excluido: false }],
+    page: 1,
+    limit: 20,
+    total: 1,
+  }),
+}));
+vi.mock('@/features/estados/hooks/useEstados', () => ({
+  useEstados: () => ({
+    data: [
+      { id: 'e1', key: 'nuevo', label: 'Nuevo', color: '#2563EB', orden: 0, activo: true, esDefecto: true, esSalida: false, esConversion: false },
+    ],
+    isLoading: false,
+  }),
+}));
 vi.mock('@/api/whatsapp-templates', () => ({ getWhatsAppTemplates: vi.fn() }));
 vi.mock('@/features/contacts/hooks/useContactOptions', () => ({
   useContactOptions: () => ({ data: { rol: [], interes: [], objecion: [] } }),

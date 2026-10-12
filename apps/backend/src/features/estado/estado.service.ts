@@ -37,6 +37,8 @@ function toResponse(doc: IEstadoLean): IEstadoResponse {
     // `?? false`: los documentos sembrados antes de HU-PIPE-01 no traen el campo, y salir como
     // `undefined` haría que la UI tuviera que distinguir "no es de salida" de "no lo sé".
     esSalida: doc.esSalida ?? false,
+    // Mismo criterio que `esSalida`: las etapas anteriores a HU-MARK-04 no traen el campo.
+    esConversion: doc.esConversion ?? false,
   };
 }
 
@@ -149,6 +151,7 @@ export async function createEstado(
       esDefecto: false,
       // Una etapa creada a mano no es de salida: el administrador la marca después si lo es.
       esSalida: false,
+      esConversion: false,
     });
 
     return toResponse(creado as unknown as IEstadoLean);
@@ -322,6 +325,18 @@ export async function findEstadoByKey(
  */
 export async function existeEstadoActivo(tenantId: TenantId, key: string): Promise<boolean> {
   return (await countScoped(Estado, tenantId, { key, activo: true })) > 0;
+}
+
+/**
+ * De entre `keys`, las que el tenant marcó como etapa de conversión (HU-MARK-04). Una sola lectura
+ * para la etapa de origen y la de destino de un cambio: así `updateLeadEstado` sabe si el lead
+ * **entró** en una conversión (y no si ya estaba en otra).
+ */
+export async function clavesDeConversion(tenantId: TenantId, keys: string[]): Promise<Set<string>> {
+  const docs = await findScoped(Estado, tenantId, { key: { $in: keys }, esConversion: true })
+    .select({ key: 1 })
+    .lean<{ key: string }[]>();
+  return new Set(docs.map((d) => d.key));
 }
 
 /** Cuántos leads del tenant llevan grabado ese estado. Para no archivar ni borrar a ciegas. */

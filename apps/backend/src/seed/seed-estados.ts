@@ -18,16 +18,18 @@ export const ESTADOS_DEFECTO: {
   label: string;
   color: string;
   esSalida: boolean;
+  /** HU-MARK-04. Solo para tenants nuevos: el backfill no lo escribe en los existentes. */
+  esConversion: boolean;
 }[] = [
-  { key: 'nuevo', label: 'Nuevo', color: '#64748B', esSalida: false },
-  { key: 'en_gestion', label: 'En gestión', color: '#2563EB', esSalida: false },
-  { key: 'pago_pendiente', label: 'Pago pendiente', color: '#D97706', esSalida: false },
-  { key: 'pagado', label: 'Pagado', color: '#16A34A', esSalida: false },
-  { key: 'perdido', label: 'Perdido', color: '#DC2626', esSalida: true },
+  { key: 'nuevo', label: 'Nuevo', color: '#64748B', esSalida: false, esConversion: false },
+  { key: 'en_gestion', label: 'En gestión', color: '#2563EB', esSalida: false, esConversion: false },
+  { key: 'pago_pendiente', label: 'Pago pendiente', color: '#D97706', esSalida: false, esConversion: false },
+  { key: 'pagado', label: 'Pagado', color: '#16A34A', esSalida: false, esConversion: true },
+  { key: 'perdido', label: 'Perdido', color: '#DC2626', esSalida: true, esConversion: false },
   // HU-PIPE-01. Convive con `perdido` a propósito: `perdido` es la oportunidad que se enfrió y
   // `declinado` la que dijo que no. Distinguirlas es lo que hace accionable el embudo — una se
   // reintenta en la siguiente campaña, la otra no.
-  { key: 'declinado', label: 'Declinado', color: '#B91C1C', esSalida: true },
+  { key: 'declinado', label: 'Declinado', color: '#B91C1C', esSalida: true, esConversion: false },
 ];
 
 /** Las etapas de salida de fábrica. Fuente única para la siembra y para el backfill. */

@@ -59,6 +59,14 @@ export interface IEstado {
    * puerta de atrás la máquina de transiciones que la historia descarta a propósito.
    */
   esSalida: boolean;
+  /**
+   * Etapa que cuenta como **conversión** en las métricas de campañas (HU-MARK-04): un lead que entra
+   * aquí dentro de la ventana de atribución convierte para la última campaña que le escribió.
+   *
+   * Descriptivo como `esSalida`: no restringe transiciones. Cada empresa decide qué es "venta" en su
+   * embudo; de fábrica, `pagado`.
+   */
+  esConversion: boolean;
 }
 
 export interface IEstadoDocument extends IEstado, Document {}
@@ -83,6 +91,7 @@ export interface UpdateEstadoDTO {
   /** `false` archiva la etapa (sale del tablero y del selector); `true` la recupera. */
   activo?: boolean;
   esSalida?: boolean;
+  esConversion?: boolean;
 }
 
 export interface IEstadoResponse {
@@ -94,6 +103,7 @@ export interface IEstadoResponse {
   activo: boolean;
   esDefecto: boolean;
   esSalida: boolean;
+  esConversion: boolean;
   /**
    * Cuántos leads del tenant llevan grabada esta etapa. **Solo con `?uso=true`**, que es lo que
    * pide la pantalla de gestión: es una cuenta por etapa y el tablero, la tabla y los selectores no

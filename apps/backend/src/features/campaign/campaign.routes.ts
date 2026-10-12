@@ -6,11 +6,15 @@ import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { subirImagenCabecera, subirImagenCampana } from '../../middlewares/upload.middleware.js';
 import {
+  audienciaSegmentoSchema,
   campaignIdSchema,
+  campaignMetricsSchema,
+  campaignsOverviewSchema,
   createCampaignSchema,
   listCampaignsSchema,
   listRecipientsSchema,
   previewSegmentoSchema,
+  segmentoFacetasSchema,
   rescheduleCampaignSchema,
   scheduleCampaignSchema,
   transicionSchema,
@@ -20,9 +24,13 @@ import {
   cancelCampaignController,
   createCampaignController,
   getCampaignController,
+  getCampaignMetricsController,
+  getCampaignsOverviewController,
+  getSegmentFacetasController,
   launchCampaignController,
   listCampaignsController,
   listRecipientsController,
+  listSegmentAudienceController,
   pauseCampaignController,
   previewSegmentController,
   rescheduleCampaignController,
@@ -59,6 +67,26 @@ router.post(
   asyncHandler(uploadCampaignMediaController),
 );
 
+// Constructor de audiencias: contactos alcanzables por etapa y etiqueta, y la audiencia paginada
+// con búsqueda. Rutas literales, ANTES de `/:id` como la vista previa.
+router.get(
+  '/segmento/facetas',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(segmentoFacetasSchema),
+  asyncHandler(getSegmentFacetasController),
+);
+
+router.post(
+  '/segmento/contactos',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(audienciaSegmentoSchema),
+  asyncHandler(listSegmentAudienceController),
+);
+
 // HU-MARK-03 — programar con fecha/hora e imagen. Multipart: `subirImagenCampana` va entre
 // `authorize` y `validate` (la excepción documentada en `apps/backend/CLAUDE.md`), porque los
 // campos de texto no existen en `req.body` hasta que multer consume el stream. Ruta literal: ANTES
@@ -81,6 +109,16 @@ router.patch(
   subirImagenCampana,
   validate(rescheduleCampaignSchema),
   asyncHandler(rescheduleCampaignController),
+);
+
+// HU-MARK-04 — resumen de métricas del período. Ruta literal: ANTES de `/:id`.
+router.get(
+  '/metrics',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(campaignsOverviewSchema),
+  asyncHandler(getCampaignsOverviewController),
 );
 
 router.get(
@@ -108,6 +146,15 @@ router.get(
   campaignRoles,
   validate(campaignIdSchema),
   asyncHandler(getCampaignController),
+);
+
+router.get(
+  '/:id/metrics',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(campaignMetricsSchema),
+  asyncHandler(getCampaignMetricsController),
 );
 
 router.get(
