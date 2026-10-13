@@ -29,6 +29,8 @@ const MetaIntegrationSchema = new Schema<IMetaIntegrationDocument>(
 
 MetaIntegrationSchema.index({ phoneNumberId: 1 }, { unique: true });
 MetaIntegrationSchema.index({ tenantId: 1, canal: 1 }, { unique: true });
+// HT-WA-04: el webhook de estado de plantillas identifica al tenant por la WABA (`entry.id`).
+MetaIntegrationSchema.index({ wabaId: 1 });
 
 export const MetaIntegration = model<IMetaIntegrationDocument>(
   'MetaIntegration',

@@ -91,6 +91,11 @@ export const createCampaignSchema = z.object({
       parametros: z.array(z.string().max(1000)).max(20).default([]),
       lanzar: z.boolean().optional(),
       programadaPara: z.string().datetime({ offset: true }).optional(),
+      /**
+       * HT-WA-04: imagen de reemplazo subida con `POST /campaigns/media`. Sin ella, una plantilla de
+       * imagen se envía con su imagen por defecto.
+       */
+      imagenHeaderUploadId: objectId.optional(),
     })
     .strict()
     .refine((b) => !(b.lanzar && b.programadaPara), {
@@ -261,3 +266,6 @@ export type ScheduleCampaignBody = z.infer<typeof scheduleCampaignSchema>['body'
 export type RescheduleCampaignBody = z.infer<typeof rescheduleCampaignSchema>['body'];
 export type CampaignsOverviewQuery = z.infer<typeof campaignsOverviewSchema>['query'];
 export type CampaignMetricsQuery = z.infer<typeof campaignMetricsSchema>['query'];
+
+/** Imagen de reemplazo (HT-WA-04): solo viaja el archivo; tipo y tamaño los valida el service. */
+export const uploadCampaignMediaSchema = z.object({ body: empty, params: empty, query: empty });

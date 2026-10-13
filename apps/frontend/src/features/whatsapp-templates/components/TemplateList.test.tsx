@@ -9,6 +9,7 @@ import type { IWhatsAppTemplate, WhatsAppTemplatesListResponse } from '../types/
 vi.mock('../../../api/whatsapp-templates.js', () => ({
   getWhatsAppTemplates: vi.fn(),
   syncWhatsAppTemplates: vi.fn(),
+  syncWhatsAppTemplate: vi.fn(),
   templateErrorMessage: (_e: unknown, fallback: string) => fallback,
 }));
 
@@ -25,6 +26,9 @@ function makeTemplate(overrides: Partial<IWhatsAppTemplate> = {}): IWhatsAppTemp
     ejemplos: ['Ana'],
     parametrosBody: 1,
     cabecera: 'NINGUNA',
+    pie: null,
+    imagen: null,
+    motivoRechazo: null,
     obsoleta: false,
     syncedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

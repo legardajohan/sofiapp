@@ -11,11 +11,12 @@ export const sendController: RequestHandler = async (req, res) => {
 
 export const sendTemplateController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
-  const { clienteId, templateId, parametros } = req.body as ISendTemplateDto;
+  const { clienteId, templateId, parametros, imagenHeaderUploadId } = req.body as ISendTemplateDto;
   const message = await sendOutbound(tenantId, clienteId, {
     modo: 'plantilla',
     templateId,
     parametros,
+    ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
   });
   res.status(200).json({ id: message._id, status: message.status });
 };

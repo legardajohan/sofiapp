@@ -65,3 +65,11 @@ export function verificarTokenMedia(token: string, messageId: string): IMediaTok
 export function recursoImagenCampana(campaignId: string): string {
   return `campaign-${campaignId}`;
 }
+
+/**
+ * Recurso firmable de la imagen por defecto de una plantilla (HT-WA-04). Prefijo propio por la misma
+ * razón que `recursoImagenCampana`: un token de plantilla no sirve como token de campaña o mensaje.
+ */
+export function recursoImagenPlantilla(templateId: string): string {
+  return `template-${templateId}`;
+}

@@ -29,6 +29,27 @@ POST /api/webhooks/whatsapp
 > fuera del repositorio tenant-safe**. A partir del paso 5 el `tenantId` ya es conocido y todo
 > vuelve a pasar por funciones `*Scoped`.
 
+### Eventos de estado de plantillas — `message_template_status_update` (HT-WA-04)
+
+El mismo endpoint recibe más de un `field`, y **solo `messages` trae `value.metadata.phone_number_id`**.
+Los eventos de plantilla llegan con la WABA en `entry.id` y un `value` como
+`{ event, message_template_id, message_template_name, message_template_language, reason }`.
+
+- El controller ramifica por `change.field` (`webhook.service.encolarCambio`), con un `try` por
+  cambio: uno roto o de un campo desconocido ya no corta el resto del payload (antes lanzaba
+  `TypeError` y se perdían los mensajes que venían detrás).
+- **Extensión documentada de la excepción de arriba:** el tenant se resuelve con
+  `MetaIntegration.findOne({ wabaId })` (`resolveWebhookTenantByWaba`, índice `{ wabaId: 1 }`). Es la
+  misma lectura global, por otra clave firmada por Meta (el HMAC ya se validó).
+- Se encola `status-update` en la cola `whatsapp-templates`; el worker aplica
+  `aplicarEstadoPlantilla` **scoped** al tenant por `metaTemplateId` y emite `template:status-updated`
+  por Socket.IO. `REINSTATED` → `APPROVED`; `FLAGGED` no cambia el estado (sigue enviable);
+  `PENDING_DELETION`/`DELETED` → `obsoleta: true`.
+- **Respaldo:** un job repetible (`TEMPLATE_SYNC_INTERVAL_MS`, 30 min) sincroniza los tenants con
+  plantillas `PENDING`/`IN_APPEAL`. Cubre el webhook perdido y el campo sin suscribir.
+- **Paso manual en Meta (operador, una vez):** App Dashboard → WhatsApp → Configuration → Webhook
+  fields → suscribir `message_template_status_update`. Sin eso, el estado solo cambia con el respaldo.
+
 ### Verificación inicial (GET)
 
 `GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...` →
@@ -165,6 +186,38 @@ plantilla `APPROVED` (si no, 422) y número de parámetros exacto (`parametrosBo
 persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 con
 `{ esperados, recibidos }`).
 
+### Plantillas con imagen de encabezado (HT-WA-04)
+
+Hay **dos subidas distintas a Meta** y no son intercambiables:
+
+| Momento | API | Devuelve | Uso |
+|---|---|---|---|
+| Crear la plantilla | Resumable Upload: `POST /{META_APP_ID}/uploads?file_length&file_type` → `{ id: 'upload:…' }`, luego `POST /{upload-id}` con `Authorization: OAuth <token>` y `file_offset: 0` | `{ h }` = `header_handle` | `example.header_handle` del `HEADER` que revisa Meta |
+| Enviar la plantilla | `POST /{phoneNumberId}/media` | `media id` (~30 días) | `header.parameters[0].image.id` de cada mensaje |
+
+```
+POST /api/templates/media   (multipart `imagen`, JPG/PNG ≤ 5 MB → 415/413)
+     → Resumable Upload a Meta (header_handle) → guarda en el bucket <tenantId>/templates/<uuid>
+     → MediaUpload { proposito:'muestra-plantilla', headerHandle } → 201 { uploadId }
+POST /api/templates { …, cabecera: { formato:'IMAGE', uploadId }, pie? }
+     → consume el upload (un solo uso) → components = HEADER(IMAGE, header_handle) + BODY + FOOTER?
+     → Meta → PENDING con imagenDefecto. Si Meta falla, el upload vuelve a quedar disponible.
+```
+
+- Imagen solo en `MARKETING` y `UTILITY` (400 en el borde para `AUTHENTICATION`).
+- **Regla de resolución en el envío** (`buildTemplatePayload` / `prepararImagenCabecera`): imagen de
+  reemplazo (campaña o envío) → `imagenDefecto` de la plantilla → 422 «La plantilla requiere una
+  imagen y no hay ninguna disponible». Cambiar la imagen **no** reenvía la plantilla a aprobación.
+- **Caché del `media id`** (`features/media/media-meta-cache.ts`, `asegurarMetaMediaId`): se guarda
+  en el documento dueño de la imagen —la plantilla para la de por defecto, la campaña para la de
+  reemplazo— y se renueva a los 25 días. Una campaña sube su imagen **una** vez.
+- **Errores de Meta legibles** (`mapearErrorPlantilla`): nombre/idioma duplicado → 409; imagen o
+  handle inválido → 422; límite de plantillas → 422; otro 4xx → 422 genérico; timeout/5xx → 502. Se
+  detectan por subcódigo conocido (`2388024`, `2388023`, `2388047`) y, como Meta no publica la lista
+  completa, también por el texto del error. El texto crudo va solo al log.
+- La imagen de reemplazo no pasa por revisión de Meta, pero debe cumplir sus políticas: una que las
+  incumpla puede bajar la calidad del número o pausar la plantilla. La UI lo avisa.
+
 ## 5. Campañas (implementado en HU-MARK-01)
 
 - Las difusiones masivas reutilizan las mismas plantillas HSM aprobadas, y **consumen
@@ -212,9 +265,9 @@ persistir contando `{{n}}` consecutivos desde 1 en el `BODY`; si no calzan, 400 
   La imagen se guarda en nuestro almacenamiento al programar y se sube a Meta (`POST
   /{phoneNumberId}/media`) **al arrancar**, una vez por campaña: el `media id` caduca a los 30 días,
   y se renueva a los 25 si el envío se alarga. Si la subida falla, la campaña queda `fallida` sin
-  haber escrito a nadie. Las plantillas con cabecera `DOCUMENT`/`VIDEO` y **crear** plantillas con
-  imagen desde SofiApp (subida reanudable de Meta) siguen fuera de alcance: se crean en Business
-  Manager y entran por el sync, que ya persiste los `components`.
+  haber escrito a nadie. Desde HT-WA-04 la imagen de la campaña es **opcional**: sin ella sale la
+  imagen por defecto de la plantilla (ver §4). Las cabeceras `DOCUMENT`/`VIDEO` siguen fuera de
+  alcance.
 - **Arranque exacto.** Programar encola un job con `delay` hasta la hora indicada
   (`campaign-start-<id>-<ms>`); el barrido de `CAMPAIGN_SWEEP_INTERVAL_MS` solo levanta las que
   Redis haya perdido. Job y barrido comparten la cola (`concurrency: 1`), así que nunca lanzan la
@@ -322,7 +375,8 @@ de `Message` (ver `data-model.md`). Tests unitarios de parsing por canal.
 ## 8. Variables de entorno relevantes
 
 ```
-META_APP_ID=                # canje del code del Embedded Signup (HT-WA-03). Opcional: sin ella ese endpoint da 503
+META_APP_ID=                # canje del code del Embedded Signup (HT-WA-03) y Resumable Upload de la imagen de muestra (HT-WA-04). Opcional: sin ella esos endpoints dan 503
+TEMPLATE_SYNC_INTERVAL_MS=1800000  # respaldo del webhook de estado de plantillas (HT-WA-04)
 META_APP_SECRET=            # validación HMAC del webhook y canje del code — OBLIGATORIA fuera de NODE_ENV=test
 META_VERIFY_TOKEN=          # verificación GET del webhook — OBLIGATORIA fuera de NODE_ENV=test
 META_GRAPH_VERSION=v26.0    # confirmar la vigente en developers.facebook.com/docs/graph-api/changelog

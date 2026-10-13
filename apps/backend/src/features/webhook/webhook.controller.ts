@@ -1,11 +1,6 @@
 import type { Request, Response, RequestHandler } from 'express';
 import { logger } from '../../utils/logger.js';
-import {
-  verifyChallenge,
-  validateHmacSignature,
-  resolveWebhookTenant,
-  enqueueInboundJob,
-} from './webhook.service.js';
+import { verifyChallenge, validateHmacSignature, encolarCambio } from './webhook.service.js';
 import type { IWhatsAppWebhookPayload } from './webhook.types.js';
 
 export const verifyController: RequestHandler = (req, res) => {
@@ -46,21 +41,26 @@ export const receiveController = async (req: Request, res: Response): Promise<vo
 
   res.sendStatus(200);
 
+  let payload: IWhatsAppWebhookPayload;
   try {
-    const payload = JSON.parse(rawBody.toString()) as IWhatsAppWebhookPayload;
+    payload = JSON.parse(rawBody.toString()) as IWhatsAppWebhookPayload;
+  } catch (err) {
+    logger.error('Webhook con cuerpo que no es JSON', { error: String(err) });
+    return;
+  }
 
-    for (const entry of payload.entry) {
-      for (const change of entry.changes) {
-        const phoneNumberId = change.value.metadata.phone_number_id;
-        const integration = await resolveWebhookTenant(phoneNumberId);
-        if (!integration) {
-          logger.warn('phone_number_id sin tenant asociado', { phoneNumberId });
-          continue;
-        }
-        await enqueueInboundJob(integration.tenantId.toString(), payload);
+  // Cada cambio va en su propio try: uno roto (o de un campo que no conocemos) no puede dejar sin
+  // procesar los demás del mismo payload (HT-WA-04, criterio 5).
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      try {
+        await encolarCambio(entry.id, change, payload);
+      } catch (err) {
+        logger.error('Error procesando un cambio del webhook', {
+          field: (change as { field?: unknown }).field,
+          error: String(err),
+        });
       }
     }
-  } catch (err) {
-    logger.error('Error procesando webhook', { error: String(err) });
   }
 };

@@ -10,6 +10,10 @@ interface Props {
   conImagen: boolean;
   /** Hora de salida, para la marca de la burbuja. Sin ella no se inventa una. */
   hora?: Date | null;
+  /** Pie de la plantilla (HT-WA-04): WhatsApp lo muestra en gris, debajo del texto. */
+  pie?: string | null;
+  /** Qué decir mientras aún no hay texto. Cambia según dónde se use la vista previa. */
+  textoVacio?: string;
 }
 
 /**
@@ -26,6 +30,8 @@ export function MessagePreview({
   imagenUrl,
   conImagen,
   hora = null,
+  pie = null,
+  textoVacio = 'Elige una plantilla para ver el mensaje',
 }: Props): React.ReactElement {
   const texto = cuerpo ? substituteEjemplos(cuerpo, parametros) : null;
 
@@ -52,8 +58,9 @@ export function MessagePreview({
           {texto ? (
             <p className="whitespace-pre-wrap">{texto}</p>
           ) : (
-            <p className="italic text-muted-foreground">Elige una plantilla para ver el mensaje</p>
+            <p className="italic text-muted-foreground">{textoVacio}</p>
           )}
+          {pie ? <p className="mt-1 text-xs text-muted-foreground">{pie}</p> : null}
           {hora ? (
             <p className="mt-1 text-right text-[11px] tabular-nums text-muted-foreground" aria-hidden>
               {hora.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}

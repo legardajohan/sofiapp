@@ -336,11 +336,48 @@
   parametrosBody: Number,         // nº de placeholders {{n}} del componente BODY, derivado al persistir
   syncedAt: ISODate,              // último sync (manual, POST /api/templates/sync) o alta
   obsoleta: Boolean,              // Meta dejó de devolverla en el último sync; NO se borra
+  // HT-WA-04 — imagen de encabezado
+  imagenDefecto: {                // null en las de solo texto y en las que llegan por sync desde Meta
+    mediaKey: String,             // <tenantId>/templates/<uuid>.<ext>; nunca sale al cliente
+    mimeType: 'image/jpeg'|'image/png',
+    tamanoBytes: Number,          // ≤ 5 MB
+    metaMediaId: String?,         // caché del media id de /{phoneNumberId}/media para el envío
+    subidaMetaAt: ISODate?        // se renueva a los 25 días (Meta lo conserva 30)
+  }?,
+  motivoRechazo: String?,         // código de Meta (INVALID_FORMAT, PROMOTIONAL…) si REJECTED
   createdAt, updatedAt
 }
+// status: APPROVED | PENDING | REJECTED | PAUSED | DISABLED | IN_APPEAL
+// components[].example admite body_text y header_handle (HT-WA-04).
 // Índices: { tenantId: 1, name: 1, language: 1 } unique  (espejo local, coexisten homónimas entre tenants)
 //          { tenantId: 1, status: 1 }
+//          { tenantId: 1, metaTemplateId: 1 }   (webhook message_template_status_update, HT-WA-04)
 ```
+
+## media_uploads  (subidas de imagen en dos pasos — HT-WA-04)
+```js
+{
+  _id: ObjectId,                  // el `uploadId` opaco que maneja el cliente
+  tenantId: ObjectId,
+  proposito: 'muestra-plantilla' | 'cabecera-reemplazo',
+  mediaKey: String,               // <tenantId>/templates/… o <tenantId>/uploads/…
+  mimeType: 'image/jpeg'|'image/png',
+  tamanoBytes: Number,
+  headerHandle: String?,          // solo muestra-plantilla (Resumable Upload de Meta)
+  usadaAt: ISODate?,              // un solo uso: el alta o el envío lo consume atómicamente
+  expiraEn: ISODate,              // now + 24 h
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1 }, { expiraEn: 1 } TTL (expireAfterSeconds: 0)
+```
+> Al consumirse, la imagen **se copia por referencia** al dueño (plantilla o campaña) y la subida no
+> puede volver a usarse: dos campañas nunca comparten `mediaKey`, así que cambiar la imagen de una no
+> toca a la otra ni a la plantilla. El objeto del bucket de una subida que caduca sin usarse queda
+> huérfano (deuda conocida).
+>
+> `MetaIntegration` gana el índice `{ wabaId: 1 }` (resolución del tenant en el webhook de plantillas).
+> La imagen de reemplazo de una campaña es `Campaign.contenido.imagen` (HU-MARK-03); desde HT-WA-04
+> es opcional también con plantillas de imagen: `null` = la imagen por defecto de la plantilla.
 > **La URL del archivo NUNCA se persiste.** El modelo guarda `media.mediaKey`, una clave opaca de
 > `IMediaStorage` (`<tenantId>/<messageId>/<uuid>.<ext>`). La URL del DTO se deriva y se **firma**
 > en cada lectura (`/media/<id>?t=<hmac>`): una URL guardada caducaría o filtraría el bucket. Ver

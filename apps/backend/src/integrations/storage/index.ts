@@ -92,3 +92,21 @@ export function construirCampaignMediaKey(
   const ext = EXTENSION_POR_MIME[mimeType.toLowerCase()] ?? 'bin';
   return `${tenantId}/campaigns/${campaignId}/${randomUUID()}.${ext}`;
 }
+
+/**
+ * Clave de una imagen de cabecera subida en dos pasos (HT-WA-04).
+ *
+ * - `muestra-plantilla` → `<tenantId>/templates/<uuid>.<ext>`: queda como imagen por defecto.
+ * - `cabecera-reemplazo` → `<tenantId>/uploads/<uuid>.<ext>`: pasa a una campaña o a un envío.
+ *
+ * Igual que el resto: el tenant va primero y ningún trozo viene del cliente.
+ */
+export function construirSubidaMediaKey(
+  tenantId: string,
+  proposito: 'muestra-plantilla' | 'cabecera-reemplazo',
+  mimeType: string,
+): MediaKey {
+  const ext = EXTENSION_POR_MIME[mimeType.toLowerCase()] ?? 'bin';
+  const carpeta = proposito === 'muestra-plantilla' ? 'templates' : 'uploads';
+  return `${tenantId}/${carpeta}/${randomUUID()}.${ext}`;
+}

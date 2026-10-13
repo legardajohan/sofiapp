@@ -19,9 +19,24 @@ import {
   CAMPAIGN_SCHEDULED_START_JOB,
   CAMPAIGN_SWEEP_SCHEDULER_ID,
   MEDIA_INGEST_QUEUE_NAME,
+  TEMPLATE_QUEUE_NAME,
+  TEMPLATE_STATUS_JOB,
+  TEMPLATE_SYNC_SCHEDULER_ID,
+  TEMPLATE_SYNC_SWEEP_JOB,
+  TEMPLATE_SYNC_TENANT_JOB,
   campaignQueue,
   flowRuntimeQueue,
+  templateQueue,
 } from './config/queues.js';
+import {
+  processTemplateStatusJob,
+  processTemplateSyncSweep,
+  processTemplateSyncTenant,
+} from './workers/template.processor.js';
+import type {
+  TemplateStatusJobData,
+  TemplateSyncTenantJobData,
+} from './features/whatsapp-template/whatsapp-template.types.js';
 import { processInboundJob, type InboundJobData } from './workers/inbound-message.processor.js';
 import { processKbIndexJob } from './workers/kb-index.processor.js';
 import { processAiReplyJob, type AiReplyJobData } from './workers/ai-reply.processor.js';
@@ -149,6 +164,24 @@ mediaIngestWorker.on('failed', (job, err) => {
   });
 });
 
+// Estado de las plantillas en Meta (HT-WA-04): eventos del webhook y sincronización de respaldo.
+// `concurrency: 2`: el barrido llama a la Graph API por tenant y no hay ninguna prisa.
+const templateWorker = new Worker<
+  TemplateStatusJobData | TemplateSyncTenantJobData | Record<string, never>
+>(
+  TEMPLATE_QUEUE_NAME,
+  async (job) => {
+    if (job.name === TEMPLATE_STATUS_JOB) {
+      await processTemplateStatusJob(job.data as TemplateStatusJobData);
+    } else if (job.name === TEMPLATE_SYNC_SWEEP_JOB) {
+      await processTemplateSyncSweep();
+    } else if (job.name === TEMPLATE_SYNC_TENANT_JOB) {
+      await processTemplateSyncTenant(job.data as TemplateSyncTenantJobData);
+    }
+  },
+  { connection: redisConnection, concurrency: 2 },
+);
+
 const workers = [
   inboundWorker,
   llmWorker,
@@ -158,6 +191,7 @@ const workers = [
   aiReplyWorker,
   flowRuntimeWorker,
   mediaIngestWorker,
+  templateWorker,
 ];
 
 for (const w of workers) {
@@ -193,6 +227,13 @@ mongoose
       CAMPAIGN_SWEEP_SCHEDULER_ID,
       { every: env.CAMPAIGN_SWEEP_INTERVAL_MS },
       { name: CAMPAIGN_START_JOB, opts: { removeOnComplete: 100 } },
+    );
+
+    // Sincronización de respaldo de plantillas (HT-WA-04): mismo patrón idempotente.
+    await templateQueue.upsertJobScheduler(
+      TEMPLATE_SYNC_SCHEDULER_ID,
+      { every: env.TEMPLATE_SYNC_INTERVAL_MS },
+      { name: TEMPLATE_SYNC_SWEEP_JOB, opts: { removeOnComplete: 100 } },
     );
 
     logger.info('Proceso WORKER iniciado y escuchando colas BullMQ');

@@ -193,6 +193,11 @@ export type ContenidoOutbound =
       parametros: string[];
       /** Imagen de cabecera ya subida a Meta (HU-MARK-03). Solo para plantillas con `HEADER` IMAGE. */
       imagenCabecera?: { metaMediaId: string };
+      /**
+       * HT-WA-04: imagen de reemplazo aún sin subir a Meta (`uploadId` de `POST /campaigns/media`).
+       * `sendOutbound` la consume y la sube. Sin ninguna de las dos, la imagen por defecto.
+       */
+      imagenHeaderUploadId?: string;
     }
   /**
    * Archivo YA guardado en nuestro almacenamiento y YA subido a Meta (HU-OMNI-06). `sendOutbound`
@@ -220,4 +225,5 @@ export interface ISendTemplateDto {
   clienteId: string;
   templateId: string;
   parametros: string[];
+  imagenHeaderUploadId?: string;
 }

@@ -8,9 +8,36 @@ export interface IWebhookEntry {
   changes: IWebhookChange[];
 }
 
-export interface IWebhookChange {
-  value: IWebhookValue;
+/**
+ * Un cambio del webhook, discriminado por `field`. La app de SofiApp recibe varios campos por el
+ * mismo endpoint, y solo `messages` trae `value.metadata.phone_number_id`: asumirlo en todos era lo
+ * que tumbaba el procesamiento de un payload con un evento de plantilla (HT-WA-04).
+ *
+ * Meta puede añadir campos sin avisar; el código los ignora con el `else` final, aunque el tipo no
+ * los modele (un `field: string` aquí impediría estrechar la unión).
+ */
+export type IWebhookChange = IWebhookMessagesChange | ITemplateStatusChange;
+
+export interface IWebhookMessagesChange {
   field: 'messages';
+  value: IWebhookValue;
+}
+
+/** `message_template_status_update` (HT-WA-04). `entry.id` es la WABA, no el número. */
+export interface ITemplateStatusChange {
+  field: 'message_template_status_update';
+  value: ITemplateStatusValue;
+}
+
+export interface ITemplateStatusValue {
+  /** `APPROVED`, `REJECTED`, `PENDING`, `PAUSED`, `DISABLED`, `FLAGGED`, `REINSTATED`… */
+  event: string;
+  /** Meta lo manda como número; se guarda como string, igual que `metaTemplateId`. */
+  message_template_id: number | string;
+  message_template_name?: string;
+  message_template_language?: string;
+  /** Motivo del rechazo (`INVALID_FORMAT`…) o `NONE`. */
+  reason?: string | null;
 }
 
 export interface IWebhookValue {

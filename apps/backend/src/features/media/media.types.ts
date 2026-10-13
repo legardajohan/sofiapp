@@ -1,3 +1,4 @@
+import type { Document, Types } from 'mongoose';
 import type { EstadoMedia, TipoMensaje } from '../message/message.types.js';
 
 /**
@@ -126,4 +127,68 @@ export interface IMediaResponse {
 export interface IConfigAudioResponse {
   maxDuracionSegundos: number;
   maxBytes: number;
+}
+
+// ─── Imagen de cabecera de plantillas (HT-WA-04) ─────────────────────────────────
+
+/** Mimes que Meta acepta como imagen de cabecera de una plantilla: JPG y PNG, hasta 5 MB. */
+export const MIMES_IMAGEN_CABECERA = ['image/jpeg', 'image/png'] as const;
+export type MimeImagenCabecera = (typeof MIMES_IMAGEN_CABECERA)[number];
+
+/** Archivo de imagen tal y como lo deja multer, ya traducido a dominio. */
+export interface IImagenSubida {
+  buffer: Buffer;
+  mimeType: string;
+  nombreArchivo: string;
+}
+
+/**
+ * Imagen guardada en nuestro almacenamiento con la caché de su `media id` en Meta.
+ *
+ * Mismo shape en la imagen por defecto de una plantilla y en la de reemplazo de una campaña: el
+ * `metaMediaId` dura ~30 días en Meta y se renueva a los 25 (`asegurarMetaMediaId`).
+ */
+export interface IImagenCabeceraAlmacenada {
+  mediaKey: string;
+  mimeType: MimeImagenCabecera;
+  tamanoBytes: number;
+  metaMediaId: string | null;
+  subidaMetaAt: Date | null;
+}
+
+/**
+ * Para qué se subió una imagen en dos pasos:
+ * - `muestra-plantilla`: ejemplo de la cabecera que revisa Meta al crear la plantilla. Lleva el
+ *   `header_handle` de la Resumable Upload API y queda como imagen por defecto.
+ * - `cabecera-reemplazo`: imagen distinta para una campaña o un envío, sin reaprobar la plantilla.
+ */
+export const PROPOSITOS_SUBIDA = ['muestra-plantilla', 'cabecera-reemplazo'] as const;
+export type PropositoSubida = (typeof PROPOSITOS_SUBIDA)[number];
+
+export interface IMediaUpload {
+  tenantId: Types.ObjectId;
+  proposito: PropositoSubida;
+  mediaKey: string;
+  mimeType: MimeImagenCabecera;
+  tamanoBytes: number;
+  headerHandle: string | null;
+  /** `null` mientras nadie la haya consumido: una subida se usa una sola vez. */
+  usadaAt: Date | null;
+  /** El TTL de Mongo borra el documento al llegar aquí (el handle de Meta también caduca). */
+  expiraEn: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IMediaUploadDocument extends IMediaUpload, Document {
+  _id: Types.ObjectId;
+}
+
+export type LeanMediaUpload = IMediaUpload & { _id: Types.ObjectId };
+
+/** Respuesta de las subidas en dos pasos. El cliente solo maneja el `uploadId`, nunca la clave. */
+export interface IUploadResponse {
+  uploadId: string;
+  mimeType: MimeImagenCabecera;
+  tamanoBytes: number;
 }

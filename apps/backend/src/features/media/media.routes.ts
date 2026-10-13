@@ -7,6 +7,7 @@ import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
   getCampaignImageController,
   getMediaController,
+  getTemplateImageController,
   retryMediaController,
 } from './media.controller.js';
 import { getCampaignImageSchema, getMediaSchema, retryMediaSchema } from './media.validation.js';
@@ -35,6 +36,13 @@ router.get(
   '/campaigns/:id/imagen',
   validate(getCampaignImageSchema),
   asyncHandler(getCampaignImageController),
+);
+
+/** Imagen por defecto de una plantilla (HT-WA-04). Credencial: HMAC firmado sobre `template-<id>`. */
+router.get(
+  '/templates/:id/imagen',
+  validate(getCampaignImageSchema),
+  asyncHandler(getTemplateImageController),
 );
 
 /**

@@ -105,3 +105,15 @@ export const subirImagenCampana: RequestHandler = crearSubidaUnica({
   maxCampos: 8,
   mensajeVariosArchivos: 'Solo se puede adjuntar una imagen por campaña.',
 });
+
+/**
+ * Imagen de cabecera subida en dos pasos (HT-WA-04): la muestra de una plantilla
+ * (`POST /api/templates/media`) y la imagen de reemplazo de una campaña o un envío
+ * (`POST /api/campaigns/media`). Solo viaja el archivo: el `uploadId` lo consume el alta después.
+ */
+export const subirImagenCabecera: RequestHandler = crearSubidaUnica({
+  campo: 'imagen',
+  maxBytes: Math.min(env.MEDIA_MAX_BYTES_IMAGEN, 5 * 1024 * 1024),
+  maxCampos: 0,
+  mensajeVariosArchivos: 'Solo se puede subir una imagen a la vez.',
+});
