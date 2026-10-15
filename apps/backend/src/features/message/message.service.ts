@@ -14,16 +14,23 @@ import {
   buildTemplatePayload,
 } from '../whatsapp-template/whatsapp-template.service.js';
 import { asegurarMetaMediaId, extensionImagen } from '../media/media-meta-cache.js';
+import type { IArchivoImagen } from '../whatsapp-template/whatsapp-template.types.js';
 import {
   aImagenAlmacenada,
   consumirSubida,
   liberarSubida,
 } from '../media/media-upload.service.js';
-import { applyDeliveryStatusToRecipient } from '../campaign/campaign.service.js';
+import {
+  applyDeliveryStatusToRecipient,
+  getNombresCampanas,
+} from '../campaign/campaign.service.js';
+import { publishRealtime } from '../../realtime/realtime.publisher.js';
+import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from './message.model.js';
 import type {
   ContenidoOutbound,
+  ContextoEnvio,
   ICreateMessageDto,
   IMessageDocument,
   ISendMessageDto,
@@ -36,16 +43,43 @@ type TenantId = string | Types.ObjectId;
 const FUERA_DE_VENTANA =
   'Fuera de la ventana de 24 h. Solo se pueden enviar plantillas HSM aprobadas.';
 
+/** Código de Mongo para clave duplicada en un índice único. */
+const DUPLICATE_KEY = 11000;
+
+function esClaveDuplicada(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === DUPLICATE_KEY;
+}
+
+/**
+ * Persiste un mensaje entrante de forma idempotente por `metaMessageId` (HU-MARK-05).
+ *
+ * `creado: false` significa "Meta ya nos lo había entregado": el llamador NO debe volver a
+ * notificar, contar como no leído ni responder. La búsqueda previa cubre el reenvío normal; el
+ * índice único `{ tenantId, metaMessageId }` cubre la carrera entre dos jobs con el mismo webhook.
+ */
 export async function saveMessage(
   tenantId: TenantId,
   dto: ICreateMessageDto,
-): Promise<IMessageDocument> {
-  if (dto.metaMessageId) {
-    const existing = await findOneScoped(Message, tenantId, { metaMessageId: dto.metaMessageId }).lean();
-    if (existing) return existing as unknown as IMessageDocument;
-  }
+): Promise<{ message: IMessageDocument; creado: boolean }> {
+  const buscarExistente = async (): Promise<IMessageDocument | null> =>
+    dto.metaMessageId
+      ? ((await findOneScoped(Message, tenantId, {
+          metaMessageId: dto.metaMessageId,
+        }).lean()) as unknown as IMessageDocument | null)
+      : null;
 
-  return createScoped(Message, tenantId, dto as unknown as Record<string, unknown>);
+  const existente = await buscarExistente();
+  if (existente) return { message: existente, creado: false };
+
+  try {
+    const message = await createScoped(Message, tenantId, dto as unknown as Record<string, unknown>);
+    return { message, creado: true };
+  } catch (err: unknown) {
+    if (!esClaveDuplicada(err)) throw err;
+    const ganador = await buscarExistente();
+    if (!ganador) throw err;
+    return { message: ganador, creado: false };
+  }
 }
 
 /**
@@ -58,18 +92,21 @@ export async function saveMessage(
 async function subirImagenReemplazo(
   tenantId: TenantId,
   contenido: Extract<ContenidoOutbound, { modo: 'plantilla' }>,
-): Promise<{ metaMediaId: string }> {
+): Promise<{ metaMediaId: string; archivo: IArchivoImagen }> {
   const uploadId = contenido.imagenHeaderUploadId as string;
   await assertContenidoCompatible(tenantId, contenido.templateId, contenido.parametros, true);
 
   const subida = await consumirSubida(tenantId, uploadId, 'cabecera-reemplazo');
+  const almacenada = aImagenAlmacenada(subida);
   try {
-    const metaMediaId = await asegurarMetaMediaId(tenantId, aImagenAlmacenada(subida), {
+    const metaMediaId = await asegurarMetaMediaId(tenantId, almacenada, {
       nombreArchivo: `envio-${uploadId}.${extensionImagen(subida.mimeType)}`,
       mensajeError: 'No se pudo subir la imagen del mensaje a WhatsApp.',
       persistir: async () => {},
     });
-    return { metaMediaId };
+    // HU-MARK-05: el hilo apunta a la misma subida (ya es de este envío), sin copiar el archivo.
+    const { mediaKey, mimeType, tamanoBytes } = almacenada;
+    return { metaMediaId, archivo: { mediaKey, mimeType, tamanoBytes } };
   } catch (err) {
     await liberarSubida(tenantId, uploadId);
     throw err;
@@ -86,6 +123,7 @@ export async function sendOutbound(
   clienteId: string,
   contenido: ContenidoOutbound,
   sender: Sender = 'agent',
+  contexto: ContextoEnvio = {},
 ): Promise<IMessageDocument> {
   // Cuota de mensajes (outbound): bloqueo duro antes de cualquier decisión. HU-SAAS-02.
   await assertWithinQuota(tenantId, 'mensajesMes');
@@ -146,7 +184,12 @@ export async function sendOutbound(
   }
 
   let plantilla:
-    | { templateId: string; parametros: string[]; imagenCabecera?: { metaMediaId: string } }
+    | {
+        templateId: string;
+        parametros: string[];
+        imagenCabecera?: { metaMediaId: string };
+        archivoReemplazo?: IArchivoImagen;
+      }
     | undefined;
   let texto: string | undefined;
 
@@ -163,15 +206,17 @@ export async function sendOutbound(
     }
   } else {
     // 'plantilla': permitido dentro y fuera de la ventana, Meta lo acepta en ambos casos.
-    const imagenCabecera =
-      contenido.imagenCabecera ??
-      (contenido.imagenHeaderUploadId
+    const reemplazo =
+      !contenido.imagenCabecera && contenido.imagenHeaderUploadId
         ? await subirImagenReemplazo(tenantId, contenido)
-        : undefined);
+        : undefined;
+    const imagenCabecera =
+      contenido.imagenCabecera ?? (reemplazo ? { metaMediaId: reemplazo.metaMediaId } : undefined);
     plantilla = {
       templateId: contenido.templateId,
       parametros: contenido.parametros,
       ...(imagenCabecera ? { imagenCabecera } : {}),
+      ...(reemplazo ? { archivoReemplazo: reemplazo.archivo } : {}),
     };
   }
 
@@ -195,6 +240,11 @@ export async function sendOutbound(
       integration.accessToken,
     );
 
+    const { campaignId } = contexto;
+    // HU-MARK-05 · la imagen que el cliente vio de verdad: la propia de la campaña, la de reemplazo
+    // de un envío suelto o, sin ninguna de las dos, la por defecto de la plantilla (HT-WA-04).
+    const archivoCabecera =
+      contexto.mediaCabecera ?? plantilla.archivoReemplazo ?? payload.imagenDefecto;
     const message = await createScoped(Message, tenantId, {
       clienteId: new Types.ObjectId(clienteId),
       canal: 'whatsapp',
@@ -202,7 +252,33 @@ export async function sendOutbound(
       // Los envíos por plantilla se atribuyen a 'bot': son un mensaje automatizado/aprobado por
       // Meta, no texto libre redactado por el agente, aunque los haya disparado un admin.
       sender: 'bot',
+      // Se queda `plantilla` aunque lleve imagen: el presupuesto de 24 h del tier de Meta cuenta
+      // por este `tipo` (HU-MARK-01). La bandeja deduce cómo pintarlo de `media.mimeType`.
       tipo: 'plantilla',
+      // HU-MARK-05: lo que el cliente leyó de verdad. Antes no se guardaba nada y la burbuja
+      // salía como "Mensaje sin contenido".
+      ...(payload.texto ? { texto: payload.texto } : {}),
+      plantilla: {
+        templateId: new Types.ObjectId(plantilla.templateId),
+        nombre: payload.name,
+        idioma: payload.langCode,
+        parametros: plantilla.parametros,
+      },
+      ...(campaignId ? { origen: 'campana', campaignId: new Types.ObjectId(campaignId) } : {}),
+      // La imagen ya está en nuestro almacenamiento: nace `disponible` y se reutiliza su clave,
+      // sin copiar el archivo.
+      ...(archivoCabecera && payload.cabeceraMetaMediaId
+        ? {
+            media: {
+              estado: 'disponible' as const,
+              mimeType: archivoCabecera.mimeType,
+              mediaKey: archivoCabecera.mediaKey,
+              metaMediaId: payload.cabeceraMetaMediaId,
+              tamanoBytes: archivoCabecera.tamanoBytes,
+              descargadaAt: new Date(),
+            },
+          }
+        : {}),
       metaMessageId: messageId,
       status: 'sent',
     } as Record<string, unknown>);
@@ -245,12 +321,47 @@ export async function sendMessage(
   return sendOutbound(tenantId, dto.clienteId, { modo: 'texto', texto: dto.texto }, dto.sender);
 }
 
+/**
+ * Desde qué estados se puede llegar a cada uno (HU-MARK-05). Meta no garantiza el orden de los
+ * `statuses`: un `delivered` puede llegar después del `read`, y sin esta tabla el tick retrocedía.
+ * `failed` no pisa `read`: si el cliente lo leyó, llegó.
+ */
+const ESTADOS_PREVIOS: Readonly<Record<MessageStatus, readonly MessageStatus[]>> = {
+  sent: [],
+  delivered: ['sent'],
+  read: ['sent', 'delivered'],
+  failed: ['sent', 'delivered'],
+};
+
 export async function updateDeliveryStatus(
   tenantId: TenantId,
   metaMessageId: string,
   status: MessageStatus,
 ): Promise<void> {
-  await findOneAndUpdateScoped(Message, tenantId, { metaMessageId }, { status });
+  // Atómico: el filtro por estado previo decide si avanza, sin leer antes (dos webhooks
+  // simultáneos no pueden cruzarse).
+  const actualizado = await findOneAndUpdateScoped(
+    Message,
+    tenantId,
+    { metaMessageId, status: { $in: ESTADOS_PREVIOS[status] } },
+    { $set: { status } },
+    { new: true },
+  ).lean();
+
+  if (actualizado) {
+    // Ticks en vivo: el hilo reemplaza el mensaje por `id` (mismo evento que la media, HU-OMNI-06).
+    const fuente = actualizado as unknown as IMessageSource;
+    const campanas = fuente.campaignId
+      ? await getNombresCampanas(tenantId, [fuente.campaignId])
+      : new Map<string, string>();
+    await publishRealtime({
+      type: 'message:updated',
+      tenantId: String(tenantId),
+      conversationId: String(actualizado.clienteId),
+      message: toMessageResponse(fuente, String(tenantId), campanas),
+    });
+  }
+
   // Los `statuses` de Meta entran por un único camino (el webhook → esta función), así que el
   // destinatario de campaña se actualiza aquí en vez de duplicar el parseo en otro sitio. Es un
   // no-op para los mensajes que no pertenecen a ninguna campaña, que son la mayoría (HU-MARK-01).

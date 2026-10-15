@@ -39,6 +39,7 @@ import { findLeadIdsByClientes } from '../lead/lead.service.js';
 import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import { createNotification } from '../notification/notification.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
+import { getNombresCampanas } from '../campaign/campaign.service.js';
 import {
   toAssignmentResponse,
   toConversationResponse,
@@ -268,9 +269,15 @@ export async function getThread(
     .limit(limit)
     .lean();
 
+  // Una sola consulta para todos los nombres de campaña de la página (HU-MARK-05).
+  const campanas = await getNombresCampanas(
+    tenantId,
+    docs.flatMap((m) => (m.campaignId ? [m.campaignId] : [])),
+  );
+
   const data = docs
     .reverse()
-    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId)));
+    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId), campanas));
 
   return { data, page, limit, total };
 }
@@ -299,13 +306,19 @@ async function enviarYNotificar(
  * Separada del envío porque el texto y la media producen el `Message` por caminos distintos
  * (`sendMessage` y `enviarMediaSaliente`) pero necesitan exactamente la misma reacción después;
  * duplicarla dejaría a la bandeja actualizándose solo para uno de los dos.
+ *
+ * Exportada desde HU-MARK-05: el worker de campañas también la llama tras cada envío, para que el
+ * mensaje de campaña aparezca en la bandeja sin recargar.
  */
-async function notificarSaliente(
+export async function notificarSaliente(
   tenantId: string,
   clienteId: string,
   msg: IMessageSource,
 ): Promise<IMessageResponse> {
-  const message = toMessageResponse(msg, String(tenantId));
+  const campanas = msg.campaignId
+    ? await getNombresCampanas(tenantId, [msg.campaignId])
+    : new Map<string, string>();
+  const message = toMessageResponse(msg, String(tenantId), campanas);
 
   const cliente = await findOneAndUpdateScoped(
     Cliente,

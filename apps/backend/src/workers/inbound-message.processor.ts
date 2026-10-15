@@ -146,7 +146,7 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
         // conserva íntegro — `enlace` acompaña al texto, no lo sustituye.
         const clasificado = media ? null : clasificarTexto(texto);
 
-        const saved = await saveMessage(tenantId, {
+        const { message: saved, creado } = await saveMessage(tenantId, {
           tenantId: tenantOid,
           clienteId,
           canal: 'whatsapp',
@@ -173,6 +173,11 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
           metaMessageId: msg.id,
           status: 'sent',
         });
+
+        // Meta reenvía webhooks que no recibieron 200 a tiempo (HU-MARK-05). Si este mensaje ya
+        // estaba guardado, todo lo de abajo ya ocurrió la primera vez: volver a hacerlo sumaría
+        // otro no leído, duplicaría el aviso en la bandeja y podría responderle dos veces.
+        if (!creado) continue;
 
         // Bandeja en vivo: sube el contador de no leídos y emite message:new al tenant.
         await notifyInboundMessage(tenantId, clienteId.toString(), saved as unknown as IMessageSource);

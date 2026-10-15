@@ -32,7 +32,12 @@ import { HeaderImageField } from './HeaderImageField.js';
 import { MessagePreview } from './MessagePreview.js';
 import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
 import { ResumenAudiencia } from './audiencia/ResumenAudiencia.js';
-import type { ScheduleCampaignPayload, SegmentoFiltros } from '../types.js';
+import { ParametrosPlantilla } from './ParametrosPlantilla.js';
+import type {
+  ParametroDinamico,
+  ScheduleCampaignPayload,
+  SegmentoFiltros,
+} from '../types.js';
 
 interface Props {
   open: boolean;
@@ -70,6 +75,7 @@ interface Borrador {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos: ParametroDinamico[];
   imagen: File | null;
   programadaPara: Date | null;
 }
@@ -80,6 +86,7 @@ function borradorVacio(): Borrador {
     filtros: {},
     templateId: '',
     parametros: [],
+    parametrosDinamicos: [],
     imagen: null,
     programadaPara: null,
   };
@@ -159,6 +166,7 @@ export function CampaignScheduler({
       ...b,
       templateId: id,
       parametros: Array.from({ length: elegida?.parametrosBody ?? 0 }, () => ''),
+      parametrosDinamicos: [],
       // La imagen elegida era para la plantilla anterior: se vuelve a la por defecto de la nueva.
       imagen: null,
     }));
@@ -171,6 +179,9 @@ export function CampaignScheduler({
       filtros: borrador.filtros,
       templateId: borrador.templateId,
       parametros: borrador.parametros,
+      ...(borrador.parametrosDinamicos.length > 0
+        ? { parametrosDinamicos: borrador.parametrosDinamicos }
+        : {}),
       programadaPara: borrador.programadaPara.toISOString(),
       imagen: llevaImagen ? borrador.imagen : null,
     });
@@ -240,27 +251,16 @@ export function CampaignScheduler({
                 )}
 
                 {plantilla && plantilla.parametrosBody > 0 ? (
-                  <div className="space-y-2">
-                    <Label>Texto del mensaje</Label>
-                    {Array.from({ length: plantilla.parametrosBody }, (_, i) => (
-                      <Input
-                        key={i}
-                        value={borrador.parametros[i] ?? ''}
-                        onChange={(e) =>
-                          setBorrador((b) => {
-                            const parametros = [...b.parametros];
-                            parametros[i] = e.target.value;
-                            return { ...b, parametros };
-                          })
-                        }
-                        placeholder={plantilla.ejemplos[i] ?? `Valor para {{${i + 1}}}`}
-                        aria-label={`Valor para el hueco ${i + 1}`}
-                      />
-                    ))}
-                    <p className="text-sm text-muted-foreground">
-                      El mismo texto va a todos los contactos de la campaña.
-                    </p>
-                  </div>
+                  <ParametrosPlantilla
+                    etiqueta="Texto del mensaje"
+                    cantidad={plantilla.parametrosBody}
+                    parametros={borrador.parametros}
+                    dinamicos={borrador.parametrosDinamicos}
+                    ejemplos={plantilla.ejemplos}
+                    onChange={(parametros, parametrosDinamicos) =>
+                      setBorrador((b) => ({ ...b, parametros, parametrosDinamicos }))
+                    }
+                  />
                 ) : null}
 
                 {llevaImagen ? (
@@ -286,6 +286,7 @@ export function CampaignScheduler({
                       ? borrador.parametros
                       : (plantilla?.ejemplos ?? [])
                   }
+                  dinamicos={borrador.parametrosDinamicos}
                   imagenUrl={urlImagen ?? imagenDefectoUrl}
                   conImagen={llevaImagen}
                   pie={plantilla?.pie ?? null}

@@ -1,9 +1,12 @@
 import { ImageIcon } from 'lucide-react';
-import { substituteEjemplos } from '@/features/whatsapp-templates/lib/substitute-ejemplos';
+import { segmentarCuerpo } from '../lib/variables.js';
+import type { ParametroDinamico } from '../types.js';
 
 interface Props {
   cuerpo: string | null;
   parametros: string[];
+  /** Huecos que se rellenan con un dato de cada contacto (HU-MARK-05). */
+  dinamicos?: ParametroDinamico[];
   /** URL de la imagen (de objeto o del API). `null` sin imagen elegida. */
   imagenUrl: string | null;
   /** La plantilla lleva imagen: si aún no hay, se reserva el hueco para que se vea dónde irá. */
@@ -27,13 +30,14 @@ interface Props {
 export function MessagePreview({
   cuerpo,
   parametros,
+  dinamicos = [],
   imagenUrl,
   conImagen,
   hora = null,
   pie = null,
   textoVacio = 'Elige una plantilla para ver el mensaje',
 }: Props): React.ReactElement {
-  const texto = cuerpo ? substituteEjemplos(cuerpo, parametros) : null;
+  const segmentos = cuerpo ? segmentarCuerpo(cuerpo, parametros, dinamicos) : null;
 
   return (
     <div className="rounded-xl bg-muted/50 p-3">
@@ -55,8 +59,19 @@ export function MessagePreview({
         ) : null}
 
         <div className="px-3 pb-1.5 pt-2 text-sm text-foreground">
-          {texto ? (
-            <p className="whitespace-pre-wrap">{texto}</p>
+          {segmentos ? (
+            <p className="whitespace-pre-wrap">
+              {segmentos.map((s, i) =>
+                s.variable ? (
+                  // La variable se distingue del texto fijo: es lo que cambia de un contacto a otro.
+                  <span key={i} className="rounded bg-primary/10 px-1 font-medium text-primary">
+                    {s.texto}
+                  </span>
+                ) : (
+                  s.texto
+                ),
+              )}
+            </p>
           ) : (
             <p className="italic text-muted-foreground">{textoVacio}</p>
           )}

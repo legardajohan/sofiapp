@@ -31,7 +31,7 @@ describe('Aislamiento multi-tenant', () => {
     const clienteIdA = new Types.ObjectId();
     const clienteIdB = new Types.ObjectId();
 
-    const msgA = await saveMessage(tenantA, {
+    const { message: msgA, creado: creadoA } = await saveMessage(tenantA, {
       tenantId: tenantA,
       clienteId: clienteIdA,
       canal: 'whatsapp',
@@ -44,7 +44,7 @@ describe('Aislamiento multi-tenant', () => {
     });
 
     // Mismo metaMessageId, tenant distinto: debe crear su propio documento, no devolver el de A.
-    const msgB = await saveMessage(tenantB, {
+    const { message: msgB, creado: creadoB } = await saveMessage(tenantB, {
       tenantId: tenantB,
       clienteId: clienteIdB,
       canal: 'whatsapp',
@@ -56,13 +56,15 @@ describe('Aislamiento multi-tenant', () => {
       status: 'sent',
     });
 
+    expect(creadoA).toBe(true);
+    expect(creadoB).toBe(true);
     expect(msgA._id.toString()).not.toBe(msgB._id.toString());
     expect((msgB as unknown as { tenantId: Types.ObjectId }).tenantId.toString()).toBe(
       tenantB.toString(),
     );
 
     // El dedupe real (mismo tenant, mismo metaMessageId) sigue funcionando.
-    const msgADuplicado = await saveMessage(tenantA, {
+    const { message: msgADuplicado, creado: creadoDuplicado } = await saveMessage(tenantA, {
       tenantId: tenantA,
       clienteId: clienteIdA,
       canal: 'whatsapp',
@@ -74,6 +76,8 @@ describe('Aislamiento multi-tenant', () => {
       status: 'sent',
     });
     expect(msgADuplicado._id.toString()).toBe(msgA._id.toString());
+    // HU-MARK-05: el llamador sabe que es un reenvío y no vuelve a notificar.
+    expect(creadoDuplicado).toBe(false);
   });
 
   it('updateDeliveryStatus: no modifica el mensaje de otro tenant con el mismo metaMessageId', async () => {

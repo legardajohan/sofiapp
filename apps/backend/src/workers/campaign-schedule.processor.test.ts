@@ -221,12 +221,19 @@ describe('HU-MARK-03 — lote con imagen de cabecera', () => {
 
     await processCampaignJob({ tenantId: tenantId.toString(), campaignId: campana._id.toString(), lote: 0 });
 
-    expect(sendOutbound).toHaveBeenCalledWith(tenantId.toString(), cliente._id.toString(), {
-      modo: 'plantilla',
-      templateId: campana.templateId.toString(),
-      parametros: ['hola'],
-      imagenCabecera: { metaMediaId: 'meta-media-1' },
-    });
+    expect(sendOutbound).toHaveBeenCalledWith(
+      tenantId.toString(),
+      cliente._id.toString(),
+      {
+        modo: 'plantilla',
+        templateId: campana.templateId.toString(),
+        parametros: ['hola'],
+        imagenCabecera: { metaMediaId: 'meta-media-1' },
+      },
+      'bot',
+      // HU-MARK-05: el mensaje del hilo queda ligado a la campaña.
+      { campaignId: campana._id.toString() },
+    );
   });
 
   it('una campaña de solo texto no manda `imagenCabecera`', async () => {

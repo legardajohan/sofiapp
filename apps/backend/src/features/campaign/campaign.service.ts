@@ -41,6 +41,7 @@ import { Message } from '../message/message.model.js';
 import { Campaign } from './campaign.model.js';
 import { CampaignRecipient } from './campaign-recipient.model.js';
 import { assertPuedeLanzar, calcularPresupuesto } from './campaign.pacing.js';
+import { assertParametrosDinamicos } from './campaign.parametros.js';
 import {
   construirFiltroSegmento,
   facetasSegmento,
@@ -108,6 +109,7 @@ function toCampaignResponse(c: LeanCampaign): ICampaignResponse {
     filtros: c.filtros,
     templateId: c.templateId.toString(),
     parametros: c.parametros,
+    parametrosDinamicos: (c.parametrosDinamicos ?? []).map(({ indice, campo }) => ({ indice, campo })),
     imagen: toImagenResponse(c),
     totales: c.totales,
     presupuesto: c.presupuesto,
@@ -270,6 +272,8 @@ export async function createCampaign(
   const reemplazo = dto.imagenHeaderUploadId
     ? await consumirSubida(tenantId, dto.imagenHeaderUploadId, 'cabecera-reemplazo')
     : null;
+  const parametrosDinamicos = dto.parametrosDinamicos ?? [];
+  assertParametrosDinamicos(dto.parametros, parametrosDinamicos);
 
   const creada = await createScoped(Campaign, tenantId, {
     nombre: dto.nombre,
@@ -277,6 +281,7 @@ export async function createCampaign(
     templateId: new Types.ObjectId(dto.templateId),
     parametros: dto.parametros,
     contenido: { imagen: reemplazo ? aImagenAlmacenada(reemplazo) : null },
+    parametrosDinamicos,
     estado: dto.programadaPara ? 'programada' : 'borrador',
     programadaPara: dto.programadaPara ? new Date(dto.programadaPara) : null,
     creadaPor: new Types.ObjectId(actorId),
@@ -557,6 +562,8 @@ export async function scheduleCampaign(
 
   // Contenido ↔ plantilla ANTES de guardar nada: ni objeto en el bucket ni documento en Mongo.
   await assertContenidoCompatible(tenantId, dto.templateId, dto.parametros, !!imagen);
+  const parametrosDinamicos = dto.parametrosDinamicos ?? [];
+  assertParametrosDinamicos(dto.parametros, parametrosDinamicos);
 
   // El id se genera aquí porque la clave de la imagen lo necesita antes de crear el documento.
   const campaignId = new Types.ObjectId();
@@ -575,6 +582,7 @@ export async function scheduleCampaign(
       filtros: dto.filtros,
       templateId: new Types.ObjectId(dto.templateId),
       parametros: dto.parametros,
+      parametrosDinamicos,
       contenido: { imagen: imagenGuardada },
       estado: 'programada',
       programadaPara,
@@ -636,6 +644,10 @@ export async function rescheduleCampaign(
   const templateId = dto.templateId ?? campana.templateId.toString();
   const parametros = dto.parametros ?? campana.parametros;
   await assertContenidoCompatible(tenantId, templateId, parametros, llevaraImagen);
+  assertParametrosDinamicos(
+    parametros,
+    dto.parametrosDinamicos ?? campana.parametrosDinamicos ?? [],
+  );
 
   const nuevaImagen =
     imagen && mimeType ? await guardarImagen(tenantId, campaignId, imagen, mimeType) : null;
@@ -645,6 +657,7 @@ export async function rescheduleCampaign(
   if (dto.filtros !== undefined) set['filtros'] = dto.filtros;
   if (dto.templateId !== undefined) set['templateId'] = new Types.ObjectId(dto.templateId);
   if (dto.parametros !== undefined) set['parametros'] = dto.parametros;
+  if (dto.parametrosDinamicos !== undefined) set['parametrosDinamicos'] = dto.parametrosDinamicos;
   if (nuevaImagen) set['contenido.imagen'] = nuevaImagen;
   else if (dto.quitarImagen) set['contenido.imagen'] = null;
   const nuevaHora = dto.programadaPara ? new Date(dto.programadaPara) : null;
@@ -924,6 +937,29 @@ export async function listRecipients(
     limit: query.limit,
     total,
   };
+}
+
+// ─── Puente con la bandeja (HU-MARK-05) ──────────────────────────────────────────
+
+/**
+ * Nombres de las campañas que mandaron estos mensajes, en una sola consulta. Lo usan el hilo y
+ * los eventos de tiempo real para poder decir "Campaña «X»" sin una lectura por burbuja. Una
+ * campaña que ya no existe simplemente no aparece en el mapa.
+ */
+export async function getNombresCampanas(
+  tenantId: TenantId,
+  campaignIds: ReadonlyArray<Types.ObjectId | string>,
+): Promise<Map<string, string>> {
+  const unicos = [...new Set(campaignIds.map(String))];
+  if (unicos.length === 0) return new Map();
+
+  const campanas = await findScoped(Campaign, tenantId, {
+    _id: { $in: unicos.map((id) => new Types.ObjectId(id)) },
+  })
+    .select('nombre')
+    .lean<Array<{ _id: Types.ObjectId; nombre: string }>>();
+
+  return new Map(campanas.map((c) => [String(c._id), c.nombre]));
 }
 
 // ─── Puente con el webhook de entrega ───────────────────────────────────────────

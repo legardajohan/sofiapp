@@ -28,9 +28,10 @@ import { formatearNumero } from '../lib/pacing.js';
 import { AudienceMeter } from './AudienceMeter.js';
 import { HeaderImageField } from './HeaderImageField.js';
 import { MessagePreview } from './MessagePreview.js';
+import { ParametrosPlantilla } from './ParametrosPlantilla.js';
 import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
 import { ResumenAudiencia } from './audiencia/ResumenAudiencia.js';
-import type { CreateCampaignPayload, SegmentoFiltros } from '../types.js';
+import type { CreateCampaignPayload, ParametroDinamico, SegmentoFiltros } from '../types.js';
 
 interface Props {
   open: boolean;
@@ -62,8 +63,16 @@ function borradorVacio(): {
   parametros: string[];
   /** HT-WA-04: imagen de reemplazo. `null` = la imagen por defecto de la plantilla. */
   imagen: File | null;
+  parametrosDinamicos: ParametroDinamico[];
 } {
-  return { nombre: '', filtros: {}, templateId: '', parametros: [], imagen: null };
+  return {
+    nombre: '',
+    filtros: {},
+    templateId: '',
+    parametros: [],
+    imagen: null,
+    parametrosDinamicos: [],
+  };
 }
 
 /**
@@ -156,6 +165,7 @@ export function CampaignWizard({
       parametros: Array.from({ length: elegida?.parametrosBody ?? 0 }, () => ''),
       // La imagen elegida era para la plantilla anterior: se vuelve a la por defecto de la nueva.
       imagen: null,
+      parametrosDinamicos: [],
     }));
   }
 
@@ -166,6 +176,9 @@ export function CampaignWizard({
       templateId: borrador.templateId,
       parametros: borrador.parametros,
       ...(llevaImagen && borrador.imagen ? { imagen: borrador.imagen } : {}),
+      ...(borrador.parametrosDinamicos.length > 0
+        ? { parametrosDinamicos: borrador.parametrosDinamicos }
+        : {}),
       ...(lanzar ? { lanzar: true } : {}),
     });
   }
@@ -232,27 +245,15 @@ export function CampaignWizard({
               {plantilla ? (
                 <>
                   {plantilla.parametrosBody > 0 ? (
-                    <div className="space-y-2">
-                      <Label>Huecos del mensaje</Label>
-                      {Array.from({ length: plantilla.parametrosBody }, (_, i) => (
-                        <Input
-                          key={i}
-                          value={borrador.parametros[i] ?? ''}
-                          onChange={(e) =>
-                            setBorrador((b) => {
-                              const parametros = [...b.parametros];
-                              parametros[i] = e.target.value;
-                              return { ...b, parametros };
-                            })
-                          }
-                          placeholder={`Valor para {{${i + 1}}}`}
-                          aria-label={`Valor para el hueco ${i + 1}`}
-                        />
-                      ))}
-                      <p className="text-sm text-muted-foreground">
-                        El mismo texto va a todos los destinatarios de esta campaña.
-                      </p>
-                    </div>
+                    <ParametrosPlantilla
+                      etiqueta="Huecos del mensaje"
+                      cantidad={plantilla.parametrosBody}
+                      parametros={borrador.parametros}
+                      dinamicos={borrador.parametrosDinamicos}
+                      onChange={(parametros, parametrosDinamicos) =>
+                        setBorrador((b) => ({ ...b, parametros, parametrosDinamicos }))
+                      }
+                    />
                   ) : null}
 
                   {llevaImagen ? (
@@ -272,6 +273,7 @@ export function CampaignWizard({
                           ? borrador.parametros
                           : plantilla.ejemplos
                       }
+                      dinamicos={borrador.parametrosDinamicos}
                       imagenUrl={urlReemplazo ?? imagenDefectoUrl}
                       conImagen={llevaImagen}
                       pie={plantilla.pie}

@@ -1,4 +1,5 @@
-import { Sparkles } from 'lucide-react';
+import { Megaphone, Sparkles } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { shortTime } from '../lib/format.js';
 import type { MessageDTO } from '../types.js';
@@ -18,6 +19,19 @@ const DESCARGANDO: Partial<Record<MessageDTO['tipo'], string>> = {
   documento: 'Descargando documento…',
   sticker: 'Descargando sticker…',
 };
+
+/**
+ * Tipo con el que se PINTA el mensaje. Coincide con `tipo` salvo en una plantilla con cabecera
+ * multimedia (HU-MARK-05): el backend la guarda como `plantilla` —el cupo diario de Meta cuenta por
+ * ese tipo— pero en la burbuja es una imagen con su texto, no una tarjeta de documento.
+ */
+function tipoVisual(m: MessageDTO): MessageDTO['tipo'] {
+  if (m.tipo !== 'plantilla' || !m.media) return m.tipo;
+  const mime = m.media.mimeType;
+  if (mime.startsWith('image/')) return 'imagen';
+  if (mime.startsWith('video/')) return 'video';
+  return 'documento';
+}
 
 /** Etiqueta para el `alt` y el nombre accesible del lightbox. */
 function describir(m: MessageDTO): string {
@@ -49,13 +63,17 @@ export function MessageBubble({
   const outbound = message.direccion === 'outbound';
   // Saber si respondió Sofi o una persona cambia cómo se lee el hilo: sin esta marca, el asesor no
   // distingue lo que él escribió de lo que contestó la IA por él (HU-IA-01).
-  const deSofi = outbound && message.sender === 'bot';
+  // Una campaña también sale como `bot`, pero firmarla "Sofi" haría creer al asesor que la IA le
+  // escribió al cliente por su cuenta (HU-MARK-05). Lleva su propia etiqueta.
+  const deCampana = outbound && message.origen === 'campana';
+  const deSofi = outbound && message.sender === 'bot' && !deCampana;
 
   const media = message.media;
-  const esImagen = message.tipo === 'imagen' || message.tipo === 'sticker';
+  const tipo = tipoVisual(message);
+  const esImagen = tipo === 'imagen' || tipo === 'sticker';
   // Imagen y video llenan la burbuja de borde a borde; el padding del texto les dejaría un marco
   // que en WhatsApp no existe.
-  const sinPadding = !!media && media.estado === 'disponible' && (esImagen || message.tipo === 'video');
+  const sinPadding = !!media && media.estado === 'disponible' && (esImagen || tipo === 'video');
 
   return (
     <div className={cn('flex', outbound ? 'justify-end' : 'justify-start')}>
@@ -83,7 +101,13 @@ export function MessageBubble({
             )}
           </>
         ) : (
-          <p className="italic opacity-80">Mensaje sin contenido</p>
+          // Una plantilla sin texto es un envío real del que no quedó copia (anterior a HU-MARK-05
+          // y no recuperable): decir "sin contenido" haría pensar que no se mandó nada.
+          <p className="italic opacity-80">
+            {message.tipo === 'plantilla'
+              ? 'Plantilla enviada · contenido no disponible'
+              : 'Mensaje sin contenido'}
+          </p>
         )}
 
         <div
@@ -99,11 +123,40 @@ export function MessageBubble({
               Sofi
             </span>
           )}
+          {deCampana && <EtiquetaCampana nombre={message.campana?.nombre ?? null} />}
           <span>{shortTime(message.createdAt)}</span>
           {outbound && <MessageStatus status={message.status} />}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Marca discreta de "esto lo envió una campaña" (HU-MARK-05). Mismo tamaño, peso y color que la de
+ * Sofi para no cambiar la lectura del hilo; el nombre de la campaña va en el tooltip, que es donde
+ * lo busca quien lo necesita sin ensuciar cada burbuja.
+ *
+ * Sin animación propia: se ve decenas de veces al día, y el tooltip ya trae la suya de shadcn.
+ */
+function EtiquetaCampana({ nombre }: { nombre: string | null }): React.ReactElement {
+  const descripcion = nombre ? `Enviado por la campaña «${nombre}»` : 'Enviado por una campaña';
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            aria-label={descripcion}
+            className="mr-auto flex cursor-default items-center gap-1 rounded-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
+          >
+            <Megaphone className="size-2.5" aria-hidden="true" />
+            Campaña
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">{descripcion}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -116,6 +169,7 @@ function Contenido({
 }: Props): React.ReactElement {
   const media = message.media!;
   const outbound = message.direccion === 'outbound';
+  const tipo = tipoVisual(message);
 
   if (media.estado === 'pendiente') {
     return <MediaPendiente etiqueta={DESCARGANDO[message.tipo] ?? 'Descargando archivo…'} />;
@@ -131,12 +185,12 @@ function Contenido({
   }
 
   const pie = message.texto ? (
-    <p className={cn('whitespace-pre-wrap break-words', message.tipo === 'documento' ? 'mt-1.5' : 'mt-1.5 px-2')}>
+    <p className={cn('whitespace-pre-wrap break-words', tipo === 'documento' ? 'mt-1.5' : 'mt-1.5 px-2')}>
       {message.texto}
     </p>
   ) : null;
 
-  switch (message.tipo) {
+  switch (tipo) {
     case 'imagen':
     case 'sticker':
       return (
@@ -144,7 +198,7 @@ function Contenido({
           <MediaImagen
             media={media}
             alt={describir(message)}
-            sticker={message.tipo === 'sticker'}
+            sticker={tipo === 'sticker'}
             onAbrir={() => media.urlArchivo && onAbrirImagen(media.urlArchivo, describir(message))}
           />
           {pie}

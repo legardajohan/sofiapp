@@ -1,5 +1,11 @@
 import { Schema, model } from 'mongoose';
-import type { IMensajeMedia, IMessageDocument, IPreviewEnlace } from './message.types.js';
+import { ORIGENES_MENSAJE } from './message.types.js';
+import type {
+  IMensajeMedia,
+  IMessageDocument,
+  IPlantillaEnviada,
+  IPreviewEnlace,
+} from './message.types.js';
 
 /**
  * Metadata del archivo, anidada y no plana. Son nueve campos que solo existen juntos: en plano, un
@@ -31,6 +37,17 @@ const PreviewEnlaceSchema = new Schema<IPreviewEnlace>(
   {
     url: { type: String, required: true },
     dominio: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+/** Foto de la plantilla enviada (HU-MARK-05). Value object del mensaje, como `media`. */
+const PlantillaEnviadaSchema = new Schema<IPlantillaEnviada>(
+  {
+    templateId: { type: Schema.Types.ObjectId, ref: 'WhatsAppTemplate', required: true },
+    nombre: { type: String, required: true },
+    idioma: { type: String, required: true },
+    parametros: { type: [String], default: [] },
   },
   { _id: false },
 );
@@ -79,12 +96,22 @@ const MessageSchema = new Schema<IMessageDocument>(
       enum: ['sent', 'delivered', 'read', 'failed'],
       default: 'sent',
     },
+    origen: { type: String, enum: [...ORIGENES_MENSAJE] },
+    campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign' },
+    plantilla: { type: PlantillaEnviadaSchema },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
 MessageSchema.index({ tenantId: 1, clienteId: 1, createdAt: 1 });
-MessageSchema.index({ tenantId: 1, metaMessageId: 1 }, { sparse: true });
+// Único (HU-MARK-05): Meta reenvía webhooks y dos jobs pueden procesar el mismo mensaje a la vez;
+// la comprobación de `saveMessage` sola no cierra esa carrera. PARCIAL y no `sparse`: con `sparse`
+// un índice compuesto sigue indexando los documentos que tienen `tenantId`, así que todos los
+// mensajes sin `metaMessageId` chocarían entre sí como `null`.
+MessageSchema.index(
+  { tenantId: 1, metaMessageId: 1 },
+  { unique: true, partialFilterExpression: { metaMessageId: { $type: 'string' } } },
+);
 // Consumo del tier de Meta en las últimas 24 h (HU-MARK-01): cuántos destinatarios únicos abrió el
 // número con plantillas. Se consulta antes de cada lote de campaña, así que el filtro por `tipo` y
 // el rango de `createdAt` tienen que resolverse con un índice y no recorriendo la colección.

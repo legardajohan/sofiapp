@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
 import {
+  CAMPOS_CONTACTO,
   COMBINACIONES_SEGMENTO,
   ESTADOS_CAMPANA,
   ESTADOS_DESTINATARIO,
@@ -46,6 +47,19 @@ const segmentoFiltros = z
   })
   .strict();
 
+/**
+ * Variables de contacto (HU-MARK-05). Aquí solo la forma; el rango contra `parametros` lo valida
+ * el service con los valores finales (`assertParametrosDinamicos`), porque al reprogramar puede
+ * llegar uno sin el otro.
+ */
+const parametrosDinamicos = z
+  .array(
+    z
+      .object({ indice: z.number().int().min(0).max(19), campo: z.enum(CAMPOS_CONTACTO) })
+      .strict(),
+  )
+  .max(20);
+
 const paginacion = {
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
@@ -89,6 +103,7 @@ export const createCampaignSchema = z.object({
       filtros: segmentoFiltros,
       templateId: objectId,
       parametros: z.array(z.string().max(1000)).max(20).default([]),
+      parametrosDinamicos: parametrosDinamicos.optional(),
       lanzar: z.boolean().optional(),
       programadaPara: z.string().datetime({ offset: true }).optional(),
       /**
@@ -147,6 +162,7 @@ const scheduleBody = z
     filtros: jsonDe(segmentoFiltros),
     templateId: objectId,
     parametros: jsonDe(z.array(z.string().max(1000)).max(20)),
+    parametrosDinamicos: jsonDe(parametrosDinamicos).optional(),
     programadaPara: programadaParaFutura,
   })
   .strict();
@@ -169,6 +185,7 @@ export const rescheduleCampaignSchema = z.object({
       filtros: jsonDe(segmentoFiltros).optional(),
       templateId: objectId.optional(),
       parametros: jsonDe(z.array(z.string().max(1000)).max(20)).optional(),
+      parametrosDinamicos: jsonDe(parametrosDinamicos).optional(),
       programadaPara: programadaParaFutura.optional(),
       quitarImagen: z
         .literal('true')

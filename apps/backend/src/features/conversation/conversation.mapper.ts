@@ -4,8 +4,10 @@ import { toMediaResponse } from '../media/media.service.js';
 import type {
   Direccion,
   IMensajeMedia,
+  IPlantillaEnviada,
   IPreviewEnlace,
   MessageStatus,
+  OrigenMensaje,
   Sender,
   TipoMensaje,
 } from '../message/message.types.js';
@@ -50,6 +52,9 @@ export interface IMessageSource {
   media?: IMensajeMedia;
   previewEnlace?: IPreviewEnlace;
   status: MessageStatus;
+  origen?: OrigenMensaje;
+  campaignId?: Types.ObjectId | string;
+  plantilla?: IPlantillaEnviada;
   createdAt: Date;
 }
 
@@ -126,8 +131,14 @@ export function toAssignmentResponse(
  * modelo guarda una clave de almacenamiento, nunca una URL, para que no pueda caducar ni filtrar el
  * bucket.
  */
-export function toMessageResponse(msg: IMessageSource, tenantId: string): IMessageResponse {
+export function toMessageResponse(
+  msg: IMessageSource,
+  tenantId: string,
+  /** Nombres de campaña por id (HU-MARK-05); ver `getNombresCampanas`. */
+  campanas: ReadonlyMap<string, string> = new Map(),
+): IMessageResponse {
   const id = String(msg._id);
+  const campaignId = msg.campaignId ? String(msg.campaignId) : null;
   const media = toMediaResponse(tenantId, id, msg.media);
 
   return {
@@ -145,6 +156,9 @@ export function toMessageResponse(msg: IMessageSource, tenantId: string): IMessa
     // tienen `media`. Lo nuevo viaja siempre por `media.urlArchivo`.
     attachmentUrl: media?.urlArchivo ?? msg.attachmentUrl ?? null,
     status: msg.status,
+    origen: msg.origen ?? null,
+    campana: campaignId ? { id: campaignId, nombre: campanas.get(campaignId) ?? null } : null,
+    plantilla: msg.plantilla ? { nombre: msg.plantilla.nombre } : null,
     createdAt: msg.createdAt.toISOString(),
   };
 }

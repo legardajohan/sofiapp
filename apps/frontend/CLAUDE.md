@@ -167,6 +167,12 @@ apiClient.interceptors.response.use(r => r, (e) => {
     acepta adjuntos por botón y por arrastrar y soltar, con barra de progreso. La proporción del
     hueco se reserva con `aspect-*` de Tailwind (nativo desde v3.4): **no** hace falta el
     `aspect-ratio` de shadcn.
+  - **Mensajes de campaña (HU-MARK-05):** `MessageBubble` pinta el texto real de la plantilla y,
+    si `origen === 'campana'`, la etiqueta "Campaña" (con el nombre en `Tooltip`) en el slot donde
+    va "Sofi". Una plantilla con imagen de cabecera llega con `tipo: 'plantilla'` y se pinta por
+    `media.mimeType` (`tipoVisual`). Una plantilla sin texto recuperable dice "Plantilla enviada ·
+    contenido no disponible", nunca "Mensaje sin contenido". Los huecos de plantilla del wizard y
+    del programador comparten `ParametrosPlantilla` (texto fijo o variable de contacto).
   - **Notas de voz y emojis (HU-OMNI-07):**
     - `ReproductorAudio` sustituye al `<audio controls>` nativo. Tiene una onda decorativa estable
       por mensaje con el `Slider` de shadcn encima (variante `transparente`), y un solo audio suena

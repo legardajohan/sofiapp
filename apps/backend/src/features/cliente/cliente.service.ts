@@ -16,6 +16,7 @@ import { toResumenResponse } from './cliente.mapper.js';
 import { Message } from '../message/message.model.js';
 import type { IMessageDocument } from '../message/message.types.js';
 import { toMessageResponse, type IMessageSource } from '../conversation/conversation.mapper.js';
+import { getNombresCampanas } from '../campaign/campaign.service.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
@@ -209,9 +210,14 @@ export async function getContactHistory(
     .limit(limit)
     .lean();
 
+  const campanas = await getNombresCampanas(
+    tenantId,
+    docs.flatMap((m) => (m.campaignId ? [m.campaignId] : [])),
+  );
+
   const mensajes = docs
     .reverse()
-    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId)));
+    .map((m) => toMessageResponse(m as unknown as IMessageSource, String(tenantId), campanas));
 
   const tagMap = await findTagsByIds(
     tenantId,

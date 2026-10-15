@@ -111,6 +111,9 @@ export interface PreviewEnlaceDTO {
   dominio: string;
 }
 
+/** De dónde salió un mensaje cuando no basta con `sender` (HU-MARK-05). */
+export type OrigenMensaje = 'campana';
+
 export interface MessageDTO {
   id: string;
   direccion: Direccion;
@@ -123,6 +126,12 @@ export interface MessageDTO {
   /** @deprecated HU-OMNI-06: espejo de `media.urlArchivo`. Usar `media`. */
   attachmentUrl: string | null;
   status: MessageStatus;
+  /** `campana` si lo envió una campaña masiva (HU-MARK-05); `null` en todo lo demás. */
+  origen: OrigenMensaje | null;
+  /** `nombre: null` si la campaña ya no existe. */
+  campana: { id: string; nombre: string | null } | null;
+  /** Plantilla HSM con la que salió, si salió por plantilla. */
+  plantilla: { nombre: string } | null;
   createdAt: string;
 }
 

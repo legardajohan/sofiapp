@@ -187,6 +187,7 @@ export function CampaignDetailPage(): React.ReactElement {
           <MessagePreview
             cuerpo={campana.plantilla.cuerpo}
             parametros={campana.parametros}
+            dinamicos={campana.parametrosDinamicos ?? []}
             imagenUrl={campana.imagen ? apiUrl(campana.imagen.url) : null}
             conImagen={campana.imagen !== null}
             hora={campana.programadaPara ? new Date(campana.programadaPara) : null}

@@ -115,6 +115,19 @@ export interface TotalesCampana {
 }
 
 /** Imagen de cabecera de la campaña (HU-MARK-03). `url` es relativa a la base del API. */
+/** Datos del contacto que un parámetro puede tomar por destinatario (HU-MARK-05). */
+export const CAMPOS_CONTACTO = ['nombre', 'telefono'] as const;
+export type CampoContacto = (typeof CAMPOS_CONTACTO)[number];
+
+/**
+ * El parámetro `indice` (0 = `{{1}}`) se rellena con `campo` de cada destinatario. Su texto de
+ * respaldo —si el contacto no tiene el dato— es `parametros[indice]`.
+ */
+export interface ParametroDinamico {
+  indice: number;
+  campo: CampoContacto;
+}
+
 export interface ImagenCampanaDTO {
   url: string;
   mimeType: 'image/jpeg' | 'image/png';
@@ -128,6 +141,7 @@ export interface CampaignDTO {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos: ParametroDinamico[];
   imagen: ImagenCampanaDTO | null;
   totales: TotalesCampana;
   presupuesto: {
@@ -169,6 +183,7 @@ export interface CreateCampaignPayload {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos?: ParametroDinamico[];
   lanzar?: boolean;
   programadaPara?: string;
   /**
@@ -184,6 +199,7 @@ export interface ScheduleCampaignPayload {
   filtros: SegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos?: ParametroDinamico[];
   /** ISO-8601 con offset. */
   programadaPara: string;
   imagen: File | null;

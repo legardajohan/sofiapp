@@ -1,7 +1,12 @@
 import { Schema, model } from 'mongoose';
 import { MESSAGING_TIERS, QUALITY_RATINGS } from '../channel/channel.types.js';
-import { COMBINACIONES_SEGMENTO, ESTADOS_CAMPANA, MIMES_IMAGEN_CAMPANA } from './campaign.types.js';
-import type { ICampaignDocument } from './campaign.types.js';
+import {
+  CAMPOS_CONTACTO,
+  COMBINACIONES_SEGMENTO,
+  ESTADOS_CAMPANA,
+  MIMES_IMAGEN_CAMPANA,
+} from './campaign.types.js';
+import type { ICampaignDocument, IParametroDinamico } from './campaign.types.js';
 
 /**
  * Filtros del segmento. `_id: false` como el resto de subdocumentos del proyecto.
@@ -78,6 +83,14 @@ const ContenidoSchema = new Schema(
   { _id: false },
 );
 
+const ParametroDinamicoSchema = new Schema<IParametroDinamico>(
+  {
+    indice: { type: Number, required: true, min: 0 },
+    campo: { type: String, enum: [...CAMPOS_CONTACTO], required: true },
+  },
+  { _id: false },
+);
+
 const CampaignSchema = new Schema<ICampaignDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
@@ -85,6 +98,8 @@ const CampaignSchema = new Schema<ICampaignDocument>(
     filtros: { type: FiltrosSchema, required: true, default: () => ({}) },
     templateId: { type: Schema.Types.ObjectId, ref: 'WhatsAppTemplate', required: true },
     parametros: { type: [String], required: true, default: [] },
+    // HU-MARK-05. Default vacío: las campañas anteriores se leen como "todo fijo".
+    parametrosDinamicos: { type: [ParametroDinamicoSchema], default: [] },
     // HU-MARK-03. Default con imagen nula: las campañas de solo texto de MARK-01 se leen igual.
     contenido: { type: ContenidoSchema, required: true, default: () => ({ imagen: null }) },
     estado: { type: String, enum: ESTADOS_CAMPANA, required: true, default: 'borrador' },
