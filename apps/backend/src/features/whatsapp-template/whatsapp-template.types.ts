@@ -26,6 +26,25 @@ export interface ICabeceraEnvio {
   metaMediaId: string;
 }
 
+/** Archivo de una imagen ya guardada en nuestro almacenamiento (sin el estado de Meta). */
+export type IArchivoImagen = Pick<IImagenCabeceraAlmacenada, 'mediaKey' | 'mimeType' | 'tamanoBytes'>;
+
+/** Lo que `buildTemplatePayload` deja listo para enviar y para guardar en el hilo (HU-MARK-05). */
+export interface IPayloadPlantilla {
+  name: string;
+  langCode: string;
+  components: unknown[];
+  /** Cabecera TEXT + BODY con `{{n}}` sustituidos + FOOTER. `null` si la plantilla no tiene BODY. */
+  texto: string | null;
+  /** `media id` de la imagen que va en la cabecera, sea la recibida o la por defecto. */
+  cabeceraMetaMediaId: string | null;
+  /**
+   * Archivo de la imagen por defecto de la plantilla (HT-WA-04) cuando la cabecera es de imagen.
+   * El hilo apunta a él si el envío no trajo una imagen propia.
+   */
+  imagenDefecto: IArchivoImagen | null;
+}
+
 export const CATEGORIAS_PLANTILLA = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
 export type CategoriaPlantilla = (typeof CATEGORIAS_PLANTILLA)[number];
 

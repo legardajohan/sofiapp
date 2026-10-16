@@ -145,6 +145,18 @@ describe('processInboundJob — decide si Sofi responde (HU-IA-02)', () => {
     expect(mockReplyFromIa).not.toHaveBeenCalled();
   });
 
+  it('HU-MARK-05: un webhook reenviado no duplica el mensaje, ni notifica ni responde otra vez', async () => {
+    await crearCliente(tenantId, true);
+    const reenviado = payload([{ id: 'wamid.REENVIO', type: 'text', body: 'Hola' }]);
+
+    await processInboundJob({ tenantId: tenantId.toString(), payload: reenviado });
+    await processInboundJob({ tenantId: tenantId.toString(), payload: reenviado });
+
+    expect(await Message.countDocuments({ tenantId, metaMessageId: 'wamid.REENVIO' })).toBe(1);
+    expect(mockNotifyInbound).toHaveBeenCalledTimes(1);
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
   it('con iaHabilitada en false no encola nada ni manda acuse', async () => {
     await crearCliente(tenantId, false);
 

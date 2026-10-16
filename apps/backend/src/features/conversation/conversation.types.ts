@@ -3,6 +3,7 @@ import type {
   Direccion,
   IPreviewEnlace,
   MessageStatus,
+  OrigenMensaje,
   Sender,
   TipoMensaje,
 } from '../message/message.types.js';
@@ -118,6 +119,12 @@ export interface IMessageResponse {
   /** @deprecated HU-OMNI-06: espejo de `media.urlArchivo`, o el valor legado. Usar `media`. */
   attachmentUrl: string | null;
   status: MessageStatus;
+  /** HU-MARK-05. `null` en todo lo que no sea campaña. */
+  origen: OrigenMensaje | null;
+  /** Campaña que lo envió. `nombre: null` si la campaña ya no existe. */
+  campana: { id: string; nombre: string | null } | null;
+  /** Plantilla HSM con la que salió, si salió por plantilla. */
+  plantilla: { nombre: string } | null;
   createdAt: string;
 }
 

@@ -234,4 +234,56 @@ describe('CampaignWizard', () => {
     expect(screen.queryByRole('button', { name: /Añadir un dato/ })).not.toBeInTheDocument();
   });
 
+  it('HU-MARK-05: un hueco puede ser el nombre de cada contacto, con texto de respaldo', async () => {
+    const user = userEvent.setup();
+    mockTemplates.mockResolvedValue({
+      data: [
+        {
+          id: 't2',
+          name: 'promo_nombre',
+          language: 'es',
+          category: 'MARKETING',
+          status: 'APPROVED',
+          cuerpo: 'Hola {{1}}, abrimos matrículas.',
+          ejemplos: ['Ana'],
+          parametrosBody: 1,
+          cabecera: 'NINGUNA',
+          pie: null,
+          imagen: null,
+          motivoRechazo: null,
+          obsoleta: false,
+          syncedAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 100,
+    });
+    const { onSubmit } = renderWizard();
+
+    await waitFor(() => expect(screen.getByText('120')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Plantilla' }));
+    await user.click(await screen.findByRole('option', { name: /promo_nombre/ }));
+
+    await user.click(screen.getByRole('combobox', { name: 'Qué va en el hueco 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Nombre del contacto' }));
+    // Sin respaldo no se puede seguir: Meta rechaza un parámetro vacío.
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Texto de respaldo para el hueco 1'), 'estudiante');
+
+    // La vista previa enseña la variable, no el respaldo: ahí irá el dato de cada persona.
+    expect(screen.getByText('Nombre del contacto', { selector: 'p > span' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.type(screen.getByLabelText('Nombre de la campaña'), 'Matrículas 2026');
+    await user.click(screen.getByRole('button', { name: /Enviar a 120/ }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parametros: ['estudiante'],
+        parametrosDinamicos: [{ indice: 0, campo: 'nombre' }],
+      }),
+    );
+  });
 });

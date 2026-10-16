@@ -295,15 +295,29 @@
   previewEnlace: { url: String, dominio: String }?,  // solo dominio: Meta no manda Open Graph
   attachmentUrl: String?,         // @deprecated HU-OMNI-06 — documentos previos y el seed de demo
   metaMessageId: String?,         // idempotencia con Meta, SCOPED por tenant (ver índice)
-  // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01)
+  // estado de entrega de Meta, actualizado por los `statuses` del webhook (HT-WA-01). Solo
+  // AVANZA (HU-MARK-05): sent → delivered → read; `failed` no pisa `read`. Cada cambio publica
+  // `message:updated` para los ticks en vivo.
   status: "sent" | "delivered" | "read" | "failed",   // default "sent"
+  // HU-MARK-05 — envíos por plantilla. `texto` lleva el render (cabecera TEXT + BODY con los {{n}}
+  // sustituidos + FOOTER) y `tipo` sigue siendo "plantilla" aunque haya imagen de cabecera: el
+  // presupuesto de 24 h cuenta por ese tipo. La imagen va en `media` (reusa el mediaKey de la campaña).
+  plantilla: { templateId: ObjectId, nombre: String, idioma: String, parametros: [String] }?,
+                                  // foto del envío; `parametros` ya resueltos por destinatario
+  origen: "campana"?,             // ausente en lo que no es campaña; la bandeja lo etiqueta "Campaña"
+  campaignId: ObjectId?,          // ref Campaign
   createdAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1, createdAt: 1 }   (hilo de conversación)
-//          { tenantId: 1, metaMessageId: 1 } sparse      (dedupe de webhooks, POR TENANT — nunca
+//          { tenantId: 1, metaMessageId: 1 } ÚNICO, parcial sobre metaMessageId de tipo string
+//                                                         (dedupe de webhooks, POR TENANT — nunca
 //                                                          global: HT-WA-01-V2 cerró una fuga de
 //                                                          aislamiento donde el dedupe y el update
-//                                                          de `status` no llevaban `tenantId`)
+//                                                          de `status` no llevaban `tenantId`.
+//                                                          Único desde HU-MARK-05: cierra la carrera
+//                                                          entre dos jobs con el mismo webhook. Antes
+//                                                          de desplegarlo, `backfill:mensajes-campana
+//                                                          --dry-run` reporta duplicados existentes)
 //          { tenantId: 1, tipo: 1, createdAt: -1 }        (HU-MARK-01: consumo del tier en las
 //                                                          últimas 24 h — destinatarios únicos de
 //                                                          plantilla, se consulta antes de cada lote)
@@ -506,7 +520,11 @@ CRM-04, IA-05 y MARK-01 las resuelven.
     nivelInteres: [String], estadoComercial: [String], tagIds: [ObjectId]
   },
   templateId: ObjectId,           // ref WhatsAppTemplate — NO el `name` suelto (ver nota)
-  parametros: [String],           // huecos del BODY, fijos para toda la campaña
+  parametros: [String],           // huecos del BODY; en los dinámicos es el texto de respaldo
+  parametrosDinamicos: [{         // HU-MARK-05 — default []: todo fijo
+    indice: Number,               // 0 = {{1}}
+    campo: "nombre" | "telefono", // dato del Cliente que se pone por destinatario al enviar
+  }],
   contenido: {                    // HU-MARK-03 — media que acompaña a la plantilla
     imagen: {                     // cabecera IMAGE de la plantilla; null = solo texto
       mediaKey: String,           // `<tenantId>/campaigns/<campaignId>/<uuid>.<ext>` (nuestro storage)

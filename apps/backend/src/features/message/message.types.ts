@@ -1,5 +1,6 @@
 import { Document, Types } from 'mongoose';
 import type { TipoMediaSaliente } from '../media/media.types.js';
+import type { IArchivoImagen } from '../whatsapp-template/whatsapp-template.types.js';
 
 export type Direccion = 'inbound' | 'outbound';
 export type Sender = 'user' | 'bot' | 'agent';
@@ -131,6 +132,37 @@ export interface IPreviewEnlace {
   dominio: string;
 }
 
+/**
+ * De dónde salió un mensaje cuando no basta con `sender` (HU-MARK-05). Una campaña se envía como
+ * `sender: 'bot'` —es contenido automatizado, igual que Sofi— pero la bandeja tiene que poder
+ * decir "esto lo mandó una campaña" y no firmarlo como la IA. Lista abierta a propósito: flujos y
+ * recordatorios podrán sumarse sin migrar nada.
+ */
+export const ORIGENES_MENSAJE = ['campana'] as const;
+export type OrigenMensaje = (typeof ORIGENES_MENSAJE)[number];
+
+/**
+ * Lo que se envió de verdad por plantilla HSM (HU-MARK-05). Es una **foto** del envío: si la
+ * plantilla se edita o desaparece del catálogo, el hilo sigue diciendo lo que recibió el cliente.
+ */
+export interface IPlantillaEnviada {
+  templateId: Types.ObjectId;
+  nombre: string;
+  idioma: string;
+  /** Ya resueltos para ESTE destinatario (variables de contacto sustituidas). */
+  parametros: string[];
+}
+
+/**
+ * Lo que el llamador de `sendOutbound` sabe y el envío no (HU-MARK-05). Solo lo usa la rama de
+ * plantilla; el resto de modos lo ignora.
+ */
+export interface ContextoEnvio {
+  campaignId?: string;
+  /** Imagen de cabecera ya guardada en nuestro almacenamiento: el hilo la pinta sin re-subirla. */
+  mediaCabecera?: IArchivoImagen;
+}
+
 export interface IMessage {
   tenantId: Types.ObjectId;
   clienteId: Types.ObjectId;
@@ -149,6 +181,10 @@ export interface IMessage {
   previewEnlace?: IPreviewEnlace;
   metaMessageId?: string;
   status: MessageStatus;
+  /** HU-MARK-05. Ausente en todo lo que no sea campaña (y en los documentos anteriores). */
+  origen?: OrigenMensaje;
+  campaignId?: Types.ObjectId;
+  plantilla?: IPlantillaEnviada;
   createdAt: Date;
 }
 

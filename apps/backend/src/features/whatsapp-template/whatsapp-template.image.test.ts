@@ -483,6 +483,98 @@ describe('Envío con imagen por defecto o de reemplazo (criterios 8, 10-13)', ()
   });
 });
 
+describe('HU-MARK-05 · el hilo guarda la imagen que el cliente vio de verdad', () => {
+  async function prepararEnvio(
+    tenantId: Types.ObjectId,
+  ): Promise<{ templateId: string; clienteId: string }> {
+    await crearIntegracion(tenantId);
+    const templateId = await crearPlantillaConImagen(tenantId);
+    const cliente = await createScoped(Cliente, tenantId, {
+      metaUserId: `meta-${new Types.ObjectId().toString()}`,
+      telefono: '573003333333',
+      nombre: 'Luis',
+      canalOrigen: 'whatsapp',
+      estadoComercial: 'nuevo',
+      rolContacto: 'estudiante',
+    });
+    return { templateId, clienteId: cliente._id.toString() };
+  }
+
+  it('envío suelto con reemplazo: texto, plantilla y media apuntando a la subida, sin origen de campaña', async () => {
+    const tenantId = new Types.ObjectId();
+    const { templateId, clienteId } = await prepararEnvio(tenantId);
+    const { uploadId } = await subirImagenReemplazo(tenantId, PNG);
+
+    const mensaje = await sendOutbound(tenantId, clienteId, {
+      modo: 'plantilla',
+      templateId,
+      parametros: ['Luis'],
+      imagenHeaderUploadId: uploadId,
+    });
+
+    const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;
+    expect(mensaje.texto).toBe('Hola Luis, mira la promo');
+    expect(mensaje.plantilla).toMatchObject({ nombre: 'promo_mes', parametros: ['Luis'] });
+    expect(mensaje.media).toMatchObject({ estado: 'disponible', mimeType: 'image/png' });
+    expect(mensaje.media?.metaMediaId).toBe('meta-media-1');
+    expect(mensaje.media?.mediaKey).toBeTruthy();
+    expect(mensaje.media?.mediaKey).not.toBe(defecto?.mediaKey);
+    expect(mensaje.origen).toBeUndefined();
+  });
+
+  it('envío suelto sin reemplazo: media = imagen por defecto de la plantilla', async () => {
+    const tenantId = new Types.ObjectId();
+    const { templateId, clienteId } = await prepararEnvio(tenantId);
+
+    const mensaje = await sendOutbound(tenantId, clienteId, {
+      modo: 'plantilla',
+      templateId,
+      parametros: ['Luis'],
+    });
+
+    const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;
+    expect(mensaje.media).toMatchObject({
+      estado: 'disponible',
+      mediaKey: defecto?.mediaKey,
+      metaMediaId: 'meta-media-1',
+    });
+  });
+
+  it('campaña sin imagen propia: el worker pasa la por defecto ya subida y el hilo la guarda', async () => {
+    const tenantId = new Types.ObjectId();
+    const { templateId, clienteId } = await prepararEnvio(tenantId);
+    const campana = await createCampaign(tenantId, actorId, {
+      nombre: 'Sin imagen propia',
+      filtros: { rolContacto: ['estudiante'] },
+      templateId,
+      parametros: ['Ana'],
+    });
+    // Igual que `campaign-broadcast.processor`: imagen ya resuelta y contexto sin `mediaCabecera`.
+    const imagenCabecera = await prepararImagenCabecera(
+      tenantId,
+      await leerCampana(tenantId, campana.id),
+    );
+
+    const mensaje = await sendOutbound(
+      tenantId,
+      clienteId,
+      {
+        modo: 'plantilla',
+        templateId,
+        parametros: ['Ana'],
+        ...(imagenCabecera ? { imagenCabecera } : {}),
+      },
+      'bot',
+      { campaignId: campana.id },
+    );
+
+    const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;
+    expect(mensaje.origen).toBe('campana');
+    expect(mensaje.media).toMatchObject({ estado: 'disponible', mediaKey: defecto?.mediaKey });
+    expect(mensaje.media?.metaMediaId).toBe(imagenCabecera?.metaMediaId);
+  });
+});
+
 describe('Aislamiento multi-tenant (criterio 17)', () => {
   it('B no consume la subida de A, no ve su plantilla ni su imagen, y un evento de A no toca a B', async () => {
     const tenantA = new Types.ObjectId();

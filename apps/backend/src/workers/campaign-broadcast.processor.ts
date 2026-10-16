@@ -16,6 +16,13 @@ import {
   resolverPresupuesto,
 } from '../features/campaign/campaign.service.js';
 import { sendOutbound } from '../features/message/message.service.js';
+import { notificarSaliente } from '../features/conversation/conversation.service.js';
+import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
+import { Cliente } from '../features/cliente/cliente.model.js';
+import {
+  resolverParametros,
+  type IContactoParametros,
+} from '../features/campaign/campaign.parametros.js';
 import type {
   CampaignJobData,
   CampaignStartJobData,
@@ -133,17 +140,50 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
   // se puede enviar la plantilla, así que tampoco tiene sentido marcar a nadie como fallido.
   const imagenCabecera = await prepararImagenCabecera(tenantId, campana);
 
+  // HU-MARK-05 — variables de contacto. Una sola lectura para todo el lote, y solo si la campaña
+  // las usa: las de parámetros fijos no pagan nada.
+  const dinamicos = campana.parametrosDinamicos ?? [];
+  const contactos = new Map<string, IContactoParametros>();
+  if (dinamicos.length > 0) {
+    const clientes = await findScoped(Cliente, tenantId, {
+      _id: { $in: destinatarios.map((d) => d.clienteId) },
+    })
+      .select('nombre telefono')
+      .lean<Array<{ _id: Types.ObjectId; nombre?: string | null; telefono: string }>>();
+    for (const c of clientes) contactos.set(String(c._id), c);
+  }
+
+  // La imagen ya vive en nuestro almacenamiento: el mensaje del hilo apunta a ella (HU-MARK-05).
+  const imagenGuardada = campana.contenido?.imagen;
+  const mediaCabecera = imagenGuardada
+    ? {
+        mediaKey: imagenGuardada.mediaKey,
+        mimeType: imagenGuardada.mimeType,
+        tamanoBytes: imagenGuardada.tamanoBytes,
+      }
+    : undefined;
+
   let enviados = 0;
   let fallidos = 0;
 
   for (const [indice, destinatario] of destinatarios.entries()) {
+    const clienteId = destinatario.clienteId.toString();
+    const contacto = contactos.get(clienteId);
     try {
-      const mensaje = await sendOutbound(tenantId, destinatario.clienteId.toString(), {
-        modo: 'plantilla',
-        templateId: campana.templateId.toString(),
-        parametros: campana.parametros,
-        ...(imagenCabecera ? { imagenCabecera } : {}),
-      });
+      const mensaje = await sendOutbound(
+        tenantId,
+        clienteId,
+        {
+          modo: 'plantilla',
+          templateId: campana.templateId.toString(),
+          parametros: contacto
+            ? resolverParametros(campana.parametros, dinamicos, contacto)
+            : campana.parametros,
+          ...(imagenCabecera ? { imagenCabecera } : {}),
+        },
+        'bot',
+        { campaignId, ...(mediaCabecera ? { mediaCabecera } : {}) },
+      );
 
       await findOneAndUpdateScoped(
         CampaignRecipient,
@@ -159,6 +199,18 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
         },
       );
       enviados += 1;
+
+      // Fuera del criterio de éxito a propósito: el mensaje YA salió. Si avisar a la bandeja
+      // falla, el destinatario sigue `enviado` y el hilo lo mostrará en el próximo refetch.
+      try {
+        await notificarSaliente(tenantId, clienteId, mensaje as unknown as IMessageSource);
+      } catch (err) {
+        logger.warn('No se pudo notificar a la bandeja un envío de campaña', {
+          campaignId,
+          clienteId,
+          error: String(err),
+        });
+      }
     } catch (err) {
       // Deliberadamente por destinatario: un número dado de baja, un contacto borrado o un 470 de
       // Meta son casos de UNA fila. Propagar tumbaría el lote entero y BullMQ reintentaría envíos

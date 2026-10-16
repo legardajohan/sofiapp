@@ -25,6 +25,23 @@ export const ESTADOS_CAMPANA = [
 ] as const;
 export type EstadoCampana = (typeof ESTADOS_CAMPANA)[number];
 
+/**
+ * Datos del contacto que un parámetro de la plantilla puede tomar por destinatario (HU-MARK-05).
+ * Lista cerrada a propósito: son los dos campos que todo `Cliente` tiene y que no son sensibles.
+ */
+export const CAMPOS_CONTACTO = ['nombre', 'telefono'] as const;
+export type CampoContacto = (typeof CAMPOS_CONTACTO)[number];
+
+/**
+ * El parámetro `indice` (0 = `{{1}}`) se rellena con `campo` del destinatario. El texto de
+ * respaldo —lo que va si el contacto no tiene ese dato— es `parametros[indice]`: no hay un segundo
+ * array que mantener sincronizado.
+ */
+export interface IParametroDinamico {
+  indice: number;
+  campo: CampoContacto;
+}
+
 /** Estados en los que la campaña todavía puede consumir cupo del número. */
 export const ESTADOS_CAMPANA_VIVOS: readonly EstadoCampana[] = ['programada', 'en_curso', 'pausada'];
 
@@ -156,8 +173,13 @@ export interface ICampaign {
    * seguir apuntando a la plantilla con la que se envió. Mismo criterio que `Tenant.recordatorio`.
    */
   templateId: Types.ObjectId;
-  /** Parámetros del BODY, fijos para toda la campaña (el mail-merge por fila está fuera de alcance). */
+  /**
+   * Parámetros del BODY. Fijos, salvo los que `parametrosDinamicos` resuelve por destinatario
+   * (HU-MARK-05); para esos, el valor guardado aquí es el texto de respaldo.
+   */
   parametros: string[];
+  /** HU-MARK-05. Vacío en las campañas anteriores: todos sus parámetros son fijos. */
+  parametrosDinamicos: IParametroDinamico[];
   /** Media que acompaña a la plantilla (HU-MARK-03). `{ imagen: null }` en las campañas de solo texto. */
   contenido: IContenidoCampana;
   estado: EstadoCampana;
@@ -239,6 +261,7 @@ export interface CreateCampaignDTO {
   filtros: ISegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos?: IParametroDinamico[];
   /** `true` = crear y arrancar en la misma petición. Incompatible con `programadaPara`. */
   lanzar?: boolean;
   /** ISO-8601. Deja la campaña en `programada`; la levanta el barrido al llegar la hora. */
@@ -253,6 +276,7 @@ export interface ScheduleCampaignDTO {
   filtros: ISegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos?: IParametroDinamico[];
   /** ISO-8601 con offset, al menos un minuto en el futuro. */
   programadaPara: string;
 }
@@ -344,6 +368,7 @@ export interface ICampaignResponse {
   filtros: ISegmentoFiltros;
   templateId: string;
   parametros: string[];
+  parametrosDinamicos: IParametroDinamico[];
   /** Imagen de cabecera con URL firmada de vida corta, o `null` si la campaña es solo texto. */
   imagen: IImagenCampanaResponse | null;
   totales: ITotalesCampana;

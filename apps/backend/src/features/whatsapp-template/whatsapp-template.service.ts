@@ -35,6 +35,7 @@ import type {
   EstadoPlantilla,
   FormatoCabecera,
   ICabeceraEnvio,
+  IPayloadPlantilla,
   IImagenPlantillaResponse,
   IMotivoRechazoResponse,
   IPlantillaComponente,
@@ -78,6 +79,35 @@ function componenteDe(
 
 function bodyTextOf(components: IPlantillaComponente[]): string | null {
   return componenteDe(components, 'BODY')?.text ?? null;
+}
+
+/**
+ * El texto que el cliente leyó en WhatsApp (HU-MARK-05): cabecera de texto, cuerpo con los `{{n}}`
+ * sustituidos y pie, separados por una línea en blanco como los muestra WhatsApp. `null` si la
+ * plantilla no tiene cuerpo.
+ *
+ * Un `{{n}}` sin parámetro se deja tal cual: es mejor un hueco visible que inventar contenido que
+ * el cliente nunca recibió. Los botones no se incluyen; no son texto del mensaje.
+ */
+export function renderizarPlantilla(
+  components: IPlantillaComponente[],
+  parametros: string[],
+): string | null {
+  const cuerpo = bodyTextOf(components);
+  if (cuerpo === null) return null;
+
+  const sustituido = cuerpo.replace(/\{\{(\d+)\}\}/g, (literal, n: string) => {
+    const valor = parametros[Number(n) - 1];
+    return valor === undefined ? literal : valor;
+  });
+
+  const header = components.find((c) => c.type === 'HEADER');
+  const cabecera = header && (header.format ?? 'TEXT') === 'TEXT' ? header.text : undefined;
+  const pie = components.find((c) => c.type === 'FOOTER')?.text;
+
+  return [cabecera, sustituido, pie]
+    .filter((p): p is string => !!p && p.trim() !== '')
+    .join('\n\n');
 }
 
 /** Formato de la cabecera según los `components` persistidos. Sin `HEADER` → `NINGUNA`. */
@@ -543,9 +573,10 @@ export async function buildTemplatePayload(
   templateId: string,
   parametros: string[],
   cabecera?: ICabeceraEnvio,
-): Promise<{ name: string; langCode: string; components: unknown[] }> {
+): Promise<IPayloadPlantilla> {
   const tpl = await resolverPlantillaEnviable(tenantId, templateId, parametros, !!cabecera);
   const imagen = cabecera ?? (await asegurarImagenDefecto(tenantId, tpl));
+  const porDefecto = formatoCabecera(tpl) === 'IMAGE' ? (tpl.imagenDefecto ?? null) : null;
 
   const components: unknown[] = [];
   if (imagen) {
@@ -558,7 +589,22 @@ export async function buildTemplatePayload(
     components.push({ type: 'body', parameters: parametros.map((text) => ({ type: 'text', text })) });
   }
 
-  return { name: tpl.name, langCode: tpl.language, components };
+  // `texto` viaja junto al payload porque la plantilla ya está cargada aquí: el envío la persiste
+  // sin una segunda lectura (HU-MARK-05).
+  return {
+    name: tpl.name,
+    langCode: tpl.language,
+    components,
+    texto: renderizarPlantilla(tpl.components, parametros),
+    cabeceraMetaMediaId: imagen?.metaMediaId ?? null,
+    imagenDefecto: porDefecto
+      ? {
+          mediaKey: porDefecto.mediaKey,
+          mimeType: porDefecto.mimeType,
+          tamanoBytes: porDefecto.tamanoBytes,
+        }
+      : null,
+  };
 }
 
 /**

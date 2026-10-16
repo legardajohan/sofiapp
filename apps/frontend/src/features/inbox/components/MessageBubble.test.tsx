@@ -15,6 +15,9 @@ function mensaje(parcial: Partial<MessageDTO> = {}): MessageDTO {
     previewEnlace: null,
     attachmentUrl: null,
     status: 'sent',
+    origen: null,
+    campana: null,
+    plantilla: null,
     createdAt: '2026-09-16T12:00:00.000Z',
     ...parcial,
   };
@@ -183,5 +186,71 @@ describe('MessageBubble — renderizado por tipo (HU-OMNI-06)', () => {
     );
 
     expect(screen.getByText('paquete.zip')).toBeInTheDocument();
+  });
+});
+
+describe('MessageBubble — mensajes de campaña (HU-MARK-05)', () => {
+  const deCampana = (parcial: Partial<MessageDTO> = {}): MessageDTO =>
+    mensaje({
+      direccion: 'outbound',
+      sender: 'bot',
+      tipo: 'plantilla',
+      texto: 'Hola Ana, tenemos cupos para el sábado.',
+      origen: 'campana',
+      campana: { id: 'c-1', nombre: 'Promo sábado' },
+      plantilla: { nombre: 'promo_icfes' },
+      ...parcial,
+    });
+
+  it('muestra el texto real y la etiqueta Campaña, no la firma de Sofi', () => {
+    pintar(deCampana());
+
+    expect(screen.getByText('Hola Ana, tenemos cupos para el sábado.')).toBeInTheDocument();
+    expect(screen.getByText('Campaña')).toBeInTheDocument();
+    expect(screen.queryByText('Sofi')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mensaje sin contenido')).not.toBeInTheDocument();
+  });
+
+  it('la etiqueta nombra la campaña para lectores de pantalla y al enfocarla', async () => {
+    pintar(deCampana());
+
+    const etiqueta = screen.getByLabelText('Enviado por la campaña «Promo sábado»');
+    await userEvent.tab();
+    expect(etiqueta).toHaveFocus();
+  });
+
+  it('una campaña borrada se sigue identificando como campaña', () => {
+    pintar(deCampana({ campana: { id: 'c-1', nombre: null } }));
+    expect(screen.getByLabelText('Enviado por una campaña')).toBeInTheDocument();
+  });
+
+  it('una plantilla con imagen de cabecera se pinta como imagen con su texto, no como documento', () => {
+    pintar(deCampana({ media: media({ mimeType: 'image/jpeg' }) }));
+
+    expect(
+      screen.getByRole('img', { name: 'Hola Ana, tenemos cupos para el sábado.' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Hola Ana, tenemos cupos para el sábado.')).toBeInTheDocument();
+  });
+
+  it('una plantilla sin contenido recuperable no se presenta como mensaje vacío', () => {
+    pintar(deCampana({ texto: null, origen: null, campana: null }));
+
+    expect(screen.getByText('Plantilla enviada · contenido no disponible')).toBeInTheDocument();
+    expect(screen.queryByText('Mensaje sin contenido')).not.toBeInTheDocument();
+  });
+
+  it('una respuesta de Sofi sigue firmada como Sofi', () => {
+    pintar(mensaje({ direccion: 'outbound', sender: 'bot', texto: 'Claro, te cuento' }));
+
+    expect(screen.getByText('Sofi')).toBeInTheDocument();
+    expect(screen.queryByText('Campaña')).not.toBeInTheDocument();
+  });
+
+  it('un mensaje del asesor no lleva ninguna de las dos marcas', () => {
+    pintar(mensaje({ direccion: 'outbound', sender: 'agent', texto: 'Te llamo' }));
+
+    expect(screen.queryByText('Sofi')).not.toBeInTheDocument();
+    expect(screen.queryByText('Campaña')).not.toBeInTheDocument();
   });
 });

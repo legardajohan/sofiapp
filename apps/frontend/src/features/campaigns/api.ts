@@ -110,6 +110,9 @@ export async function scheduleCampaign(payload: ScheduleCampaignPayload): Promis
   form.append('filtros', JSON.stringify(payload.filtros));
   form.append('templateId', payload.templateId);
   form.append('parametros', JSON.stringify(payload.parametros));
+  if (payload.parametrosDinamicos?.length) {
+    form.append('parametrosDinamicos', JSON.stringify(payload.parametrosDinamicos));
+  }
   form.append('programadaPara', payload.programadaPara);
   if (payload.imagen) form.append('imagen', payload.imagen);
 
