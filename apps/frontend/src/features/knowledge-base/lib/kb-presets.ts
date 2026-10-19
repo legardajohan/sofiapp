@@ -175,8 +175,8 @@ function umbralSimilitud(longitudMinima: number): number {
 /**
  * Distancia de Levenshtein entre dos cadenas **ya normalizadas**.
  *
- * Implementación propia de dos filas rodantes: los títulos topan en 200 caracteres (`maxLength` del
- * input y el `.max(200)` de `createDocumentSchema`) y un tenant tiene decenas de documentos, así que
+ * Implementación propia de dos filas rodantes: los títulos topan en 400 caracteres (`maxLength` del
+ * input y el `.max(400)` de `createDocumentSchema`) y un tenant tiene decenas de documentos, así que
  * el coste es irrelevante y no justifica una dependencia nueva.
  *
  * Los `?? 0` son inalcanzables —los índices recorridos siempre existen— pero

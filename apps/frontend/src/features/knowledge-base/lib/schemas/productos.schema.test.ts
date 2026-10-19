@@ -12,7 +12,9 @@ import { serializeEstructura, serializedLength } from '../kb-serialize.js';
 import { PRODUCTOS_SCHEMA } from './productos.schema.js';
 
 /** Espejo de `CONTENIDO_MAX` en `apps/backend/src/features/kb/kb.validation.ts`. */
-const CONTENIDO_MAX = 10_000;
+const CONTENIDO_MAX = 15_000;
+/** Espejo de `ESTRUCTURA_MAX_BYTES` en el mismo archivo del backend: tope del JSON de `estructura`. */
+const ESTRUCTURA_MAX_BYTES = 60_000;
 
 /**
  * Ids congelados. **Este test es el candado**: renombrar un campo deja huérfano el dato ya guardado
@@ -95,10 +97,10 @@ describe('las columnas del catálogo', () => {
     expect(campo('catalogo').subcampos?.map((s) => s.id)).not.toContain('precio');
   });
 
-  it('respeta los topes: nombre 60, descripcion 120 (el default de `repetible`)', () => {
+  it('respeta los topes: nombre 120, descripcion 240 (el default de `repetible`)', () => {
     const subcampos = campo('catalogo').subcampos ?? [];
-    expect(subcampos.find((s) => s.id === 'nombre')?.maxLength).toBe(60);
-    expect(subcampos.find((s) => s.id === 'descripcion')?.maxLength).toBe(120);
+    expect(subcampos.find((s) => s.id === 'nombre')?.maxLength).toBe(120);
+    expect(subcampos.find((s) => s.id === 'descripcion')?.maxLength).toBe(240);
   });
 
   it('admite hasta 12 filas', () => {
@@ -144,14 +146,14 @@ describe('exigencia de los campos', () => {
     expect(faltan.map((c) => c.id)).toEqual(['catalogo']);
   });
 
-  it('`resumen_oferta` se acota a 600, no a los 1.500 del kind', () => {
-    expect(limiteDeCampo(campo('resumen_oferta'))).toBe(600);
+  it('`resumen_oferta` se acota a 900, no a los 1.500 del kind', () => {
+    expect(limiteDeCampo(campo('resumen_oferta'))).toBe(900);
   });
 
   it('las listas llevan su propio tope de ítems y de longitud', () => {
     expect(maxItemsDeCampo(campo('formas_pago'))).toBe(8);
     expect(maxItemsDeCampo(campo('modalidades_entrega'))).toBe(6);
-    expect(limiteDeCampo(campo('formas_pago'))).toBe(60);
+    expect(limiteDeCampo(campo('formas_pago'))).toBe(120);
   });
 });
 
@@ -280,6 +282,10 @@ describe('presupuesto de caracteres', () => {
 
     return estructura(campos, 'x'.repeat(1500));
   }
+
+  it('con todo al tope, el JSON de la estructura cabe en ESTRUCTURA_MAX_BYTES (HU-REP-05-V2)', () => {
+    expect(JSON.stringify(estructuraAlTope()).length).toBeLessThanOrEqual(ESTRUCTURA_MAX_BYTES);
+  });
 
   it('con todo al tope, el texto serializado cabe en CONTENIDO_MAX', () => {
     expect(serializedLength(estructuraAlTope(), PRODUCTOS_SCHEMA)).toBeLessThanOrEqual(CONTENIDO_MAX);

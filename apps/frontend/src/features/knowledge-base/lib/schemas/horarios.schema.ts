@@ -39,7 +39,7 @@ export const HORARIOS_SCHEMA: KbSchemaDef = {
           etiqueta: 'Dirección',
           kind: 'texto-medio',
           requisito: 'opcional',
-          maxLength: 200,
+          maxLength: 400,
           ayuda: 'La dirección del punto principal de atención.',
         },
         {
@@ -63,9 +63,9 @@ export const HORARIOS_SCHEMA: KbSchemaDef = {
           // Los `id` de subcampo acaban DENTRO del texto que lee la IA (el serializador emite la
           // clave, no la etiqueta), así que van en español legible.
           subcampos: [
-            { id: 'nombre', etiqueta: 'Nombre de la sede', maxLength: 60 },
-            { id: 'direccion', etiqueta: 'Dirección', maxLength: 120 },
-            { id: 'telefono', etiqueta: 'Teléfono', maxLength: 40 },
+            { id: 'nombre', etiqueta: 'Nombre de la sede', maxLength: 120 },
+            { id: 'direccion', etiqueta: 'Dirección', maxLength: 240 },
+            { id: 'telefono', etiqueta: 'Teléfono', maxLength: 80 },
           ],
         },
       ],
@@ -84,21 +84,21 @@ export const HORARIOS_SCHEMA: KbSchemaDef = {
           etiqueta: 'WhatsApp',
           kind: 'texto-corto',
           requisito: 'opcional',
-          maxLength: 60,
+          maxLength: 120,
         },
         {
           id: 'telefono',
           etiqueta: 'Teléfono',
           kind: 'texto-corto',
           requisito: 'opcional',
-          maxLength: 60,
+          maxLength: 120,
         },
         {
           id: 'correo',
           etiqueta: 'Correo electrónico',
           kind: 'texto-corto',
           requisito: 'opcional',
-          maxLength: 80,
+          maxLength: 160,
         },
         {
           id: 'redes_sociales',
@@ -106,7 +106,7 @@ export const HORARIOS_SCHEMA: KbSchemaDef = {
           kind: 'lista',
           requisito: 'opcional',
           maxItems: 6,
-          maxLength: 80,
+          maxLength: 160,
           // Una lista y no un campo por red: declararlos obligaría a adivinar cuáles usa cada
           // negocio (Instagram, TikTok, X, LinkedIn…) y a quedarse corto igual.
           ayuda: 'Una por línea, con su nombre: «Instagram: @acme».',

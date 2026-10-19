@@ -17,10 +17,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { createKbFaq, faqErrorMessage, updateKbFaq } from '../../../api/kb-faqs.js';
 import { estadoMinimo, useKbFaqs } from '../hooks/useKbFaqs.js';
+import { FAQ_PREGUNTA_MAX as MAX_PREGUNTA, FAQ_RESPUESTA_MAX as MAX_RESPUESTA } from '../lib/kb-faq-limites.js';
 import type { IKbFaq } from '../types/index.js';
-
-const MAX_PREGUNTA = 300;
-const MAX_RESPUESTA = 2000;
 
 interface Props {
   /** Presente = modo editar; ausente = modo crear. */

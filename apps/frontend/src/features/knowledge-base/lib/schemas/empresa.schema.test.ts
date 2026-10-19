@@ -16,7 +16,9 @@ import { EMPRESA_SCHEMA } from './empresa.schema.js';
  * Tope global del contenido, espejo de `CONTENIDO_MAX` en `apps/backend/src/features/kb/kb.validation.ts`.
  * Si allá sube o baja, este test es el que avisa de que el formulario dejó de caber.
  */
-const CONTENIDO_MAX = 10_000;
+const CONTENIDO_MAX = 15_000;
+/** Espejo de `ESTRUCTURA_MAX_BYTES` en el mismo archivo del backend: tope del JSON de `estructura`. */
+const ESTRUCTURA_MAX_BYTES = 60_000;
 
 /**
  * Los ids del schema, congelados. **Este test es el candado**: renombrar un campo deja huérfano el
@@ -110,8 +112,8 @@ describe('exigencia de los campos', () => {
     expect(faltan).toHaveLength(0);
   });
 
-  it('`anio_fundacion` se acota a 30: un año no es una biografía', () => {
-    expect(limiteDeCampo(campo('anio_fundacion'))).toBe(30);
+  it('`anio_fundacion` se acota a 60: un año no es una biografía', () => {
+    expect(limiteDeCampo(campo('anio_fundacion'))).toBe(60);
   });
 
   it('las listas llevan su propio tope de ítems', () => {
@@ -253,6 +255,10 @@ describe('presupuesto de caracteres', () => {
 
     return estructura(campos, 'x'.repeat(1500));
   }
+
+  it('con todo al tope, el JSON de la estructura cabe en ESTRUCTURA_MAX_BYTES (HU-REP-05-V2)', () => {
+    expect(JSON.stringify(estructuraAlTope()).length).toBeLessThanOrEqual(ESTRUCTURA_MAX_BYTES);
+  });
 
   it('con todo al tope, el texto serializado cabe en CONTENIDO_MAX', () => {
     const total = serializedLength(estructuraAlTope(), EMPRESA_SCHEMA);

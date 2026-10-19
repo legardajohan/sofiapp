@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { faqErrorMessage, testKbFaq } from '../../../api/kb-faqs.js';
+import { FAQ_PREGUNTA_MAX } from '../lib/kb-faq-limites.js';
 import type { FaqTestResult } from '../types/index.js';
 
 const pct = (v: number): number => Math.round(v * 100);
@@ -150,7 +151,7 @@ export function FaqTester(): React.ReactElement {
           value={pregunta}
           onChange={(e) => setPregunta(e.target.value)}
           placeholder="¿Cuánto cuesta el curso?"
-          maxLength={300}
+          maxLength={FAQ_PREGUNTA_MAX}
           className="flex-1"
         />
         <Button type="submit" disabled={!puedeProbe} className="sm:w-28">

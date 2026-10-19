@@ -288,6 +288,16 @@ describe('campos condicionales', () => {
     expect(screen.getByRole('textbox', { name: /Plazo/ })).toBeInTheDocument();
   });
 
+  it('el detalle del tri-estado toma el tope de su kind (700, HU-REP-05-V2) y lo cuenta', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Formulario />);
+    await irA(user, /Políticas/);
+
+    await user.click(screen.getByRole('radio', { name: 'Sí' }));
+    expect(container.querySelector('textarea[maxlength="700"]')).toBeInTheDocument();
+    expect(screen.getByText('0 / 700')).toBeInTheDocument();
+  });
+
   it('visible y vacío, bloquea el guardado', async () => {
     const user = userEvent.setup();
     render(<Formulario />);
