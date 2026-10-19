@@ -2,11 +2,12 @@ import { z } from 'zod';
 
 const idParams = z.object({ id: z.string().regex(/^[0-9a-f]{24}$/i, 'ID inválido') });
 
+/** HU-REP-05-V2: 300 → 700. El probador (`/test`) usa el mismo campo, así que queda alineado. */
 const preguntaField = z
   .string()
   .trim()
   .min(3, 'La pregunta es obligatoria.')
-  .max(300, 'La pregunta no puede superar los 300 caracteres.');
+  .max(700, 'La pregunta no puede superar los 700 caracteres.');
 
 const respuestaField = z
   .string()
