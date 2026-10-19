@@ -12,18 +12,15 @@ export function useContactHistory(clienteId: string | null) {
 }
 
 /**
- * Genera/actualiza el resumen y refresca las DOS vistas que lo muestran: la ficha del contacto y
- * la tira sobre el hilo (HU-IA-04). Sin la segunda invalidación, regenerar dejaba la tira
- * enseñando el texto anterior.
+ * Genera/actualiza el resumen y refresca la ficha del contacto, el único sitio que lo muestra desde
+ * HU-REP-05-V2 (la tira sobre el hilo se retiró por duplicada). El overview no se invalida: ya
+ * nada en la UI lee su `resumen`.
  */
 export function useGenerateSummary(clienteId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => generateSummary(clienteId as string),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] });
-      void qc.invalidateQueries({ queryKey: ['conversation-overview', clienteId] });
-    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['contact-history', clienteId] }),
   });
 }
 
