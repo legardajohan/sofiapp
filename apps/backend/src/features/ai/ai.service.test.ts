@@ -26,6 +26,11 @@ async function crearUsageLog(
   return doc._id as Types.ObjectId;
 }
 
+/** Fija `createdAt` por el driver: Mongoose trata ese timestamp como inmutable y lo ignora en un update. */
+async function fecharLog(id: Types.ObjectId, createdAt: Date): Promise<void> {
+  await AiUsageLogModel.collection.updateOne({ _id: id }, { $set: { createdAt } });
+}
+
 async function crearContext(
   tenantId: Types.ObjectId,
   usageLogId: Types.ObjectId,
@@ -117,5 +122,38 @@ describe('HU-KB-04 — listAiResponses', () => {
     const soloChat = await listAiResponses(tenantStr, { page: 1, limit: 20, method: 'chat' });
     expect(soloChat.data).toHaveLength(1);
     expect(soloChat.data[0]?.method).toBe('chat');
+  });
+
+  describe('rango por createdAt (HU-REP-05-V2)', () => {
+    const desde = new Date('2026-10-01T05:00:00.000Z');
+    const hasta = new Date('2026-10-04T05:00:00.000Z');
+
+    async function sembrar(): Promise<void> {
+      await fecharLog(await crearUsageLog(tenant), new Date(desde.getTime() - 1)); // antes
+      await fecharLog(await crearUsageLog(tenant), desde); // borde inicial: entra
+      await fecharLog(await crearUsageLog(tenant, { method: 'classify' }), new Date('2026-10-02T12:00:00.000Z'));
+      await fecharLog(await crearUsageLog(tenant), new Date(hasta.getTime() - 1)); // 23:59:59.999 local: entra
+      await fecharLog(await crearUsageLog(tenant), hasta); // borde final, exclusivo: no entra
+    }
+
+    it('desde es inclusivo y hasta exclusivo; total cuenta solo lo filtrado', async () => {
+      await sembrar();
+      const res = await listAiResponses(tenantStr, { page: 1, limit: 20, desde, hasta });
+      expect(res.total).toBe(3);
+      expect(res.data).toHaveLength(3);
+    });
+
+    it('admite solo desde o solo hasta', async () => {
+      await sembrar();
+      expect((await listAiResponses(tenantStr, { page: 1, limit: 20, desde })).total).toBe(4);
+      expect((await listAiResponses(tenantStr, { page: 1, limit: 20, hasta })).total).toBe(4);
+    });
+
+    it('se combina con method', async () => {
+      await sembrar();
+      const res = await listAiResponses(tenantStr, { page: 1, limit: 20, method: 'chat', desde, hasta });
+      expect(res.total).toBe(2);
+      expect(res.data.every((r) => r.method === 'chat')).toBe(true);
+    });
   });
 });

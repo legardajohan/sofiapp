@@ -1,7 +1,7 @@
-import type { Types } from 'mongoose';
+import type { FilterQuery, Types } from 'mongoose';
 import { countScoped, findByIdScoped, findOneScoped, findScoped } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
-import { AiUsageLogModel } from '../../services/ai/ai-usage-log.model.js';
+import { AiUsageLogModel, type IAiUsageLogDocument } from '../../services/ai/ai-usage-log.model.js';
 import { AiResponseContextModel } from '../../services/ai/ai-response-context.model.js';
 import type {
   AiResponseContextDTO,
@@ -44,7 +44,17 @@ export async function listAiResponses(
   tenantId: TenantId,
   query: ListAiResponsesQuery,
 ): Promise<Paginated<AiResponseSummaryDTO>> {
-  const filter = query.method ? { method: query.method } : {};
+  const filter: FilterQuery<IAiUsageLogDocument> = {
+    ...(query.method ? { method: query.method } : {}),
+    ...(query.desde || query.hasta
+      ? {
+          createdAt: {
+            ...(query.desde ? { $gte: query.desde } : {}),
+            ...(query.hasta ? { $lt: query.hasta } : {}),
+          },
+        }
+      : {}),
+  };
 
   const [logs, total] = await Promise.all([
     findScoped(AiUsageLogModel, tenantId, filter)
