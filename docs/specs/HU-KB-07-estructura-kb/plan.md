@@ -81,6 +81,9 @@ versión que el admin no pidió, y conviene agrupar los cambios de serializer en
 
 ## Decisión 2 — `CONTENIDO_MAX`: 3.000 → **10.000**
 
+> **Actualizado en HU-REP-05-V2 (D3):** 10.000 → **15.000** y `ESTRUCTURA_MAX_BYTES` 40.000 → 60.000,
+> al ampliar los topes por campo. El análisis de abajo queda como registro de la decisión original.
+
 | Tope | Fragmentos con `KB_CHUNK_SIZE=1000` / overlap 150 (paso 850) | Veredicto |
 |---|---|---|
 | 3.000 (hoy) | ~4 | Insuficiente para un formulario de 15 campos |

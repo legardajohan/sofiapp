@@ -693,7 +693,9 @@ cualquier intento de guardarlo es un 400.
 }
 // Índices: { tenantId: 1, titulo: 1 } unique
 //          { tenantId: 1, createdAt: -1 }
-// Contenido tope 10.000 caracteres (validación Zod; eran 3.000 hasta HU-KB-07). Editar (PATCH)
+// Contenido tope 15.000 caracteres (validación Zod; 3.000 hasta HU-KB-07, 10.000 hasta HU-REP-05-V2),
+// título 400 (200 hasta HU-REP-05-V2) y JSON de `estructura` 60.000 bytes. Sin `maxlength` en el
+// modelo: los topes viven solo en Zod, así que cambiarlos no requiere migración. Editar (PATCH)
 // re-versiona, limpia chunks y re-indexa solo si el contenido no está vacío. Los 5 presets se
 // siembran vacíos al crear el tenant.
 //
