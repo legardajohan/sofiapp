@@ -100,3 +100,27 @@ describe('AdvisorReportPage — HU-REP-01', () => {
     expect(await screen.findByText('Tu empresa aún no tiene asesores con cuenta en el panel.')).toBeInTheDocument();
   });
 });
+
+describe('Refresco del tablero — HU-REP-05', () => {
+  it('cada KPI lleva su icono y "Actualizar" vuelve a pedir sin pasar a esqueleto', async () => {
+    mockGet.mockResolvedValue(reporte([fila('Laura', 120, 14)]));
+    renderPage();
+
+    expect(await screen.findByText(/^Actualizado a las \d/)).toBeInTheDocument();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    expect(document.querySelectorAll('svg[data-kpi-icon]')).toHaveLength(4);
+
+    // La recarga queda en vuelo para ver el estado intermedio.
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    const boton = screen.getByRole('button', { name: 'Actualizar' });
+    await userEvent.click(boton);
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(mockGet.mock.calls[1]?.[0]).toEqual(mockGet.mock.calls[0]?.[0]);
+    expect(boton).toBeDisabled();
+    expect(boton.querySelector('svg')).toHaveClass('animate-spin');
+    // CA-5: los datos siguen a la vista, sin esqueletos.
+    expect(document.querySelectorAll('svg[data-kpi-icon]')).toHaveLength(4);
+    expect(document.querySelector('[aria-busy="true"]:not(button)')).toBeNull();
+  });
+});

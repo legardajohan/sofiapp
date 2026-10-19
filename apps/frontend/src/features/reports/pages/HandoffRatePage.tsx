@@ -2,8 +2,10 @@ import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { PeriodFilter } from '@/components/charts/PeriodFilter';
+import { RefreshControl } from '@/components/charts/RefreshControl';
 import { usePeriodParams, type PeriodoPreset } from '@/hooks/use-period-params';
-import { useHandoffRate } from '../hooks/useHandoffRate.js';
+import { useDashboardRefresh } from '@/hooks/use-dashboard-refresh';
+import { useHandoffRate, HANDOFF_RATE_KEY } from '../hooks/useHandoffRate.js';
 import { HandoffKpiStrip } from '../components/HandoffKpiStrip.js';
 import { HandoffDonutChart } from '../components/HandoffDonutChart.js';
 import { HandoffMotivoChart } from '../components/HandoffMotivoChart.js';
@@ -24,7 +26,8 @@ function rangoLegible(desde: string, hasta: string): string {
  */
 export function HandoffRatePage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });
-  const { data, isPending, isError, refetch } = useHandoffRate(period.rango);
+  const tablero = useDashboardRefresh(HANDOFF_RATE_KEY);
+  const { data, dataUpdatedAt, isPending, isError, refetch } = useHandoffRate(period.rango);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
@@ -35,11 +38,18 @@ export function HandoffRatePage(): React.ReactElement {
             {data ? rangoLegible(data.rango.desde, data.rango.hasta) : 'Cuántas conversaciones pasan de Sofi a un asesor'}
           </p>
         </div>
-        <PeriodFilter
-          period={period}
-          idPrefix="reporte-escalamiento"
-          mientrasInvertido="Mostramos los últimos 30 días hasta que lo corrijas."
-        />
+        <div className="flex flex-wrap items-end gap-3">
+          <PeriodFilter
+            period={period}
+            idPrefix="reporte-escalamiento"
+            mientrasInvertido="Mostramos los últimos 30 días hasta que lo corrijas."
+          />
+          <RefreshControl
+            onRefresh={() => void tablero.refresh()}
+            isRefreshing={tablero.isRefreshing}
+            updatedAt={data ? dataUpdatedAt : undefined}
+          />
+        </div>
       </header>
 
       {isError && !data ? (

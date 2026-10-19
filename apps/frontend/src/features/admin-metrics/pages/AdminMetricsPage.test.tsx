@@ -107,3 +107,30 @@ describe('AdminMetricsPage — HU-SAAS-03', () => {
     expect(await screen.findByText('Aún no hay empresas registradas. Créalas desde Empresas.')).toBeInTheDocument();
   });
 });
+
+describe('Refresco del tablero — HU-REP-05', () => {
+  it('cada KPI lleva su icono y "Actualizar" vuelve a pedir sin pasar a esqueleto', async () => {
+    mockGet.mockResolvedValue(respuesta([fila('Acme', 20, 5)]));
+    renderPage();
+
+    expect(await screen.findByText(/^Actualizado a las \d/)).toBeInTheDocument();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(document.querySelectorAll('svg[data-kpi-icon]')).toHaveLength(6);
+
+    // La recarga queda en vuelo para ver el estado intermedio.
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    const boton = screen.getByRole('button', { name: 'Actualizar' });
+    await userEvent.click(boton);
+
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(4));
+    // CA-8: se repiten las dos queries del tablero (la principal y la del top), en cualquier orden.
+    const iniciales = mockGet.mock.calls.slice(0, 2).map(([p]) => p);
+    const recargas = mockGet.mock.calls.slice(2).map(([p]) => p);
+    expect(recargas).toEqual(expect.arrayContaining(iniciales));
+    expect(boton).toBeDisabled();
+    expect(boton.querySelector('svg')).toHaveClass('animate-spin');
+    // CA-5: los datos siguen a la vista, sin esqueletos.
+    expect(document.querySelectorAll('svg[data-kpi-icon]')).toHaveLength(6);
+    expect(document.querySelector('[aria-busy="true"]:not(button)')).toBeNull();
+  });
+});
