@@ -1,3 +1,4 @@
+import { DateRangeFilter } from '@/components/filters/DateRangeFilter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +20,7 @@ import {
 import { useAiContextStore } from '../store/useAiContextStore.js';
 import { useAiResponses } from '../hooks/useAiResponses.js';
 import { METHOD_LABEL, formatDateTime, formatDuration } from '../lib/format.js';
+import { diasLocalesAInstantes, type RangoFechas } from '../lib/date-range.js';
 import type { AiUsageMethod } from '../types.js';
 
 const TODOS = '__todos__';
@@ -29,6 +31,10 @@ interface Props {
   onPageChange: (page: number) => void;
   method: AiUsageMethod | undefined;
   onMethodChange: (method: AiUsageMethod | undefined) => void;
+  /** Rango por fecha de creación (HU-REP-05-V2). La página es la dueña: al cambiarlo vuelve a la 1. */
+  fechas: RangoFechas;
+  onFechaChange: (campo: keyof RangoFechas, valor: string) => void;
+  onLimpiarFechas: () => void;
 }
 
 function OrigenBadge({
@@ -48,8 +54,16 @@ export function AiResponseTable({
   onPageChange,
   method,
   onMethodChange,
+  fechas,
+  onFechaChange,
+  onLimpiarFechas,
 }: Props): React.ReactElement {
-  const { data, isLoading, isError, refetch } = useAiResponses(page, method);
+  const { data, isLoading, isError, refetch } = useAiResponses(
+    page,
+    method,
+    diasLocalesAInstantes(fechas),
+  );
+  const conFechas = fechas.desde !== '' || fechas.hasta !== '';
   const selectedId = useAiContextStore((s) => s.selectedId);
   const select = useAiContextStore((s) => s.select);
 
@@ -60,36 +74,50 @@ export function AiResponseTable({
 
   return (
     <section className="rounded-xl border border-border bg-card shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-6 py-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">Respuestas de la IA</h2>
           {data && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               {total === 0
-                ? 'Ninguna todavía'
+                ? conFechas
+                  ? 'Ninguna en esas fechas'
+                  : 'Ninguna todavía'
                 : `${total} ${total === 1 ? 'respuesta' : 'respuestas'}`}
             </p>
           )}
         </div>
-        <Select
-          value={method ?? TODOS}
-          onValueChange={(v) => {
-            onPageChange(1);
-            onMethodChange(v === TODOS ? undefined : (v as AiUsageMethod));
-          }}
-        >
-          <SelectTrigger aria-label="Filtrar por método" className="h-8 w-44 text-xs">
-            <SelectValue placeholder="Método" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todos los métodos</SelectItem>
-            {METHODS.map((m) => (
-              <SelectItem key={m} value={m}>
-                {METHOD_LABEL[m]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Filtros arriba a la derecha, alineados por la base: los de fecha llevan etiqueta y el
+            de método no, así que comparten línea de controles. */}
+        <div className="flex flex-wrap items-end gap-3">
+          <DateRangeFilter
+            idPrefix="ai-respuestas"
+            desde={fechas.desde}
+            hasta={fechas.hasta}
+            onChange={onFechaChange}
+            onClear={onLimpiarFechas}
+            mientrasInvertido="Mostramos todas las respuestas hasta que lo corrijas."
+          />
+          <Select
+            value={method ?? TODOS}
+            onValueChange={(v) => {
+              onPageChange(1);
+              onMethodChange(v === TODOS ? undefined : (v as AiUsageMethod));
+            }}
+          >
+            <SelectTrigger aria-label="Filtrar por método" className="h-8 w-44 text-xs">
+              <SelectValue placeholder="Método" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos los métodos</SelectItem>
+              {METHODS.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {METHOD_LABEL[m]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -104,6 +132,13 @@ export function AiResponseTable({
           <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
             Reintentar
           </Button>
+        </div>
+      ) : responses.length === 0 && conFechas ? (
+        <div className="px-6 py-12 text-center">
+          <p className="text-sm font-medium text-foreground">Ninguna respuesta en esas fechas</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+            Amplía el rango o límpialo. Las respuestas se guardan 90 días.
+          </p>
         </div>
       ) : responses.length === 0 ? (
         <div className="px-6 py-12 text-center">
