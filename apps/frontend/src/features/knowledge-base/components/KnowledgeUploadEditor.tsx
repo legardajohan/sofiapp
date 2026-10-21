@@ -37,9 +37,13 @@ import { KnowledgeStructuredForm } from './KnowledgeStructuredForm.js';
 
 /**
  * HU-KB-07: 3.000 → 10.000. El contenido dejó de ser un texto libre para pasar a ser la suma de los
- * campos de un formulario. Debe seguir en lockstep con `CONTENIDO_MAX` de `kb.validation.ts`.
+ * campos de un formulario. HU-REP-05-V2: 10.000 → 15.000, porque los topes por campo crecieron y con
+ * todo al tope el formulario más largo ya no cabía. Debe seguir en lockstep con `CONTENIDO_MAX` de
+ * `kb.validation.ts`.
  */
-const CONTENIDO_MAX = 10_000;
+const CONTENIDO_MAX = 15_000;
+/** Lockstep con `TITULO_MAX` de `kb.validation.ts` (HU-REP-05-V2: 200 → 400). */
+const TITULO_MAX = 400;
 const PLACEHOLDER_GENERICO = 'Escribe o pega aquí la información pertinente…';
 
 /** Mensaje del servidor si vino, o el de reserva. */
@@ -234,7 +238,7 @@ export function KnowledgeUploadEditor({
             }}
             onBlur={() => setTituloVisitado(true)}
             placeholder="Ej. Convenios con empresas"
-            maxLength={200}
+            maxLength={TITULO_MAX}
             required
             autoFocus
             aria-invalid={tituloDuplicado}

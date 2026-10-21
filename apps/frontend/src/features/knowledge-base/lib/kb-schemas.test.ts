@@ -280,6 +280,18 @@ describe('límites por campo', () => {
     expect(LIMITE_POR_KIND['texto-largo']).toBeGreaterThan(LIMITE_POR_KIND['texto-medio']);
     expect(LIMITE_POR_KIND['texto-medio']).toBeGreaterThan(LIMITE_POR_KIND['texto-corto']);
   });
+
+  it('topes por kind de HU-REP-05-V2: 300 → 700, < 300 → ×2; texto-largo y horario sin cambio', () => {
+    expect(LIMITE_POR_KIND).toEqual({
+      'texto-corto': 240,
+      'texto-medio': 700,
+      'texto-largo': 1500,
+      lista: 240,
+      triestado: 700,
+      horario: 5,
+      repetible: 240,
+    });
+  });
 });
 
 describe('valorInicial', () => {

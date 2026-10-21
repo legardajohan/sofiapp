@@ -507,7 +507,7 @@ describe('KnowledgeBasePage — modo legado y estructurado (HU-KB-07)', () => {
 
     const dialog = await abrir(user, /Editar Convenios con empresas/);
 
-    expect(within(dialog).getByLabelText('Contenido')).toHaveAttribute('maxlength', '10000');
+    expect(within(dialog).getByLabelText('Contenido')).toHaveAttribute('maxlength', '15000');
     expect(within(dialog).getByText(/\/ 10\.000/)).toBeInTheDocument();
   });
 

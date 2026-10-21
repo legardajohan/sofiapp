@@ -22,6 +22,11 @@ async function crearUsageLog(tenantId: Types.ObjectId): Promise<Types.ObjectId> 
   return doc._id as Types.ObjectId;
 }
 
+/** Fija `createdAt` por el driver: Mongoose trata ese timestamp como inmutable y lo ignora en un update. */
+async function fecharLog(id: Types.ObjectId, createdAt: Date): Promise<void> {
+  await AiUsageLogModel.collection.updateOne({ _id: id }, { $set: { createdAt } });
+}
+
 describe('HU-KB-04 — aislamiento multi-tenant de la trazabilidad de respuestas', () => {
   beforeEach(async () => {
     await AiUsageLogModel.deleteMany({});
@@ -57,5 +62,19 @@ describe('HU-KB-04 — aislamiento multi-tenant de la trazabilidad de respuestas
 
     const listaA = await listAiResponses(tenantA.toString(), { page: 1, limit: 20 });
     expect(listaA.total).toBe(2);
+  });
+
+  it('con rango de fechas, el listado de A no trae registros de B dentro del mismo rango (HU-REP-05-V2)', async () => {
+    const dentro = new Date('2026-10-02T12:00:00.000Z');
+    const propio = await crearUsageLog(tenantA);
+    await fecharLog(propio, dentro);
+    await fecharLog(await crearUsageLog(tenantB), dentro);
+    await fecharLog(await crearUsageLog(tenantB), dentro);
+
+    const rango = { desde: new Date('2026-10-01T00:00:00.000Z'), hasta: new Date('2026-10-03T00:00:00.000Z') };
+    const listaA = await listAiResponses(tenantA.toString(), { page: 1, limit: 20, ...rango });
+
+    expect(listaA.total).toBe(1);
+    expect(listaA.data.map((r) => r.id)).toEqual([propio.toString()]);
   });
 });

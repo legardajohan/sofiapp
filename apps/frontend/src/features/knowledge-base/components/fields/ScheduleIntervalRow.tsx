@@ -5,7 +5,7 @@ import { estadoIntervalo } from '../../lib/kb-horario.js';
 import type { KbScheduleInterval } from '../../types/index.js';
 
 /** Tope de la descripción. Es una etiqueta («Solo recepción de pedidos»), no un párrafo. */
-export const DESCRIPCION_MAX = 80;
+export const DESCRIPCION_MAX = 160;
 
 const ERROR_INVERTIDO = 'La hora de cierre debe ser posterior a la de apertura.';
 const AVISO_INCOMPLETO = 'Completa las dos horas.';

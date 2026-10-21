@@ -7,6 +7,9 @@ export const fetchAiResponses = async (params: {
   page: number;
   limit?: number;
   method?: AiUsageMethod;
+  /** Instantes ISO (HU-REP-05-V2): `desde` inclusivo, `hasta` exclusivo. */
+  desde?: string;
+  hasta?: string;
 }): Promise<Paginated<AiResponseSummary>> => {
   const res = await apiClient.get<Paginated<AiResponseSummary>>('/ai/responses', { params });
   return res.data;

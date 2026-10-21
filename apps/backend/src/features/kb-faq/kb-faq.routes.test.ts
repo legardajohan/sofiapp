@@ -138,6 +138,15 @@ describe('POST /api/kb/faqs', () => {
     expect(res.body.message).toBe('Error de validación.');
   });
 
+  it('pregunta de 700 caracteres → 201, y de 701 → 400 (HU-REP-05-V2)', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const crear = (pregunta: string) =>
+      authed(request(app).post('/api/kb/faqs'), token).send({ pregunta, respuesta: 'Sí.' });
+
+    expect((await crear('¿'.padEnd(700, 'x'))).status).toBe(201);
+    expect((await crear('¿'.padEnd(701, 'y'))).status).toBe(400);
+  });
+
   it('respuesta que supera los 2.000 caracteres → 400', async () => {
     const token = makeToken(new Types.ObjectId().toString(), 'admin');
     const res = await authed(request(app).post('/api/kb/faqs'), token).send({
@@ -185,6 +194,17 @@ describe('PATCH /api/kb/faqs/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.respuesta).toBe('Después.');
+  });
+
+  it('editar la pregunta a 701 caracteres → 400 (HU-REP-05-V2)', async () => {
+    const tenantId = new Types.ObjectId();
+    const faq = await createFaq(tenantId, { pregunta: '¿Larga?', respuesta: 'x' });
+    const token = makeToken(tenantId.toString(), 'admin');
+
+    const res = await authed(request(app).patch(`/api/kb/faqs/${faq.id}`), token).send({
+      pregunta: '¿'.padEnd(701, 'x'),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('body vacío → 400', async () => {
@@ -359,6 +379,15 @@ describe('POST /api/kb/faqs/test', () => {
     expect(res.body.matched).toBe(false);
     expect(res.body.confianza).toBeCloseTo(score);
     expect(res.body.pregunta).toBe('¿Cuánto cuesta el curso?');
+  });
+
+  it('el probador acepta 700 caracteres y rechaza 701 (HU-REP-05-V2)', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const probar = (pregunta: string) =>
+      authed(request(app).post('/api/kb/faqs/test'), token).send({ pregunta });
+
+    expect((await probar('¿'.padEnd(700, 'x'))).status).toBe(200);
+    expect((await probar('¿'.padEnd(701, 'x'))).status).toBe(400);
   });
 
   it('rol asesor → 403', async () => {

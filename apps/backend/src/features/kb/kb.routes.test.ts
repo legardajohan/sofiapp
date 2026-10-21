@@ -83,6 +83,19 @@ describe('POST /api/kb/documents', () => {
     expect(res.body.id).toBeDefined();
   });
 
+  it('título de 400 caracteres → 201, y de 401 → 400 (HU-REP-05-V2)', async () => {
+    const token = makeToken(new Types.ObjectId().toString(), 'admin');
+    const crear = (titulo: string) =>
+      request(app)
+        .post('/api/kb/documents')
+        .set('Cookie', [`token=${token}`, `csrfToken=${CSRF}`])
+        .set('X-CSRF-Token', CSRF)
+        .send({ titulo, contenido: 'Contenido.' });
+
+    expect((await crear('t'.repeat(400))).status).toBe(201);
+    expect((await crear('u'.repeat(401))).status).toBe(400);
+  });
+
   it('contenido vacío → 400', async () => {
     const token = makeToken(new Types.ObjectId().toString(), 'admin');
     const res = await request(app)
@@ -169,7 +182,7 @@ describe('PATCH /api/kb/documents/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('contenido que excede 10.000 caracteres → 400, y 10.000 exactos → 200 (HU-KB-07)', async () => {
+  it('contenido que excede 15.000 caracteres → 400, y 15.000 exactos → 200 (HU-REP-05-V2)', async () => {
     const tenantId = new Types.ObjectId();
     const doc = await createDocument(tenantId, { titulo: 'Largo', contenido: 'v1' });
     const token = makeToken(tenantId.toString(), 'admin');
@@ -180,9 +193,10 @@ describe('PATCH /api/kb/documents/:id', () => {
         .set('X-CSRF-Token', CSRF)
         .send({ contenido });
 
-    expect((await patch('a'.repeat(10_001))).status).toBe(400);
-    // El tope viejo (3.000) ya no rechaza: lo subió HU-KB-07 porque el texto es la suma de campos.
-    expect((await patch('a'.repeat(10_000))).status).toBe(200);
+    expect((await patch('a'.repeat(15_001))).status).toBe(400);
+    // Los topes viejos (3.000 y 10.000) ya no rechazan: el texto es la suma de campos, y los campos
+    // crecieron en HU-REP-05-V2.
+    expect((await patch('a'.repeat(15_000))).status).toBe(200);
   });
 
   it('id con formato inválido → 400', async () => {
@@ -354,7 +368,8 @@ describe('estructura en el borde HTTP (HU-KB-07)', () => {
     const gorda = {
       ...estructura,
       campos: Object.fromEntries(
-        Array.from({ length: 400 }, (_, i) => [`campo${i}`, { tipo: 'texto', valor: 'x'.repeat(100) }]),
+        // ~84 KB: por encima de los 60.000 de `ESTRUCTURA_MAX_BYTES` (HU-REP-05-V2; antes 40.000).
+        Array.from({ length: 600 }, (_, i) => [`campo${i}`, { tipo: 'texto', valor: 'x'.repeat(100) }]),
       ),
     };
 

@@ -13,11 +13,23 @@ export const getAiResponseContextSchema = z.object({
 export const listAiResponsesSchema = z.object({
   body: empty,
   params: empty,
-  query: z.object({
-    page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(20),
-    method: aiMethod.optional(),
-  }),
+  query: z
+    .object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      method: aiMethod.optional(),
+      /**
+       * Rango por `createdAt` (HU-REP-05-V2). Son INSTANTES, no días: el navegador convierte los días
+       * que elige el usuario con su propia zona horaria, así que el backend no hace aritmética de
+       * zonas. `desde` es inclusivo y `hasta` exclusivo (la medianoche del día siguiente).
+       */
+      desde: z.coerce.date().optional(),
+      hasta: z.coerce.date().optional(),
+    })
+    .refine((q) => !q.desde || !q.hasta || q.hasta > q.desde, {
+      message: "`hasta` debe ser posterior a `desde`.",
+      path: ["hasta"],
+    }),
 });
 
 export type ListAiResponsesValidatedQuery = z.infer<typeof listAiResponsesSchema>['query'];

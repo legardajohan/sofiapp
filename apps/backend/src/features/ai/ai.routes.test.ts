@@ -79,6 +79,41 @@ describe('GET /api/ai/responses', () => {
     expect(res.body.page).toBe(1);
   });
 
+  it('rango de fechas: 200 con solo desde, solo hasta o ambos (HU-REP-05-V2)', async () => {
+    const cookie = `token=${makeToken(tenantId.toString(), 'admin')}`;
+    const desde = '2026-10-01T05:00:00.000Z';
+    const hasta = '2026-10-04T05:00:00.000Z';
+    for (const qs of [`desde=${desde}`, `hasta=${hasta}`, `desde=${desde}&hasta=${hasta}`]) {
+      const res = await request(app).get(`/api/ai/responses?${qs}`).set('Cookie', cookie);
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('un tenantId en la query se ignora: el rango se aplica solo al tenant del token', async () => {
+    const otro = new Types.ObjectId();
+    await crearUsageLog(otro);
+
+    const res = await request(app)
+      .get(`/api/ai/responses?tenantId=${otro.toString()}&desde=2000-01-01T00:00:00.000Z`)
+      .set('Cookie', `token=${makeToken(tenantId.toString(), 'admin')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+  });
+
+  it('rango de fechas: 400 si hasta no es posterior a desde o la fecha no es válida', async () => {
+    const cookie = `token=${makeToken(tenantId.toString(), 'admin')}`;
+    const t = '2026-10-04T05:00:00.000Z';
+    for (const qs of [
+      `desde=${t}&hasta=${t}`,
+      `desde=${t}&hasta=2026-10-01T05:00:00.000Z`,
+      'desde=no-es-fecha',
+    ]) {
+      const res = await request(app).get(`/api/ai/responses?${qs}`).set('Cookie', cookie);
+      expect(res.status).toBe(400);
+    }
+  });
+
   it('method inválido en query → 400', async () => {
     const res = await request(app)
       .get('/api/ai/responses?method=no-existe')

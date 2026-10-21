@@ -45,9 +45,9 @@ export const PRODUCTOS_SCHEMA: KbSchemaDef = {
           kind: 'texto-largo',
           // Sin el marco general, la IA solo tendría una lista de nombres sueltos.
           requisito: 'obligatorio',
-          // 600 y no los 1.500 del kind: esto es un resumen, el detalle vive en las filas de abajo.
+          // 900 y no los 1.500 del kind: esto es un resumen, el detalle vive en las filas de abajo.
           // El recorte es además lo que le deja aire al `repetible` en el presupuesto.
-          maxLength: 600,
+          maxLength: 900,
           ayuda: 'En dos o tres frases, a qué se dedica la oferta en conjunto.',
         },
         {
@@ -64,8 +64,8 @@ export const PRODUCTOS_SCHEMA: KbSchemaDef = {
           // Los `id` de los subcampos acaban DENTRO del texto que lee la IA (el serializador emite
           // la clave, no la etiqueta), así que van en español legible.
           subcampos: [
-            { id: 'nombre', etiqueta: 'Nombre', maxLength: 60 },
-            { id: 'descripcion', etiqueta: 'Qué es o qué incluye', maxLength: 120 },
+            { id: 'nombre', etiqueta: 'Nombre', maxLength: 120 },
+            { id: 'descripcion', etiqueta: 'Qué es o qué incluye', maxLength: 240 },
           ],
           ayuda: 'Una fila por producto o servicio. Describe lo que no cambia cada mes.',
         },
@@ -91,7 +91,7 @@ export const PRODUCTOS_SCHEMA: KbSchemaDef = {
           kind: 'lista',
           requisito: 'opcional',
           maxItems: 8,
-          maxLength: 60,
+          maxLength: 120,
           ayuda: 'Efectivo, transferencia, tarjeta, contra entrega…',
         },
         {
@@ -114,7 +114,7 @@ export const PRODUCTOS_SCHEMA: KbSchemaDef = {
           kind: 'lista',
           requisito: 'opcional',
           maxItems: 6,
-          maxLength: 60,
+          maxLength: 120,
           ayuda: 'Domicilio, recoger en tienda, envío nacional, entrega digital…',
         },
         {

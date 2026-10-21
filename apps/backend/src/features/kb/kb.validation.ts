@@ -2,20 +2,25 @@ import { z } from 'zod';
 
 const OBJECT_ID_REGEX = /^[0-9a-f]{24}$/i;
 
+/** Tope del título del documento (HU-REP-05-V2: 200 → 400). */
+const TITULO_MAX = 400;
+
 /**
  * HU-KB-07: subido de 3.000 a 10.000 porque el contenido dejó de ser un texto libre para pasar a ser
- * la **suma** de los campos de un formulario. Con `KB_CHUNK_SIZE=1000` / overlap 150 (paso 850) un
- * documento al tope produce ~12 fragmentos: cabe de sobra sin diluir el top-5 de `KB_RETRIEVAL_K`.
+ * la **suma** de los campos de un formulario. HU-REP-05-V2: 10.000 → 15.000 al ampliar los topes
+ * por campo; con todo al tope el formulario más largo (empresa) mide ~14.200. Con
+ * `KB_CHUNK_SIZE=1000` / overlap 150 (paso 850) un documento al tope produce ~18 fragmentos, sin
+ * tocar el top-5 de `KB_RETRIEVAL_K`.
  */
-const CONTENIDO_MAX = 10_000;
-const CONTENIDO_MAX_MSG = 'El contenido no puede superar los 10,000 caracteres.';
+const CONTENIDO_MAX = 15_000;
+const CONTENIDO_MAX_MSG = 'El contenido no puede superar los 15,000 caracteres.';
 
 /**
  * Tope del JSON de `estructura`. ~4× el tope de texto porque el JSON pesa más que su serialización
  * (claves, discriminantes de tipo y comillas). Es el único guardarraíl real del campo: impide que un
  * documento crezca sin cota sin obligar al backend a conocer los campos.
  */
-const ESTRUCTURA_MAX_BYTES = 40_000;
+const ESTRUCTURA_MAX_BYTES = 60_000;
 const ESTRUCTURA_MAX_MSG = 'La información estructurada es demasiado grande.';
 
 /**
@@ -40,7 +45,7 @@ export const createDocumentSchema = z.object({
       .string()
       .trim()
       .min(1, 'El título es obligatorio.')
-      .max(200, 'El título no puede tener más de 200 caracteres.'),
+      .max(TITULO_MAX, `El título no puede tener más de ${TITULO_MAX} caracteres.`),
     contenido: z
       .string()
       .trim()

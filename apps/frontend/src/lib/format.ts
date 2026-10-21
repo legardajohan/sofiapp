@@ -18,3 +18,10 @@ export function formatEntero(n: number): string {
 export function formatPorcentaje(fraccion: number): string {
   return porcentaje.format(fraccion);
 }
+
+const horaCorta = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+/** Instante (ms o ISO) → `10:42 a. m.`, en la hora local del visor. */
+export function formatHoraCorta(instante: number | string): string {
+  return horaCorta.format(new Date(instante));
+}

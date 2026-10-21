@@ -149,6 +149,9 @@ function Campo({ campo, estructura, onCampoChange, mostrarErrores }: CampoProps)
             onCampoChange(campo.id, { tipo: 'triestado', valor: siguiente, detalle })
           }
           detalle={detalle}
+          // El tope sale del schema, como en el resto de campos: el default del componente no es
+          // una fuente de verdad (HU-REP-05-V2).
+          detalleMaxLength={max}
           onDetalleChange={(siguiente) =>
             onCampoChange(campo.id, { tipo: 'triestado', valor: respuesta, detalle: siguiente })
           }

@@ -65,10 +65,10 @@ export const EMPRESA_SCHEMA: KbSchemaDef = {
           etiqueta: 'Año de fundación',
           kind: 'texto-corto',
           requisito: 'opcional',
-          // 30 y no los 120 del kind: un año no es una biografía. Al no existir un `kind` numérico
+          // 60 y no los 240 del kind: un año no es una biografía. Al no existir un `kind` numérico
           // ni de fecha en el contrato, el tope estrecho es la única señal de formato disponible;
           // "desde 2011" sigue siendo una respuesta válida y útil.
-          maxLength: 30,
+          maxLength: 60,
           ayuda: 'Ej. 2011.',
         },
       ],

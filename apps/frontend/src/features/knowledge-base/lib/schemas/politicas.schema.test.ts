@@ -11,7 +11,9 @@ import { serializeEstructura, serializedLength } from '../kb-serialize.js';
 import { POLITICAS_SCHEMA } from './politicas.schema.js';
 
 /** Espejo de `CONTENIDO_MAX` en `apps/backend/src/features/kb/kb.validation.ts`. */
-const CONTENIDO_MAX = 10_000;
+const CONTENIDO_MAX = 15_000;
+/** Espejo de `ESTRUCTURA_MAX_BYTES` en el mismo archivo del backend: tope del JSON de `estructura`. */
+const ESTRUCTURA_MAX_BYTES = 60_000;
 
 /** Tope de «Información adicional» en `KnowledgeStructuredForm` (el de `texto-largo`). */
 const ADICIONAL_MAX = 1500;
@@ -93,9 +95,9 @@ describe('forma del schema', () => {
     expect(limiteDeCampo(campo('terminos_generales'))).toBe(1500);
   });
 
-  it('el detalle de cada política tiene el tope del `triestado` (300)', () => {
+  it('el detalle de cada política tiene el tope del `triestado` (700)', () => {
     for (const def of todosLosCampos(POLITICAS_SCHEMA).filter((c) => c.kind === 'triestado')) {
-      expect(limiteDeCampo(def)).toBe(300);
+      expect(limiteDeCampo(def)).toBe(700);
     }
   });
 
@@ -218,7 +220,7 @@ describe('el resto del texto', () => {
 });
 
 describe('presupuesto de caracteres', () => {
-  /** Llena TODOS los campos hasta su tope: los 6 detalles a 300 y los dos textos largos completos. */
+  /** Llena TODOS los campos hasta su tope: los 6 detalles a 700 y los dos textos largos completos. */
   function estructuraAlTope(): KbEstructura {
     const campos: Record<string, KbFieldValue> = {};
 
@@ -233,6 +235,10 @@ describe('presupuesto de caracteres', () => {
     return estructura(campos, 'x'.repeat(ADICIONAL_MAX));
   }
 
+  it('con todo al tope, el JSON de la estructura cabe en ESTRUCTURA_MAX_BYTES (HU-REP-05-V2)', () => {
+    expect(JSON.stringify(estructuraAlTope()).length).toBeLessThanOrEqual(ESTRUCTURA_MAX_BYTES);
+  });
+
   it('con todo al tope, el texto serializado cabe en CONTENIDO_MAX', () => {
     expect(serializedLength(estructuraAlTope(), POLITICAS_SCHEMA)).toBeLessThanOrEqual(
       CONTENIDO_MAX,
@@ -246,9 +252,10 @@ describe('presupuesto de caracteres', () => {
     }
   });
 
-  it('los dos textos largos cuestan MÁS que las seis preguntas juntas: ahí está el peso', () => {
-    // Si algún día hay que recortar, el candidato es `terminos_generales`, no el número de
-    // políticas: un tri-estado con su detalle cuesta ~330 caracteres.
+  it('las seis preguntas juntas cuestan MÁS que los dos textos largos: ahí está el peso', () => {
+    // Se invirtió en HU-REP-05-V2: el detalle del tri-estado pasó de 300 a 700, así que cada
+    // pregunta cuesta ~730 caracteres. Si algún día hay que recortar, el candidato es ese detalle,
+    // no `terminos_generales` ni el número de políticas.
     const tope = estructuraAlTope();
     const total = serializedLength(tope, POLITICAS_SCHEMA);
 
@@ -264,6 +271,6 @@ describe('presupuesto de caracteres', () => {
     const costePreguntas =
       total - serializedLength({ ...tope, campos: soloTextos }, POLITICAS_SCHEMA);
 
-    expect(costeTextos).toBeGreaterThan(costePreguntas);
+    expect(costePreguntas).toBeGreaterThan(costeTextos);
   });
 });

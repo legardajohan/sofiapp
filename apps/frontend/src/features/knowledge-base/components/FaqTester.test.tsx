@@ -161,3 +161,14 @@ describe('FaqTester — diagnóstico de las tres señales', () => {
     expect(screen.queryByText('Se parece a la FAQ')).not.toBeInTheDocument();
   });
 });
+
+describe('FaqTester — tope de la pregunta (HU-REP-05-V2)', () => {
+  it('acepta hasta 700 caracteres, igual que el formulario de la FAQ y el backend', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <FaqTester />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText('Pregunta de prueba')).toHaveAttribute('maxlength', '700');
+  });
+});

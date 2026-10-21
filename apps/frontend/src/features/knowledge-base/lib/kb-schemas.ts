@@ -105,17 +105,17 @@ export interface KbSchemaDef {
  * (o subcampo), no del conjunto; para `triestado` es el del detalle opcional; para `horario` son los
  * 5 caracteres de un `HH:mm`.
  *
- * El tope **global** no vive aquí: es `CONTENIDO_MAX` (10.000) medido sobre el texto ya serializado,
+ * El tope **global** no vive aquí: es `CONTENIDO_MAX` (15.000) medido sobre el texto ya serializado,
  * porque lo que el backend acota es el texto que va a la IA, no la suma de los campos.
  */
 export const LIMITE_POR_KIND: Readonly<Record<KbFieldKind, number>> = {
-  'texto-corto': 120,
-  'texto-medio': 300,
+  'texto-corto': 240,
+  'texto-medio': 700,
   'texto-largo': 1500,
-  lista: 120,
-  triestado: 300,
+  lista: 240,
+  triestado: 700,
   horario: 5,
-  repetible: 120,
+  repetible: 240,
 };
 
 /** Tope de ítems de una `lista` o un `repetible` cuando el campo no fija el suyo. */

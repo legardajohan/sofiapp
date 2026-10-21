@@ -1,7 +1,9 @@
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useGlobalMetrics } from '../hooks/useGlobalMetrics.js';
+import { RefreshControl } from '@/components/charts/RefreshControl';
+import { useDashboardRefresh } from '@/hooks/use-dashboard-refresh';
+import { useGlobalMetrics, GLOBAL_METRICS_KEY } from '../hooks/useGlobalMetrics.js';
 import { useMetricsFilters } from '../hooks/useMetricsFilters.js';
 import { MetricsFilters } from '../components/MetricsFilters.js';
 import { KpiStrip } from '../components/KpiStrip.js';
@@ -11,12 +13,12 @@ import { MonthlyTrendChart } from '../components/MonthlyTrendChart.js';
 import { TopTenantsChart } from '../components/TopTenantsChart.js';
 import { TenantMetricsTable } from '../components/TenantMetricsTable.js';
 
-const horaCorta = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
-
 /** Tablero global del SaaS (HU-SAAS-03). Solo superadmin: la guarda vive en `AdminRoutes`. */
 export function AdminMetricsPage(): React.ReactElement {
   const filters = useMetricsFilters();
-  const { data, isPending, isFetching, isError, refetch } = useGlobalMetrics(filters.params);
+  // Por prefijo: "Actualizar" refresca también la query propia de `TopTenantsChart`.
+  const tablero = useDashboardRefresh(GLOBAL_METRICS_KEY);
+  const { data, dataUpdatedAt, isPending, isFetching, isError, refetch } = useGlobalMetrics(filters.params);
   const conRango = filters.rango.desde !== undefined || filters.rango.hasta !== undefined;
 
   return (
@@ -24,12 +26,16 @@ export function AdminMetricsPage(): React.ReactElement {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Métricas globales</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cómo van todas las empresas de la plataforma
-            {data && <>. Datos de las {horaCorta.format(new Date(data.generadoAt))}</>}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Cómo van todas las empresas de la plataforma</p>
         </div>
-        <MetricsFilters filters={filters} />
+        <div className="flex flex-wrap items-end gap-3">
+          <MetricsFilters filters={filters} />
+          <RefreshControl
+            onRefresh={() => void tablero.refresh()}
+            isRefreshing={tablero.isRefreshing}
+            updatedAt={data ? dataUpdatedAt : undefined}
+          />
+        </div>
       </header>
 
       {isError && !data ? (

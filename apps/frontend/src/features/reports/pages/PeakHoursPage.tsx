@@ -2,8 +2,10 @@ import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { PeriodFilter } from '@/components/charts/PeriodFilter';
+import { RefreshControl } from '@/components/charts/RefreshControl';
 import { usePeriodParams, type PeriodoPreset } from '@/hooks/use-period-params';
-import { usePeakHours } from '../hooks/usePeakHours.js';
+import { useDashboardRefresh } from '@/hooks/use-dashboard-refresh';
+import { usePeakHours, PEAK_HOURS_KEY } from '../hooks/usePeakHours.js';
 import { PeakHoursKpiStrip } from '../components/PeakHoursKpiStrip.js';
 import { PeakHoursByHourChart } from '../components/PeakHoursByHourChart.js';
 import { PeakHoursByDayChart } from '../components/PeakHoursByDayChart.js';
@@ -36,7 +38,8 @@ function rangoLegible(desde: string, hasta: string): string {
  */
 export function PeakHoursPage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });
-  const { data, isPending, isError, refetch } = usePeakHours({
+  const tablero = useDashboardRefresh(PEAK_HOURS_KEY);
+  const { data, dataUpdatedAt, isPending, isError, refetch } = usePeakHours({
     ...period.rango,
     ...(ZONA_DEL_VISOR ? { tz: ZONA_DEL_VISOR } : {}),
   });
@@ -52,11 +55,18 @@ export function PeakHoursPage(): React.ReactElement {
               : 'A qué horas escriben más tus clientes'}
           </p>
         </div>
-        <PeriodFilter
-          period={period}
-          idPrefix="reporte-horas-pico"
-          mientrasInvertido="Mostramos los últimos 30 días hasta que lo corrijas."
-        />
+        <div className="flex flex-wrap items-end gap-3">
+          <PeriodFilter
+            period={period}
+            idPrefix="reporte-horas-pico"
+            mientrasInvertido="Mostramos los últimos 30 días hasta que lo corrijas."
+          />
+          <RefreshControl
+            onRefresh={() => void tablero.refresh()}
+            isRefreshing={tablero.isRefreshing}
+            updatedAt={data ? dataUpdatedAt : undefined}
+          />
+        </div>
       </header>
 
       {isError && !data ? (

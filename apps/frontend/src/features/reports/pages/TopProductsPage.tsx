@@ -4,8 +4,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PeriodFilter } from '@/components/charts/PeriodFilter';
+import { RefreshControl } from '@/components/charts/RefreshControl';
 import { usePeriodParams, type PeriodoPreset } from '@/hooks/use-period-params';
-import { useTopProducts } from '../hooks/useTopProducts.js';
+import { useDashboardRefresh } from '@/hooks/use-dashboard-refresh';
+import { useTopProducts, TOP_PRODUCTS_KEY } from '../hooks/useTopProducts.js';
 import { TopProductsKpiStrip } from '../components/TopProductsKpiStrip.js';
 import { TopProductsChart } from '../components/TopProductsChart.js';
 
@@ -37,7 +39,8 @@ export function TopProductsPage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });
   const [params, setParams] = useSearchParams();
   const top = leerTop(params.get('top'));
-  const { data, isPending, isError, refetch } = useTopProducts({ ...period.rango, top });
+  const tablero = useDashboardRefresh(TOP_PRODUCTS_KEY);
+  const { data, dataUpdatedAt, isPending, isError, refetch } = useTopProducts({ ...period.rango, top });
 
   function cambiarTop(valor: string): void {
     setParams(
@@ -75,6 +78,11 @@ export function TopProductsPage(): React.ReactElement {
             period={period}
             idPrefix="reporte-productos"
             mientrasInvertido="Mostramos los últimos 30 días hasta que lo corrijas."
+          />
+          <RefreshControl
+            onRefresh={() => void tablero.refresh()}
+            isRefreshing={tablero.isRefreshing}
+            updatedAt={data ? dataUpdatedAt : undefined}
           />
         </div>
       </header>

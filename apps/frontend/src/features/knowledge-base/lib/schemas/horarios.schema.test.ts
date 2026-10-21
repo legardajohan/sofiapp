@@ -13,13 +13,15 @@ import { serializeEstructura, serializedLength } from '../kb-serialize.js';
 import { HORARIOS_SCHEMA } from './horarios.schema.js';
 
 /** Espejo de `CONTENIDO_MAX` en `apps/backend/src/features/kb/kb.validation.ts`. */
-const CONTENIDO_MAX = 10_000;
+const CONTENIDO_MAX = 15_000;
+/** Espejo de `ESTRUCTURA_MAX_BYTES` en el mismo archivo del backend: tope del JSON de `estructura`. */
+const ESTRUCTURA_MAX_BYTES = 60_000;
 
 /** Tope de tramos por día que impone `ScheduleDayRow`. */
 const MAX_INTERVALOS = 4;
 
 /** Tope de la descripción de un tramo (`ScheduleIntervalRow`, HU-KB-12). */
-const DESCRIPCION_MAX = 80;
+const DESCRIPCION_MAX = 160;
 
 /**
  * Ids congelados. **Este test es el candado**: renombrar un campo deja huérfano el dato ya guardado
@@ -323,7 +325,7 @@ describe('presupuesto de caracteres', () => {
               dia(
                 d,
                 // Con la descripción AL TOPE: desde HU-KB-12 es el mayor crecimiento que ha tenido
-                // esta categoría (7 días × 4 tramos × 80 ≈ 2.240 caracteres) y el presupuesto tiene
+                // esta categoría (7 días × 4 tramos × 160 ≈ 4.480 caracteres) y el presupuesto tiene
                 // que medirse con ella puesta, no sin ella.
                 Array.from({ length: MAX_INTERVALOS }, () => ({
                   desde: '08:00',
@@ -341,6 +343,10 @@ describe('presupuesto de caracteres', () => {
 
     return estructura(campos, 'x'.repeat(1500));
   }
+
+  it('con todo al tope, el JSON de la estructura cabe en ESTRUCTURA_MAX_BYTES (HU-REP-05-V2)', () => {
+    expect(JSON.stringify(estructuraAlTope()).length).toBeLessThanOrEqual(ESTRUCTURA_MAX_BYTES);
+  });
 
   it('con todo al tope, el texto serializado cabe en CONTENIDO_MAX', () => {
     expect(serializedLength(estructuraAlTope(), HORARIOS_SCHEMA)).toBeLessThanOrEqual(CONTENIDO_MAX);

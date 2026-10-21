@@ -43,6 +43,10 @@ export interface ListAiResponsesQuery {
   page: number;
   limit: number;
   method?: AiUsageMethod;
+  /** Instante inclusivo (`createdAt >= desde`). Lo calcula el navegador desde su medianoche local. */
+  desde?: Date;
+  /** Instante EXCLUSIVO (`createdAt < hasta`): la medianoche local del día siguiente al elegido. */
+  hasta?: Date;
 }
 
 // ─── Chatbot con RAG (HU-IA-01) ─────────────────────────────────────────────

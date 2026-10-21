@@ -1,6 +1,6 @@
-import { Card } from '@/components/ui/card';
+import { Building2, DollarSign, Megaphone, MessageSquare, Target, Users, type LucideIcon } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
+import { KpiCell, KpiStripCard, KpiStripSkeleton } from '@/components/charts/KpiCell';
 import { formatEntero, formatPorcentaje } from '../lib/format.js';
 import type { GlobalMetricsConsolidado } from '../types/index.js';
 
@@ -12,10 +12,11 @@ interface Props {
 }
 
 // `gap-px` sobre `bg-border`: divisores de 1px exactos en 2, 3 o 6 columnas, sin bordes dobles.
-const STRIP = 'grid grid-cols-2 gap-px overflow-hidden bg-border sm:grid-cols-3 xl:grid-cols-6';
+const COLUMNAS = 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6';
 
 interface Celda {
   key: string;
+  icon: LucideIcon;
   label: string;
   valor: number;
   detalle: string;
@@ -27,17 +28,7 @@ interface Celda {
  */
 export function KpiStrip({ consolidado, isLoading, conRango }: Props): React.ReactElement {
   if (isLoading || !consolidado) {
-    return (
-      <Card className={STRIP} aria-busy="true">
-        {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="space-y-3 bg-card p-5">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-8 w-24" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-        ))}
-      </Card>
-    );
+    return <KpiStripSkeleton count={6} columns={COLUMNAS} />;
   }
 
   const c = consolidado;
@@ -45,30 +36,35 @@ export function KpiStrip({ consolidado, isLoading, conRango }: Props): React.Rea
   const celdas: Celda[] = [
     {
       key: 'empresas',
+      icon: Building2,
       label: 'Empresas',
       valor: c.empresas.total,
       detalle: `${formatEntero(c.empresas.porEstado.activo)} activas, ${formatEntero(c.empresas.porEstado.prueba)} en prueba`,
     },
     {
       key: 'usuarios',
+      icon: Users,
       label: 'Usuarios',
       valor: c.usuarios.total,
       detalle: `${formatEntero(c.usuarios.activos)} activos`,
     },
     {
       key: 'conversaciones',
+      icon: MessageSquare,
       label: 'Conversaciones',
       valor: c.conversaciones.total,
       detalle: `${formatEntero(c.conversaciones.activas)} con mensajes ${conRango ? 'en el periodo' : 'en 30 días'}`,
     },
     {
       key: 'leads',
+      icon: Target,
       label: 'Leads',
       valor: c.leads,
       detalle: `${formatEntero(c.mensajes.inbound + c.mensajes.outbound)} mensajes${enPeriodo}`,
     },
     {
       key: 'campanas',
+      icon: Megaphone,
       label: 'Campañas',
       valor: c.campanas.total,
       detalle: `${formatEntero(c.campanas.porEstado.completada)} completadas`,
@@ -76,37 +72,31 @@ export function KpiStrip({ consolidado, isLoading, conRango }: Props): React.Rea
   ];
 
   return (
-    <Card className={STRIP}>
+    <KpiStripCard columns={COLUMNAS}>
       {celdas.map((celda) => (
-        <div
+        <KpiCell
           key={celda.key}
-          className="flex flex-col gap-1 bg-card p-5"
-        >
-          <span className="text-sm text-muted-foreground">{celda.label}</span>
-          <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-            {formatEntero(celda.valor)}
-          </span>
-          <span className="text-xs text-muted-foreground">{celda.detalle}</span>
-        </div>
+          icon={celda.icon}
+          label={celda.label}
+          value={formatEntero(celda.valor)}
+          detail={celda.detalle}
+        />
       ))}
 
       {/* Ventas: la celda con acento. El medidor es la conversión leads → ventas. */}
-      <div
-        className="flex flex-col gap-1 bg-secondary p-5"
+      <KpiCell
+        accent
+        icon={DollarSign}
+        label="Ventas"
+        value={formatEntero(c.ventas)}
+        detail={`${formatPorcentaje(c.tasaConversion)} de los leads${enPeriodo}`}
       >
-        <span className="text-sm font-medium text-primary">Ventas</span>
-        <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
-          {formatEntero(c.ventas)}
-        </span>
         <Progress
           value={Math.min(100, c.tasaConversion * 100)}
           className="mt-1 h-1.5 bg-primary/15"
           aria-label={`Conversión de leads a ventas: ${formatPorcentaje(c.tasaConversion)}`}
         />
-        <span className="text-xs text-muted-foreground">
-          {formatPorcentaje(c.tasaConversion)} de los leads{enPeriodo}
-        </span>
-      </div>
-    </Card>
+      </KpiCell>
+    </KpiStripCard>
   );
 }

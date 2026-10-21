@@ -47,7 +47,7 @@ export function PolicyTriState({
   onValorChange,
   detalle = '',
   onDetalleChange,
-  detalleMaxLength = 300,
+  detalleMaxLength = 700,
   etiquetaDetalle = 'Detalle',
   detalleEn = ['si'],
 }: PolicyTriStateProps): React.ReactElement {
