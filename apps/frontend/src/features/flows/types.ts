@@ -92,6 +92,28 @@ export interface INodo {
 
 export type EstadoFlow = 'borrador' | 'publicado';
 
+// ─── Disparador (HU-FLOW-04) ─────────────────────────────────────────────────────
+
+export const TIPOS_TRIGGER = ['siempre', 'palabra_clave', 'primer_mensaje', 'horario'] as const;
+export type TipoTrigger = (typeof TIPOS_TRIGGER)[number];
+
+export interface IHorarioTrigger {
+  /** 0 = domingo … 6 = sábado. */
+  dias: number[];
+  /** `HH:mm` en 24 h, en `zonaHoraria`. El rango es `[desde, hasta)`. */
+  desde: string;
+  hasta: string;
+  zonaHoraria: string;
+}
+
+export interface ITriggerFlow {
+  tipo: TipoTrigger;
+  palabras?: string[];
+  horario?: IHorarioTrigger;
+}
+
+export const TRIGGER_POR_DEFECTO: ITriggerFlow = { tipo: 'siempre' };
+
 export interface FlowListItemDTO {
   id: string;
   nombre: string;
@@ -107,6 +129,7 @@ export interface FlowDTO {
   nodos: INodo[];
   aristas: IArista[];
   entrada: string;
+  trigger: ITriggerFlow;
   version: number;
   estado: EstadoFlow;
   activo: boolean;
@@ -119,6 +142,7 @@ export interface SaveFlowPayload {
   nodos: INodo[];
   aristas: IArista[];
   entrada: string;
+  trigger: ITriggerFlow;
   activo?: boolean;
 }
 

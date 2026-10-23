@@ -236,9 +236,11 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
  *    explícito que la empresa diseñó, así que manda sobre la conversación libre.
  *  - **Sofi** (HU-IA-01/02) en caso contrario: RAG sobre la KB, con la ventana de agrupación.
  *
- * El discriminante es `getActiveFlow` y no el resultado de `ejecutarFlujo`: este último también
+ * El discriminante es `getActiveFlow` y no si `ejecutarFlujo` hizo algo: este último también
  * corta en seco por idempotencia (`metaMessageId` repetido) o porque un asesor tomó la
- * conversación, y en esos casos tampoco debe entrar Sofi de rebote.
+ * conversación, y en esos casos tampoco debe entrar Sofi de rebote. La única excepción es
+ * `trigger_no_cumplido` (HU-FLOW-04): el flow existe pero su disparador no se cumple para este
+ * mensaje, así que contesta Sofi como si no hubiera flow.
  */
 async function responderAutomaticamente(
   tenantId: string,
@@ -248,8 +250,8 @@ async function responderAutomaticamente(
   const flujoActivo = await getActiveFlow(tenantId);
 
   if (flujoActivo) {
-    await ejecutarFlujo(tenantId, clienteId, msg.text?.body ?? '', msg.id);
-    return;
+    const resultado = await ejecutarFlujo(tenantId, clienteId, msg.text?.body ?? '', msg.id);
+    if (resultado !== 'trigger_no_cumplido') return;
   }
 
   await atenderConSofi(tenantId, clienteId, msg.type, msg.text?.body);

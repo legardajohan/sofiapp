@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto';
 import { Types } from 'mongoose';
 import { z } from 'zod';
-import { findByIdScoped, findOneAndUpdateScoped, findOneScoped, findScoped } from '../../repositories/base.repository.js';
+import {
+  countScoped,
+  findByIdScoped,
+  findOneAndUpdateScoped,
+  findOneScoped,
+  findScoped,
+} from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
@@ -17,7 +23,17 @@ import { searchKnowledge } from '../kb/kb.retrieval.service.js';
 import { avanzar } from './flow.engine.js';
 import { getActiveFlow } from './flow.service.js';
 import { FlowState } from './flow.model.js';
-import type { Efecto, EntradaMotor, IFlowLean, IFlowState, ISalidaIa, RequiereMotor, SalidaMotor } from './flow.types.js';
+import { evaluarTrigger } from './flow.trigger.js';
+import type {
+  Efecto,
+  EntradaMotor,
+  IFlowLean,
+  IFlowState,
+  ISalidaIa,
+  RequiereMotor,
+  ResultadoFlujo,
+  SalidaMotor,
+} from './flow.types.js';
 
 type TenantId = string | Types.ObjectId;
 
@@ -346,24 +362,59 @@ export async function ejecutarFlujo(
   clienteId: string,
   mensaje: string,
   metaMessageId?: string,
-): Promise<void> {
+): Promise<ResultadoFlujo> {
   const flow = await getActiveFlow(tenantId);
-  if (!flow) return;
+  if (!flow) return 'atendido';
 
   // Defensa propia además de la guarda del worker (`cliente.iaHabilitada` antes de llamar): si
   // algo más alguna vez invoca `ejecutarFlujo` directamente, el motor sigue sin pisar a un asesor
   // humano que ya tomó la conversación.
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
-  if (!cliente || !cliente.iaHabilitada) return;
+  if (!cliente || !cliente.iaHabilitada) return 'atendido';
 
   const stateDoc = await findOneScoped(FlowState, tenantId, {
     clienteId: new Types.ObjectId(clienteId),
     flowId: flow._id,
   }).lean<IFlowState | null>();
 
-  if (metaMessageId && stateDoc?.ultimoMetaMessageId === metaMessageId) return;
+  if (metaMessageId && stateDoc?.ultimoMetaMessageId === metaMessageId) return 'atendido';
+
+  // HU-FLOW-04: el disparador solo decide si el flow ARRANCA. Con el flow ya en curso el cliente
+  // sigue por el motor aunque su mensaje (p. ej. "sí", "123") no cumpla la palabra clave.
+  if (!flujoEnCurso(flow, stateDoc) && !(await debeIniciar(tenantId, clienteId, flow, mensaje))) {
+    return 'trigger_no_cumplido';
+  }
 
   await correrMotor(tenantId, clienteId, flow, stateDoc, mensaje, undefined, metaMessageId);
+  return 'atendido';
+}
+
+/** El flow está a medias para este cliente: espera su respuesta o quedó en un nodo que no es la
+ *  entrada. Un flow terminado se persiste con `nodoActualId = entrada` y `esperandoRespuesta: false`
+ *  (ver `persistirFlowState`), así que el siguiente mensaje cuenta como un arranque nuevo. */
+export function flujoEnCurso(flow: IFlowLean, state: IFlowState | null): boolean {
+  return state !== null && (state.esperandoRespuesta || state.nodoActualId !== flow.entrada);
+}
+
+async function debeIniciar(
+  tenantId: string,
+  clienteId: string,
+  flow: IFlowLean,
+  mensaje: string,
+): Promise<boolean> {
+  const trigger = flow.trigger;
+  if (!trigger || trigger.tipo === 'siempre') return true;
+
+  // El mensaje que dispara esta evaluación ya está persistido, así que "primero" = como mucho uno.
+  const esPrimerMensaje =
+    trigger.tipo === 'primer_mensaje'
+      ? (await countScoped(Message, tenantId, {
+          clienteId: new Types.ObjectId(clienteId),
+          sender: 'user',
+        })) <= 1
+      : false;
+
+  return evaluarTrigger(trigger, { texto: mensaje, esPrimerMensaje, ahora: new Date() });
 }
 
 /**

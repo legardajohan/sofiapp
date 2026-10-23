@@ -174,7 +174,7 @@ describe('nodo ia — de punta a punta (HU-FLOW-03)', () => {
     await crearFlowActivo([nodoIa, nodoFin, nodoDefault], [], 'ia1');
     const clienteId = await crearCliente(true);
 
-    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBeUndefined();
+    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBe('atendido');
 
     const state = await FlowState.findOne({ clienteId }).lean();
     expect(state?.nodoActualId).toBe('ia1');

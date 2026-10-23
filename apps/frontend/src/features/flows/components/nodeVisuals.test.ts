@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { configConDestino, filasDeRama } from './nodeVisuals.js';
-import type { INodo } from '../types.js';
+import { configConDestino, describirRelacion, filasDeRama, NODE_DESCRIPCION } from './nodeVisuals.js';
+import { TIPOS_NODO, type INodo } from '../types.js';
 
 const condicion: INodo = {
   id: 'n1',
@@ -98,5 +98,89 @@ describe('configConDestino', () => {
   it('actualiza la ramaPorDefecto de un nodo ia cuando el handle es "default"', () => {
     const config = configConDestino(ia.config, 'default', 'n9');
     expect(config).toMatchObject({ ramaPorDefecto: 'n9' });
+  });
+});
+
+describe('describirRelacion (HU-FLOW-04)', () => {
+  const destino: INodo = {
+    id: 'n2',
+    tipo: 'handoff',
+    posicion: { x: 0, y: 0 },
+    config: { tipo: 'handoff' },
+  };
+
+  it('condición "contiene": explica la regla con el ejemplo del asesor', () => {
+    const nodo: INodo = {
+      id: 'n1',
+      tipo: 'condicion',
+      posicion: { x: 0, y: 0 },
+      config: {
+        tipo: 'condicion',
+        variable: 'ultimo_mensaje',
+        ramas: [{ operador: 'contiene', valor: 'asesor', nodoDestino: 'n2' }],
+        ramaPorDefecto: 'n3',
+      },
+    };
+    expect(describirRelacion(nodo, 'rama-0', destino)).toBe(
+      'Si el mensaje del cliente contiene «asesor», sigue a «Transferir a humano».',
+    );
+    expect(describirRelacion(nodo, 'default', destino)).toBe(
+      'Si ninguna condición coincide, sigue a «Transferir a humano».',
+    );
+  });
+
+  it('condición sobre una variable capturada nombra la variable, no "el mensaje"', () => {
+    const nodo: INodo = {
+      id: 'n1',
+      tipo: 'condicion',
+      posicion: { x: 0, y: 0 },
+      config: {
+        tipo: 'condicion',
+        variable: 'var:ciudad',
+        ramas: [{ operador: 'igual_a', valor: 'Cali', nodoDestino: 'n2' }],
+        ramaPorDefecto: 'n3',
+      },
+    };
+    expect(describirRelacion(nodo, 'rama-0', destino)).toContain('«ciudad» es exactamente «Cali»');
+  });
+
+  it('intención y asistente IA describen quién decide', () => {
+    expect(describirRelacion(intencion, 'etiqueta-0', destino)).toBe(
+      'Si la IA entiende que el cliente quiere «quiere_precio», sigue a «Transferir a humano».',
+    );
+    expect(describirRelacion(intencion, 'default', destino)).toContain('no reconoce ninguna intención');
+
+    const nodoIa: INodo = {
+      id: 'n1',
+      tipo: 'ia',
+      posicion: { x: 0, y: 0 },
+      config: {
+        tipo: 'ia',
+        objetivo: 'Calificar al cliente',
+        salidas: [{ etiqueta: 'listo', descripcion: 'x', nodoDestino: 'n2' }],
+        ramaPorDefecto: 'n3',
+        maxTurnos: 4,
+        usarKb: true,
+      },
+    };
+    expect(describirRelacion(nodoIa, 'salida-0', destino)).toContain('da por cumplida «listo»');
+    expect(describirRelacion(nodoIa, 'default', destino)).toContain('en 4 turnos');
+  });
+
+  it('salida lineal: "al terminar X, sigue a Y"; sin destino dice que termina', () => {
+    const mensaje: INodo = {
+      id: 'n1',
+      tipo: 'mensaje',
+      posicion: { x: 0, y: 0 },
+      config: { tipo: 'mensaje', texto: 'Hola' },
+    };
+    expect(describirRelacion(mensaje, null, destino)).toBe('Al terminar «Mensaje», sigue a «Transferir a humano».');
+    expect(describirRelacion(mensaje, null, undefined)).toBe('Al terminar «Mensaje», termina.');
+  });
+
+  it('todos los tipos de nodo tienen descripción para el tooltip del menú', () => {
+    for (const tipo of TIPOS_NODO) {
+      expect(NODE_DESCRIPCION[tipo].length).toBeGreaterThan(20);
+    }
   });
 });

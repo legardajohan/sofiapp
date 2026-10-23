@@ -160,7 +160,7 @@ describe('ejecutarFlujo — un efecto que falla no propaga al llamador', () => {
     await crearFlowActivo([nodoKb], [], 'kb1');
     const clienteId = await crearCliente(true);
 
-    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBeUndefined();
+    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBe('atendido');
   });
 });
 
@@ -207,7 +207,7 @@ describe('ejecutarFlujo — nodo espera (HU-FLOW-02)', () => {
     await crearFlowActivo([nodoEspera, nodoFinEspera], [{ id: 'a1', from: 'esp1', to: 'fin' }], 'esp1');
     const clienteId = await crearCliente(true);
 
-    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBeUndefined();
+    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBe('atendido');
 
     const state = await FlowState.findOne({ clienteId }).lean();
     expect(state?.esperaToken).toBeFalsy();
