@@ -624,6 +624,11 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   } ],
   aristas: [ { id: String, from: String, to: String, condicion: String? } ],
   entrada: String,                 // id del nodo por el que arranca la ejecución
+  trigger: {                       // HU-FLOW-04 · cuándo ARRANCA el flow (ausente = 'siempre')
+    tipo: "siempre" | "palabra_clave" | "primer_mensaje" | "horario",
+    palabras: [String]?,           // solo palabra_clave (1..20), sin tildes/mayúsculas al comparar
+    horario: { dias: [Number], desde: "HH:mm", hasta: "HH:mm", zonaHoraria: String }?  // solo horario; dias 0=dom..6=sáb, rango [desde, hasta)
+  }?,
   version: Number,
   estado: "borrador" | "publicado",
   activo: Boolean,                 // solo UNA versión activa por tenant (índice parcial único)

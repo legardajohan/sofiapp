@@ -32,6 +32,20 @@ export const NODE_VISUALS: Record<TipoNodo, NodeVisual> = {
   ia: { icon: Sparkles, label: 'Asistente IA', destacado: true },
 };
 
+/** Qué hace cada nodo, en una o dos líneas y con un ejemplo. Es el texto del tooltip de "Agregar
+ *  nodo": el nombre solo ("Intención", "Captura") no le dice a quien arma el flujo cuándo usarlo. */
+export const NODE_DESCRIPCION: Record<TipoNodo, string> = {
+  mensaje: 'Envía un texto o una plantilla al cliente. Ej.: «Hola, ¿en qué te ayudo?»',
+  captura: 'Hace una pregunta y guarda la respuesta (nombre, correo…). Ej.: «¿Cuál es tu correo?»',
+  condicion: 'Elige el camino según lo que escribió el cliente. Ej.: si contiene «asesor», pasa a un humano.',
+  intencion: 'La IA entiende qué quiere el cliente (precio, horario, comprar…) y sigue por esa rama.',
+  kb: 'Responde con tu base de conocimiento. Ej.: «¿Cuánto cuesta el curso?»',
+  accion: 'Hace algo en el CRM sin escribirle al cliente: crear lead, cambiar etapa, etiquetar o asignar asesor.',
+  handoff: 'Apaga la IA y deja la conversación a un asesor humano. Cierra el flujo.',
+  espera: 'Pausa el flujo unos minutos y luego continúa. Útil para hacer seguimiento.',
+  ia: 'Un asistente conversa con el cliente hasta cumplir un objetivo y elige por qué salida continuar.',
+};
+
 /** Tipos cuyo "siguiente" nodo lo decide una arista genérica del canvas (un único handle de
  *  salida). `condicion`/`intencion`/`ia` ramifican desde su propia configuración y pintan un
  *  handle por rama vía `filasDeRama`; `handoff` es siempre terminal y no tiene salida alguna. */
@@ -118,6 +132,46 @@ export function configConDestino(config: INodo['config'], handleId: string, dest
     };
   }
   return config;
+}
+
+/**
+ * Frase que explica por qué el flujo pasa de `origen` a `destino` por la línea de `handleId`
+ * (`null` = la salida lineal de un nodo sin ramas). Es el contenido del tooltip del conector: el
+ * texto corto de la línea («contiene asesor») dice QUÉ se evalúa, esto dice qué ocurre.
+ */
+export function describirRelacion(origen: INodo, handleId: string | null, destino: INodo | undefined): string {
+  const aDestino = destino ? `sigue a «${NODE_VISUALS[destino.tipo].label}»` : 'termina';
+  const indice = handleId ? Number(handleId.split('-')[1]) : -1;
+  const config = origen.config;
+
+  if (config.tipo === 'condicion') {
+    if (handleId === 'default') return `Si ninguna condición coincide, ${aDestino}.`;
+    const rama = config.ramas[indice];
+    if (!rama) return `Si se cumple la condición, ${aDestino}.`;
+    const sujeto = config.variable.startsWith('var:')
+      ? `«${config.variable.slice(4)}»`
+      : 'el mensaje del cliente';
+    const valor = rama.valor || '…';
+    if (rama.operador === 'contiene') return `Si ${sujeto} contiene «${valor}», ${aDestino}.`;
+    if (rama.operador === 'igual_a') return `Si ${sujeto} es exactamente «${valor}», ${aDestino}.`;
+    return `Si el cliente elige la opción «${valor}» (o su número), ${aDestino}.`;
+  }
+
+  if (config.tipo === 'intencion') {
+    if (handleId === 'default') return `Si la IA no reconoce ninguna intención, ${aDestino}.`;
+    const etiqueta = config.etiquetas[indice]?.etiqueta || 'esta intención';
+    return `Si la IA entiende que el cliente quiere «${etiqueta}», ${aDestino}.`;
+  }
+
+  if (config.tipo === 'ia') {
+    if (handleId === 'default') {
+      return `Si el asistente no lo resuelve en ${config.maxTurnos} turnos, ${aDestino}.`;
+    }
+    const etiqueta = config.salidas[indice]?.etiqueta || 'esta salida';
+    return `Si el asistente da por cumplida «${etiqueta}», ${aDestino}.`;
+  }
+
+  return `Al terminar «${NODE_VISUALS[origen.tipo].label}», ${aDestino}.`;
 }
 
 const EFECTO_LABEL: Record<string, string> = {

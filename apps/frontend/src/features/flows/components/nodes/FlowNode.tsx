@@ -25,7 +25,7 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
   return (
     <div
       className={cn(
-        'w-64 rounded-lg border bg-card shadow-sm transition-shadow',
+        'w-60 rounded-lg border bg-card shadow-sm transition-shadow',
         selected ? 'ring-2 ring-ring' : '',
         esEntrada && 'ring-2 ring-primary',
         esHandoff ? 'border-destructive/50' : 'border-border',

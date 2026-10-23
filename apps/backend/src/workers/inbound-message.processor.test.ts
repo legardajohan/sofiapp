@@ -504,6 +504,33 @@ describe('processInboundJob — flujo activo y Sofi no contestan a la vez', () =
     );
   });
 
+  it('flujo activo con trigger no cumplido (HU-FLOW-04): contesta Sofi', async () => {
+    await crearFlujoActivo();
+    await crearCliente(tenantId, true);
+    mockEjecutarFlujo.mockResolvedValue('trigger_no_cumplido');
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f6', type: 'text', body: 'hola buenas' }]),
+    });
+
+    expect(mockEjecutarFlujo).toHaveBeenCalledTimes(1);
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('flujo activo que atiende (o corta por idempotencia/asesor): Sofi no entra de rebote', async () => {
+    await crearFlujoActivo();
+    await crearCliente(tenantId, true);
+    mockEjecutarFlujo.mockResolvedValue('atendido');
+
+    await processInboundJob({
+      tenantId: tenantId.toString(),
+      payload: payload([{ id: 'wamid.f7', type: 'text', body: 'hola' }]),
+    });
+
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
   it('sin flujo activo contesta Sofi, y el motor de flujos ni se toca', async () => {
     await crearCliente(tenantId, true);
 

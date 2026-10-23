@@ -27,6 +27,26 @@ const NodoSchema = new Schema(
   { _id: false },
 );
 
+const HorarioTriggerSchema = new Schema(
+  {
+    dias: { type: [Number], required: true },
+    desde: { type: String, required: true },
+    hasta: { type: String, required: true },
+    zonaHoraria: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+// La forma exacta por `tipo` (qué campos exige cada uno) la valida `flow.validation.ts` en el borde.
+const TriggerSchema = new Schema(
+  {
+    tipo: { type: String, required: true, enum: ['siempre', 'palabra_clave', 'primer_mensaje', 'horario'] },
+    palabras: { type: [String], default: undefined },
+    horario: { type: HorarioTriggerSchema, default: undefined },
+  },
+  { _id: false },
+);
+
 const FlowSchema = new Schema<IFlowDocument>(
   {
     // Sin `index: true` aquí a propósito: un índice plano `{ tenantId: 1 }` colisionaría de nombre
@@ -37,6 +57,8 @@ const FlowSchema = new Schema<IFlowDocument>(
     nodos: { type: [NodoSchema], required: true, default: [] },
     aristas: { type: [AristaSchema], required: true, default: [] },
     entrada: { type: String, required: true },
+    // Sin `default`: los flows anteriores a HU-FLOW-04 no lo tienen y se leen como `siempre`.
+    trigger: { type: TriggerSchema },
     version: { type: Number, required: true, default: 1 },
     estado: { type: String, required: true, enum: ['borrador', 'publicado'], default: 'borrador' },
     activo: { type: Boolean, required: true, default: false },

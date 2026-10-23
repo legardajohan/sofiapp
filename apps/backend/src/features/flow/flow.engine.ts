@@ -12,7 +12,9 @@ import type {
  *  vez de colgar el worker — es la única defensa del motor contra un grafo que se muerde la cola. */
 const TOPE_SALTOS = 25;
 
-function normalizar(valor: string): string {
+/** Minúsculas, sin tildes y sin espacios en los bordes. La reusa `flow.trigger.ts`: el disparador
+ *  y las ramas de una `condicion` tienen que coincidir con el mismo criterio. */
+export function normalizar(valor: string): string {
   return valor
     .trim()
     .toLowerCase()

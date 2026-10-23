@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { addEdge, useEdgesState, useNodesState, type Edge, type Node, type OnConnect } from '@xyflow/react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,9 +11,11 @@ import { ActivateFlowDialog } from '../components/ActivateFlowDialog.js';
 import { EmptyFlowState } from '../components/EmptyFlowState.js';
 import { FlowCanvas } from '../components/FlowCanvas.js';
 import { NodeInspector } from '../components/NodeInspector.js';
+import { TriggerSettings } from '../components/TriggerSettings.js';
 import {
   configConDestino,
   configPorDefecto,
+  describirRelacion,
   filasDeRama,
   resumenConfig,
   NODE_VISUALS,
@@ -21,8 +24,16 @@ import type { FlowNodeData } from '../components/nodes/FlowNode.js';
 import { useFlow } from '../hooks/useFlow.js';
 import { useFlows } from '../hooks/useFlows.js';
 import { useSaveFlow } from '../hooks/useSaveFlow.js';
+import { validarTrigger } from '../lib/trigger.js';
 import { useFlowStore } from '../useFlowStore.js';
-import type { ConfigNodo, IArista, INodo, TipoNodo } from '../types.js';
+import {
+  TRIGGER_POR_DEFECTO,
+  type ConfigNodo,
+  type IArista,
+  type INodo,
+  type ITriggerFlow,
+  type TipoNodo,
+} from '../types.js';
 
 function nodoToRFNode(nodo: INodo): Node {
   return {
@@ -61,6 +72,7 @@ export function FlowEditorPage(): React.ReactElement {
 
   const [nombre, setNombre] = useState('');
   const [entrada, setEntrada] = useState('');
+  const [trigger, setTrigger] = useState<ITriggerFlow>(TRIGGER_POR_DEFECTO);
   const [activo, setActivo] = useState(false);
   const [activarAbierto, setActivarAbierto] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -74,6 +86,7 @@ export function FlowEditorPage(): React.ReactElement {
       resetStore();
       setNombre('');
       setEntrada('');
+      setTrigger(TRIGGER_POR_DEFECTO);
       setActivo(false);
       setNodes([]);
       setEdges([]);
@@ -84,6 +97,7 @@ export function FlowEditorPage(): React.ReactElement {
     resetStore();
     setNombre(flow.nombre);
     setEntrada(flow.entrada);
+    setTrigger(flow.trigger ?? TRIGGER_POR_DEFECTO);
     setActivo(flow.activo);
     setNodes(flow.nodos.map(nodoToRFNode));
     setEdges(flow.aristas.map(aristaToRFEdge));
@@ -112,9 +126,16 @@ export function FlowEditorPage(): React.ReactElement {
     [nodes, selectedNodeId],
   );
 
-  // Líneas de rama de `condicion`/`intencion`: se derivan de `config` en cada render, nunca se
-  // guardan en `edges`/`aristas` — evita que el destino de una rama (el `<Select>` del inspector)
-  // y una arista de canvas se desincronicen, que es justo el bug que tenía el diseño anterior.
+  const nodoPorId = useMemo(() => {
+    const mapa = new Map<string, INodo>();
+    nodes.forEach((n) => mapa.set(n.id, (n.data as FlowNodeData).nodo));
+    return mapa;
+  }, [nodes]);
+
+  // Líneas de rama de `condicion`/`intencion`/`ia`: se derivan de `config` en cada render, nunca
+  // se guardan en `edges`/`aristas` — evita que el destino de una rama (el `<Select>` del
+  // inspector) y una arista de canvas se desincronicen, que es justo el bug que tenía el diseño
+  // anterior. Cada línea lleva en `data` la frase del tooltip (HU-FLOW-04).
   const edgesDerivados = useMemo<Edge[]>(
     () =>
       nodes.flatMap((n) => {
@@ -126,12 +147,30 @@ export function FlowEditorPage(): React.ReactElement {
             source: n.id,
             sourceHandle: fila.handleId,
             target: fila.destino,
-            label: fila.label,
+            type: 'flowEdge',
+            data: {
+              etiqueta: fila.label,
+              descripcion: describirRelacion(nodo, fila.handleId, nodoPorId.get(fila.destino)),
+            },
             deletable: false,
             reconnectable: false,
           }));
       }),
-    [nodes],
+    [nodes, nodoPorId],
+  );
+
+  // Las aristas lineales (salida única de un nodo) también explican su relación al pasar el mouse.
+  const edgesManuales = useMemo<Edge[]>(
+    () =>
+      edges.map((e) => {
+        const origen = nodoPorId.get(e.source);
+        return {
+          ...e,
+          type: 'flowEdge',
+          data: { descripcion: origen ? describirRelacion(origen, null, nodoPorId.get(e.target)) : '' },
+        };
+      }),
+    [edges, nodoPorId],
   );
 
   const actualizarDestinoDeRama = useCallback(
@@ -147,7 +186,7 @@ export function FlowEditorPage(): React.ReactElement {
     [setNodes],
   );
 
-  const edgesParaCanvas = useMemo(() => [...edges, ...edgesDerivados], [edges, edgesDerivados]);
+  const edgesParaCanvas = useMemo(() => [...edgesManuales, ...edgesDerivados], [edgesManuales, edgesDerivados]);
 
   const onConnect: OnConnect = useCallback(
     (connection) => {
@@ -168,7 +207,7 @@ export function FlowEditorPage(): React.ReactElement {
       const id = nuevoId('nodo');
       const columna = nodes.length % 4;
       const fila = Math.floor(nodes.length / 4);
-      const posicion = { x: 60 + columna * 260, y: 60 + fila * 180 };
+      const posicion = { x: 60 + columna * 300, y: 60 + fila * 180 };
       const nodo: INodo = { id, tipo, posicion, config: configPorDefecto(tipo) };
       setNodes((nds) => [...nds, { id, type: 'flowNode', position: posicion, data: { nodo, esEntrada: false } }]);
       setEntrada((actual) => actual || id);
@@ -205,11 +244,17 @@ export function FlowEditorPage(): React.ReactElement {
   }, [flows, esNuevo, id]);
 
   function guardar(activarAhora?: boolean): void {
+    const errorTrigger = validarTrigger(trigger);
+    if (errorTrigger) {
+      toast.error(errorTrigger);
+      return;
+    }
     const payload = {
       nombre: nombre.trim() || 'Flujo sin nombre',
       nodos: nodes.map((n) => (n.data as FlowNodeData).nodo),
       aristas: edges.map((e) => ({ id: e.id, from: e.source, to: e.target })),
       entrada,
+      trigger,
       activo: activarAhora ?? activo,
     };
     saveFlow.mutate(
@@ -273,6 +318,7 @@ export function FlowEditorPage(): React.ReactElement {
           className="h-9 max-w-xs border-transparent bg-transparent text-base font-semibold shadow-none hover:border-input focus-visible:border-input"
         />
         <div className="ml-auto flex items-center gap-2">
+          <TriggerSettings value={trigger} onChange={setTrigger} />
           <Button variant={activo ? 'secondary' : 'outline'} size="sm" onClick={onActivarToggle} disabled={saveFlow.isPending}>
             {activo ? 'Desactivar' : 'Activar flujo'}
           </Button>

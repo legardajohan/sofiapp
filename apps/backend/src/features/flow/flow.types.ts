@@ -109,6 +109,35 @@ export interface INodo extends INodoBase {
 
 export type EstadoFlow = 'borrador' | 'publicado';
 
+// ─── Disparador (HU-FLOW-04) ─────────────────────────────────────────────────────
+
+export const TIPOS_TRIGGER = ['siempre', 'palabra_clave', 'primer_mensaje', 'horario'] as const;
+export type TipoTrigger = (typeof TIPOS_TRIGGER)[number];
+
+export interface IHorarioTrigger {
+  /** Días permitidos, 0 = domingo … 6 = sábado (convención de `Date#getDay`). */
+  dias: number[];
+  /** `HH:mm` en 24 h, en `zonaHoraria`. El rango es `[desde, hasta)`. */
+  desde: string;
+  hasta: string;
+  /** Zona IANA. El horario se interpreta en ella, no en UTC. */
+  zonaHoraria: string;
+}
+
+/** Cuándo arranca un flow. Se evalúa solo al INICIAR (cliente sin flow en curso); un flow ya en
+ *  marcha no vuelve a pasar por aquí. Sin `trigger` equivale a `{ tipo: 'siempre' }`. */
+export interface ITriggerFlow {
+  tipo: TipoTrigger;
+  /** Solo `palabra_clave`: basta con que el mensaje contenga alguna. */
+  palabras?: string[];
+  /** Solo `horario`. */
+  horario?: IHorarioTrigger;
+}
+
+/** Qué hizo `ejecutarFlujo` con un mensaje. El worker solo deriva a Sofi con `trigger_no_cumplido`:
+ *  los demás cortes (idempotencia, asesor humano al mando) tampoco deben dejarla entrar de rebote. */
+export type ResultadoFlujo = 'atendido' | 'trigger_no_cumplido';
+
 export interface IFlow {
   tenantId: Types.ObjectId;
   nombre: string;
@@ -116,6 +145,8 @@ export interface IFlow {
   aristas: IArista[];
   /** `id` del nodo por el que arranca la ejecución. */
   entrada: string;
+  /** Ausente en flows anteriores a HU-FLOW-04: se trata como `siempre`. */
+  trigger?: ITriggerFlow;
   version: number;
   estado: EstadoFlow;
   activo: boolean;
@@ -212,6 +243,7 @@ export interface CreateFlowDTO {
   nodos: INodo[];
   aristas: IArista[];
   entrada: string;
+  trigger?: ITriggerFlow;
   activo?: boolean;
 }
 
@@ -220,6 +252,7 @@ export interface UpdateFlowDTO {
   nodos?: INodo[];
   aristas?: IArista[];
   entrada?: string;
+  trigger?: ITriggerFlow;
   estado?: EstadoFlow;
   activo?: boolean;
 }
@@ -230,6 +263,8 @@ export interface IFlowResponse {
   nodos: INodo[];
   aristas: IArista[];
   entrada: string;
+  /** Siempre presente en la respuesta: un flow sin trigger guardado se devuelve como `siempre`. */
+  trigger: ITriggerFlow;
   version: number;
   estado: EstadoFlow;
   activo: boolean;

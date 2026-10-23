@@ -180,3 +180,50 @@ describe('flow.validation — nodo ia (HU-FLOW-03)', () => {
     expect(parse(body).success).toBe(true);
   });
 });
+
+describe('flow.validation — trigger (HU-FLOW-04)', () => {
+  it('sin trigger es válido (equivale a "siempre")', () => {
+    expect(parse(base()).success).toBe(true);
+  });
+
+  it('acepta cada tipo de trigger bien formado', () => {
+    expect(parse(base({ trigger: { tipo: 'siempre' } })).success).toBe(true);
+    expect(parse(base({ trigger: { tipo: 'primer_mensaje' } })).success).toBe(true);
+    expect(parse(base({ trigger: { tipo: 'palabra_clave', palabras: ['precio', 'horario'] } })).success).toBe(true);
+    expect(
+      parse(
+        base({
+          trigger: {
+            tipo: 'horario',
+            horario: { dias: [1, 2, 3], desde: '08:00', hasta: '18:00', zonaHoraria: 'America/Bogota' },
+          },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('palabra_clave sin palabras o con una vacía → falla', () => {
+    expect(parse(base({ trigger: { tipo: 'palabra_clave', palabras: [] } })).success).toBe(false);
+    expect(parse(base({ trigger: { tipo: 'palabra_clave', palabras: ['  '] } })).success).toBe(false);
+  });
+
+  it('horario inválido → falla', () => {
+    const horario = { dias: [1], desde: '08:00', hasta: '18:00', zonaHoraria: 'America/Bogota' };
+    const con = (cambio: Record<string, unknown>) =>
+      parse(base({ trigger: { tipo: 'horario', horario: { ...horario, ...cambio } } })).success;
+
+    expect(con({ desde: '8:00' })).toBe(false);
+    expect(con({ hasta: '25:00' })).toBe(false);
+    expect(con({ desde: '18:00', hasta: '08:00' })).toBe(false);
+    expect(con({ desde: '08:00', hasta: '08:00' })).toBe(false);
+    expect(con({ dias: [] })).toBe(false);
+    expect(con({ dias: [7] })).toBe(false);
+    expect(con({ dias: [1, 1] })).toBe(false);
+    expect(con({ zonaHoraria: 'Marte/Olympus' })).toBe(false);
+  });
+
+  it('rechaza un tipo desconocido y campos de otro tipo (.strict())', () => {
+    expect(parse(base({ trigger: { tipo: 'semantico' } })).success).toBe(false);
+    expect(parse(base({ trigger: { tipo: 'siempre', palabras: ['x'] } })).success).toBe(false);
+  });
+});

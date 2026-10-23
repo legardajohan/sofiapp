@@ -138,12 +138,63 @@ const arista = z
   })
   .strict();
 
+// ─── Disparador (HU-FLOW-04) ─────────────────────────────────────────────────────
+
+const horaHHmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'La hora debe tener formato HH:mm.');
+
+const zonaIana = z
+  .string()
+  .max(64)
+  .refine(
+    (zona) => {
+      try {
+        new Intl.DateTimeFormat('en-CA', { timeZone: zona });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Zona horaria desconocida. Usa un nombre IANA como America/Bogota.' },
+  );
+
+const horarioTrigger = z
+  .object({
+    dias: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, 'Elige al menos un día.')
+      .refine((dias) => new Set(dias).size === dias.length, { message: 'Hay días repetidos.' }),
+    desde: horaHHmm,
+    hasta: horaHHmm,
+    zonaHoraria: zonaIana,
+  })
+  .strict()
+  // Mismo formato de ancho fijo: la comparación de texto equivale a la de hora.
+  .refine((h) => h.desde < h.hasta, { message: 'La hora de inicio debe ser anterior a la de fin.', path: ['hasta'] });
+
+/** Unión discriminada con `.strict()` por rama: un `palabras` en un trigger `horario` es un 400,
+ *  no un campo ignorado en silencio que luego confunda al editar. */
+const triggerFlow = z.discriminatedUnion('tipo', [
+  z.object({ tipo: z.literal('siempre') }).strict(),
+  z
+    .object({
+      tipo: z.literal('palabra_clave'),
+      palabras: z
+        .array(z.string().trim().min(1, 'Las palabras no pueden estar vacías.').max(60))
+        .min(1, 'Agrega al menos una palabra.')
+        .max(20),
+    })
+    .strict(),
+  z.object({ tipo: z.literal('primer_mensaje') }).strict(),
+  z.object({ tipo: z.literal('horario'), horario: horarioTrigger }).strict(),
+]);
+
 const grafoFlow = z
   .object({
     nombre: z.string().trim().min(1, 'El flujo necesita un nombre.').max(120),
     nodos: z.array(nodo).min(1, 'El flujo necesita al menos un nodo.'),
     aristas: z.array(arista),
     entrada: z.string().min(1),
+    trigger: triggerFlow.optional(),
     estado: z.enum(['borrador', 'publicado']).optional(),
     activo: z.boolean().optional(),
   })
