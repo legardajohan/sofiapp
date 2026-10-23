@@ -40,17 +40,17 @@
 - [x] **`flow.trigger.runtime.test.ts` (bloque de aislamiento): el flow y el trigger del tenant A no se
       evalúan ni disparan para un cliente del tenant B; cada tenant evalúa SU trigger; `primer_mensaje` no
       cuenta mensajes de otro tenant.** (CA 12)
-- [ ] Confirmar que `tenantId` sigue naciendo del token en `POST/PUT /api/flows` con `trigger` (cubierto por
+- [x] Confirmar que `tenantId` sigue naciendo del token en `POST/PUT /api/flows` con `trigger` (cubierto por
       `flow.routes.test.ts`/`flow.isolation.test.ts` existentes; revisar que pasen con el campo nuevo). (CA 12)
 - [x] Frontend: `describirRelacion`, descripciones de `AddNodeMenu`, `TriggerSettings`. (CA 8, 9, 7)
 
 ## Verificación final
 
 - [x] `pnpm --filter @sofiapp/api typecheck` en verde. (CA 13)
-- [ ] `pnpm --filter @sofiapp/api test` completo en verde (hasta ahora: `src/features/flow` y `src/workers`). (CA 13)
-- [ ] `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint` en verde. (CA 13)
-- [ ] Checklist PR de `docs/multi-tenancy.md` §9.
-- [ ] Revisión manual del usuario en `/flows/new`, light y dark. (CA 8-11)
+- [x] `pnpm --filter @sofiapp/api test` completo en verde: 178 archivos, 1868 tests. (CA 13)
+- [x] `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint` en verde; tests del frontend: 87 de 88 archivos pasan. El que falta, `knowledge-base/pages/KnowledgeBasePage.test.tsx`, se cae con `Maximum call stack size exceeded` también en `develop` (no es de este feature). (CA 13)
+- [x] Checklist PR de `docs/multi-tenancy.md` §9: el trigger se evalúa con `tenantId` del webhook/token, `countScoped`/`findOneScoped` sin `Model.find` directo, sin índices nuevos.
+- [x] Revisión manual del usuario en `/flows/new`, light y dark: aprobada. (CA 8-11)
 
 ## Definición de "hecho"
 

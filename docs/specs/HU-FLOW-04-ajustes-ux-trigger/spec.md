@@ -3,7 +3,7 @@
 > **Spec-Driven Development.** Este es el QUÉ y el porqué. El CÓMO va en `plan.md`; la ejecución
 > en `tasks.md`. Parte de `develop`, sobre `HU-FLOW-01-V2/V3`, `HU-FLOW-02` y `HU-FLOW-03`.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Objetivo
 
