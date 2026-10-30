@@ -9,6 +9,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { filtroClientesReales } from '../cliente/cliente.filters.js';
 import { seedContactOptions } from '../../seed/seed-contact-options.js';
 import { ContactOption } from './contact-option.model.js';
 import {
@@ -286,7 +287,7 @@ export async function deleteContactOption(
   if (!opcion) throw new AppError('Opción no encontrada.', 404);
 
   const campo = CAMPO_CLIENTE_POR_TIPO[opcion.tipo];
-  const enUso = await countScoped(Cliente, tenantId, { [campo]: opcion.key });
+  const enUso = await countScoped(Cliente, tenantId, { [campo]: opcion.key, ...filtroClientesReales() });
 
   if (enUso === 0) {
     await findOneAndDeleteScoped(ContactOption, tenantId, { _id: opcion._id });

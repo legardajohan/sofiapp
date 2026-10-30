@@ -89,7 +89,7 @@ export class AIService {
 
     const cached = await getCached<string>(this.redis, cacheKey);
     if (cached !== null) {
-      this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      this.logUsage({ _id: usageLogId, tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
       this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, []);
       return { data: cached, cacheHit: true, fromFaq: false, retrievedChunks: [], promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
@@ -102,7 +102,7 @@ export class AIService {
       const faq = await this.faqMatcher(params.tenantId, ultimaPregunta);
       if (faq.matched && faq.respuesta) {
         const durationMs = Date.now() - start;
-        this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: true, durationMs });
+        this.logUsage({ _id: usageLogId, tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'chat', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: true, durationMs });
         this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, []);
         return { data: faq.respuesta, cacheHit: true, fromFaq: true, retrievedChunks: [], promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs };
       }
@@ -127,7 +127,7 @@ export class AIService {
 
     await setCached(this.redis, cacheKey, reply, env.AI_CACHE_TTL_CHAT_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ _id: usageLogId, tenantId: params.tenantId, method: 'chat', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ _id: usageLogId, tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'chat', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     this.writeResponseContext(usageLogId, params.tenantId, template, kbVersion, retrievedChunks);
     return { data: reply, cacheHit: false, fromFaq: false, retrievedChunks, ...usage, durationMs };
   }
@@ -149,7 +149,7 @@ export class AIService {
 
     const parsed = params.schema.parse(result.slots) as T;
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'extract', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'extract', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: parsed, cacheHit: false, fromFaq: false, ...usage, durationMs };
   }
 
@@ -161,7 +161,7 @@ export class AIService {
 
     const cached = await getCached<ClassifyResult>(this.redis, cacheKey);
     if (cached !== null) {
-      this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'classify', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
       return { data: cached, cacheHit: true, fromFaq: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
@@ -181,7 +181,7 @@ export class AIService {
     };
     await setCached(this.redis, cacheKey, classifyResult, env.AI_CACHE_TTL_CLASSIFY_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'classify', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: classifyResult, cacheHit: false, fromFaq: false, ...usage, durationMs };
   }
 
@@ -200,7 +200,7 @@ export class AIService {
 
     const cached = await getCached<ClassifyTopicResult>(this.redis, cacheKey);
     if (cached !== null) {
-      this.logUsage({ tenantId: params.tenantId, method: 'topic', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
+      this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'topic', llmModel: env.GEMINI_MODEL, promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHit: true, fromFaq: false, durationMs: Date.now() - start });
       return { data: cached, cacheHit: true, fromFaq: false, promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: Date.now() - start };
     }
 
@@ -216,7 +216,7 @@ export class AIService {
     };
     await setCached(this.redis, cacheKey, topicResult, env.AI_CACHE_TTL_CLASSIFY_S);
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'topic', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'topic', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: topicResult, cacheHit: false, fromFaq: false, ...usage, durationMs };
   }
 
@@ -238,7 +238,7 @@ export class AIService {
     });
 
     const durationMs = Date.now() - start;
-    this.logUsage({ tenantId: params.tenantId, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
+    this.logUsage({ tenantId: params.tenantId, esPrueba: params.esPrueba === true, method: 'summary', llmModel: env.GEMINI_MODEL, ...usage, cacheHit: false, fromFaq: false, durationMs });
     return { data: result, cacheHit: false, ...usage, durationMs };
   }
 

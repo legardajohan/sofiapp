@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import type { FilterQuery } from 'mongoose';
 import { aggregateScoped, countScoped, findScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { filtroClientesReales } from '../cliente/cliente.filters.js';
 import { Lead } from '../lead/lead.model.js';
 import type { ICliente, IClienteDocument } from '../cliente/cliente.types.js';
 import type {
@@ -105,7 +106,8 @@ async function construirFiltroCoincidencia(
   tenantId: TenantId,
   filtros: ISegmentoFiltros,
 ): Promise<FilterQuery<IClienteDocument>> {
-  const filtro = construirFiltroContacto(filtros);
+  // HU-IA-08: la conversación de prueba nunca entra a un segmento ni recibe una campaña.
+  const filtro: FilterQuery<IClienteDocument> = { ...construirFiltroContacto(filtros), ...filtroClientesReales() };
 
   // Ids que imponen los ejes del lead. `null` = ningún eje del lead activo.
   let porLead: Types.ObjectId[] | null = null;

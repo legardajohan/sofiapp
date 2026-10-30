@@ -79,6 +79,13 @@ export function subscribeRealtime(io: Server): void {
       return;
     }
 
+    if (evt.type === 'sandbox:message' || evt.type === 'sandbox:effect') {
+      // HU-IA-08: la conversación de prueba es privada del admin que la abrió. Jamás al room del
+      // tenant: ahí escuchan la bandeja y los demás asesores.
+      io.to(`asesor:${evt.ownerId}`).emit(evt.type, evt);
+      return;
+    }
+
     io.to(`tenant:${evt.tenantId}`).emit(evt.type, evt);
   });
 }

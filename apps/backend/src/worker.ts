@@ -14,6 +14,8 @@ import {
   FLOW_RUNTIME_QUEUE_NAME,
   REMINDER_SWEEP_JOB,
   REMINDER_SWEEP_SCHEDULER_ID,
+  SANDBOX_SWEEP_JOB,
+  SANDBOX_SWEEP_SCHEDULER_ID,
   CAMPAIGN_QUEUE_NAME,
   CAMPAIGN_START_JOB,
   CAMPAIGN_SCHEDULED_START_JOB,
@@ -218,6 +220,13 @@ mongoose
       REMINDER_SWEEP_SCHEDULER_ID,
       { every: env.REMINDER_SWEEP_INTERVAL_MS },
       { name: REMINDER_SWEEP_JOB, opts: { removeOnComplete: 100 } },
+    );
+
+    // Barrido diario de conversaciones de prueba inactivas (HU-IA-08). Mismo patrón idempotente.
+    await flowRuntimeQueue.upsertJobScheduler(
+      SANDBOX_SWEEP_SCHEDULER_ID,
+      { every: 24 * 60 * 60 * 1000 },
+      { name: SANDBOX_SWEEP_JOB, opts: { removeOnComplete: 100 } },
     );
 
     // Barrido de campañas programadas (HU-MARK-01). Mismo patrón idempotente: reiniciar el proceso

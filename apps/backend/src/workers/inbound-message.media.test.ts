@@ -33,7 +33,11 @@ vi.mock('../features/conversation/conversation.service.js', () => ({
   notifyInboundMessage: mockNotifyInbound,
 }));
 
-vi.mock('../features/flow/flow.service.js', () => ({ getActiveFlow: vi.fn(async () => null) }));
+vi.mock('../features/flow/flow.service.js', () => ({
+  getActiveFlow: vi.fn(async () => null),
+  // HU-IA-08: el procesador resuelve el flujo por cliente; sin flujo activo devuelve `null`.
+  resolverFlujoPara: vi.fn(async () => null),
+}));
 vi.mock('../features/flow/flow.runtime.service.js', () => ({ ejecutarFlujo: vi.fn() }));
 
 import { env } from '../config/env.js';

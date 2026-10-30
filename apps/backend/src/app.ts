@@ -45,6 +45,7 @@ import aiRoutes from './features/ai/ai.routes.js';
 import aiAssistantRoutes from './features/ai/ai-assistant.routes.js';
 import aiHandoffRoutes from './features/ai/ai-handoff.routes.js';
 import flowRoutes from './features/flow/flow.routes.js';
+import sandboxRoutes from './features/sandbox/sandbox.routes.js';
 import campaignRoutes from './features/campaign/campaign.routes.js';
 import mediaRoutes from './features/media/media.routes.js';
 import notificationRoutes from './features/notification/notification.routes.js';
@@ -115,6 +116,7 @@ app.use('/api/ai/handoff-rules', aiHandoffRoutes);
 // resolverse primero, o el genérico se los come.
 app.use('/api/ai', aiAssistantRoutes);
 app.use('/api/flows', flowRoutes);
+app.use('/api/sandbox', sandboxRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportsRoutes);

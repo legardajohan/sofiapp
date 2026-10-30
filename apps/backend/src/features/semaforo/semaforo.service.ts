@@ -9,6 +9,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { Lead } from '../lead/lead.model.js';
+import { filtroLeadsReales } from '../lead/lead.filters.js';
 import { Semaforo } from './semaforo.model.js';
 import {
   COLOR_SEMAFORO_DEFECTO,
@@ -229,5 +230,5 @@ export async function existeSemaforo(tenantId: TenantId, key: string): Promise<b
 
 /** Cuántos leads del tenant llevan grabado ese semáforo. Para no archivar a ciegas. */
 export async function contarLeadsConSemaforo(tenantId: TenantId, key: string): Promise<number> {
-  return countScoped(Lead, tenantId, { semaforo: key });
+  return countScoped(Lead, tenantId, { semaforo: key, ...filtroLeadsReales() });
 }

@@ -49,6 +49,11 @@ const AiContextPage = lazy(() =>
 const AssistantConfigPage = lazy(() =>
   import('./features/ai-assistant/index.js').then((m) => ({ default: m.AssistantConfigPage })),
 );
+
+// HU-IA-08: chat de prueba del asistente.
+const AssistantTestPage = lazy(() =>
+  import('./features/assistant-sandbox/index.js').then((m) => ({ default: m.AssistantTestPage })),
+);
 const HandoffSettingsPage = lazy(() =>
   import('./features/handoff/index.js').then((m) => ({ default: m.HandoffSettingsPage })),
 );
@@ -169,6 +174,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <AssistantConfigPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/assistant/test',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <AssistantTestPage />
                 </Suspense>
               </RequireRole>
             ),

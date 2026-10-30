@@ -1,5 +1,6 @@
 import type { IConversationResponse, IMessageResponse } from '../features/conversation/conversation.types.js';
 import type { ILeadResponse } from '../features/lead/lead.types.js';
+import type { SandboxEfecto } from '../features/sandbox/sandbox.types.js';
 import type { EstadoCampana, ITotalesCampana } from '../features/campaign/campaign.types.js';
 import type {
   EstadoPlantilla,
@@ -94,4 +95,22 @@ export type RealtimeEvent =
       templateId: string;
       status: EstadoPlantilla;
       motivoRechazo: IMotivoRechazoResponse | null;
+    }
+  | {
+      /**
+       * HU-IA-08 — un mensaje de la conversación de prueba. Va SOLO a la sala del admin que prueba
+       * (`asesor:<ownerId>`): si saliera como `message:new`, la bandeja del tenant lo mostraría.
+       */
+      type: 'sandbox:message';
+      tenantId: string;
+      ownerId: string;
+      message: IMessageResponse;
+    }
+  | {
+      /** HU-IA-08 — algo que el sistema hizo durante la prueba (lead, asignación, transferencia…). */
+      type: 'sandbox:effect';
+      tenantId: string;
+      ownerId: string;
+      efecto: SandboxEfecto;
+      at: string;
     };

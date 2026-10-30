@@ -10,6 +10,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { Lead } from '../lead/lead.model.js';
+import { filtroLeadsReales } from '../lead/lead.filters.js';
 import { Estado } from './estado.model.js';
 import {
   COLOR_ESTADO_DEFECTO,
@@ -341,5 +342,5 @@ export async function clavesDeConversion(tenantId: TenantId, keys: string[]): Pr
 
 /** Cuántos leads del tenant llevan grabado ese estado. Para no archivar ni borrar a ciegas. */
 export async function contarLeadsConEstado(tenantId: TenantId, key: string): Promise<number> {
-  return countScoped(Lead, tenantId, { estado: key });
+  return countScoped(Lead, tenantId, { estado: key, ...filtroLeadsReales() });
 }

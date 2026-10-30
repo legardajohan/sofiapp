@@ -9,6 +9,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { Flow } from './flow.model.js';
+import type { ICliente } from '../cliente/cliente.types.js';
 import type {
   CreateFlowDTO,
   IFlowLean,
@@ -70,6 +71,22 @@ export async function getFlowById(tenantId: TenantId, flowId: string): Promise<I
  *  ninguno activo — el motor de flujos simplemente no interviene. */
 export async function getActiveFlow(tenantId: TenantId): Promise<IFlowLean | null> {
   return findOneScoped(Flow, tenantId, { activo: true }).lean<IFlowLean | null>();
+}
+
+/**
+ * Qué flujo corre para este cliente (HU-IA-08). Un cliente real siempre usa el flujo `activo` del
+ * tenant. La conversación de prueba puede apuntar a otro (`pruebaFlowId`), activo o no, para probarlo
+ * antes de publicarlo; si ese flujo se borró, cae al activo en vez de dejar la prueba sin flujo.
+ */
+export async function resolverFlujoPara(
+  tenantId: TenantId,
+  cliente: Pick<ICliente, 'esPrueba' | 'pruebaFlowId'>,
+): Promise<IFlowLean | null> {
+  if (cliente.esPrueba && cliente.pruebaFlowId) {
+    const elegido = await findByIdScoped(Flow, tenantId, String(cliente.pruebaFlowId)).lean<IFlowLean | null>();
+    if (elegido) return elegido;
+  }
+  return getActiveFlow(tenantId);
 }
 
 /** Desactiva el flujo `activo` anterior del tenant, si lo hay. Se llama SIEMPRE antes de crear o

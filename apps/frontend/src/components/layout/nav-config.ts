@@ -16,6 +16,7 @@ import {
   PieChart,
   PackageSearch,
   Clock,
+  FlaskConical,
   ScanSearch,
   Sparkles,
   Tags,
@@ -174,6 +175,7 @@ export const navGroups: NavGroup[] = [
         roles: ['admin'],
         children: [
           { label: 'Comportamiento', to: '/settings/assistant', icon: Bot },
+          { label: 'Probar asistente', to: '/settings/assistant/test', icon: FlaskConical },
           {
             label: 'Transferencia a un asesor',
             to: '/settings/assistant/handoff',

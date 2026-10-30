@@ -9,6 +9,8 @@ import {
 import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { filtroClientesReales } from '../cliente/cliente.filters.js';
+import { emitirEfectoPrueba, emitirMensajePrueba, ownerDePrueba } from '../sandbox/sandbox.effects.js';
 import type { IClienteDocument, IResumenResponse } from '../cliente/cliente.types.js';
 import { Message } from '../message/message.model.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
@@ -110,7 +112,8 @@ function buildFiltro(
 
   // Los clientes sembrados por el seed de desarrollo (seed-inbox-demo.ts) usan metaUserId con
   // prefijo 'demo-'. Nunca deben aparecer en la bandeja real: exclusión incondicional.
-  f.metaUserId = { $not: /^demo-/ };
+  // HU-IA-08: tampoco la conversación de prueba de un admin (ya la ve en su chat, no en la bandeja).
+  Object.assign(f, filtroClientesReales());
 
   return f;
 }
@@ -157,6 +160,8 @@ export async function publishConversationUpdated(
 ): Promise<void> {
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
   if (!cliente) return;
+  // HU-IA-08: el hilo de prueba no existe para la bandeja del tenant.
+  if (cliente.esPrueba) return;
 
   const source = cliente as unknown as IConversationSource;
   const conversation = toConversationResponse(
@@ -328,6 +333,13 @@ export async function notificarSaliente(
     { new: true },
   ).lean();
 
+  // HU-IA-08: el hilo de prueba se ve solo en el chat de su dueño, nunca en la bandeja del tenant.
+  const ownerPrueba = ownerDePrueba(cliente);
+  if (ownerPrueba) {
+    await emitirMensajePrueba(tenantId, ownerPrueba, message);
+    return message;
+  }
+
   if (cliente) {
     const source = cliente as unknown as IConversationSource;
     const asignado = await resolveAsignado(tenantId, source.asesorId);
@@ -470,7 +482,9 @@ export async function markRead(tenantId: string, clienteId: string): Promise<ICo
   const tagMap = await resolveTags(tenantId, source);
   const leadMap = await resolveLeadMap(tenantId, clienteId);
   const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
-  await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  if (!cliente.esPrueba) {
+    await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  }
   return conversation;
 }
 
@@ -553,7 +567,10 @@ export async function setIaHabilitada(
   const tagMap = await resolveTags(tenantId, source);
   const leadMap = await resolveLeadMap(tenantId, clienteId);
   const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
-  await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  // HU-IA-08: apagar a Sofi en el hilo de prueba no es un evento de bandeja.
+  if (!cliente.esPrueba) {
+    await publishRealtime({ type: 'conversation:updated', tenantId, conversationId: clienteId, conversation });
+  }
   return conversation;
 }
 
@@ -590,6 +607,15 @@ export async function setConversationTags(
   const tagMap = await findTagsByIds(tenantId, unicos);
   const leadMap = await resolveLeadMap(tenantId, clienteId);
   const conversation = toConversationResponse(source, null, new Date(), asignado, tagMap, leadMap);
+
+  // HU-IA-08: las etiquetas del hilo de prueba se cuentan en el chat, no en la bandeja del tenant.
+  if (updated.esPrueba) {
+    await emitirEfectoPrueba(tenantId, clienteId, {
+      tipo: 'etiquetas',
+      nombres: [...tagMap.values()].map((t) => t.nombre),
+    });
+    return conversation;
+  }
 
   await publishRealtime({
     type: 'conversation:updated',
@@ -661,6 +687,29 @@ export async function assignConversation(
   );
 
   const actorInfo = (await findUsersByIds(tenantId, [actorId])).get(actorId) ?? null;
+
+  // HU-IA-08: una asignación sobre el hilo de prueba no avisa al asesor real ni mueve la bandeja del
+  // tenant. Queda en el chat de prueba, y la notificación va al admin que prueba, marcada.
+  const ownerPrueba = ownerDePrueba(updated);
+  if (ownerPrueba) {
+    await emitirEfectoPrueba(tenantId, clienteId, {
+      tipo: 'asignado',
+      asesor: asignadoA ? { id: asignadoA, nombre: asignado?.nombre ?? 'Asesor' } : null,
+    });
+    if (asignadoA) {
+      await createNotification(tenantId, {
+        userId: ownerPrueba,
+        tipo: 'assignment',
+        conversacionId: clienteId,
+        clienteResumen: conversation.nombre ?? conversation.telefono,
+        actorId,
+        actorNombre: actorInfo?.nombre ?? 'Un administrador',
+        mensaje: `(prueba) Se habría asignado la conversación a ${asignado?.nombre ?? 'un asesor'}`,
+      });
+    }
+    return conversation;
+  }
+
   // La notificación se persiste ANTES de publicar: al recibir el evento el front refresca la campana,
   // y si el registro aún no existe esa lectura llega vacía.
   if (asignadoA) {
@@ -742,6 +791,12 @@ export async function marcarParaAsesor(tenantId: string, clienteId: string): Pro
   // Mismo criterio que `notifyInboundMessage`: si la conversación ya no está, no hay nada que
   // notificar y tampoco es un error que deba escalar.
   if (!cliente) return;
+
+  // HU-IA-08: en la prueba no hay bandeja que refrescar; la UI ya sabe que Sofi quedó apagada.
+  if (cliente.esPrueba) {
+    await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'handoff', motivo: 'error', asesor: null });
+    return;
+  }
 
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);
@@ -840,6 +895,32 @@ export async function handoffConversation(
     await resolveLeadMap(tenantId, clienteId),
   );
 
+  // HU-IA-08: la transferencia del hilo de prueba se cuenta en el chat y avisa al admin que prueba,
+  // nunca al asesor destino ni a la bandeja del tenant.
+  const ownerPrueba = ownerDePrueba(updated);
+  if (ownerPrueba) {
+    const asesorDestino = await resolveAsignado(tenantId, updatedSource.asesorId);
+    await emitirEfectoPrueba(tenantId, clienteId, {
+      tipo: 'handoff',
+      motivo,
+      asesor: asesorDestino
+        ? { id: String(updatedSource.asesorId), nombre: asesorDestino.nombre }
+        : null,
+    });
+    await createNotification(tenantId, {
+      userId: ownerPrueba,
+      tipo: 'handoff',
+      conversacionId: clienteId,
+      clienteResumen: conversation.nombre ?? conversation.telefono,
+      actorId: null,
+      actorNombre: 'Sofi',
+      mensaje: `(prueba) Sofi habría transferido la conversación${
+        asesorDestino ? ` a ${asesorDestino.nombre}` : ''
+      }`,
+    });
+    return;
+  }
+
   // Un solo evento. `conversation:assigned` solo si hay un destinatario NUEVO al que avisar: si la
   // conversación ya la llevaba alguien, o si no hay a quién asignársela, nadie estrena
   // responsabilidad y el evento correcto es el de actualización.
@@ -922,6 +1003,13 @@ export async function notifyInboundMessage(
     { new: true },
   ).lean();
   if (!cliente) return;
+
+  // HU-IA-08: el entrante de la conversación de prueba solo lo ve su dueño.
+  const ownerPrueba = ownerDePrueba(cliente);
+  if (ownerPrueba) {
+    await emitirMensajePrueba(tenantId, ownerPrueba, toMessageResponse(savedMsg, String(tenantId)));
+    return;
+  }
 
   const source = cliente as unknown as IConversationSource;
   const asignado = await resolveAsignado(tenantId, source.asesorId);

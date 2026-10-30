@@ -169,6 +169,13 @@
   // Se consulta con `$ne: true`, no con `false`: los contactos anteriores al campo no lo llevan,
   // y ausente significa "no ha pedido la baja", no "desconocido".
   marketingOptOut: Boolean,       // default false
+  // Conversación de prueba del admin (HU-IA-08). Un `Cliente` más, pero SOLO existe para "Probar
+  // asistente": su salida no va a Meta y queda fuera de bandeja, reportes, pipeline, cuota de leads,
+  // segmentos de campaña y recordatorios (`filtroClientesReales`). Se consulta con `$ne: true`.
+  esPrueba: Boolean,              // default false
+  pruebaOwnerId: ObjectId?,       // ref User — dueño de la sesión; `metaUserId` = "prueba-<userId>"
+  pruebaFlowId: ObjectId?,        // ref Flow — flujo a probar; null = el activo del tenant
+  pruebaUltimaActividad: ISODate?,// el barrido de 7 días se guía por él
   // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
   // la conversación, nadie filtra la bandeja por esto.
   semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
@@ -459,6 +466,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   responsableId: ObjectId,        // ref User; por defecto, quien convirtió
   estado: "nuevo" | "en_gestion" | "pago_pendiente" | "pagado" | "perdido",   // default "nuevo"
   semaforo: String | null,        // `key` del catálogo `semaforos`; default null (HU-CRM-04)
+  esPrueba: Boolean,              // HU-IA-08: nació de la conversación de prueba; fuera de listados y conteos
   createdAt, updatedAt
 }
 ```
@@ -671,6 +679,7 @@ cualquier intento de guardarlo es un 400.
   // compara este valor con el que llevaba y se descarta si no coincide — resuelve la carrera entre
   // "el cliente responde" y "el job diferido arranca" sin cancelar el job en BullMQ.
   esperaToken: String?,
+  esperaHasta: ISODate?,            // HU-IA-08: cuándo vence la espera; el chat de prueba ofrece «Avanzar ahora»
   actualizadoAt: ISODate
 }
 // Índices: { tenantId: 1, clienteId: 1 } único · { tenantId: 1, flowId: 1 }
@@ -1030,6 +1039,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   cacheHit: Boolean,
   fromFaq: Boolean,                // respondida por cortocircuito de FAQ, sin generación (HU-KB-02)
   durationMs: Number,
+  esPrueba: Boolean,               // HU-IA-08: consumo del chat de prueba (cuesta tokens reales); default false
   createdAt                        // { timestamps: { createdAt: true, updatedAt: false } }
 }
 // Índices: { tenantId: 1 }, { tenantId: 1, createdAt: -1 }

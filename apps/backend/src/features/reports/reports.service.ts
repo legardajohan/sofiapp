@@ -4,6 +4,7 @@ import { AppError } from '../../utils/AppError.js';
 import { DIA_MS, inicioDelDiaUtc, normalizeHasta, ratio } from '../../utils/date-range.util.js';
 import { Message } from '../message/message.model.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { filtroClientesReales, matchClientesReales } from '../cliente/cliente.filters.js';
 import { Lead } from '../lead/lead.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
 import { User } from '../users/user.model.js';
@@ -14,7 +15,6 @@ import {
   ACCION_HANDOFF,
   ACCIONES_ETAPA_LEAD,
   DESFASE_MAX_MS,
-  PREFIJO_CLIENTE_DEMO,
   RANGO_DEFAULT_DIAS,
   RANGO_MAX_DIAS,
   type IAdvisorReportResponse,
@@ -98,9 +98,9 @@ async function contarAtendidas(tenantOid: Types.ObjectId, r: Rango): Promise<Map
   const rows = await aggregateScoped<Conteo>(Message, tenantOid, [
     { $match: { sender: 'agent', createdAt: { $gte: r.desde, $lte: r.hasta } } },
     { $group: { _id: '$clienteId' } },
-    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { asesorId: 1, metaUserId: 1 }, 'c'),
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { asesorId: 1, metaUserId: 1, esPrueba: 1 }, 'c'),
     { $unwind: '$c' },
-    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $match: matchClientesReales('c') },
     { $group: { _id: { $ifNull: ['$c.asesorId', null] }, n: { $sum: 1 } } },
   ]);
   return toMap(rows);
@@ -113,7 +113,7 @@ async function contarAsignadasActivas(tenantOid: Types.ObjectId, r: Rango): Prom
       $match: {
         asesorId: { $ne: null },
         ultimoMensajeAt: { $gte: r.desde, $lte: r.hasta },
-        metaUserId: { $not: PREFIJO_CLIENTE_DEMO },
+        ...filtroClientesReales(),
       },
     },
     { $group: { _id: '$asesorId', n: { $sum: 1 } } },
@@ -136,9 +136,9 @@ async function contarVentas(tenantOid: Types.ObjectId, r: Rango): Promise<Map<st
       },
     },
     { $group: { _id: '$entidadId' } },
-    lookupScoped(Lead.collection.name, tenantOid, '$_id', { estado: 1, responsableId: 1 }, 'l'),
+    lookupScoped(Lead.collection.name, tenantOid, '$_id', { estado: 1, responsableId: 1, esPrueba: 1 }, 'l'),
     { $unwind: '$l' },
-    { $match: { 'l.estado': KEY_ESTADO_VENTA } },
+    { $match: { 'l.estado': KEY_ESTADO_VENTA, 'l.esPrueba': { $ne: true } } },
     { $group: { _id: { $ifNull: ['$l.responsableId', null] }, n: { $sum: 1 } } },
   ]);
   return toMap(rows);
@@ -233,9 +233,9 @@ async function contarTransferidas(tenantOid: Types.ObjectId, r: Rango): Promise<
     { $match: { accion: ACCION_HANDOFF, entidad: 'cliente', createdAt: { $gte: r.desde, $lte: r.hasta } } },
     { $sort: { createdAt: 1, _id: 1 } },
     { $group: { _id: '$entidadId', eventos: { $sum: 1 }, motivo: { $last: '$despues.motivo' } } },
-    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1 }, 'c'),
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1, esPrueba: 1 }, 'c'),
     { $unwind: '$c' },
-    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $match: matchClientesReales('c') },
     { $group: { _id: '$motivo', conversaciones: { $sum: 1 }, eventos: { $sum: '$eventos' } } },
   ]);
 }
@@ -268,9 +268,9 @@ async function contarConversacionesIa(tenantOid: Types.ObjectId, r: Rango): Prom
       },
     },
     { $group: { _id: '$_id' } },
-    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1 }, 'c'),
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1, esPrueba: 1 }, 'c'),
     { $unwind: '$c' },
-    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $match: matchClientesReales('c') },
     { $count: 'n' },
   ]);
   return rows[0]?.n ?? 0;
@@ -333,9 +333,9 @@ async function contarConsultasPorTema(tenantOid: Types.ObjectId, r: Rango): Prom
   return aggregateScoped<FilaTema>(Message, tenantOid, [
     { $match: { sender: 'user', createdAt: { $gte: r.desde, $lte: r.hasta } } },
     { $group: { _id: '$clienteId' } },
-    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1, temaIA: 1 }, 'c'),
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id', { metaUserId: 1, esPrueba: 1, temaIA: 1 }, 'c'),
     { $unwind: '$c' },
-    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $match: matchClientesReales('c') },
     {
       $group: {
         _id: {
@@ -470,9 +470,9 @@ async function contarMensajesPorHora(tenantOid: Types.ObjectId, r: Rango, tz: st
         salientes: { $sum: { $cond: [{ $eq: ['$direccion', 'inbound'] }, 0, 1] } },
       },
     },
-    lookupScoped(Cliente.collection.name, tenantOid, '$_id.c', { metaUserId: 1 }, 'c'),
+    lookupScoped(Cliente.collection.name, tenantOid, '$_id.c', { metaUserId: 1, esPrueba: 1 }, 'c'),
     { $unwind: '$c' },
-    { $match: { 'c.metaUserId': { $not: PREFIJO_CLIENTE_DEMO } } },
+    { $match: matchClientesReales('c') },
     {
       $group: {
         _id: { dia: '$_id.dia', hora: '$_id.hora' },

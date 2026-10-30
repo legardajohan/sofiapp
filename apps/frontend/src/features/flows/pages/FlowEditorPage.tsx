@@ -12,6 +12,7 @@ import { EmptyFlowState } from '../components/EmptyFlowState.js';
 import { FlowCanvas } from '../components/FlowCanvas.js';
 import { NodeInspector } from '../components/NodeInspector.js';
 import { TriggerSettings } from '../components/TriggerSettings.js';
+import { SandboxSheet } from '../../assistant-sandbox/index.js';
 import {
   configConDestino,
   configPorDefecto,
@@ -319,6 +320,13 @@ export function FlowEditorPage(): React.ReactElement {
         />
         <div className="ml-auto flex items-center gap-2">
           <TriggerSettings value={trigger} onChange={setTrigger} />
+          {/* Solo un flujo ya guardado: lo que se prueba es la versión del servidor, no el borrador del canvas. */}
+          {!esNuevo && id && (
+            <SandboxSheet
+              flowId={id}
+              descripcion="Se prueba la versión guardada de este flujo. Guarda antes si acabas de cambiarlo."
+            />
+          )}
           <Button variant={activo ? 'secondary' : 'outline'} size="sm" onClick={onActivarToggle} disabled={saveFlow.isPending}>
             {activo ? 'Desactivar' : 'Activar flujo'}
           </Button>

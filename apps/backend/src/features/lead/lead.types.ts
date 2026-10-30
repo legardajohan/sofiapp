@@ -32,6 +32,8 @@ export interface ILead {
   clienteId: Types.ObjectId;
   origen: IOrigenLead;
   responsableId: Types.ObjectId;
+  /** HU-IA-08: nació de la conversación de prueba. Fuera de listados, pipeline, conteos y cuota. */
+  esPrueba?: boolean;
   /**
    * `key` de una etapa del catálogo `estados` del tenant (HU-CRM-03), no un enum: cada empresa
    * define las suyas. El tipo sigue apuntando a la unión de `Cliente` porque las cinco claves de

@@ -8,14 +8,15 @@ import {
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
-import { findScoped } from '../repositories/base.repository.js';
+import { findByIdScoped, findScoped } from '../repositories/base.repository.js';
+import { Cliente } from '../features/cliente/cliente.model.js';
 import { resolveWebhookTenant } from '../features/webhook/webhook.service.js';
 import { upsertByMetaUser } from '../features/cliente/cliente.service.js';
 import { saveMessage, updateDeliveryStatus } from '../features/message/message.service.js';
 import { notifyInboundMessage, replyFromIa } from '../features/conversation/conversation.service.js';
 import { Message } from '../features/message/message.model.js';
 import { ejecutarFlujo } from '../features/flow/flow.runtime.service.js';
-import { getActiveFlow } from '../features/flow/flow.service.js';
+import { getActiveFlow, resolverFlujoPara } from '../features/flow/flow.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import {
   extraerMedia,
@@ -28,6 +29,19 @@ import { clasificarTexto } from '../features/media/media.service.js';
 import { mediaIngestJobId } from './media-ingest.processor.js';
 import { registrarRespuestaCampana } from '../features/campaign/campaign.metrics.service.js';
 import { MENSAJE_SOLO_TEXTO } from './ai-reply.messages.js';
+
+/**
+ * Lo que `responderAutomaticamente` necesita de un mensaje entrante, sin atarse a Meta (HU-IA-08).
+ * El webhook lo arma desde `IWhatsAppMessage`; el chat de prueba lo arma desde lo que escribe el
+ * admin. Así los dos pasan por exactamente la misma decisión flujo-vs-Sofi.
+ */
+export interface IEntradaAutomatica {
+  /** `msg.type` de Meta (`text`, `image`…): decide si Sofi lee el mensaje o acusa recibo. */
+  tipo: string;
+  texto?: string;
+  /** Clave de idempotencia del flujo (`metaMessageId`). */
+  mensajeId: string;
+}
 
 export interface InboundJobData {
   tenantId: string;
@@ -203,7 +217,11 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
 
         if (cliente.iaHabilitada) {
           try {
-            await responderAutomaticamente(tenantId, clienteId.toString(), msg);
+            await responderAutomaticamente(tenantId, clienteId.toString(), {
+              tipo: msg.type,
+              mensajeId: msg.id,
+              ...(msg.text?.body ? { texto: msg.text.body } : {}),
+            });
           } catch (err: unknown) {
             // Que el bot no arranque no deshace lo que ya pasó: el mensaje está guardado y en la
             // bandeja. Tumbar el job entero no recupera nada, y con `attempts` > 1 reintentaría
@@ -242,19 +260,22 @@ export async function processInboundJob(data: InboundJobData): Promise<void> {
  * `trigger_no_cumplido` (HU-FLOW-04): el flow existe pero su disparador no se cumple para este
  * mensaje, así que contesta Sofi como si no hubiera flow.
  */
-async function responderAutomaticamente(
+export async function responderAutomaticamente(
   tenantId: string,
   clienteId: string,
-  msg: IWhatsAppMessage,
+  entrada: IEntradaAutomatica,
 ): Promise<void> {
-  const flujoActivo = await getActiveFlow(tenantId);
+  // El flujo que corre lo decide el cliente: uno real usa el activo del tenant; la conversación de
+  // prueba (HU-IA-08) puede apuntar a otro. `resolverFlujoPara` es la única que lo sabe.
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  const flujo = cliente ? await resolverFlujoPara(tenantId, cliente) : await getActiveFlow(tenantId);
 
-  if (flujoActivo) {
-    const resultado = await ejecutarFlujo(tenantId, clienteId, msg.text?.body ?? '', msg.id);
+  if (flujo) {
+    const resultado = await ejecutarFlujo(tenantId, clienteId, entrada.texto ?? '', entrada.mensajeId);
     if (resultado !== 'trigger_no_cumplido') return;
   }
 
-  await atenderConSofi(tenantId, clienteId, msg.type, msg.text?.body);
+  await atenderConSofi(tenantId, clienteId, entrada.tipo, entrada.texto);
 }
 
 /**

@@ -220,6 +220,18 @@ export interface ICliente {
    * `false`: ausente significa "no se ha pedido la baja", no "desconocido".
    */
   marketingOptOut: boolean;
+  /**
+   * HU-IA-08: este hilo es la conversación de prueba de un admin ("Probar asistente"). Se comporta
+   * como un cliente real —flujos, Sofi, efectos— pero su salida no va a Meta y queda fuera de
+   * bandeja, reportes, pipeline, cuotas, campañas y recordatorios (`filtroClientesReales`).
+   */
+  esPrueba?: boolean;
+  /** Admin dueño de la sesión de prueba. Una sesión por `(tenantId, pruebaOwnerId)`. */
+  pruebaOwnerId?: Types.ObjectId;
+  /** Flujo a probar. `null` = el flujo activo del tenant, como vería un cliente real. */
+  pruebaFlowId?: Types.ObjectId | null;
+  /** Último mensaje del admin en la sesión; el barrido de 7 días se guía por él. */
+  pruebaUltimaActividad?: Date;
 }
 
 export interface IClienteDocument extends ICliente, Document {}

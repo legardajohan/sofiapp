@@ -1,6 +1,7 @@
 import { Bot, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AssistantConfigForm } from '../components/AssistantConfigForm.js';
+import { SandboxSheet } from '../../assistant-sandbox/index.js';
 import { useAssistantConfig } from '../hooks/useAssistantConfig.js';
 
 function CargandoConfiguracion(): React.ReactElement {
@@ -34,13 +35,14 @@ export function AssistantConfigPage(): React.ReactElement {
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary">
           <Bot className="size-5 text-primary-foreground" aria-hidden="true" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Asistente IA</h1>
           <p className="mt-0.5 text-sm text-secondary-foreground">
             Define cómo responde Sofi en WhatsApp. Lo que dice sale de tu base de conocimiento;
             aquí decides con qué voz y con qué límites.
           </p>
         </div>
+        <SandboxSheet descripcion="Guarda tus cambios y pruébalos: Sofi responde con la última configuración guardada." />
       </header>
 
       {isPending && <CargandoConfiguracion />}

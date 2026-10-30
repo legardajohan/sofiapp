@@ -1,8 +1,14 @@
 import type { Job } from 'bullmq';
-import { FLOW_RESUME_JOB, FLOW_REMINDER_JOB, REMINDER_SWEEP_JOB } from '../config/queues.js';
+import {
+  FLOW_RESUME_JOB,
+  FLOW_REMINDER_JOB,
+  REMINDER_SWEEP_JOB,
+  SANDBOX_SWEEP_JOB,
+} from '../config/queues.js';
 import { logger } from '../utils/logger.js';
 import { reanudarFlujo } from '../features/flow/flow.runtime.service.js';
 import { enviarRecordatorio, ejecutarBarridoRecordatorios } from '../features/flow/flow.reminder.service.js';
+import { barrerSesionesInactivas } from '../features/sandbox/sandbox.service.js';
 import type { FlowJobData } from '../features/flow/flow.types.js';
 
 /**
@@ -25,6 +31,9 @@ export async function processFlowRuntimeJob(job: Job<FlowJobData | Record<string
     }
     case REMINDER_SWEEP_JOB:
       await ejecutarBarridoRecordatorios(new Date());
+      return;
+    case SANDBOX_SWEEP_JOB:
+      await barrerSesionesInactivas(new Date());
       return;
     default:
       logger.warn('flow-runtime: job con nombre desconocido', { name: job.name, id: job.id });

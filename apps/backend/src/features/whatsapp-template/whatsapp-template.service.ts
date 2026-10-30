@@ -622,3 +622,17 @@ export async function resolverImagenPlantilla(
   if (!imagen) throw new AppError('Imagen no encontrada.', 404);
   return imagen;
 }
+
+/**
+ * HU-IA-08 — lo que un cliente leería de una plantilla, sin prepararla para Meta. La conversación de
+ * prueba no envía nada: se salta la comprobación de aprobación, la imagen de cabecera y la subida
+ * de media, y devuelve solo el texto renderizado y los datos que el hilo persiste.
+ */
+export async function renderizarPlantillaDePrueba(
+  tenantId: TenantId,
+  templateId: string,
+  parametros: string[],
+): Promise<{ nombre: string; idioma: string; texto: string | null }> {
+  const tpl = await getTemplateOrFail(tenantId, templateId);
+  return { nombre: tpl.name, idioma: tpl.language, texto: renderizarPlantilla(tpl.components, parametros) };
+}

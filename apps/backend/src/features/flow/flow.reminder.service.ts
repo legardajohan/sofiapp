@@ -43,6 +43,8 @@ export async function buscarCandidatos(ahora: Date): Promise<ICandidatoRecordato
     {
       ventana24hExpiraEn: { $gt: ahora, $lte: limite },
       iaHabilitada: true,
+      // HU-IA-08: la conversación de prueba no recibe recordatorios de inactividad.
+      esPrueba: { $ne: true },
       estadoComercial: { $nin: ['pagado', 'perdido'] },
       // `$ne` entre `undefined`/`null` (nunca se envió) y una fecha real es `true`, así que un
       // cliente sin recordatorio previo siempre entra. Autolimpiante: en cuanto un nuevo inbound

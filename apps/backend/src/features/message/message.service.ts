@@ -7,11 +7,13 @@ import {
 } from '../../repositories/base.repository.js';
 import { AppError } from '../../utils/AppError.js';
 import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client.js';
+import { sandboxMessagingProvider } from '../../integrations/messaging/sandbox-messaging.provider.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
 import {
   assertContenidoCompatible,
   buildTemplatePayload,
+  renderizarPlantillaDePrueba,
 } from '../whatsapp-template/whatsapp-template.service.js';
 import { asegurarMetaMediaId, extensionImagen } from '../media/media-meta-cache.js';
 import type { IArchivoImagen } from '../whatsapp-template/whatsapp-template.types.js';
@@ -114,6 +116,57 @@ async function subirImagenReemplazo(
 }
 
 /**
+ * Envío de la conversación de prueba (HU-IA-08). Persiste el `Message` igual que un envío real, pero
+ * con el proveedor sandbox: sin Meta, sin cuota `mensajesMes`, sin ventana de 24 h. Una plantilla se
+ * guarda con su texto renderizado, tal como la habría leído el cliente; la media no está disponible.
+ */
+async function enviarEnPrueba(
+  tenantId: TenantId,
+  clienteId: string,
+  contenido: ContenidoOutbound,
+  sender: Sender,
+): Promise<IMessageDocument> {
+  if (contenido.modo === 'media') {
+    throw new AppError('Enviar archivos no está disponible en el chat de prueba.', 422);
+  }
+
+  const base = {
+    clienteId: new Types.ObjectId(clienteId),
+    canal: 'whatsapp' as const,
+    direccion: 'outbound' as const,
+    status: 'sent' as const,
+  };
+
+  if (contenido.modo === 'plantilla') {
+    const { messageId } = await sandboxMessagingProvider.sendTemplate('', '', '', [], '', '');
+    const render = await renderizarPlantillaDePrueba(tenantId, contenido.templateId, contenido.parametros);
+    return createScoped(Message, tenantId, {
+      ...base,
+      sender: 'bot',
+      tipo: 'plantilla',
+      ...(render.texto ? { texto: render.texto } : {}),
+      plantilla: {
+        templateId: new Types.ObjectId(contenido.templateId),
+        nombre: render.nombre,
+        idioma: render.idioma,
+        parametros: contenido.parametros,
+      },
+      metaMessageId: messageId,
+    } as Record<string, unknown>);
+  }
+
+  // `auto` y `texto`: en la prueba la ventana se da siempre por abierta, así que nunca cae a plantilla.
+  const { messageId } = await sandboxMessagingProvider.sendText('', contenido.texto, '', '');
+  return createScoped(Message, tenantId, {
+    ...base,
+    sender,
+    tipo: 'texto',
+    texto: contenido.texto,
+    metaMessageId: messageId,
+  } as Record<string, unknown>);
+}
+
+/**
  * Único punto del sistema donde se decide texto libre vs plantilla HSM según la ventana de 24 h
  * del cliente (`Cliente.ventana24hExpiraEn`). La bandeja (`sendMessage`), `HU-FLOW-02`
  * (recordatorios) y la futura épica de Remarketing la consumen; ninguna reimplementa la regla.
@@ -125,10 +178,15 @@ export async function sendOutbound(
   sender: Sender = 'agent',
   contexto: ContextoEnvio = {},
 ): Promise<IMessageDocument> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+
+  // HU-IA-08: la conversación de prueba no sale a Meta ni gasta cuota ni depende de la ventana.
+  // Va ANTES de la cuota a propósito: un tenant sin mensajes de plan debe poder seguir probando.
+  if (cliente?.esPrueba) return enviarEnPrueba(tenantId, clienteId, contenido, sender);
+
   // Cuota de mensajes (outbound): bloqueo duro antes de cualquier decisión. HU-SAAS-02.
   await assertWithinQuota(tenantId, 'mensajesMes');
 
-  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
   if (!cliente) throw new AppError('Cliente no encontrado.', 404);
 
   const now = new Date();

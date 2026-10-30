@@ -68,7 +68,7 @@ async function preparar(tenantId: string, clienteId: string): Promise<Preparacio
   if (env.TEMA_AUTO !== 'on') return null;
 
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
-  if (!cliente || PREFIJO_CLIENTE_DEMO.test(cliente.metaUserId)) return null;
+  if (!cliente || PREFIJO_CLIENTE_DEMO.test(cliente.metaUserId) || cliente.esPrueba) return null;
 
   // Sin productos en la KB no hay vocabulario: cualquier respuesta sería `otros`.
   const { productos, version } = await listarProductosKb(tenantId);

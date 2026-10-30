@@ -65,6 +65,8 @@ export type KnowledgeRetriever = (
 
 export interface AiChatParams {
   tenantId: Types.ObjectId;
+  /** HU-IA-08: la llamada nace de la conversación de prueba; se registra aparte en el uso de IA. */
+  esPrueba?: boolean;
   historial: ChatTurn[];
   tono?: string;
   instrucciones?: string;
@@ -72,6 +74,8 @@ export interface AiChatParams {
 
 export interface AiExtractParams {
   tenantId: Types.ObjectId;
+  /** HU-IA-08: la llamada nace de la conversación de prueba; se registra aparte en el uso de IA. */
+  esPrueba?: boolean;
   historial: ChatTurn[];
   schema: ZodSchema;
   camposObjetivo: SlotSpec[];
@@ -79,11 +83,15 @@ export interface AiExtractParams {
 
 export interface AiClassifyParams {
   tenantId: Types.ObjectId;
+  /** HU-IA-08: la llamada nace de la conversación de prueba; se registra aparte en el uso de IA. */
+  esPrueba?: boolean;
   historial: ChatTurn[];
 }
 
 export interface AiSummarizeParams {
   tenantId: Types.ObjectId;
+  /** HU-IA-08: la llamada nace de la conversación de prueba; se registra aparte en el uso de IA. */
+  esPrueba?: boolean;
   historial: ChatTurn[];
 }
 
@@ -97,6 +105,8 @@ export type ClassifyResult = ClassifyLeadOutput;
 /** HU-REP-03. `catalogoVersion` versiona la caché: editar la KB no reutiliza una respuesta vieja. */
 export interface AiClassifyTopicParams {
   tenantId: Types.ObjectId;
+  /** HU-IA-08: la llamada nace de la conversación de prueba; se registra aparte en el uso de IA. */
+  esPrueba?: boolean;
   historial: ChatTurn[];
   opciones: TopicOption[];
   catalogoVersion: string;

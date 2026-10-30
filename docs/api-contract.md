@@ -133,6 +133,11 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | POST | `/api/flows` | admin | Crea un flujo (`{ nombre, nodos, aristas, entrada, trigger?, activo? }`) → `201`. El grafo se valida completo en el borde (Zod `superRefine`): ids duplicados, nodo de entrada inexistente, aristas/`nodoDestino`/`ramaPorDefecto` a un id que no existe, o un nodo huérfano → `400`. `activo: true` desactiva el flujo activo anterior del tenant en la misma operación (HU-FLOW-01-V2). |
 | GET | `/api/flows/:id` | admin | Detalle completo del flujo (nodos + aristas). Flujo de otro tenant → `404`, nunca `403` (HU-FLOW-01-V2). |
 | PUT | `/api/flows/:id` | admin | Reemplaza el grafo completo y sube `version`; misma validación que `POST` y la misma exclusividad de `activo` (HU-FLOW-01-V2). `trigger` (HU-FLOW-04) es opcional en ambos y se devuelve siempre en la respuesta (`{ tipo: 'siempre' }` si el flujo no lo tiene); se evalúa solo al iniciar el flujo: si no se cumple, contesta Sofi. |
+| GET | `/api/sandbox/session` | admin | Abre (o recupera) la conversación de prueba del admin autenticado y devuelve `{ clienteId, flujo, flujoActivo, iaHabilitada, esperaPendiente, mensajes }`. Idempotente: una sola sesión por `(tenant, usuario)`. Ningún endpoint de `/api/sandbox` recibe un `clienteId` ni un `tenantId` (HU-IA-08). |
+| POST | `/api/sandbox/messages` | admin | `{ texto }` (1..4096, `.strict()`). Guarda el mensaje como entrante y lo procesa con la misma decisión que un WhatsApp → `202 { message }`; la respuesta de Sofi o del flujo llega por socket (`sandbox:message`, `sandbox:effect`) (HU-IA-08). |
+| PUT | `/api/sandbox/session` | admin | `{ flowId \| null }`: flujo a probar (cualquiera del tenant, incluso inactivo; `null` = el activo). Flujo ajeno o inexistente → `404`. Reinicia el estado del flujo y devuelve a Sofi la palabra (HU-IA-08). |
+| POST | `/api/sandbox/session/reset` | admin | Borra la conversación de prueba y todo lo que colgó de ella; devuelve una sesión nueva y vacía (HU-IA-08). |
+| POST | `/api/sandbox/session/advance-wait` | admin | «Avanzar ahora» en un nodo `espera` → `202`; sin espera pendiente `409`; sin sesión `404` (HU-IA-08). |
 | GET | `/api/flows/reminder` | admin | Configuración del recordatorio de inactividad del tenant: `{ activo, antelacionMinutos, texto, templateId }` (HU-FLOW-02). Registrada ANTES de `/:id` en el router — es una ruta literal, no un id. |
 | PUT | `/api/flows/reminder` | admin | Actualiza la configuración. `antelacionMinutos` entero 15–1440; `activo: true` sin `texto` → `422` (regla de coherencia). El `tenantId` nace del token, nunca de la URL — no existe un `/:id/reminder` de superadmin (HU-FLOW-02). |
 | GET/POST | `/api/catalog-items` | admin | Catálogo del tenant. |
@@ -180,7 +185,9 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
   HU-PIPE-01. Solo se emite en un cambio **efectivo** de etapa) y `campaign:progress` (room
   `tenant:<id>`: el historial de campañas es una vista compartida — HU-MARK-01. Se emite **una vez
   por lote**, no por destinatario: un envío de 10 000 produciría 10 000 eventos y lo único que la UI
-  necesita es la barra de progreso moviéndose).
+  necesita es la barra de progreso moviéndose). `sandbox:message` y `sandbox:effect` (HU-IA-08) van
+  **solo** al room `asesor:<ownerId>` del admin que prueba — nunca al `tenant:<id>`, donde escucha la
+  bandeja —: son la conversación de prueba y las tarjetas de lo que el sistema hizo en ella.
 
 
 ## 8. Acceso a los archivos de la conversación (HU-OMNI-06)

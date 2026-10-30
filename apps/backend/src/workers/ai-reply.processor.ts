@@ -80,7 +80,11 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
 
   let resultado: AiResult<string>;
   try {
-    resultado = await getAIService().chat({ tenantId: new Types.ObjectId(tenantId), historial });
+    resultado = await getAIService().chat({
+      tenantId: new Types.ObjectId(tenantId),
+      historial,
+      esPrueba: cliente.esPrueba === true,
+    });
   } catch (err: unknown) {
     // El cliente no puede quedarse esperando por un fallo nuestro. Se le avisa y la conversación
     // sube a la bandeja para que la recoja una persona. No se relanza: con `attempts: 1` BullMQ
@@ -93,7 +97,13 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
 
   // Punto 2: lo que solo se puede decidir con la respuesta delante (baja confianza, intención de
   // compra). Va aquí y no después de enviar: si hay handoff, lo que sale por WhatsApp cambia.
-  const posterior = await evaluarDespuesDeGenerar(handoff, tenantId, historial, resultado);
+  const posterior = await evaluarDespuesDeGenerar(
+    handoff,
+    tenantId,
+    historial,
+    resultado,
+    cliente.esPrueba === true,
+  );
   if (posterior.dispara) {
     await ejecutarHandoff(tenantId, clienteId, handoff, posterior, resultado.data);
     return historial;

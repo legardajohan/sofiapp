@@ -815,3 +815,31 @@ describe('AIService logUsage — aislamiento multi-tenant', () => {
     expect(templateB).toHaveLength(0);
   });
 });
+
+// ─── HU-IA-08: consumo de la conversación de prueba ───────────────────────────
+describe('AIService — consumo etiquetado de la conversación de prueba (HU-IA-08)', () => {
+  it('chat y extract con esPrueba:true registran el uso con esPrueba:true; sin él, false', async () => {
+    const tenantId = new Types.ObjectId();
+    await seedGlobalTemplate('chat');
+    await seedGlobalTemplate('extract');
+    const service = new AIService(makeProvider(), makeRedisMock());
+
+    await service.chat({ tenantId, historial: HISTORIAL, esPrueba: true });
+    await service.chat({ tenantId, historial: [{ role: 'user', content: 'otra pregunta' }] });
+    await service.extract({
+      tenantId,
+      historial: HISTORIAL,
+      schema: z.object({ nombre: z.string().optional() }),
+      camposObjetivo: [{ campo: 'nombre', tipo: 'texto', requerido: false, descripcion: 'Nombre' }],
+      esPrueba: true,
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    const logs = await findScoped(AiUsageLogModel, tenantId).lean<IAiUsageLog[]>().exec();
+    expect(logs).toHaveLength(3);
+    const deChat = logs.filter((l) => l.method === 'chat');
+    expect(deChat.filter((l) => l.esPrueba).length).toBe(1);
+    expect(deChat.filter((l) => !l.esPrueba).length).toBe(1);
+    expect(logs.find((l) => l.method === 'extract')?.esPrueba).toBe(true);
+  });
+});

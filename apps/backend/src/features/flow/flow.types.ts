@@ -179,6 +179,8 @@ export interface IFlowState {
    * y "el job diferido arranca" sin intentar cancelar el job de BullMQ.
    */
   esperaToken?: string | null;
+  /** HU-IA-08: cuándo vence la espera programada; la conversación de prueba lo muestra. */
+  esperaHasta?: Date | null;
   actualizadoAt: Date;
 }
 

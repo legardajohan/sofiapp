@@ -158,11 +158,21 @@ const ClienteSchema = new Schema<IClienteDocument>(
       ),
       required: false,
     },
+    // HU-IA-08 — conversación de prueba del admin. Ver `ICliente.esPrueba`.
+    esPrueba: { type: Boolean, default: false },
+    pruebaOwnerId: { type: Schema.Types.ObjectId, ref: 'User' },
+    pruebaFlowId: { type: Schema.Types.ObjectId, ref: 'Flow', default: null },
+    pruebaUltimaActividad: { type: Date },
   },
   { timestamps: true },
 );
 
 ClienteSchema.index({ tenantId: 1, metaUserId: 1 }, { unique: true });
+// Una sola sesión de prueba por admin. Parcial: los clientes reales no tienen `pruebaOwnerId`.
+ClienteSchema.index(
+  { tenantId: 1, pruebaOwnerId: 1 },
+  { unique: true, partialFilterExpression: { esPrueba: true } },
+);
 ClienteSchema.index({ tenantId: 1, estadoComercial: 1 });
 ClienteSchema.index({ tenantId: 1, ultimoMensajeAt: -1 });
 ClienteSchema.index({ tenantId: 1, asesorId: 1 });

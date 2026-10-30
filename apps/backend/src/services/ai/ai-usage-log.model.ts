@@ -11,6 +11,8 @@ export interface IAiUsageLog {
   /** Respuesta servida desde una FAQ, sin generación del modelo (HU-KB-02). */
   fromFaq: boolean;
   durationMs: number;
+  /** HU-IA-08: consumo del chat de prueba. Cuesta tokens reales, pero no es tráfico de clientes. */
+  esPrueba?: boolean;
   createdAt?: Date;
 }
 
@@ -27,6 +29,7 @@ const AiUsageLogSchema = new Schema<IAiUsageLogDocument>(
     cacheHit: { type: Boolean, required: true },
     fromFaq: { type: Boolean, required: true, default: false },
     durationMs: { type: Number, required: true },
+    esPrueba: { type: Boolean, default: false },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

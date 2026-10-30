@@ -14,6 +14,10 @@ export const FLOW_RESUME_JOB = 'resume';
 export const FLOW_REMINDER_JOB = 'reminder';
 export const REMINDER_SWEEP_JOB = 'sweep';
 export const REMINDER_SWEEP_SCHEDULER_ID = 'reminder-sweep';
+// HU-IA-08 — barrido diario de las conversaciones de prueba inactivas. Comparte la cola `flow-runtime`:
+// reacciona al paso del tiempo, igual que los recordatorios.
+export const SANDBOX_SWEEP_JOB = 'sandbox-sweep';
+export const SANDBOX_SWEEP_SCHEDULER_ID = 'sandbox-sweep';
 
 // HU-MARK-01 — difusión de campañas. El nombre de la cola es el que `apps/backend/CLAUDE.md` y
 // `docs/architecture.md` ya tenían reservado, y el que ocupaba el worker placeholder de `worker.ts`.

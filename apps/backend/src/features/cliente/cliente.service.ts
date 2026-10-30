@@ -609,6 +609,7 @@ export async function ejecutarExtraccion(
     tenantId: new Types.ObjectId(tenantId),
     historial,
     camposObjetivo: DATOS_CONTACTO_SLOTS,
+    esPrueba: cliente.esPrueba === true,
     schema: datosExtraidosSchema,
   });
 
