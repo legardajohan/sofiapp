@@ -122,6 +122,7 @@ describe('HU-MARK-01 — contrato HTTP de /api/campaigns', () => {
     expect(res.body.resumen).toEqual({
       coinciden: 1,
       bajas: 0,
+      bloqueados: 0,
       excluidosAMano: 0,
       duplicados: 0,
       validos: 1,

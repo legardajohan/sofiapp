@@ -157,6 +157,7 @@ describe('Constructor de audiencias — etapas, etiquetas, exclusiones y duplica
     expect(resumen).toEqual({
       coinciden: 4, // Ana, Ana (repetida), Carla, Baja
       bajas: 1,
+      bloqueados: 0,
       excluidosAMano: 1,
       duplicados: 1, // las dos fichas de Ana comparten teléfono
       validos: 1,

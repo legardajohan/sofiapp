@@ -730,6 +730,19 @@ export async function listLeads(
     return { data: [], page, limit, total: 0 };
   }
 
+  // Etiqueta (HU-MARK-07): vive en el contacto, no en el lead, así que se resuelve con un salto
+  // previo por `Cliente.tagIds` (índice `{ tenantId, tagIds }`). Un `tagId` de otra empresa no casa
+  // con ningún contacto de esta, y el listado sale vacío por construcción.
+  if (query.etiqueta) {
+    const clientes = await findScoped(Cliente, tenantId, {
+      tagIds: new Types.ObjectId(query.etiqueta),
+    })
+      .select({ _id: 1 })
+      .lean<{ _id: Types.ObjectId }[]>();
+    if (clientes.length === 0) return { data: [], page, limit, total: 0 };
+    filter.clienteId = { $in: clientes.map((c) => c._id) };
+  }
+
   const [leads, total] = await Promise.all([
     findScoped(Lead, tenantId, filter)
       .sort({ createdAt: -1 })

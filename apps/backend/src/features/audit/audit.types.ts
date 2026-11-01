@@ -27,6 +27,7 @@ export type AuditAccion =
   // reconstruirse meses después.
   | 'campaign.create'
   | 'campaign.launch'
+  | 'campaign.send'
   | 'campaign.pause'
   | 'campaign.resume'
   | 'campaign.cancel'

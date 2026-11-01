@@ -8,6 +8,7 @@ import {
   INTENCIONES_COMPRA,
   MAX_EXCLUSIONES_SEGMENTO,
 } from './campaign.types.js';
+import { TAG_NOMBRE_MAX } from '../tag/tag.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
@@ -96,11 +97,70 @@ export const audienciaSegmentoSchema = z.object({
  * arranque a la vez, y elegir uno por él sería adivinar. `programadaPara` en el pasado también es
  * un `400`: casi siempre es un error de zona horaria, y arrancar "ya" no es lo que se pidió.
  */
+// ─── HU-MARK-07 — audiencia por mensajes recientes ─────────────────────────────
+
+/**
+ * Día de calendario `YYYY-MM-DD`. Solo la **forma**: si es futuro o si el rango excede el máximo
+ * depende de la zona del tenant, que Zod no conoce, y lo decide `resolverRangoAudiencia`.
+ */
+const ymd = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha con formato AAAA-MM-DD.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'Fecha inválida.');
+
+/** Discriminada por `rango`: un `custom` sin fechas responde con la ruta exacta del campo que falta. */
+export const audienciaRecienteSchema = z.discriminatedUnion('rango', [
+  z.object({ tipo: z.literal('mensajes_recientes'), rango: z.literal('1d') }).strict(),
+  z.object({ tipo: z.literal('mensajes_recientes'), rango: z.literal('3d') }).strict(),
+  z.object({ tipo: z.literal('mensajes_recientes'), rango: z.literal('7d') }).strict(),
+  z
+    .object({
+      tipo: z.literal('mensajes_recientes'),
+      rango: z.literal('custom'),
+      desde: ymd,
+      hasta: ymd,
+    })
+    .strict(),
+]);
+
+const audienciaSchema = z.union([
+  z.object({ tipo: z.literal('segmento') }).strict(),
+  audienciaRecienteSchema,
+]);
+
+export const previewAudienciaSchema = z.object({
+  body: z.object({ audiencia: audienciaRecienteSchema }).strict(),
+  params: empty,
+  query: empty,
+});
+
+/** `tagId` (una existente) **o** `nombre` (nueva, o reutiliza la del mismo nombre). Nunca las dos. */
+const etiquetaEnvio = z.union([
+  z.object({ tagId: objectId }).strict(),
+  z
+    .object({
+      nombre: z
+        .string()
+        .trim()
+        .min(1, 'El nombre de la etiqueta no puede estar vacío.')
+        .max(TAG_NOMBRE_MAX, `El nombre no puede superar los ${TAG_NOMBRE_MAX} caracteres.`),
+    })
+    .strict(),
+]);
+
+export const sendCampaignSchema = z.object({
+  body: z.object({ etiqueta: etiquetaEnvio.optional() }).strict(),
+  params: z.object({ id: objectId }),
+  query: empty,
+});
+
 export const createCampaignSchema = z.object({
   body: z
     .object({
       nombre: z.string().trim().min(1, 'El nombre es obligatorio.').max(120),
-      filtros: segmentoFiltros,
+      // Vacío en una audiencia por fechas (HU-MARK-07): no se combinan con los filtros.
+      filtros: segmentoFiltros.default({}),
+      audiencia: audienciaSchema.optional(),
       templateId: objectId,
       parametros: z.array(z.string().max(1000)).max(20).default([]),
       parametrosDinamicos: parametrosDinamicos.optional(),
@@ -277,6 +337,8 @@ export const campaignsOverviewSchema = z.object({
 export type PreviewSegmentoBody = z.infer<typeof previewSegmentoSchema>['body'];
 export type AudienciaSegmentoBody = z.infer<typeof audienciaSegmentoSchema>['body'];
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>['body'];
+export type PreviewAudienciaBody = z.infer<typeof previewAudienciaSchema>['body'];
+export type SendCampaignBody = z.infer<typeof sendCampaignSchema>['body'];
 export type ListCampaignsQuery = z.infer<typeof listCampaignsSchema>['query'];
 export type ListRecipientsQuery = z.infer<typeof listRecipientsSchema>['query'];
 export type ScheduleCampaignBody = z.infer<typeof scheduleCampaignSchema>['body'];

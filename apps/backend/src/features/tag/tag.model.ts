@@ -1,12 +1,15 @@
 import { Schema, model } from 'mongoose';
-import { SEMAFORO_SLUGS, type ITagDocument } from './tag.types.js';
+import { ORIGENES_TAG, SEMAFORO_SLUGS, TAG_NOMBRE_MAX, type ITagDocument } from './tag.types.js';
 
 const TagSchema = new Schema<ITagDocument>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
-    nombre: { type: String, required: true, trim: true, maxlength: 30 },
+    nombre: { type: String, required: true, trim: true, maxlength: TAG_NOMBRE_MAX },
     color: { type: String, required: true },
     semaforo: { type: String, enum: SEMAFORO_SLUGS },
+    // HU-MARK-07. Default para las etiquetas de siempre, que las crea una persona.
+    origen: { type: String, enum: ORIGENES_TAG, default: 'manual' },
+    campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', default: null },
   },
   { timestamps: true },
 );

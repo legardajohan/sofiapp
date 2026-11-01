@@ -9,6 +9,16 @@ export type SemaforoSlug = 'azul' | 'rojo' | 'naranja' | 'verde';
 
 export const SEMAFORO_SLUGS: readonly SemaforoSlug[] = ['azul', 'rojo', 'naranja', 'verde'];
 
+/**
+ * De dónde salió la etiqueta (HU-MARK-07). `campana` = la generó el envío de una campaña para
+ * marcar a sus destinatarios; `manual` = la creó una persona. Es informativo: ambas se usan igual.
+ */
+export const ORIGENES_TAG = ['manual', 'campana'] as const;
+export type OrigenTag = (typeof ORIGENES_TAG)[number];
+
+/** Tope del nombre. 60 y no 30: `Campaña {nombre} - {fecha}` no cabía (HU-MARK-07). */
+export const TAG_NOMBRE_MAX = 60;
+
 export interface ITag {
   tenantId: Types.ObjectId;
   nombre: string;
@@ -16,6 +26,10 @@ export interface ITag {
   color: string;
   /** Presente solo en las cuatro etiquetas sembradas; `undefined` en las creadas por el usuario. */
   semaforo?: SemaforoSlug;
+  /** Ausente en las etiquetas anteriores a HU-MARK-07: se leen como `manual`. */
+  origen?: OrigenTag;
+  /** Campaña que la generó, si `origen === 'campana'`. */
+  campaignId?: Types.ObjectId | null;
 }
 
 export interface ITagDocument extends ITag, Document {}
@@ -35,4 +49,6 @@ export interface ITagResponse {
   nombre: string;
   color: string;
   semaforo: SemaforoSlug | null;
+  origen: OrigenTag;
+  campaignId: string | null;
 }

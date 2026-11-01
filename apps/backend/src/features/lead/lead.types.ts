@@ -131,6 +131,8 @@ export interface ListLeadsQuery {
   estado?: string;
   asesor?: string;
   semaforo?: string;
+  /** `tagId` (HU-MARK-07): leads cuyo contacto lleva esa etiqueta. Otro tenant / inexistente → vacío. */
+  etiqueta?: string;
   desde?: Date;
   hasta?: Date;
 }
