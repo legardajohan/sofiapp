@@ -24,6 +24,10 @@ export interface ContactPatchPayload {
   objecionPrincipal?: string | null;
   rolContacto?: string | null;
   atributos?: AtributoInput[];
+  /** HU-MARK-01. */
+  marketingOptOut?: boolean;
+  /** HU-MARK-07. */
+  bloqueado?: boolean;
 }
 
 // ─── Catálogos de interés / objeción / rol (HU-CRM-02) ──────────────────────────

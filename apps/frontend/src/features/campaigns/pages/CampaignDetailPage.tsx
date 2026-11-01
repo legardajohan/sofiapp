@@ -29,6 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiUrl } from '@/api/apiClient';
+import { CampaignAudienceSummary } from '../components/CampaignAudienceSummary.js';
 import { CampaignMetricsPanel } from '../components/CampaignMetricsPanel.js';
 import { CampaignProgress } from '../components/CampaignProgress.js';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
@@ -172,6 +173,8 @@ export function CampaignDetailPage(): React.ReactElement {
           ) : null}
         </div>
       </header>
+
+      <CampaignAudienceSummary campana={campana} />
 
       <section className="rounded-lg border border-border bg-card p-5">
         <CampaignProgress campana={campana} />

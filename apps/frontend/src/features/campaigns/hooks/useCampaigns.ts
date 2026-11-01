@@ -22,6 +22,7 @@ import {
   fetchSegmentFacetas,
   launchCampaign,
   pauseCampaign,
+  previewAudiencia,
   previewSegmento,
   rescheduleCampaign,
   resumeCampaign,
@@ -29,6 +30,8 @@ import {
 } from '../api.js';
 import type {
   AudienciaContactoDTO,
+  AudiencePreviewDTO,
+  AudienciaRecienteInput,
   CampaignDTO,
   CampaignDetalleDTO,
   CampaignMetricsDTO,
@@ -141,6 +144,24 @@ export function useSegmentPreview(
 }
 
 /** Cuántos contactos hay por etapa y etiqueta. Cambia despacio: un minuto de caché sobra. */
+/**
+ * Vista previa de la audiencia por mensajes recientes (HU-MARK-07). `null` = todavía no hay un
+ * rango completo (p. ej. personalizado sin la fecha de fin): no se pregunta nada al servidor.
+ */
+export function useAudiencePreview(
+  audiencia: AudienciaRecienteInput | null,
+  enabled: boolean,
+): UseQueryResult<AudiencePreviewDTO> {
+  return useQuery({
+    queryKey: ['campaign-audience', audiencia],
+    queryFn: () => previewAudiencia(audiencia!),
+    enabled: enabled && audiencia !== null,
+    placeholderData: keepPreviousData,
+    // El rango rodante se mueve con el reloj: una cifra de hace un minuto ya no es "las últimas 24 h".
+    staleTime: 30_000,
+  });
+}
+
 export function useSegmentFacetas(enabled: boolean): UseQueryResult<SegmentFacetasDTO> {
   return useQuery({
     queryKey: ['campaign-segment', 'facetas'],

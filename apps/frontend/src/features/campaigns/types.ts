@@ -62,10 +62,12 @@ export type CombinacionSegmento = 'y' | 'o';
 /** Tope de exclusiones a mano que acepta el backend. */
 export const MAX_EXCLUSIONES = 1000;
 
-/** De dónde sale el total: `coinciden = validos + bajas + excluidosAMano + duplicados`. */
+/** De dónde sale el total: `coinciden = validos + bajas + bloqueados + excluidosAMano + duplicados`. */
 export interface ResumenSegmentoDTO {
   coinciden: number;
   bajas: number;
+  /** HU-MARK-07. Opcional: backend anterior. */
+  bloqueados?: number;
   excluidosAMano: number;
   duplicados: number;
   validos: number;
@@ -105,6 +107,36 @@ export interface SegmentPreviewDTO {
   resumen?: ResumenSegmentoDTO;
   presupuesto: PresupuestoDTO;
 }
+
+// ─── HU-MARK-07 — audiencia por mensajes recientes ─────────────────────────────
+
+export const RANGOS_AUDIENCIA = ['1d', '3d', '7d', 'custom'] as const;
+export type RangoAudiencia = (typeof RANGOS_AUDIENCIA)[number];
+export type TipoAudiencia = 'segmento' | 'mensajes_recientes';
+
+/** Lo que se manda al backend. `desde`/`hasta` son días `YYYY-MM-DD`, solo en `custom`. */
+export type AudienciaRecienteInput =
+  | { tipo: 'mensajes_recientes'; rango: Exclude<RangoAudiencia, 'custom'> }
+  | { tipo: 'mensajes_recientes'; rango: 'custom'; desde: string; hasta: string };
+
+export type AudienciaInput = { tipo: 'segmento' } | AudienciaRecienteInput;
+
+export interface AudiencePreviewDTO extends SegmentPreviewDTO {
+  /** El rango resuelto por el servidor en la zona del tenant. El cliente no recalcula fechas. */
+  rango: { desde: string; hasta: string; zonaHoraria: string };
+}
+
+/** Filtro aplicado que guarda la campaña (trazabilidad). */
+export interface AudienciaCampanaDTO {
+  tipo: TipoAudiencia;
+  rango: RangoAudiencia | null;
+  desde: string | null;
+  hasta: string | null;
+  zonaHoraria: string | null;
+}
+
+/** Etiqueta al enviar: una existente o un nombre (nueva, o reutiliza la del mismo nombre). */
+export type EtiquetaEnvio = { tagId: string } | { nombre: string };
 
 export interface TotalesCampana {
   destinatarios: number;
@@ -154,6 +186,9 @@ export interface CampaignDTO {
   iniciadaAt: string | null;
   finalizadaAt: string | null;
   motivo: string | null;
+  /** HU-MARK-07. Opcionales: backend anterior. */
+  audiencia?: AudienciaCampanaDTO;
+  etiqueta?: { id: string; nombre: string; color: string } | null;
   createdAt: string;
 }
 
@@ -191,6 +226,13 @@ export interface CreateCampaignPayload {
    * `POST /campaigns/media` y manda su `imagenHeaderUploadId`. Sin ella, la imagen por defecto.
    */
   imagen?: File | null;
+  /** HU-MARK-07. Sin ella, audiencia por filtros. */
+  audiencia?: AudienciaInput;
+  /**
+   * HU-MARK-07. Solo con `lanzar`: la campaña se crea y se envía con `POST /:id/send`, que le pone
+   * esta etiqueta a cada destinatario enviado con éxito.
+   */
+  etiqueta?: EtiquetaEnvio;
 }
 
 /** Programar una campaña (HU-MARK-03). Viaja como multipart: la imagen es un archivo aparte. */

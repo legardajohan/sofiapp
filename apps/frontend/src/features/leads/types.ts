@@ -89,6 +89,8 @@ export interface LeadsFiltros {
   asesor?: string;
   /** `key` de un semáforo del catálogo del tenant, ya no un slug cerrado. */
   semaforo?: string;
+  /** `tagId` (HU-MARK-07): leads cuyo contacto lleva esa etiqueta, p. ej. la de una campaña. */
+  etiqueta?: string;
   /** `YYYY-MM-DD`, tal cual lo produce un `<input type="date">`. */
   desde?: string;
   hasta?: string;
