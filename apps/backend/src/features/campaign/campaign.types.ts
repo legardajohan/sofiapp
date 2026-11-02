@@ -310,12 +310,14 @@ export interface CreateCampaignDTO {
   parametrosDinamicos?: IParametroDinamico[];
   /** `true` = crear y arrancar en la misma petición. Incompatible con `programadaPara`. */
   lanzar?: boolean;
-  /** ISO-8601. Deja la campaña en `programada`; la levanta el barrido al llegar la hora. */
+  /** ISO-8601, al menos un minuto en el futuro. Deja la campaña en `programada` y encola su arranque. */
   programadaPara?: string;
   /** HT-WA-04: imagen de reemplazo (`POST /campaigns/media`). Sin ella, la de la plantilla. */
   imagenHeaderUploadId?: string;
   /** HU-MARK-07. Ausente = `{ tipo: 'segmento' }`. */
   audiencia?: AudienciaInputDTO;
+  /** HU-MARK-07. Etiqueta para los enviados con éxito, al lanzar ahora o a la hora programada. */
+  etiqueta?: EtiquetaEnvioDTO;
 }
 
 /** Alta de una campaña programada (HU-MARK-03). La imagen llega aparte, como archivo multipart. */

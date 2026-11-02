@@ -229,8 +229,8 @@ export interface CreateCampaignPayload {
   /** HU-MARK-07. Sin ella, audiencia por filtros. */
   audiencia?: AudienciaInput;
   /**
-   * HU-MARK-07. Solo con `lanzar`: la campaña se crea y se envía con `POST /:id/send`, que le pone
-   * esta etiqueta a cada destinatario enviado con éxito.
+   * HU-MARK-07. Con `lanzar` o `programadaPara`: se le pone a cada destinatario enviado con éxito,
+   * ahora o cuando la campaña arranque a su hora.
    */
   etiqueta?: EtiquetaEnvio;
 }

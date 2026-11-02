@@ -27,6 +27,7 @@ import {
   rescheduleCampaign,
   resumeCampaign,
   scheduleCampaign,
+  sendCampaign,
 } from '../api.js';
 import type {
   AudienciaContactoDTO,
@@ -38,6 +39,7 @@ import type {
   CampaignsOverviewDTO,
   CampaignRecipientDTO,
   CreateCampaignPayload,
+  EtiquetaEnvio,
   EstadoCampana,
   EstadoDestinatario,
   PagedDTO,
@@ -284,6 +286,24 @@ export const useLaunchCampaign = (): UseMutationResult<CampaignDTO, unknown, str
     (c) => `«${c.nombre}» empezó a enviarse`,
     'No se pudo lanzar la campaña.',
   );
+
+/** HU-MARK-07 — lanza un borrador y, si se eligió, etiqueta a quienes lo reciban con éxito. */
+export function useSendCampaign(): UseMutationResult<
+  CampaignDTO,
+  unknown,
+  { id: string; etiqueta?: EtiquetaEnvio }
+> {
+  const invalidar = useInvalidarCampanas();
+  return useMutation({
+    mutationFn: ({ id, etiqueta }: { id: string; etiqueta?: EtiquetaEnvio }) =>
+      sendCampaign(id, etiqueta),
+    onSuccess: (campana) => {
+      invalidar();
+      toast.success(`«${campana.nombre}» empezó a enviarse`);
+    },
+    onError: (error) => toast.error(motivo(error, 'No se pudo lanzar la campaña.')),
+  });
+}
 
 export const usePauseCampaign = (): UseMutationResult<CampaignDTO, unknown, string> =>
   useTransicion(pauseCampaign, (c) => `«${c.nombre}» está en pausa`, 'No se pudo pausar la campaña.');

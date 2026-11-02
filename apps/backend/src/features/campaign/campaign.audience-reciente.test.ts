@@ -26,6 +26,7 @@ vi.mock('../../integrations/meta/meta-phone-number.client.js', () => ({
   },
 }));
 
+import { CAMPAIGN_SCHEDULED_START_JOB, campaignQueue } from '../../config/queues.js';
 import { createCampaign, getCampaign, previewAudience, sendCampaign } from './campaign.service.js';
 import type { LeanCampaign } from './campaign.types.js';
 
@@ -321,6 +322,72 @@ describe('HU-MARK-07 — audiencia por mensajes recientes', () => {
       });
       expect(detalle.audiencia.desde).not.toBeNull();
       expect(detalle.etiqueta?.nombre).toBe('Detalle');
+    });
+  });
+
+  describe('programar o lanzar con etiqueta al crear', () => {
+    const enUnaHora = (): string => new Date(Date.now() + 3_600_000).toISOString();
+
+    beforeEach(async () => {
+      const ana = await contacto({ nombre: 'Ana', telefono: '573000000001' });
+      await mensaje(ana, 'outbound', 1);
+      vi.mocked(campaignQueue.add).mockClear();
+    });
+
+    it('programada: guarda la etiqueta, encola el arranque exacto y no materializa todavía', async () => {
+      const programadaPara = enUnaHora();
+      const r = await createCampaign(tenantId, actorId, {
+        nombre: 'Seguimiento',
+        filtros: {},
+        templateId,
+        parametros: [],
+        audiencia: { tipo: 'mensajes_recientes', rango: '1d' },
+        programadaPara,
+        etiqueta: { nombre: 'Seguimiento noviembre' },
+      });
+
+      expect(r).toMatchObject({ estado: 'programada', programadaPara });
+      expect(r.etiqueta?.nombre).toBe('Seguimiento noviembre');
+      const tag = await Tag.findOne({ tenantId }).lean();
+      expect(String(tag?.campaignId)).toBe(r.id);
+      expect(await CampaignRecipient.countDocuments({ tenantId })).toBe(0);
+
+      const llamadas = vi.mocked(campaignQueue.add).mock.calls;
+      expect(llamadas).toHaveLength(1);
+      expect(llamadas[0]?.[0]).toBe(CAMPAIGN_SCHEDULED_START_JOB);
+      expect(llamadas[0]?.[1]).toMatchObject({ campaignId: r.id, programadaParaMs: Date.parse(programadaPara) });
+    });
+
+    it('un tagId inexistente responde 404 sin crear la campaña', async () => {
+      await expect(
+        createCampaign(tenantId, actorId, {
+          nombre: 'Seguimiento',
+          filtros: {},
+          templateId,
+          parametros: [],
+          audiencia: { tipo: 'mensajes_recientes', rango: '1d' },
+          programadaPara: enUnaHora(),
+          etiqueta: { tagId: new Types.ObjectId().toString() },
+        }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(await Campaign.countDocuments({ tenantId })).toBe(0);
+      expect(campaignQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('lanzar ahora con etiqueta en la misma petición la deja en curso y etiquetada', async () => {
+      const r = await createCampaign(tenantId, actorId, {
+        nombre: 'Seguimiento',
+        filtros: {},
+        templateId,
+        parametros: [],
+        audiencia: { tipo: 'mensajes_recientes', rango: '1d' },
+        lanzar: true,
+        etiqueta: { nombre: 'Ya' },
+      });
+
+      expect(r.estado).toBe('en_curso');
+      expect(r.etiqueta?.nombre).toBe('Ya');
+      expect(await CampaignRecipient.countDocuments({ tenantId, campaignId: r.id })).toBe(1);
     });
   });
 });

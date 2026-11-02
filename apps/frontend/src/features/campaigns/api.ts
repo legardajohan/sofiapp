@@ -107,15 +107,15 @@ export async function createCampaign({
   ...payload
 }: CreateCampaignPayload): Promise<CampaignDTO> {
   const imagenHeaderUploadId = imagen ? (await uploadHeaderImage(imagen)).uploadId : undefined;
-  // Con etiqueta (HU-MARK-07) el lanzamiento va por `/send`: primero se crea en borrador —así el
-  // rango queda congelado— y luego se envía con la etiqueta. Sin ella, el camino de siempre.
-  const conEtiqueta = Boolean(payload.lanzar && etiqueta);
+  // HU-MARK-07: la etiqueta viaja en el alta, tanto si se lanza ya como si queda programada. Un
+  // borrador no la lleva: se elige al enviarlo.
+  const conEtiqueta = Boolean((payload.lanzar || payload.programadaPara) && etiqueta);
   const { data } = await apiClient.post<CampaignDTO>('/campaigns', {
     ...payload,
-    ...(conEtiqueta ? { lanzar: undefined } : {}),
+    ...(conEtiqueta ? { etiqueta } : {}),
     ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
   });
-  return conEtiqueta ? sendCampaign(data.id, etiqueta) : data;
+  return data;
 }
 
 /**

@@ -68,6 +68,7 @@ import type {
   IAudienciaCampana,
   IAudiencePreviewResponse,
   SendCampaignDTO,
+  EtiquetaEnvioDTO,
   IImagenCampana,
   IImagenCampanaResponse,
   IImagenSubida,
@@ -343,7 +344,16 @@ export async function createCampaign(
     ? (await previewMensajesRecientes(tenantId, rangoCongelado(audiencia))).total
     : 0;
 
+  // El id va antes que el documento: una etiqueta nueva nace apuntando a su campaña. Se resuelve
+  // antes de crear para que un `tagId` ajeno sea un 404 sin dejar una campaña a medias.
+  const campaignId = new Types.ObjectId();
+  const tagId = dto.etiqueta
+    ? await resolverEtiquetaEnvio(tenantId, campaignId.toString(), dto.etiqueta)
+    : null;
+  const programadaPara = dto.programadaPara ? new Date(dto.programadaPara) : null;
+
   const creada = await createScoped(Campaign, tenantId, {
+    _id: campaignId,
     nombre: dto.nombre,
     // Una audiencia por fechas no segmenta: los filtros se guardan vacíos para que nadie los mezcle.
     filtros: esReciente ? {} : dto.filtros,
@@ -353,12 +363,16 @@ export async function createCampaign(
     parametros: dto.parametros,
     contenido: { imagen: reemplazo ? aImagenAlmacenada(reemplazo) : null },
     parametrosDinamicos,
-    estado: dto.programadaPara ? 'programada' : 'borrador',
-    programadaPara: dto.programadaPara ? new Date(dto.programadaPara) : null,
+    tagId,
+    estado: programadaPara ? 'programada' : 'borrador',
+    programadaPara,
     creadaPor: new Types.ObjectId(actorId),
   });
 
   const campana = creada.toObject() as LeanCampaign;
+
+  // Arranque exacto a la hora elegida; el barrido de 60 s queda de red de seguridad.
+  if (programadaPara) await encolarArranque(tenantId.toString(), campaignId.toString(), programadaPara);
 
   await recordAuditEvent(tenantId, {
     actorId,
@@ -366,7 +380,12 @@ export async function createCampaign(
     entidad: 'campaign',
     entidadId: campana._id.toString(),
     antes: {},
-    despues: { nombre: campana.nombre, estado: campana.estado },
+    despues: {
+      nombre: campana.nombre,
+      estado: campana.estado,
+      programadaPara: programadaPara ? programadaPara.toISOString() : null,
+      tagId: tagId ? tagId.toString() : null,
+    },
   });
 
   if (dto.lanzar) return launchCampaign(tenantId, actorId, campana._id.toString());
@@ -556,6 +575,25 @@ export async function launchCampaign(
  * `launchCampaign` tal cual: aquí solo se resuelve la etiqueta antes. Si el lanzamiento falla, una
  * etiqueta recién creada se conserva vacía; reintentar con el mismo nombre la reutiliza.
  */
+/**
+ * La etiqueta elegida al enviar o programar (HU-MARK-07): una existente por `tagId`, o una por
+ * nombre que se crea con `origen: 'campana'` (o se reutiliza si ya hay una que se llama igual).
+ */
+async function resolverEtiquetaEnvio(
+  tenantId: TenantId,
+  campaignId: string,
+  etiqueta: EtiquetaEnvioDTO,
+): Promise<Types.ObjectId> {
+  if ('tagId' in etiqueta) {
+    // De otro tenant o inexistente: 404 sin escribir nada (criterio 13).
+    const tag = await findTagById(tenantId, etiqueta.tagId);
+    if (!tag) throw new AppError('Etiqueta no encontrada.', 404);
+    return new Types.ObjectId(tag.id);
+  }
+  const tag = await findOrCreateTagPorNombre(tenantId, etiqueta.nombre, 'campana', campaignId);
+  return new Types.ObjectId(tag.id);
+}
+
 export async function sendCampaign(
   tenantId: TenantId,
   actorId: string,
@@ -569,23 +607,9 @@ export async function sendCampaign(
     return responder(tenantId, campana);
   }
 
-  let tagId: Types.ObjectId | null = campana.tagId ?? null;
-  if (dto.etiqueta) {
-    if ('tagId' in dto.etiqueta) {
-      // De otro tenant o inexistente: 404 sin escribir nada (criterio 13).
-      const tag = await findTagById(tenantId, dto.etiqueta.tagId);
-      if (!tag) throw new AppError('Etiqueta no encontrada.', 404);
-      tagId = new Types.ObjectId(tag.id);
-    } else {
-      const tag = await findOrCreateTagPorNombre(
-        tenantId,
-        dto.etiqueta.nombre,
-        'campana',
-        campana._id.toString(),
-      );
-      tagId = new Types.ObjectId(tag.id);
-    }
-  }
+  const tagId = dto.etiqueta
+    ? await resolverEtiquetaEnvio(tenantId, campana._id.toString(), dto.etiqueta)
+    : (campana.tagId ?? null);
 
   if (tagId && String(tagId) !== String(campana.tagId ?? '')) {
     await findOneAndUpdateScoped(Campaign, tenantId, { _id: campana._id }, { $set: { tagId } });

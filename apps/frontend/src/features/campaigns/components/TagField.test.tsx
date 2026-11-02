@@ -49,20 +49,35 @@ describe('HU-MARK-07 — TagField', () => {
     expect(screen.getByText('Se creará al enviar la campaña.')).toBeInTheDocument();
   });
 
-  it('«Usar una existente» lista las de /etiquetas (sin las de semáforo) y permite elegir una', async () => {
+  it('«Usar una existente» lista TODAS las de /etiquetas, también las de semáforo, y permite elegir una', async () => {
     const user = userEvent.setup();
     render(<Arnes inicial={{ modo: 'nueva', nombre: 'x' }} />);
 
-    await user.click(screen.getByRole('radio', { name: 'Usar una existente' }));
+    await user.click(screen.getByRole('radio', { name: /^Usar una existente/ }));
     // Sin elegir todavía: no hay nada válido que enviar.
     expect(envio()).toBeNull();
 
     expect(screen.getByRole('option', { name: /Seguimiento octubre/ })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Feria 2026/ })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /Rojo/ })).not.toBeInTheDocument();
+    // Las de semaforización también, en su propio grupo.
+    expect(screen.getByRole('option', { name: /Rojo/ })).toBeInTheDocument();
+    expect(screen.getByText('Tus etiquetas')).toBeInTheDocument();
+    expect(screen.getByText('Semaforización')).toBeInTheDocument();
 
     await user.click(screen.getByRole('option', { name: /Feria 2026/ }));
     expect(envio()).toEqual({ tagId: 't3' });
+
+    await user.click(screen.getByRole('option', { name: /Rojo/ }));
+    expect(envio()).toEqual({ tagId: 't2' });
+    expect(screen.getByText(/Es de semaforización/)).toBeInTheDocument();
+  });
+
+  it('al crear con el nombre de una de semáforo también avisa que se usará esa', async () => {
+    const user = userEvent.setup();
+    render(<Arnes inicial={{ modo: 'nueva', nombre: '' }} />);
+
+    await user.type(screen.getByLabelText('Nombre de la etiqueta'), 'rojo');
+    expect(screen.getByText(/Ya existe y se usará esa/)).toBeInTheDocument();
   });
 
   it('el buscador filtra la lista sin importar mayúsculas ni acentos', async () => {

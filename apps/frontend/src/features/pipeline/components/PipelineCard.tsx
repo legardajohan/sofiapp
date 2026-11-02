@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { initials } from '../../inbox/lib/format.js';
 import { fechaCorta, fechaLarga } from '../../leads/lib/format.js';
 import type { LeadListItemDTO } from '../../leads/types.js';
+import { LeadEtiquetas } from '../../leads/components/LeadEtiquetas.js';
 
 interface Props {
   lead: LeadListItemDTO;
@@ -71,6 +72,10 @@ function Contenido({ lead }: { lead: LeadListItemDTO }): React.ReactElement {
           </span>
         )}
       </div>
+
+      {lead.etiquetas && lead.etiquetas.length > 0 ? (
+        <LeadEtiquetas etiquetas={lead.etiquetas} max={2} />
+      ) : null}
     </>
   );
 }

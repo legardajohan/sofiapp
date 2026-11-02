@@ -1,5 +1,19 @@
 import type { ResumenDTO } from '../inbox/types.js';
 import type { SemaforoDTO } from '../semaforos/types.js';
+import type { TagDTO } from '../tags/types.js';
+import type { EstadoDestinatario } from '../campaigns/types.js';
+
+/**
+ * Una campaña tal como la recibió el contacto del lead (HU-MARK-07). `estado` es el de SU envío;
+ * `etiqueta`, la que le dejó la campaña (solo si le llegó).
+ */
+export interface LeadCampanaDTO {
+  id: string;
+  nombre: string;
+  estado: EstadoDestinatario;
+  enviadoAt: string | null;
+  etiqueta: { id: string; nombre: string; color: string } | null;
+}
 
 /** Referencia ya resuelta por el backend: la tarjeta pinta nombres, nunca ids. */
 export interface RefDTO {
@@ -27,6 +41,10 @@ export interface LeadDTO {
     convertidoPor: RefDTO | null;
     convertidoAt: string;
   };
+  /** HU-MARK-07: etiquetas del contacto, incluidas las de campaña. Opcional: backend anterior. */
+  etiquetas?: TagDTO[];
+  /** HU-MARK-07: campañas que recibió, de la más reciente a la más antigua. */
+  campanas?: LeadCampanaDTO[];
   createdAt: string;
 }
 
@@ -77,6 +95,11 @@ export interface LeadListItemDTO {
    */
   semaforo: SemaforoDTO | null;
   resumen: ResumenDTO | null;
+  /**
+   * HU-MARK-07: etiquetas del contacto —las puestas a mano y las que dejaron las campañas—.
+   * Opcional: un backend anterior no la manda.
+   */
+  etiquetas?: TagDTO[];
   ultimoMensajeAt: string | null;
   createdAt: string;
 }

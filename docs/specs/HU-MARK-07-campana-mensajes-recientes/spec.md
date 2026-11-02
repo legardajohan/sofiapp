@@ -173,10 +173,27 @@ horas (el pacing de MARK-01 puede repartir un envío en varios días), y un fall
 etiquetar a gente que sí recibió el mensaje. Etiquetar en el mismo paso que marca `enviado` hace que
 "tiene la etiqueta" y "se le envió" sean siempre lo mismo.
 
+## Ampliaciones pedidas durante la implementación
+
+Añadidas en la misma rama `feat/HU-MARK-07`, a pedido del usuario:
+
+1. **Elegir una etiqueta ya creada.** El campo de etiqueta tiene dos modos explícitos —«Crear nueva»
+   y «Usar una existente»— y el segundo lista **todas** las etiquetas del tenant, incluidas las de
+   semaforización (en su propio grupo). Enviar un borrador desde su detalle también ofrece la
+   etiqueta (`POST /:id/send`).
+2. **Enviar ahora o programar.** La revisión del asistente pregunta «¿Cuándo sale?». Programar usa
+   `POST /api/campaigns` con `programadaPara` (≥ 60 s), encola el arranque exacto y acepta
+   `etiqueta`, que se aplica a los enviados con éxito cuando la campaña arranca. En una audiencia
+   por mensajes recientes el rango sigue congelado al crear.
+3. **Etiquetas y campañas en el lead.** `GET /api/leads` y `GET /api/leads/:id` devuelven las
+   `etiquetas` del contacto —las manuales y las que dejaron las campañas—; el detalle añade
+   `campanas` (las que recibió, con el estado de su envío y la etiqueta que le dejó). Se ven en la
+   tabla, en la tarjeta del embudo y en la ficha del lead, con enlace a cada campaña.
+
 ## Dependencias
 
 - `HU-MARK-01-campanas-segmentadas` (implementado) — modelos, cola, pacing, opt-out, dedupe y wizard.
-- `HU-MARK-03-campanas-programadas` (creado) — programación; esta HU no la cambia.
+- `HU-MARK-03-campanas-programadas` (creado) — programación; esta HU la reutiliza desde el asistente (ampliación 2).
 - `HU-MARK-04-metricas-campanas` (implementado) — detalle y métricas por destinatario.
 - `HU-MARK-05-mensajes-campana-bandeja` (creado) — `Message.origen`/`campaignId` y estados de entrega.
 - `HU-OMNI-04-etiquetado-conversaciones` — modelo `Tag` y `Cliente.tagIds`.

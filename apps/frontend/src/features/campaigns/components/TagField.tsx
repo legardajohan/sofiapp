@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import {
   Command,
   CommandEmpty,
+  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
@@ -16,7 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { TagChip } from '@/features/tags/components/TagChip';
 import { useTags } from '@/features/tags/hooks/useTags';
-import { TAG_NOMBRE_MAX } from '@/features/tags/types';
+import { TAG_NOMBRE_MAX, type TagDTO } from '@/features/tags/types';
 import type { ValorEtiqueta } from '../lib/etiqueta.js';
 
 interface Props {
@@ -42,20 +43,26 @@ type Modo = 'nueva' | 'existente';
  *
  * - **Crear nueva** — un campo con el nombre sugerido, editable. Si coincide con una existente
  *   (sin importar mayúsculas ni acentos) se avisa de que se usará esa: es lo que hará el servidor.
- * - **Usar una existente** — la lista completa, con buscador, en el mismo panel. En línea y no en
- *   un `Popover`: este campo vive dentro del diálogo del asistente, y un popover anidado ahí ya dio
+ * - **Usar una existente** — **todas** las de `/etiquetas`, con buscador, en el mismo panel. En
+ *   línea y no en un `Popover`: este campo vive dentro de diálogos, y un popover anidado ahí ya dio
  *   problemas de apertura (ver `AudienceBuilder`).
  *
- * Las etiquetas de semaforización no se ofrecen: describen el estado de la conversación y las
- * mueve la IA; mezclarlas con el seguimiento de una campaña las volvería ambiguas.
+ * Las de semaforización también se ofrecen —son etiquetas creadas como cualquier otra y la página
+ * de Etiquetas las lista—, pero en su propio grupo y al final: las mueve también la IA según la
+ * conversación, y conviene que quien la elija lo vea.
  */
 export function TagField({ valor, onChange, sugerido }: Props): React.ReactElement {
   const id = useId();
   const { data: etiquetas, isLoading } = useTags();
 
-  const disponibles = useMemo(
-    () => (etiquetas ?? []).filter((t) => t.semaforo === null),
-    [etiquetas],
+  const todas = useMemo(() => etiquetas ?? [], [etiquetas]);
+  const grupos = useMemo(
+    () =>
+      [
+        { titulo: 'Tus etiquetas', tags: todas.filter((t) => t.semaforo === null) },
+        { titulo: 'Semaforización', tags: todas.filter((t) => t.semaforo !== null) },
+      ].filter((g) => g.tags.length > 0),
+    [todas],
   );
 
   const activo = valor !== null;
@@ -66,9 +73,9 @@ export function TagField({ valor, onChange, sugerido }: Props): React.ReactEleme
   const coincidente = useMemo(
     () =>
       nombre.trim()
-        ? (disponibles.find((t) => normalizar(t.nombre) === normalizar(nombre)) ?? null)
+        ? (todas.find((t) => normalizar(t.nombre) === normalizar(nombre)) ?? null)
         : null,
-    [disponibles, nombre],
+    [todas, nombre],
   );
 
   function cambiarModo(siguiente: Modo): void {
@@ -76,6 +83,25 @@ export function TagField({ valor, onChange, sugerido }: Props): React.ReactEleme
       siguiente === 'nueva'
         ? { modo: 'nueva', nombre: sugerido }
         : { modo: 'existente', tag: null },
+    );
+  }
+
+  function fila(t: TagDTO): React.ReactElement {
+    const marcada = elegida?.id === t.id;
+    return (
+      <CommandItem
+        key={t.id}
+        // El valor de cada fila es el nombre (más el id, por si dos se ven iguales): así el
+        // buscador de cmdk filtra por lo que se ve.
+        value={`${t.nombre} ${t.id}`}
+        keywords={[t.nombre]}
+        onSelect={() => onChange({ modo: 'existente', tag: t })}
+        aria-selected={marcada}
+        className={cn('gap-2', marcada && 'bg-accent')}
+      >
+        <TagChip tag={t} className="max-w-[calc(100%-1.5rem)]" />
+        {marcada ? <Check aria-hidden className="ml-auto h-4 w-4 shrink-0 text-primary" /> : null}
+      </CommandItem>
     );
   }
 
@@ -117,9 +143,12 @@ export function TagField({ valor, onChange, sugerido }: Props): React.ReactEleme
             </ToggleGroupItem>
             <ToggleGroupItem
               value="existente"
-              className="h-8 flex-1 rounded-md px-3 text-sm text-muted-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm sm:flex-none"
+              className="h-8 flex-1 gap-1.5 rounded-md px-3 text-sm text-muted-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm sm:flex-none"
             >
               Usar una existente
+              {todas.length > 0 ? (
+                <span className="tabular-nums text-muted-foreground">({todas.length})</span>
+              ) : null}
             </ToggleGroupItem>
           </ToggleGroup>
 
@@ -158,10 +187,13 @@ export function TagField({ valor, onChange, sugerido }: Props): React.ReactEleme
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : disponibles.length === 0 ? (
+          ) : todas.length === 0 ? (
             <p className="rounded-md bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-              Todavía no tienes etiquetas propias. Créalas en{' '}
-              <Link to="/etiquetas" className="font-medium text-foreground underline-offset-4 hover:underline">
+              Todavía no tienes etiquetas. Créalas en{' '}
+              <Link
+                to="/etiquetas"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
                 Etiquetas
               </Link>{' '}
               o usa «Crear nueva».
@@ -172,34 +204,25 @@ export function TagField({ valor, onChange, sugerido }: Props): React.ReactEleme
               <Command
                 aria-labelledby={`${id}-lista`}
                 className="rounded-md border border-border"
-                // El valor de cada fila es el nombre: así el buscador de cmdk filtra por lo que se ve.
-                filter={(v, busqueda) => (normalizar(v).includes(normalizar(busqueda)) ? 1 : 0)}
+                filter={(_v, busqueda, keywords) =>
+                  normalizar((keywords ?? []).join(' ')).includes(normalizar(busqueda)) ? 1 : 0
+                }
               >
                 <CommandInput placeholder="Buscar etiqueta" />
-                <CommandList className="max-h-52">
+                <CommandList className="max-h-60">
                   <CommandEmpty>Ninguna etiqueta con ese nombre.</CommandEmpty>
-                  {disponibles.map((t) => {
-                    const marcada = elegida?.id === t.id;
-                    return (
-                      <CommandItem
-                        key={t.id}
-                        value={t.nombre}
-                        onSelect={() => onChange({ modo: 'existente', tag: t })}
-                        aria-selected={marcada}
-                        className={cn('gap-2', marcada && 'bg-accent')}
-                      >
-                        <TagChip tag={t} className="max-w-[calc(100%-1.5rem)]" />
-                        {marcada ? (
-                          <Check aria-hidden className="ml-auto h-4 w-4 shrink-0 text-primary" />
-                        ) : null}
-                      </CommandItem>
-                    );
-                  })}
+                  {grupos.map((g) => (
+                    <CommandGroup key={g.titulo} heading={grupos.length > 1 ? g.titulo : undefined}>
+                      {g.tags.map(fila)}
+                    </CommandGroup>
+                  ))}
                 </CommandList>
               </Command>
               <p className="text-xs text-muted-foreground">
                 {elegida
-                  ? 'Los nuevos destinatarios se suman a quienes ya la tienen.'
+                  ? elegida.semaforo !== null
+                    ? 'Es de semaforización: la IA también la pone y la quita según la conversación.'
+                    : 'Los nuevos destinatarios se suman a quienes ya la tienen.'
                   : 'Elige la etiqueta que recibirán los destinatarios.'}
               </p>
             </div>

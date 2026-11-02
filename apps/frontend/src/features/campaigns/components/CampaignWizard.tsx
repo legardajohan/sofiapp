@@ -21,10 +21,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAudiencePreview, useSegmentPreview } from '../hooks/useCampaigns.js';
 import { formatearNumero } from '../lib/pacing.js';
+import { problemaConHora } from '../lib/programacion.js';
+import { DateTimePicker } from './DateTimePicker.js';
 import {
   DESCRIPCION_RANGO,
   aAudiencia,
@@ -68,8 +71,15 @@ const TITULO: Record<Paso, string> = {
 const DESCRIPCION: Record<Paso, string> = {
   segmento: 'Por filtros de tu cartera o por a quién le escribiste hace poco. El total se actualiza con cada cambio.',
   plantilla: 'Solo aparecen las plantillas que Meta ya aprobó.',
-  revision: 'Comprueba el alcance y el cupo de tu número antes de lanzar.',
+  revision: 'Comprueba el alcance y el cupo de tu número, y elige cuándo sale.',
 };
+
+type Cuando = 'ahora' | 'programar';
+
+const OPCIONES_CUANDO: ReadonlyArray<readonly [Cuando, string]> = [
+  ['ahora', 'Enviar ahora'],
+  ['programar', 'Programar'],
+];
 
 /** Estado inicial del borrador. Función y no constante: cada apertura parte de un objeto propio. */
 function borradorVacio(): {
@@ -90,6 +100,9 @@ function borradorVacio(): {
    * actualiza sola. En cuanto la persona la toca, deja de pisarse.
    */
   etiquetaEditada: boolean;
+  /** Cuándo sale: ya mismo o a una hora elegida. */
+  cuando: Cuando;
+  programadaPara: Date | null;
 } {
   return {
     nombre: '',
@@ -98,6 +111,8 @@ function borradorVacio(): {
     rango: { rango: '1d' },
     etiqueta: null,
     etiquetaEditada: false,
+    cuando: 'ahora',
+    programadaPara: null,
     templateId: '',
     parametros: [],
     imagen: null,
@@ -205,7 +220,8 @@ export function CampaignWizard({
       borrador.nombre.trim().length > 0 &&
       !(presupuesto?.bloqueado ?? false) &&
       // Etiqueta encendida pero sin nombre: el envío no sabría qué poner.
-      (etiqueta === null || aEtiquetaEnvio(etiqueta) !== undefined),
+      (etiqueta === null || aEtiquetaEnvio(etiqueta) !== undefined) &&
+      (borrador.cuando === 'ahora' || problemaConHora(borrador.programadaPara) === null),
   };
 
   function elegirPlantilla(id: string): void {
@@ -237,8 +253,9 @@ export function CampaignWizard({
     }));
   }
 
-  function enviar(lanzar: boolean): void {
-    const etiquetaEnvio = lanzar ? aEtiquetaEnvio(etiqueta) : undefined;
+  /** `borrador` guarda sin fecha; `ahora` lanza; `programar` deja la campaña esperando su hora. */
+  function enviar(destino: 'borrador' | Cuando): void {
+    const etiquetaEnvio = destino === 'borrador' ? undefined : aEtiquetaEnvio(etiqueta);
     onSubmit({
       nombre: borrador.nombre.trim(),
       // Una audiencia por fechas no lleva filtros: el backend los ignora, pero no se mandan.
@@ -251,7 +268,10 @@ export function CampaignWizard({
       ...(borrador.parametrosDinamicos.length > 0
         ? { parametrosDinamicos: borrador.parametrosDinamicos }
         : {}),
-      ...(lanzar ? { lanzar: true } : {}),
+      ...(destino === 'ahora' ? { lanzar: true } : {}),
+      ...(destino === 'programar' && borrador.programadaPara
+        ? { programadaPara: borrador.programadaPara.toISOString() }
+        : {}),
     });
   }
 
@@ -437,6 +457,53 @@ export function CampaignWizard({
                 }
               />
 
+              <section
+                aria-labelledby="cuando-sale"
+                className="space-y-4 rounded-lg border border-border p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <h3 id="cuando-sale" className="text-sm font-semibold">
+                      ¿Cuándo sale?
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {borrador.cuando === 'ahora'
+                        ? 'Empieza a enviarse en cuanto confirmes, al ritmo que permite tu número.'
+                        : esReciente
+                          ? 'Arranca sola a esa hora y les llega a las personas de este conteo: el rango ya quedó fijo.'
+                          : 'Arranca sola a esa hora. Los contactos se cuentan de nuevo en ese momento.'}
+                    </p>
+                  </div>
+                  <ToggleGroup
+                    type="single"
+                    value={borrador.cuando}
+                    // Radix devuelve '' al volver a pulsar el activo. Aquí siempre hay uno.
+                    onValueChange={(v) => {
+                      if (v) setBorrador((b) => ({ ...b, cuando: v as Cuando }));
+                    }}
+                    aria-label="Cuándo sale la campaña"
+                    className="inline-flex rounded-lg border border-border bg-muted/40 p-1"
+                  >
+                    {OPCIONES_CUANDO.map(([v, texto]) => (
+                      <ToggleGroupItem
+                        key={v}
+                        value={v}
+                        className="h-8 rounded-md px-3 text-sm text-muted-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                      >
+                        {texto}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+
+                {borrador.cuando === 'programar' ? (
+                  <DateTimePicker
+                    valor={borrador.programadaPara}
+                    onChange={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}
+                  />
+                ) : null}
+              </section>
+
             </div>
           ) : null}
         </div>
@@ -457,7 +524,7 @@ export function CampaignWizard({
                 type="button"
                 variant="outline"
                 disabled={pending || !borrador.nombre.trim()}
-                onClick={() => enviar(false)}
+                onClick={() => enviar('borrador')}
                 className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
               >
                 Guardar borrador
@@ -465,10 +532,16 @@ export function CampaignWizard({
               <Button
                 type="button"
                 disabled={pending || !puedeAvanzar.revision}
-                onClick={() => enviar(true)}
+                onClick={() => enviar(borrador.cuando)}
                 className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
               >
-                {pending ? 'Enviando…' : `Enviar a ${formatearNumero(total)}`}
+                {borrador.cuando === 'programar'
+                  ? pending
+                    ? 'Programando…'
+                    : 'Programar campaña'
+                  : pending
+                    ? 'Enviando…'
+                    : `Enviar a ${formatearNumero(total)}`}
               </Button>
             </div>
           ) : (
