@@ -28,6 +28,8 @@ import { useSegmentPreview } from '../hooks/useCampaigns.js';
 import { problemaConHora } from '../lib/programacion.js';
 import { AudienceMeter } from './AudienceMeter.js';
 import { DateTimePicker } from './DateTimePicker.js';
+import { AvisoHorarioCampana } from './AvisoHorarioCampana.js';
+import { useHorarioCampana } from '@/features/send-window/hooks/useHorarioCampana.js';
 import { HeaderImageField } from './HeaderImageField.js';
 import { MessagePreview } from './MessagePreview.js';
 import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
@@ -150,6 +152,9 @@ export function CampaignScheduler({
     plantilla !== null &&
     borrador.parametros.filter((p) => p.trim()).length === plantilla.parametrosBody;
 
+  // HU-CONF-01: la hora elegida, contra el horario de envío de campañas.
+  const horario = useHorarioCampana(borrador.programadaPara);
+
   const puedeAvanzar: Record<Paso, boolean> = {
     segmento: total > 0,
     // HT-WA-04: con imagen por defecto no hace falta elegir otra; sin ella, sí.
@@ -157,7 +162,9 @@ export function CampaignScheduler({
       parametrosCompletos &&
       (!llevaImagen || imagenDefectoUrl !== null || borrador.imagen !== null),
     horario:
-      borrador.nombre.trim().length > 0 && problemaConHora(borrador.programadaPara) === null,
+      borrador.nombre.trim().length > 0 &&
+      problemaConHora(borrador.programadaPara) === null &&
+      !horario.cerrada,
   };
 
   function elegirPlantilla(id: string): void {
@@ -300,10 +307,16 @@ export function CampaignScheduler({
             <div className="space-y-6">
               <ResumenAudiencia filtros={borrador.filtros} preview={preview.data} />
 
-              <DateTimePicker
-                valor={borrador.programadaPara}
-                onChange={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}
-              />
+              <div className="space-y-3">
+                <DateTimePicker
+                  valor={borrador.programadaPara}
+                  onChange={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}
+                />
+                <AvisoHorarioCampana
+                  horario={horario}
+                  onUsar={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}
+                />
+              </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="programador-nombre">Nombre de la campaña</Label>

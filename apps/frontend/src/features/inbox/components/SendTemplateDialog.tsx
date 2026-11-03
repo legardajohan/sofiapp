@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { STATUS_KEY } from '@/features/send-window/hooks/useSendWindowStatus.js';
+import { useVentanaCategoria } from '@/features/send-window/hooks/useVentanaCategoria.js';
+import { aperturaDeVentanaCerrada, textoReapertura } from '@/features/send-window/lib/ventana-cerrada.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiUrl } from '@/api/apiClient';
 import { getWhatsAppTemplates, templateErrorMessage } from '@/api/whatsapp-templates';
@@ -92,6 +95,9 @@ export function SendTemplateDialog({
   const llevaImagen = plantilla?.cabecera === 'IMAGE';
   const imagenDefectoUrl = plantilla?.imagen ? apiUrl(plantilla.imagen.url) : null;
 
+  // Horario de envío de plantillas manuales (HU-CONF-01).
+  const ventana = useVentanaCategoria('plantilla_manual');
+
   const mutation = useMutation({
     mutationFn: () =>
       sendTemplateMessage({
@@ -107,6 +113,13 @@ export function SendTemplateDialog({
       onOpenChange(false);
     },
     onError: (err: Error) => {
+      // HU-CONF-01: fuera del horario de plantillas, se dice cuándo vuelve a abrir.
+      const apertura = aperturaDeVentanaCerrada(err);
+      if (apertura !== undefined) {
+        void qc.invalidateQueries({ queryKey: STATUS_KEY });
+        setError(`Fuera del horario de envío de plantillas. ${textoReapertura(apertura, ventana.zonaHoraria)}`);
+        return;
+      }
       setError(templateErrorMessage(err, 'No se pudo enviar la plantilla. Intenta de nuevo.'));
     },
   });
@@ -120,6 +133,7 @@ export function SendTemplateDialog({
   }
 
   const puedeEnviar =
+    !ventana.cerrada &&
     plantilla !== null &&
     parametros.every((p) => p.trim().length > 0) &&
     (!llevaImagen || imagenDefectoUrl !== null || imagen !== null) &&
@@ -209,6 +223,16 @@ export function SendTemplateDialog({
             </p>
           ) : null}
         </div>
+
+        {ventana.cerrada && !error ? (
+          <p role="status" className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-secondary-foreground">
+            <Clock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Fuera del horario de envío de plantillas.{' '}
+              {textoReapertura(ventana.apertura, ventana.zonaHoraria)}
+            </span>
+          </p>
+        ) : null}
 
         <DialogFooter>
           <Button

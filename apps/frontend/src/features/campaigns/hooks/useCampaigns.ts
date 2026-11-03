@@ -285,6 +285,8 @@ interface ProgresoEvento {
   campaignId: string;
   estado: EstadoCampana;
   totales: TotalesCampana;
+  /** HU-CONF-01. */
+  retenidaHasta: string | null;
 }
 
 /**
@@ -302,7 +304,9 @@ export function useCampaignRealtime(): void {
 
     const onProgreso = (evt: ProgresoEvento): void => {
       qc.setQueryData<CampaignDetalleDTO>(['campaign', evt.campaignId], (previo) =>
-        previo ? { ...previo, estado: evt.estado, totales: evt.totales } : previo,
+        previo
+          ? { ...previo, estado: evt.estado, totales: evt.totales, retenidaHasta: evt.retenidaHasta ?? null }
+          : previo,
       );
       // El listado no se parchea fila a fila: son varias claves de query (una por filtro y página)
       // y reconstruirlas a mano sería más frágil que pedirlas de nuevo cuando toque.

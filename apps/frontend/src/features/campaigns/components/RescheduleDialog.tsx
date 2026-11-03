@@ -14,6 +14,8 @@ import { Label } from '@/components/ui/label';
 import { apiUrl } from '@/api/apiClient';
 import { problemaConHora } from '../lib/programacion.js';
 import { DateTimePicker } from './DateTimePicker.js';
+import { AvisoHorarioCampana } from './AvisoHorarioCampana.js';
+import { useHorarioCampana } from '@/features/send-window/hooks/useHorarioCampana.js';
 import { ImageDropzone } from './ImageDropzone.js';
 import type { CampaignDTO, RescheduleCampaignPayload } from '../types.js';
 
@@ -61,7 +63,9 @@ export function RescheduleDialog({
   const horaOriginal = campana.programadaPara ? new Date(campana.programadaPara).getTime() : null;
   const cambioHora = fecha !== null && fecha.getTime() !== horaOriginal;
   const hayCambios = cambioHora || imagen !== null || restaurar;
-  const horaValida = problemaConHora(fecha) === null;
+  // HU-CONF-01: solo cuenta si la hora cambia; la ya guardada pasó el control al programarse.
+  const horario = useHorarioCampana(cambioHora ? fecha : null);
+  const horaValida = problemaConHora(fecha) === null && !horario.cerrada;
 
   function guardar(): void {
     onSubmit({
@@ -83,7 +87,10 @@ export function RescheduleDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          <DateTimePicker valor={fecha} onChange={setFecha} />
+          <div className="space-y-3">
+            <DateTimePicker valor={fecha} onChange={setFecha} />
+            <AvisoHorarioCampana horario={horario} onUsar={setFecha} />
+          </div>
 
           {campana.imagen ? (
             <div className="space-y-1.5">
