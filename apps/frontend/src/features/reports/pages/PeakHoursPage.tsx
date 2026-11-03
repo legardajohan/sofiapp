@@ -9,20 +9,9 @@ import { usePeakHours, PEAK_HOURS_KEY } from '../hooks/usePeakHours.js';
 import { PeakHoursKpiStrip } from '../components/PeakHoursKpiStrip.js';
 import { PeakHoursByHourChart } from '../components/PeakHoursByHourChart.js';
 import { PeakHoursByDayChart } from '../components/PeakHoursByDayChart.js';
+import { ZONA_DEL_VISOR } from '../lib/zona-visor.js';
 
 const PRESETS: readonly PeriodoPreset[] = ['7d', '30d', 'mes', 'personalizado'];
-
-/**
- * La zona del navegador: las horas pico se leen en la hora de quien mira el reporte (spec D1). Se
- * calcula una vez por carga; si `Intl` no la resuelve, el backend usa UTC.
- */
-const ZONA_DEL_VISOR = ((): string | undefined => {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
-  } catch {
-    return undefined;
-  }
-})();
 
 // El rango viene del backend como días calendario en la zona: se lee en UTC para no correr un día.
 const dia = new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' });

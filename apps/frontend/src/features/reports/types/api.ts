@@ -19,3 +19,10 @@ export interface TopProductsParams extends ReportRangeParams {
 export interface PeakHoursParams extends ReportRangeParams {
   tz?: string;
 }
+
+/** Query de `GET /reports/advisor-activity` (HU-REP-06). */
+export interface AdvisorActivityParams extends ReportRangeParams {
+  tz?: string;
+  granularidad?: 'dia' | 'semana' | 'mes';
+  asesorId?: string;
+}

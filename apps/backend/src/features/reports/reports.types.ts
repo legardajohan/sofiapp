@@ -27,6 +27,8 @@ export interface IAdvisorRow {
   ventas: number;
   /** `ventas / conversacionesAtendidas`, 4 decimales; 0 sin atendidas. */
   tasaCierre: number;
+  /** Tiempo activo en SofiApp dentro del rango (HU-REP-06), en segundos enteros. */
+  segundosActivos: number;
 }
 
 export interface IAdvisorReportTotales {
@@ -35,6 +37,8 @@ export interface IAdvisorReportTotales {
   asignadasActivas: number;
   ventas: number;
   tasaCierre: number;
+  /** Suma del tiempo activo de los asesores listados (HU-REP-06). */
+  segundosActivos: number;
 }
 
 export interface IAdvisorReportResponse {
@@ -166,4 +170,31 @@ export interface IPeakHoursResponse {
   pico: { hora: number; entrantes: number } | null;
   /** Día con más entrantes (empate: el primero); `null` sin entrantes. */
   diaPico: { fecha: string; entrantes: number } | null;
+}
+
+/*
+ * HU-REP-06 — Tiempo activo del asesor. Definición de «activo»: `docs/domain.md` § Productividad por
+ * asesor y `docs/specs/HU-REP-06-tiempo-activo-asesor/spec.md`.
+ */
+
+export const GRANULARIDADES = ['dia', 'semana', 'mes'] as const;
+export type Granularidad = (typeof GRANULARIDADES)[number];
+
+export interface IActivityPeriodRow {
+  /** `YYYY-MM-DD` del primer día del periodo en la zona pedida (lunes para `semana`, día 1 para `mes`). */
+  periodo: string;
+  totalSegundos: number;
+  /** Solo los asesores con tiempo en el periodo. */
+  porAsesor: Array<{ asesorId: string; segundos: number }>;
+}
+
+export interface IAdvisorActivityResponse {
+  generadoAt: string;
+  rango: { desde: string; hasta: string };
+  granularidad: Granularidad;
+  timezone: string;
+  /** Los asesores que aparecen en `periodos`, con su nombre, ordenados por tiempo total. */
+  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number }>;
+  /** Todos los periodos del rango en orden, también los vacíos. */
+  periodos: IActivityPeriodRow[];
 }
