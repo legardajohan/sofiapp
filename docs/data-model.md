@@ -543,6 +543,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   } | null,
   creadaPor: ObjectId,            // ref User
   iniciadaAt: ISODate|null, finalizadaAt: ISODate|null,
+  retenidaHasta: ISODate|null,    // HU-CONF-01: en curso pero esperando la apertura del horario de envío
   motivo: String|null,            // por qué acabó `fallida` o `cancelada`
   createdAt, updatedAt
 }
@@ -989,6 +990,41 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > **`estrategiaDestino` y `condicionesExtras` no necesitaron migración.** Los documentos guardados
 > antes de HU-IA-07 no los traen, y el servicio los deriva al leer (`asesorDestinoId ? "fijo" :
 > "primero"`, y `[]`). Un tenant que no abra esa pantalla se comporta exactamente igual que antes.
+
+## send_window_configs  (horarios de envío por tipo de mensaje — HU-CONF-01)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required; índice ÚNICO: un documento por empresa
+  activo: Boolean,                // default false: sin documento, o apagado, todo sale a cualquier hora
+  zonaHoraria: String,            // IANA; default "America/Bogota". Las franjas y fechas se leen en ella
+  reglas: [{                      // una por categoría (las seis, sin repetir); subdoc _id: false
+    categoria: "asesor" | "plantilla_manual" | "ia" | "flujo" | "recordatorio" | "campana",
+    modo: "libre" | "restringido",
+    franjas: [{                   // máx. 10; sin solapes en el anillo semanal
+      dias: [Number],             // 0 = domingo … 6 = sábado
+      desde: "HH:mm",             // 00:00–23:59
+      hasta: "HH:mm"              // 00:00–24:00; desde > hasta = cruza la medianoche (pertenece al día en que empieza)
+    }]
+  }],
+  excepciones: [{                 // máx. 200; fecha única
+    fecha: "YYYY-MM-DD",          // en la zona del tenant
+    tipo: "cerrado" | "franjas",
+    franjas: [{ desde, hasta }]?, // solo con "franjas"; un solo día, sin cruzar la medianoche
+    categorias: [String]?,        // vacío/ausente = todas
+    motivo: String?,              // ≤ 80
+    origen: "manual" | "festivo"?
+  }],
+  actualizadoPor: ObjectId|null,  // ref User
+  version: Number,                // $inc en cada PUT
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1 } unique
+```
+> **Una excepción manda sobre el día entero** (00:00–24:00), incluida la cola de una franja nocturna
+> del día anterior. La política se evalúa en `send-window.policy.ts` (pura) y se cachea por proceso
+> 60 s con clave `tenantId`; un `PUT` invalida la caché de web y worker por Redis
+> (`send-window:invalidate`). Ver `docs/domain.md` §4ter y ADR 0013.
 
 ## prompt_templates  (system prompt por método y empresa — HT-AI-01 · HU-IA-01)
 ```js

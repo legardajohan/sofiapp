@@ -144,6 +144,39 @@ varios, se ejecuta un solo handoff: el del primero de la lista.
 > Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
 > que no tienen dueño.
 
+## 4ter. Horarios de envío (HU-CONF-01)
+
+Cada envío a un cliente declara una **categoría**, y la empresa decide por categoría si sale a
+cualquier hora (`libre`) o solo dentro de unas franjas (`restringido`). Todo envío pasa por un único
+control, en `sendOutbound`, después de la cuota y antes de llamar a Meta. Lo que pasa fuera de franja
+es **fijo por categoría**, no configurable (ADR 0013):
+
+| Categoría | Qué es | De fábrica | Fuera de franja |
+|---|---|---|---|
+| `asesor` | Texto, media y voz desde la bandeja; `POST /messages/send` | libre | **Bloquear**: 423 con `siguienteApertura`; la bandeja muestra el banner |
+| `plantilla_manual` | Plantilla suelta (`POST /messages/template`) | restringido | **Bloquear**: 423 |
+| `ia` | Respuestas, handoff, aviso de fallo y acuse de Sofi; flujo en reacción a un entrante | libre | **Descartar y escalar**: no sale y la conversación sube a un asesor |
+| `flujo` | Mensaje de un flujo tras un nodo `espera` | restringido | **Reprogramar**: el job `resume` se re-encola hasta la apertura, mismo token |
+| `recordatorio` | Recordatorio de la ventana de 24 h | restringido | **Adelantar**: si la ventana vence fuera de horario, sale antes, en el último tramo abierto. Si está en plazo pero aún cerrado, espera a la apertura sin marcar idempotencia |
+| `campana` | Lotes de campañas | restringido | **Retener**: el lote se re-encola hasta la apertura; la campaña sigue `en_curso` con `retenidaHasta` |
+
+- La política nace **desactivada**. Franjas de fábrica de las categorías restringidas: lun–sáb 08:00–19:00.
+- **Un día local** = sus franjas semanales más la cola de las nocturnas del día anterior; si la fecha
+  tiene una **excepción** aplicable a la categoría, manda la excepción sobre el día entero.
+- **Siguiente apertura**: se busca en los 14 días siguientes; si no hay, `null` (y los llamadores
+  que reprograman reevalúan en 1 h).
+- **Plazo efectivo del recordatorio**: el último momento en que todavía se le puede escribir dentro
+  del horario antes de que venza la ventana de 24 h — el propio vencimiento si cae dentro del
+  horario, o si no el cierre del último tramo abierto antes de él. El recordatorio sale
+  `antelacionMinutos` antes de ese plazo. Ejemplo: horario 08:00–19:00, antelación 2 h, ventana que
+  vence a las 23:00 → sale desde las 17:00, no se pierde. Si no queda ningún momento abierto antes
+  del vencimiento (p. ej. todo el resto de la ventana cae en un festivo cerrado), no hay recordatorio
+  posible. Un job que corre con la ventana ya vencida sigue la regla de HU-FLOW-02 (plantilla HSM o 422).
+- **Programar una campaña** para una hora cerrada responde 422 con `siguienteApertura`.
+- Cada retención deja el log `send_window.retenido` y se audita (`campaign.retenida-horario` una vez
+  por transición; `mensaje.retenido-horario` en `flujo`, `recordatorio` e `ia`). Los cambios de la
+  configuración se auditan como `send-window.update`.
+
 ## 5. Semaforización (HU-OMNI-04)
 
 **Semaforización** es el vocabulario compartido con el que el CRM expresa, de un vistazo, en qué
