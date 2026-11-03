@@ -109,6 +109,8 @@ const CampaignSchema = new Schema<ICampaignDocument>(
     creadaPor: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     iniciadaAt: { type: Date, default: null },
     finalizadaAt: { type: Date, default: null },
+    // HU-CONF-01. Hasta cuándo está retenida por la ventana horaria de envío (`null` = no lo está).
+    retenidaHasta: { type: Date, default: null },
     motivo: { type: String, default: null },
   },
   { timestamps: true },

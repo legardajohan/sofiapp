@@ -189,6 +189,12 @@ export interface ICampaign {
   creadaPor: Types.ObjectId;
   iniciadaAt: Date | null;
   finalizadaAt: Date | null;
+  /**
+   * HU-CONF-01. La campaña sigue `en_curso` pero el lote espera a la siguiente apertura de la
+   * ventana horaria de envío. `null` = no está retenida. Opcional: las campañas anteriores no lo
+   * tienen.
+   */
+  retenidaHasta?: Date | null;
   /** Por qué acabó `fallida` o `cancelada`. `null` mientras no aplique. */
   motivo: string | null;
   createdAt?: Date;
@@ -376,6 +382,8 @@ export interface ICampaignResponse {
   programadaPara: string | null;
   iniciadaAt: string | null;
   finalizadaAt: string | null;
+  /** HU-CONF-01. Retenida por la ventana horaria hasta esta hora (`null` = no lo está). */
+  retenidaHasta: string | null;
   motivo: string | null;
   createdAt: string;
 }

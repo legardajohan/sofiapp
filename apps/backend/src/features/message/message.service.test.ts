@@ -17,6 +17,7 @@ import { MetaIntegration } from '../channel/channel.model.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { WhatsAppTemplate } from '../whatsapp-template/whatsapp-template.model.js';
 import { sendMessage, sendOutbound } from './message.service.js';
+import { abrir, aperturaManana, cerrarHoy } from '../send-window/send-window.fixtures.js';
 import type { IClienteDocument } from '../cliente/cliente.types.js';
 
 describe('sendMessage — cuota de mensajes (HU-SAAS-02 · DoD)', () => {
@@ -44,7 +45,7 @@ describe('sendMessage — cuota de mensajes (HU-SAAS-02 · DoD)', () => {
       sendMessage(tenant._id.toString(), {
         clienteId: new Types.ObjectId().toString(),
         texto: 'hola',
-      })
+      }, 'asesor')
     ).rejects.toMatchObject({ statusCode: 429 });
 
     expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
@@ -102,7 +103,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     const clienteId = await crearCliente(tenantId, true);
     vi.mocked(metaWhatsAppClient.sendText).mockResolvedValueOnce({ messageId: 'wamid.TEXT1' });
 
-    const message = await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' });
+    const message = await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' }, 'agent', { categoria: 'asesor' });
 
     expect(metaWhatsAppClient.sendText).toHaveBeenCalledOnce();
     expect(message.tipo).toBe('texto');
@@ -113,7 +114,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     await crearIntegracion(tenantId);
     const clienteId = await crearCliente(tenantId, false);
 
-    await expect(sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' })).rejects.toMatchObject({
+    await expect(sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' }, 'agent', { categoria: 'asesor' })).rejects.toMatchObject({
       statusCode: 422,
       message: 'Fuera de la ventana de 24 h. Solo se pueden enviar plantillas HSM aprobadas.',
     });
@@ -131,7 +132,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
       modo: 'auto',
       texto: 'Hola',
       plantillaFallback: { templateId, parametros: ['Ana'] },
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     expect(metaWhatsAppClient.sendTemplate).toHaveBeenCalledOnce();
     expect(message.tipo).toBe('plantilla');
@@ -144,7 +145,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     const clienteId = await crearCliente(tenantId, false);
 
     await expect(
-      sendOutbound(tenantId, clienteId, { modo: 'auto', texto: 'Hola' }),
+      sendOutbound(tenantId, clienteId, { modo: 'auto', texto: 'Hola' }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 422 });
   });
 
@@ -159,7 +160,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
       modo: 'plantilla',
       templateId,
       parametros: ['Ana'],
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     expect(message.tipo).toBe('plantilla');
   });
@@ -187,13 +188,13 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     const templateId = await crearPlantillaAprobada(tenant._id, 1);
 
     await expect(
-      sendOutbound(tenant._id, clienteId, { modo: 'texto', texto: 'Hola' }),
+      sendOutbound(tenant._id, clienteId, { modo: 'texto', texto: 'Hola' }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 429 });
     await expect(
-      sendOutbound(tenant._id, clienteId, { modo: 'auto', texto: 'Hola' }),
+      sendOutbound(tenant._id, clienteId, { modo: 'auto', texto: 'Hola' }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 429 });
     await expect(
-      sendOutbound(tenant._id, clienteId, { modo: 'plantilla', templateId, parametros: ['Ana'] }),
+      sendOutbound(tenant._id, clienteId, { modo: 'plantilla', templateId, parametros: ['Ana'] }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 429 });
 
     expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
@@ -218,7 +219,7 @@ describe('sendOutbound — único juez de la ventana de 24 h (HT-WA-02)', () => 
     const templateId = await crearPlantillaAprobada(tenant._id, 1);
     vi.mocked(metaWhatsAppClient.sendTemplate).mockResolvedValueOnce({ messageId: 'wamid.TPL3' });
 
-    await sendOutbound(tenant._id, clienteId, { modo: 'plantilla', templateId, parametros: ['Ana'] });
+    await sendOutbound(tenant._id, clienteId, { modo: 'plantilla', templateId, parametros: ['Ana'] }, 'agent', { categoria: 'asesor' });
 
     const usage = await TenantUsage.findOne({ tenantId: tenant._id, periodo: getCurrentPeriodo() }).lean();
     expect(usage?.mensajesMes).toBe(1);
@@ -266,7 +267,7 @@ describe('sendMessage — autoría del mensaje saliente (HU-IA-01)', () => {
     const { tenantId, clienteId } = await escenarioListoParaEnviar();
     vi.mocked(metaWhatsAppClient.sendText).mockResolvedValue({ messageId: 'wamid.1' });
 
-    const msg = await sendMessage(tenantId, { clienteId, texto: 'Respuesta del asesor' });
+    const msg = await sendMessage(tenantId, { clienteId, texto: 'Respuesta del asesor' }, 'asesor');
 
     expect(msg.sender).toBe('agent');
   });
@@ -279,9 +280,49 @@ describe('sendMessage — autoría del mensaje saliente (HU-IA-01)', () => {
       clienteId,
       texto: 'Atendemos de 8:00 a 18:00.',
       sender: 'bot',
-    });
+    }, 'asesor');
 
     expect(msg.sender).toBe('bot');
     expect(msg.direccion).toBe('outbound');
+  });
+});
+
+describe('sendOutbound — ventana horaria de envío (HU-CONF-01)', () => {
+  beforeEach(() => {
+    vi.mocked(metaWhatsAppClient.sendText).mockClear();
+  });
+
+  it('fuera de franja → 423 con siguienteApertura, sin llamar a Meta ni contar cuota', async () => {
+    const tenantId = new Types.ObjectId();
+    await crearIntegracion(tenantId);
+    const clienteId = await crearCliente(tenantId, true);
+    await cerrarHoy(tenantId, ['asesor']);
+
+    await expect(
+      sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' }, 'agent', { categoria: 'asesor' }),
+    ).rejects.toMatchObject({
+      statusCode: 423,
+      details: { categoria: 'asesor', motivo: 'excepcion', siguienteApertura: aperturaManana().toISOString() },
+    });
+    expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
+    const usage = await TenantUsage.findOne({ tenantId, periodo: getCurrentPeriodo() }).lean();
+    expect(usage?.mensajesMes ?? 0).toBe(0);
+  });
+
+  it('otra categoría sin restringir sale aunque `asesor` esté cerrado; y al abrir, sale', async () => {
+    const tenantId = new Types.ObjectId();
+    await crearIntegracion(tenantId);
+    const clienteId = await crearCliente(tenantId, true);
+    await cerrarHoy(tenantId, ['asesor']);
+    vi.mocked(metaWhatsAppClient.sendText)
+      .mockResolvedValueOnce({ messageId: 'wamid.V1' })
+      .mockResolvedValueOnce({ messageId: 'wamid.V2' });
+
+    await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' }, 'bot', { categoria: 'ia' });
+    expect(metaWhatsAppClient.sendText).toHaveBeenCalledTimes(1);
+
+    await abrir(tenantId);
+    await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'Hola' }, 'agent', { categoria: 'asesor' });
+    expect(metaWhatsAppClient.sendText).toHaveBeenCalledTimes(2);
   });
 });

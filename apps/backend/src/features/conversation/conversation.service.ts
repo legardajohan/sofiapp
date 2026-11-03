@@ -293,9 +293,11 @@ async function enviarYNotificar(
   texto: string,
   sender: 'agent' | 'bot',
 ): Promise<IMessageResponse> {
-  // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422) y la
-  // cuota mensual de mensajes.
-  const msg = await sendMessage(tenantId, { clienteId, texto, sender });
+  // sendMessage (HT-WA-01) valida pertenencia al tenant, la ventana de 24 h (AppError 422), la
+  // cuota mensual de mensajes y la ventana horaria de envío (423, HU-CONF-01): el asesor responde
+  // con categoría `asesor`; Sofi, con `ia`.
+  const categoria = sender === 'agent' ? 'asesor' : 'ia';
+  const msg = await sendMessage(tenantId, { clienteId, texto, sender }, categoria);
   return notificarSaliente(tenantId, clienteId, msg as unknown as IMessageSource);
 }
 
