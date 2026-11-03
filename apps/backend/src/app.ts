@@ -48,6 +48,8 @@ import flowRoutes from './features/flow/flow.routes.js';
 import campaignRoutes from './features/campaign/campaign.routes.js';
 import mediaRoutes from './features/media/media.routes.js';
 import notificationRoutes from './features/notification/notification.routes.js';
+import sendWindowRoutes from './features/send-window/send-window.routes.js';
+import { suscribirInvalidacionVentana } from './features/send-window/send-window.service.js';
 
 const app = express();
 
@@ -118,6 +120,7 @@ app.use('/api/flows', flowRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/send-window', sendWindowRoutes);
 
 app.use(errorHandler);
 
@@ -139,6 +142,8 @@ if (env.NODE_ENV !== 'test') {
 
   // El puente Redis solo se conecta fuera de los tests (evita handles abiertos sin Redis).
   subscribeRealtime(io);
+  // Invalidación de la caché de ventanas de envío publicada por otros procesos (HU-CONF-01).
+  suscribirInvalidacionVentana();
   mongoose
     .connect(env.MONGODB_URI)
     .then(async () => {

@@ -46,6 +46,7 @@ import {
   processCampaignSweep,
   processScheduledStart,
 } from './workers/campaign-broadcast.processor.js';
+import { suscribirInvalidacionVentana } from './features/send-window/send-window.service.js';
 import { GeminiProvider } from './integrations/llm/gemini.provider.js';
 import type { KbIndexJobData } from './features/kb/kb.types.js';
 import type { FlowJobData } from './features/flow/flow.types.js';
@@ -211,6 +212,10 @@ mongoose
   .connect(env.MONGODB_URI)
   .then(async () => {
     logger.info('Worker conectado a MongoDB');
+
+    // El worker también envía (campañas, IA, flujos): su caché de ventanas se invalida igual que
+    // la del proceso web cuando un admin guarda la política (HU-CONF-01).
+    suscribirInvalidacionVentana();
 
     // Barrido periódico de recordatorios (HU-FLOW-02): Job Scheduler idempotente por
     // `schedulerId` — reiniciar el proceso no duplica la programación.

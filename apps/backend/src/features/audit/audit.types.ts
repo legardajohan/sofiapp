@@ -32,8 +32,15 @@ export type AuditAccion =
   | 'campaign.cancel'
   // HU-MARK-03 — programación con fecha/hora e imagen.
   | 'campaign.schedule'
-  | 'campaign.reschedule';
-export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign';
+  | 'campaign.reschedule'
+  // HU-CONF-01 — ventanas horarias de envío. `send-window.update`: cambio de la política (antes y
+  // después completos). `campaign.retenida-horario`: una vez por transición de la campaña a
+  // retenida. `mensaje.retenido-horario`: un envío a un cliente que no salió por el horario
+  // (`flujo`, `recordatorio`, `ia`); actor `null`, lo decide el sistema.
+  | 'send-window.update'
+  | 'campaign.retenida-horario'
+  | 'mensaje.retenido-horario';
+export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign' | 'send-window';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.
 export interface IAuditEvent {
