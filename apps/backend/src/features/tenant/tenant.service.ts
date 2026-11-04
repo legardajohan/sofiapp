@@ -289,6 +289,16 @@ export async function updateReminderConfig(
 }
 
 /**
+ * Nombre de la **propia** empresa para encabezados de reportes (HU-PDF-01). Mismo contrato que
+ * `getReminderConfig`: el `tenantId` lo resuelve siempre el caller desde el token.
+ */
+export async function getNombreEmpresa(tenantId: string): Promise<string> {
+  const tenant = await Tenant.findById(tenantId).select('nombre').lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return tenant.nombre;
+}
+
+/**
  * Límite de notas de voz del **propio** tenant (HU-OMNI-07), ya resuelto con los defaults. Mismo
  * contrato que `getReminderConfig`: el `tenantId` lo resuelve siempre el caller desde el token.
  */

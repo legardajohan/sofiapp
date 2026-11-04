@@ -896,9 +896,20 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   clienteId: ObjectId,            // ref Cliente — el contacto al que pertenece
   autorId: ObjectId,              // ref User — quién la escribió
   textoEnc: String,               // 1..2000; sufijo `Enc` histórico — se persiste en claro
+  pendiente: Boolean,             // HU-PDF-01, default false; ausente en notas antiguas = false
+  // HU-PDF-01 A1 — solo con `pendiente: true`; `null` en una nota normal:
+  programadoDia: String | null,   // día civil "YYYY-MM-DD"; sin elegir = día del alta en la zona del usuario
+  programadoHora: String | null,  // "HH:mm" de reloj; null = pendiente de todo el día
+  estadoPendiente: "abierto" | "cerrado" | null,
+  cerradoAt: Date | null,
+  cerradoPorId: ObjectId | null,  // ref User — quién lo cerró
   createdAt, updatedAt
 }
 // Índice: { tenantId: 1, clienteId: 1, createdAt: -1 }   (es exactamente la consulta de la tarjeta)
+// Índices parciales (HU-PDF-01 A1), partialFilterExpression: { pendiente: true }:
+//   { tenantId: 1, estadoPendiente: 1, programadoDia: 1, programadoHora: 1, createdAt: 1, _id: 1 }
+//     (abiertos en orden de agenda y rango del PDF por día programado)
+//   { tenantId: 1, estadoPendiente: 1, cerradoAt: -1, _id: -1 }   (historial de cerrados)
 ```
 > **Colección propia, no un subdocumento de `clientes`.** Mismo motivo que `messages`: el documento
 > del contacto no debe crecer sin techo, y paginar o auditar notas sueltas desde un array embebido
@@ -910,8 +921,14 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > `coordinator`/`secretary` recibe `403` tanto al leerlas como al crearlas. Consecuencia de producto
 > asumida a conciencia.
 
-> **Solo se agrega.** No hay editar ni borrar: una nota es un asiento del historial. Tampoco hay
-> adjuntos.
+> **Se edita y se borra desde HU-PDF-01.** Hasta entonces la nota solo se agregaba; la historia de
+> pendientes necesita cambiar su texto, activar o quitar el pendiente y eliminarla
+> (`PATCH`/`DELETE /api/clientes/:clienteId/notas/:notaId`). Cada cambio se audita
+> (`contact-note.update|delete`) **sin el texto**. Sigue sin haber adjuntos.
+
+> **El pendiente es un atributo de la nota, no una colección.** `pendiente: true` hace que la nota
+> aparezca en la columna «Pendientes» del embudo y en su PDF. Así texto, vida y borrado son los de
+> la nota y no hay copia que sincronizar (HU-PDF-01).
 
 ## contact_options  (catálogos de interés / objeción / rol — HU-CRM-02)
 ```js
