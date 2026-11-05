@@ -78,6 +78,9 @@ const ClienteSchema = new Schema<IClienteDocument>(
     // segmentación —es la única cláusula incondicional del filtro—, no solo cuando el usuario
     // elige filtrar por él.
     marketingOptOut: { type: Boolean, required: true, default: false },
+    // Bloqueado / inactivo (HU-MARK-07). Misma razón de índice que el opt-out: toda audiencia lo
+    // excluye de forma incondicional.
+    bloqueado: { type: Boolean, required: true, default: false },
     // Resumen por IA de la conversación (HU-OMNI-03). Opcional; se genera bajo demanda.
     resumenIA: {
       type: new Schema(
@@ -171,6 +174,7 @@ ClienteSchema.index({ tenantId: 1, tagIds: 1 });
 // Segmentación de campañas (HU-MARK-01). Los dos campos que aparecen en más segmentos: el opt-out
 // está en TODOS por construcción, y el rol es uno de los tres ejes que pide la historia.
 ClienteSchema.index({ tenantId: 1, marketingOptOut: 1 });
+ClienteSchema.index({ tenantId: 1, bloqueado: 1 });
 ClienteSchema.index({ tenantId: 1, rolContacto: 1 });
 
 // HU-FLOW-02 — ÚNICO índice del proyecto que no empieza por `tenantId`, y es deliberado: el

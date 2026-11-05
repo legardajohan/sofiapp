@@ -22,7 +22,7 @@ vi.mock('../../integrations/meta/meta-phone-number.client.js', () => ({
   metaPhoneNumberClient: { getHealth: (...args: unknown[]) => getHealth(...args) },
 }));
 
-import { campaignQueue } from '../../config/queues.js';
+import { CAMPAIGN_SCHEDULED_START_JOB, campaignQueue } from '../../config/queues.js';
 import {
   campaignJobId,
   cancelCampaign,
@@ -275,7 +275,7 @@ describe('HU-MARK-01 — servicio de campañas', () => {
     });
   });
 
-  it('programar deja la campaña en `programada` sin encolar ni materializar', async () => {
+  it('programar deja la campaña en `programada`: encola solo su arranque, sin materializar', async () => {
     const enUnaHora = new Date(Date.now() + 3_600_000).toISOString();
 
     const campana = await createCampaign(tenantId, actorId, {
@@ -285,7 +285,9 @@ describe('HU-MARK-01 — servicio de campañas', () => {
 
     expect(campana.estado).toBe('programada');
     expect(campana.programadaPara).toBe(enUnaHora);
-    expect(campaignQueue.add).not.toHaveBeenCalled();
+    // Un único job: el arranque a la hora elegida. Ningún lote de envío todavía.
+    expect(campaignQueue.add).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(campaignQueue.add).mock.calls[0]?.[0]).toBe(CAMPAIGN_SCHEDULED_START_JOB);
     expect(await CampaignRecipient.countDocuments({ tenantId })).toBe(0);
   });
 

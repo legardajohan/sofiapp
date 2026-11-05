@@ -4,6 +4,7 @@ import {
   findByIdScoped,
   findOneAndDeleteScoped,
   findOneAndUpdateScoped,
+  findOneScoped,
   findScoped,
   updateManyScoped,
 } from '../../repositories/base.repository.js';
@@ -14,6 +15,7 @@ import type {
   CreateTagDTO,
   ITag,
   ITagResponse,
+  OrigenTag,
   SemaforoSlug,
   UpdateTagDTO,
 } from './tag.types.js';
@@ -31,6 +33,8 @@ function toTagResponse(doc: ITagLean): ITagResponse {
     nombre: doc.nombre,
     color: doc.color,
     semaforo: doc.semaforo ?? null,
+    origen: doc.origen ?? 'manual',
+    campaignId: doc.campaignId ? String(doc.campaignId) : null,
   };
 }
 
@@ -99,6 +103,69 @@ export async function createTag(tenantId: TenantId, dto: CreateTagDTO): Promise<
     if (esNombreDuplicado(err)) throw new AppError(NOMBRE_DUPLICADO, 409);
     throw err;
   }
+}
+
+/**
+ * Paleta de las etiquetas que genera una campaña (HU-MARK-07). Nadie elige color en ese flujo, así
+ * que se deriva del nombre: estable para el mismo nombre y variada entre campañas. Tonos medios que
+ * `tagColors` del frontend ya sabe contrastar en light y dark.
+ */
+const PALETA_CAMPANA = ['#6366F1', '#0EA5E9', '#14B8A6', '#8B5CF6', '#EC4899', '#F59E0B'] as const;
+
+function colorParaNombre(nombre: string): string {
+  let hash = 0;
+  for (const ch of nombre) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return PALETA_CAMPANA[hash % PALETA_CAMPANA.length] ?? PALETA_CAMPANA[0];
+}
+
+/** La misma collation del índice único: sin ella "Promo" y "promo" no colisionan en la consulta. */
+const COLLATION_NOMBRE = { locale: 'es', strength: 2 } as const;
+
+/**
+ * Devuelve la etiqueta del tenant con ese nombre (insensible a mayúsculas y acentos) o la crea
+ * (HU-MARK-07). Reutilizar en vez de responder 409 es deliberado: quien escribe "Seguimiento oct"
+ * en el envío de una campaña quiere esa etiqueta, exista o no.
+ *
+ * Una creación simultánea con el mismo nombre choca contra el índice único; ese `E11000` no es un
+ * error para este caso, es la señal de que ya existe, y se relee.
+ */
+export async function findOrCreateTagPorNombre(
+  tenantId: TenantId,
+  nombre: string,
+  origen: OrigenTag,
+  campaignId: string | null,
+): Promise<ITagResponse> {
+  const limpio = nombre.trim();
+  const buscar = (): Promise<ITagLean | null> =>
+    findOneScoped(Tag, tenantId, { nombre: limpio })
+      .collation(COLLATION_NOMBRE)
+      .lean<ITagLean>()
+      .exec();
+
+  const existente = await buscar();
+  if (existente) return toTagResponse(existente);
+
+  try {
+    const doc = await createScoped(Tag, tenantId, {
+      nombre: limpio,
+      color: colorParaNombre(limpio),
+      origen,
+      campaignId: campaignId ? new Types.ObjectId(campaignId) : null,
+    });
+    return toTagResponse(doc.toObject() as ITagLean);
+  } catch (err) {
+    if (!esNombreDuplicado(err)) throw err;
+    const ganadora = await buscar();
+    if (!ganadora) throw err;
+    return toTagResponse(ganadora);
+  }
+}
+
+/** Una etiqueta del tenant por id, o `null` (otro tenant o inexistente: lo mismo para el llamador). */
+export async function findTagById(tenantId: TenantId, tagId: string): Promise<ITagResponse | null> {
+  if (!Types.ObjectId.isValid(tagId)) return null;
+  const doc = await findByIdScoped(Tag, tenantId, tagId).lean<ITagLean>();
+  return doc ? toTagResponse(doc) : null;
 }
 
 export async function updateTag(

@@ -15,6 +15,8 @@ import { SemaforoSelect } from './SemaforoSelect.js';
 import { LeadHistorialSemaforo } from './LeadHistorialSemaforo.js';
 import { useDeleteLead } from '../hooks/useDeleteLead.js';
 import { DeleteLeadDialog } from './DeleteLeadDialog.js';
+import { LeadCampanas } from './LeadCampanas.js';
+import { LeadEtiquetas } from './LeadEtiquetas.js';
 import {
   Sheet,
   SheetContent,
@@ -153,6 +155,20 @@ export function LeadDetailSheet({
               <Dato label="Creado">{fechaLarga(lead.createdAt)}</Dato>
               <Dato label="Última actividad">{haceCuanto(lead.ultimoMensajeAt)}</Dato>
             </dl>
+
+            <section className="mt-6" aria-labelledby="lead-etiquetas">
+              <h3 id="lead-etiquetas" className="text-sm font-semibold text-foreground">
+                Etiquetas
+              </h3>
+              <div className="mt-2">
+                <LeadEtiquetas
+                  etiquetas={lead.etiquetas}
+                  vacio="Sin etiquetas. Se ponen desde la conversación o al enviarle una campaña."
+                />
+              </div>
+            </section>
+
+            <LeadCampanas leadId={lead.id} />
 
             <Separator className="my-6" />
 

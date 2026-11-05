@@ -24,6 +24,7 @@ import pendienteRoutes from './features/pendiente/pendiente.routes.js';
 import semaforoRoutes from './features/semaforo/semaforo.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
+import tenantAjustesRoutes from './features/tenant/tenant-ajustes.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
 import platformSettingsRoutes from './features/platform-settings/platform-settings.routes.js';
 import exchangeRateRoutes from './features/exchange-rate/exchange-rate.routes.js';
@@ -104,6 +105,8 @@ app.use('/api/conversations', conversationRoutes);
 // `media.routes.ts` y `docs/multi-tenancy.md`.
 app.use('/api/media', mediaRoutes);
 app.use('/api/tags', tagRoutes);
+// Ajustes de la propia empresa (HU-MARK-07): `/me`, el tenant sale del token.
+app.use('/api/tenants/me', tenantAjustesRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/estados', estadoRoutes);
 app.use('/api/pipeline', pipelineRoutes);

@@ -9,12 +9,9 @@ import { cn } from '@/lib/utils';
 import { useAudiencia } from '../../hooks/useCampaigns.js';
 import { formatearNumero } from '../../lib/pacing.js';
 import { alternarExclusion, devolverExcluidos, sinExclusiones } from '../../lib/segmento.js';
-import {
-  MAX_EXCLUSIONES,
-  type ResumenSegmentoDTO,
-  type SegmentPreviewDTO,
-  type SegmentoFiltros,
-} from '../../types.js';
+import { MAX_EXCLUSIONES, type SegmentPreviewDTO, type SegmentoFiltros } from '../../types.js';
+import { resumenDe } from '../../lib/resumen.js';
+import { ConteoAudiencia } from './ConteoAudiencia.js';
 
 interface Props {
   filtros: SegmentoFiltros;
@@ -25,31 +22,6 @@ interface Props {
   /** Recalculando tras un cambio: hay número, pero puede estar viejo. */
   actualizando: boolean;
   enabled: boolean;
-}
-
-/** Tramos de la barra, de lo que se envía a lo que se cae. El orden es el de la lectura. */
-const TRAMOS: Array<{
-  clave: keyof Omit<ResumenSegmentoDTO, 'coinciden'>;
-  etiqueta: string;
-  clase: string;
-}> = [
-  { clave: 'validos', etiqueta: 'Recibirán el mensaje', clase: 'bg-primary' },
-  { clave: 'duplicados', etiqueta: 'Teléfono repetido', clase: 'bg-muted-foreground/55' },
-  { clave: 'excluidosAMano', etiqueta: 'Quitados por ti', clase: 'bg-destructive/70' },
-  { clave: 'bajas', etiqueta: 'Pidieron no recibir mensajes', clase: 'bg-muted-foreground/25' },
-];
-
-/** El backend anterior al constructor no manda resumen: se reconstruye lo que se sabe. */
-function resumenDe(preview: SegmentPreviewDTO): ResumenSegmentoDTO {
-  return (
-    preview.resumen ?? {
-      coinciden: preview.total,
-      bajas: 0,
-      excluidosAMano: 0,
-      duplicados: 0,
-      validos: preview.total,
-    }
-  );
 }
 
 /**
@@ -90,7 +62,6 @@ export function AudiencePanel({
   const topeAlcanzado = excluidos.size >= MAX_EXCLUSIONES;
 
   const resumen = preview ? resumenDe(preview) : null;
-  const caidos = resumen ? resumen.coinciden - resumen.validos : 0;
 
   const totalLista = lista.data?.total ?? 0;
   const desde = totalLista === 0 ? 0 : (page - 1) * 20 + 1;
@@ -101,98 +72,25 @@ export function AudiencePanel({
       aria-label="Audiencia de la campaña"
       className="flex flex-col gap-5 rounded-xl border border-border bg-muted/30 p-4 sm:p-5"
     >
-      {/* ── Cifra principal ───────────────────────────────────────────── */}
-      <div aria-live="polite" aria-busy={actualizando}>
-        {cargando || !resumen ? (
-          <div className="space-y-2">
-            <Skeleton className="h-9 w-28" />
-            <Skeleton className="h-4 w-44" />
-          </div>
-        ) : (
-          <div
-            className={cn('transition-opacity duration-200 ease-out', actualizando && 'opacity-60')}
+      <ConteoAudiencia
+        resumen={resumen}
+        cargando={cargando}
+        actualizando={actualizando}
+        coincidenTexto="cumplen los criterios"
+        vacio="Nadie cumple estos criterios. Quita alguno, o elige «Cumplen cualquiera» si combinas etapas y etiquetas."
+      >
+        {resumen && (resumen.excluidosAMano > 0 || excluidos.size > 0) ? (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-sm"
+            onClick={() => onChange(devolverExcluidos(filtros))}
           >
-            <p className="text-4xl font-semibold tabular-nums leading-none tracking-tight text-foreground">
-              {formatearNumero(resumen.validos)}
-            </p>
-            <p className="mt-1.5 flex items-baseline gap-2 text-sm text-muted-foreground">
-              <span
-                aria-hidden
-                className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full bg-primary"
-              />
-              <span>
-                {resumen.validos === 1 ? 'persona recibirá' : 'personas recibirán'} el mensaje
-                {caidos > 0 ? (
-                  <> de {formatearNumero(resumen.coinciden)} que cumplen los criterios</>
-                ) : null}
-              </span>
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Descomposición ────────────────────────────────────────────── */}
-      {resumen && resumen.coinciden > 0 ? (
-        <div
-          className={cn(
-            'space-y-3 transition-opacity duration-200 ease-out',
-            actualizando && 'opacity-60',
-          )}
-        >
-          <div
-            role="img"
-            aria-label={TRAMOS.map(
-              (t) => `${t.etiqueta}: ${formatearNumero(resumen[t.clave])}`,
-            ).join('. ')}
-            className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
-          >
-            {TRAMOS.filter((t) => resumen[t.clave] > 0).map((t) => (
-              <span
-                key={t.clave}
-                className={cn('h-full first:rounded-l-full last:rounded-r-full', t.clase)}
-                style={{ width: `${(resumen[t.clave] / resumen.coinciden) * 100}%` }}
-              />
-            ))}
-          </div>
-
-          {/* La leyenda solo explica lo que se cae: lo que se envía ya es la cifra grande. */}
-          <dl className="space-y-1.5 text-sm">
-            {TRAMOS.filter((t) => t.clave !== 'validos').map((t) => (
-              <div key={t.clave} className="flex items-center justify-between gap-3">
-                <dt className="flex items-center gap-2 text-muted-foreground">
-                  <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-full', t.clase)} />
-                  {t.etiqueta}
-                </dt>
-                <dd
-                  className={cn(
-                    'tabular-nums',
-                    resumen[t.clave] > 0 ? 'font-medium text-foreground' : 'text-muted-foreground',
-                  )}
-                >
-                  {formatearNumero(resumen[t.clave])}
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          {resumen.excluidosAMano > 0 || excluidos.size > 0 ? (
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-sm"
-              onClick={() => onChange(devolverExcluidos(filtros))}
-            >
-              Devolver a los {formatearNumero(excluidos.size)} que quitaste
-            </Button>
-          ) : null}
-        </div>
-      ) : resumen ? (
-        <p className="text-sm text-muted-foreground">
-          Nadie cumple estos criterios. Quita alguno, o elige «Cumplen cualquiera» si combinas
-          etapas y etiquetas.
-        </p>
-      ) : null}
+            Devolver a los {formatearNumero(excluidos.size)} que quitaste
+          </Button>
+        ) : null}
+      </ConteoAudiencia>
 
       {/* ── Quiénes son ───────────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-col gap-3 border-t border-border pt-4">

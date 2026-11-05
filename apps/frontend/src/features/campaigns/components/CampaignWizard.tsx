@@ -21,17 +21,36 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
-import { useSegmentPreview } from '../hooks/useCampaigns.js';
+import { useAudiencePreview, useSegmentPreview } from '../hooks/useCampaigns.js';
 import { formatearNumero } from '../lib/pacing.js';
+import { problemaConHora } from '../lib/programacion.js';
+import { DateTimePicker } from './DateTimePicker.js';
+import {
+  DESCRIPCION_RANGO,
+  aAudiencia,
+  formatearRangoResuelto,
+  sugerirNombreEtiqueta,
+  type SeleccionRango,
+} from '../lib/rango.js';
+import { aEtiquetaEnvio, type ValorEtiqueta } from '../lib/etiqueta.js';
+import { TagField } from './TagField.js';
+import { AudienceTypeSwitch } from './audiencia/AudienceTypeSwitch.js';
+import { RecentMessagesAudience } from './audiencia/RecentMessagesAudience.js';
 import { AudienceMeter } from './AudienceMeter.js';
 import { HeaderImageField } from './HeaderImageField.js';
 import { MessagePreview } from './MessagePreview.js';
 import { ParametrosPlantilla } from './ParametrosPlantilla.js';
 import { AudienceBuilder } from './audiencia/AudienceBuilder.js';
 import { ResumenAudiencia } from './audiencia/ResumenAudiencia.js';
-import type { CreateCampaignPayload, ParametroDinamico, SegmentoFiltros } from '../types.js';
+import type {
+  CreateCampaignPayload,
+  ParametroDinamico,
+  SegmentoFiltros,
+  TipoAudiencia,
+} from '../types.js';
 
 interface Props {
   open: boolean;
@@ -50,10 +69,17 @@ const TITULO: Record<Paso, string> = {
 };
 
 const DESCRIPCION: Record<Paso, string> = {
-  segmento: 'Elige por etapas del CRM, etiquetas o las dos. El total se actualiza con cada cambio.',
+  segmento: 'Por filtros de tu cartera o por a quién le escribiste hace poco. El total se actualiza con cada cambio.',
   plantilla: 'Solo aparecen las plantillas que Meta ya aprobó.',
-  revision: 'Comprueba el alcance y el cupo de tu número antes de lanzar.',
+  revision: 'Comprueba el alcance y el cupo de tu número, y elige cuándo sale.',
 };
+
+type Cuando = 'ahora' | 'programar';
+
+const OPCIONES_CUANDO: ReadonlyArray<readonly [Cuando, string]> = [
+  ['ahora', 'Enviar ahora'],
+  ['programar', 'Programar'],
+];
 
 /** Estado inicial del borrador. Función y no constante: cada apertura parte de un objeto propio. */
 function borradorVacio(): {
@@ -64,10 +90,29 @@ function borradorVacio(): {
   /** HT-WA-04: imagen de reemplazo. `null` = la imagen por defecto de la plantilla. */
   imagen: File | null;
   parametrosDinamicos: ParametroDinamico[];
+  /** HU-MARK-07. Cómo se arma la audiencia. */
+  tipoAudiencia: TipoAudiencia;
+  rango: SeleccionRango;
+  /** Etiqueta para los enviados con éxito. `null` = sin etiqueta. */
+  etiqueta: ValorEtiqueta;
+  /**
+   * Mientras sea `false`, el nombre de la etiqueta sigue al nombre de la campaña: la sugerencia se
+   * actualiza sola. En cuanto la persona la toca, deja de pisarse.
+   */
+  etiquetaEditada: boolean;
+  /** Cuándo sale: ya mismo o a una hora elegida. */
+  cuando: Cuando;
+  programadaPara: Date | null;
 } {
   return {
     nombre: '',
     filtros: {},
+    tipoAudiencia: 'segmento',
+    rango: { rango: '1d' },
+    etiqueta: null,
+    etiquetaEditada: false,
+    cuando: 'ahora',
+    programadaPara: null,
     templateId: '',
     parametros: [],
     imagen: null,
@@ -104,8 +149,25 @@ export function CampaignWizard({
   }, [open]);
 
   // Lo que se teclea repinta al instante; lo que consulta al servidor va retrasado.
+  const esReciente = borrador.tipoAudiencia === 'mensajes_recientes';
   const filtrosDebounced = useDebouncedValue(borrador.filtros, 400);
-  const preview = useSegmentPreview(filtrosDebounced, open);
+  const previewSegmento = useSegmentPreview(filtrosDebounced, open && !esReciente);
+
+  // HU-MARK-07. Una clave de texto, como en el panel de audiencia: `aAudiencia` crea un objeto nuevo
+  // en cada render y un objeto nuevo reiniciaría el debounce sin fin.
+  const claveRango = useDebouncedValue(JSON.stringify(aAudiencia(borrador.rango)), 300);
+  const audienciaReciente = useMemo(
+    () => JSON.parse(claveRango) as ReturnType<typeof aAudiencia>,
+    [claveRango],
+  );
+  const previewReciente = useAudiencePreview(audienciaReciente, open && esReciente);
+  const preview = esReciente ? previewReciente : previewSegmento;
+
+  const sugerido = sugerirNombreEtiqueta(borrador.nombre, new Date());
+  const etiqueta: ValorEtiqueta =
+    borrador.etiqueta?.modo === 'nueva' && !borrador.etiquetaEditada
+      ? { modo: 'nueva', nombre: sugerido }
+      : borrador.etiqueta;
 
   const { data: plantillas, isLoading: cargandoPlantillas } = useQuery({
     queryKey: ['templates', 'approved'],
@@ -145,14 +207,21 @@ export function CampaignWizard({
     plantilla === null ||
     borrador.parametros.filter((p) => p.trim()).length === plantilla.parametrosBody;
 
+  const rangoCompleto = !esReciente || audienciaReciente !== null;
+
   const puedeAvanzar: Record<Paso, boolean> = {
-    segmento: total > 0,
+    segmento: total > 0 && rangoCompleto && claveRango === JSON.stringify(aAudiencia(borrador.rango)),
     plantilla:
       plantilla !== null &&
       parametrosCompletos &&
       // Sin imagen por defecto, la de reemplazo es obligatoria: el backend respondería 422.
       (!llevaImagen || imagenDefectoUrl !== null || borrador.imagen !== null),
-    revision: borrador.nombre.trim().length > 0 && !(presupuesto?.bloqueado ?? false),
+    revision:
+      borrador.nombre.trim().length > 0 &&
+      !(presupuesto?.bloqueado ?? false) &&
+      // Etiqueta encendida pero sin nombre: el envío no sabría qué poner.
+      (etiqueta === null || aEtiquetaEnvio(etiqueta) !== undefined) &&
+      (borrador.cuando === 'ahora' || problemaConHora(borrador.programadaPara) === null),
   };
 
   function elegirPlantilla(id: string): void {
@@ -169,17 +238,40 @@ export function CampaignWizard({
     }));
   }
 
-  function enviar(lanzar: boolean): void {
+  function cambiarTipo(tipoAudiencia: TipoAudiencia): void {
+    setBorrador((b) => ({
+      ...b,
+      tipoAudiencia,
+      // Quien arma la campaña por mensajes recientes casi siempre quiere poder seguirla después:
+      // la etiqueta viene encendida. Por filtros, la audiencia ya es reproducible: apagada.
+      etiqueta:
+        b.etiquetaEditada || b.etiqueta?.modo === 'existente'
+          ? b.etiqueta
+          : tipoAudiencia === 'mensajes_recientes'
+            ? { modo: 'nueva', nombre: '' }
+            : null,
+    }));
+  }
+
+  /** `borrador` guarda sin fecha; `ahora` lanza; `programar` deja la campaña esperando su hora. */
+  function enviar(destino: 'borrador' | Cuando): void {
+    const etiquetaEnvio = destino === 'borrador' ? undefined : aEtiquetaEnvio(etiqueta);
     onSubmit({
       nombre: borrador.nombre.trim(),
-      filtros: borrador.filtros,
+      // Una audiencia por fechas no lleva filtros: el backend los ignora, pero no se mandan.
+      filtros: esReciente ? {} : borrador.filtros,
+      ...(esReciente && audienciaReciente ? { audiencia: audienciaReciente } : {}),
+      ...(etiquetaEnvio ? { etiqueta: etiquetaEnvio } : {}),
       templateId: borrador.templateId,
       parametros: borrador.parametros,
       ...(llevaImagen && borrador.imagen ? { imagen: borrador.imagen } : {}),
       ...(borrador.parametrosDinamicos.length > 0
         ? { parametrosDinamicos: borrador.parametrosDinamicos }
         : {}),
-      ...(lanzar ? { lanzar: true } : {}),
+      ...(destino === 'ahora' ? { lanzar: true } : {}),
+      ...(destino === 'programar' && borrador.programadaPara
+        ? { programadaPara: borrador.programadaPara.toISOString() }
+        : {}),
     });
   }
 
@@ -203,15 +295,29 @@ export function CampaignWizard({
         <div className="py-5">
           {paso === 'segmento' ? (
             <div className="space-y-6">
-              <AudienceBuilder
-                valor={borrador.filtros}
-                onChange={(filtros) => setBorrador((b) => ({ ...b, filtros }))}
-                preview={preview.data}
-                cargando={preview.isPending}
-                // También mientras corre el debounce: la cifra en pantalla ya no es la de los criterios.
-                actualizando={preview.isFetching || filtrosDebounced !== borrador.filtros}
-                enabled={open}
-              />
+              <AudienceTypeSwitch valor={borrador.tipoAudiencia} onChange={cambiarTipo} />
+              {esReciente ? (
+                <RecentMessagesAudience
+                  valor={borrador.rango}
+                  onChange={(rango) => setBorrador((b) => ({ ...b, rango }))}
+                  preview={previewReciente.data}
+                  cargando={previewReciente.isPending}
+                  actualizando={
+                    previewReciente.isFetching ||
+                    claveRango !== JSON.stringify(aAudiencia(borrador.rango))
+                  }
+                />
+              ) : (
+                <AudienceBuilder
+                  valor={borrador.filtros}
+                  onChange={(filtros) => setBorrador((b) => ({ ...b, filtros }))}
+                  preview={previewSegmento.data}
+                  cargando={previewSegmento.isPending}
+                  // También mientras corre el debounce: la cifra en pantalla ya no es la de los criterios.
+                  actualizando={previewSegmento.isFetching || filtrosDebounced !== borrador.filtros}
+                  enabled={open}
+                />
+              )}
             </div>
           ) : null}
 
@@ -300,13 +406,103 @@ export function CampaignWizard({
                 </p>
               </div>
 
-              <ResumenAudiencia filtros={borrador.filtros} preview={preview.data} />
+              {esReciente ? (
+                <section
+                  aria-label="Audiencia"
+                  className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-4"
+                >
+                  <h3 className="text-sm font-semibold text-foreground">A quién va</h3>
+                  <p className="text-sm text-muted-foreground">
+                    A quienes les escribiste en{' '}
+                    {borrador.rango.rango === 'custom'
+                      ? 'el periodo que elegiste'
+                      : DESCRIPCION_RANGO[borrador.rango.rango]}
+                    :{' '}
+                    <span className="font-medium tabular-nums text-foreground">
+                      {formatearNumero(total)}
+                    </span>{' '}
+                    {total === 1 ? 'persona' : 'personas'}, una vez cada una.
+                  </p>
+                  {previewReciente.data ? (
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      {formatearRangoResuelto(
+                        previewReciente.data.rango.desde,
+                        previewReciente.data.rango.hasta,
+                        previewReciente.data.rango.zonaHoraria,
+                      )}{' '}
+                      ({previewReciente.data.rango.zonaHoraria}). Queda fijo al guardar la campaña.
+                    </p>
+                  ) : null}
+                </section>
+              ) : (
+                <ResumenAudiencia filtros={borrador.filtros} preview={previewSegmento.data} />
+              )}
 
               {presupuesto ? (
                 <AudienceMeter destinatarios={total} presupuesto={presupuesto} />
               ) : (
                 <Skeleton className="h-32 w-full" />
               )}
+
+              <TagField
+                valor={etiqueta}
+                sugerido={sugerido}
+                onChange={(valor) =>
+                  setBorrador((b) => ({
+                    ...b,
+                    etiqueta: valor,
+                    // Encender el interruptor no es "editar": la sugerencia sigue al nombre.
+                    etiquetaEditada: valor !== null && b.etiqueta !== null,
+                  }))
+                }
+              />
+
+              <section
+                aria-labelledby="cuando-sale"
+                className="space-y-4 rounded-lg border border-border p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <h3 id="cuando-sale" className="text-sm font-semibold">
+                      ¿Cuándo sale?
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {borrador.cuando === 'ahora'
+                        ? 'Empieza a enviarse en cuanto confirmes, al ritmo que permite tu número.'
+                        : esReciente
+                          ? 'Arranca sola a esa hora y les llega a las personas de este conteo: el rango ya quedó fijo.'
+                          : 'Arranca sola a esa hora. Los contactos se cuentan de nuevo en ese momento.'}
+                    </p>
+                  </div>
+                  <ToggleGroup
+                    type="single"
+                    value={borrador.cuando}
+                    // Radix devuelve '' al volver a pulsar el activo. Aquí siempre hay uno.
+                    onValueChange={(v) => {
+                      if (v) setBorrador((b) => ({ ...b, cuando: v as Cuando }));
+                    }}
+                    aria-label="Cuándo sale la campaña"
+                    className="inline-flex rounded-lg border border-border bg-muted/40 p-1"
+                  >
+                    {OPCIONES_CUANDO.map(([v, texto]) => (
+                      <ToggleGroupItem
+                        key={v}
+                        value={v}
+                        className="h-8 rounded-md px-3 text-sm text-muted-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+                      >
+                        {texto}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+
+                {borrador.cuando === 'programar' ? (
+                  <DateTimePicker
+                    valor={borrador.programadaPara}
+                    onChange={(programadaPara) => setBorrador((b) => ({ ...b, programadaPara }))}
+                  />
+                ) : null}
+              </section>
 
             </div>
           ) : null}
@@ -328,7 +524,7 @@ export function CampaignWizard({
                 type="button"
                 variant="outline"
                 disabled={pending || !borrador.nombre.trim()}
-                onClick={() => enviar(false)}
+                onClick={() => enviar('borrador')}
                 className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
               >
                 Guardar borrador
@@ -336,10 +532,16 @@ export function CampaignWizard({
               <Button
                 type="button"
                 disabled={pending || !puedeAvanzar.revision}
-                onClick={() => enviar(true)}
+                onClick={() => enviar(borrador.cuando)}
                 className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
               >
-                {pending ? 'Enviando…' : `Enviar a ${formatearNumero(total)}`}
+                {borrador.cuando === 'programar'
+                  ? pending
+                    ? 'Programando…'
+                    : 'Programar campaña'
+                  : pending
+                    ? 'Enviando…'
+                    : `Enviar a ${formatearNumero(total)}`}
               </Button>
             </div>
           ) : (

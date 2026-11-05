@@ -93,7 +93,18 @@ function intersectar(a: Types.ObjectId[], b: Types.ObjectId[]): Types.ObjectId[]
   return a.filter((id) => enB.has(id.toString()));
 }
 
-function aObjectIds(ids: ReadonlyArray<string | Types.ObjectId> | undefined): Types.ObjectId[] {
+/**
+ * Lo que **ninguna** audiencia puede incluir, la pida quien la pida (criterio 3 de HU-MARK-01 y 5 de
+ * HU-MARK-07): quien pidió la baja de marketing y quien está bloqueado o inactivo. `$ne: true` y no
+ * `false`: los contactos anteriores a cada campo no lo llevan, y ausente significa "no".
+ *
+ * Se devuelve un objeto nuevo en cada llamada para que nadie mute el compartido.
+ */
+export function exclusionesIncondicionales(): FilterQuery<IClienteDocument> {
+  return { marketingOptOut: { $ne: true }, bloqueado: { $ne: true } };
+}
+
+export function aObjectIds(ids: ReadonlyArray<string | Types.ObjectId> | undefined): Types.ObjectId[] {
   return (ids ?? []).map((id) => new Types.ObjectId(id.toString()));
 }
 
@@ -154,14 +165,22 @@ export async function construirFiltroSegmento(
   tenantId: TenantId,
   filtros: ISegmentoFiltros,
 ): Promise<FilterQuery<IClienteDocument>> {
-  const filtro = await construirFiltroCoincidencia(tenantId, filtros);
-  filtro.marketingOptOut = { $ne: true };
+  const coincidencia = await construirFiltroCoincidencia(tenantId, filtros);
+  return aplicarExclusiones(coincidencia, aObjectIds(filtros.excluirClienteIds));
+}
 
-  const excluidos = aObjectIds(filtros.excluirClienteIds);
-  if (excluidos.length > 0) {
-    filtro.$and = [...(filtro.$and ?? []), { _id: { $nin: excluidos } }];
+/**
+ * De "lo que coincide" a "a quién se le escribe": exclusiones incondicionales + las quitadas a mano.
+ * Compartido por todos los tipos de audiencia (HU-MARK-07), para que la regla sea una sola.
+ */
+export function aplicarExclusiones(
+  coincidencia: FilterQuery<IClienteDocument>,
+  excluidosAMano: Types.ObjectId[] = [],
+): FilterQuery<IClienteDocument> {
+  const filtro: FilterQuery<IClienteDocument> = { ...coincidencia, ...exclusionesIncondicionales() };
+  if (excluidosAMano.length > 0) {
+    filtro.$and = [...(coincidencia.$and ?? []), { _id: { $nin: excluidosAMano } }];
   }
-
   return filtro;
 }
 
@@ -190,19 +209,34 @@ export async function resumirSegmento(
   tenantId: TenantId,
   filtros: ISegmentoFiltros,
 ): Promise<IResumenSegmento> {
-  const [coincidencia, segmento] = await Promise.all([
-    construirFiltroCoincidencia(tenantId, filtros),
-    construirFiltroSegmento(tenantId, filtros),
-  ]);
-  const excluidos = aObjectIds(filtros.excluirClienteIds);
+  const coincidencia = await construirFiltroCoincidencia(tenantId, filtros);
+  return resumirCoincidencia(tenantId, coincidencia, aObjectIds(filtros.excluirClienteIds));
+}
 
-  const [coinciden, bajas, excluidosAMano, candidatos, validos] = await Promise.all([
+/**
+ * El resumen a partir de "lo que coincide", sea cual sea el tipo de audiencia (HU-MARK-07). Los
+ * grupos son **disjuntos** —una baja no cuenta además como bloqueada, ni un bloqueado como
+ * excluido a mano— para que `coinciden = validos + bajas + bloqueados + excluidosAMano + duplicados`.
+ */
+export async function resumirCoincidencia(
+  tenantId: TenantId,
+  coincidencia: FilterQuery<IClienteDocument>,
+  excluidos: Types.ObjectId[] = [],
+): Promise<IResumenSegmento> {
+  const segmento = aplicarExclusiones(coincidencia, excluidos);
+
+  const [coinciden, bajas, bloqueados, excluidosAMano, candidatos, validos] = await Promise.all([
     countScoped(Cliente, tenantId, coincidencia),
     countScoped(Cliente, tenantId, { ...coincidencia, marketingOptOut: true }),
+    countScoped(Cliente, tenantId, {
+      ...coincidencia,
+      marketingOptOut: { $ne: true },
+      bloqueado: true,
+    }),
     excluidos.length > 0
       ? countScoped(Cliente, tenantId, {
           ...coincidencia,
-          marketingOptOut: { $ne: true },
+          ...exclusionesIncondicionales(),
           $and: [...(coincidencia.$and ?? []), { _id: { $in: excluidos } }],
         })
       : Promise.resolve(0),
@@ -210,7 +244,7 @@ export async function resumirSegmento(
     contarTelefonosUnicos(tenantId, segmento),
   ]);
 
-  return { coinciden, bajas, excluidosAMano, duplicados: candidatos - validos, validos };
+  return { coinciden, bajas, bloqueados, excluidosAMano, duplicados: candidatos - validos, validos };
 }
 
 type ContactoLean = Pick<ICliente, 'nombre' | 'telefono'> & { _id: Types.ObjectId };
@@ -229,11 +263,27 @@ function toContactoResumen(c: ContactoLean): IContactoResumen {
 export async function previewSegmento(
   tenantId: TenantId,
   filtros: ISegmentoFiltros,
-): Promise<{ total: number; muestra: IContactoResumen[]; resumen: IResumenSegmento }> {
-  const filtro = await construirFiltroSegmento(tenantId, filtros);
+): Promise<IPreviewCoincidencia> {
+  const coincidencia = await construirFiltroCoincidencia(tenantId, filtros);
+  return previewCoincidencia(tenantId, coincidencia, aObjectIds(filtros.excluirClienteIds));
+}
+
+export interface IPreviewCoincidencia {
+  total: number;
+  muestra: IContactoResumen[];
+  resumen: IResumenSegmento;
+}
+
+/** Conteo y muestra a partir de "lo que coincide": lo comparten todos los tipos de audiencia. */
+export async function previewCoincidencia(
+  tenantId: TenantId,
+  coincidencia: FilterQuery<IClienteDocument>,
+  excluidos: Types.ObjectId[] = [],
+): Promise<IPreviewCoincidencia> {
+  const filtro = aplicarExclusiones(coincidencia, excluidos);
 
   const [resumen, contactos] = await Promise.all([
-    resumirSegmento(tenantId, filtros),
+    resumirCoincidencia(tenantId, coincidencia, excluidos),
     findScoped(Cliente, tenantId, filtro)
       .select('nombre telefono')
       .sort({ ultimoMensajeAt: -1 })
@@ -261,8 +311,10 @@ export async function listarAudiencia(
   filtros: ISegmentoFiltros,
   opciones: { busqueda?: string; page: number; limit: number },
 ): Promise<IAudienciaResponse> {
-  const filtro = await construirFiltroCoincidencia(tenantId, filtros);
-  filtro.marketingOptOut = { $ne: true };
+  const filtro: FilterQuery<IClienteDocument> = {
+    ...(await construirFiltroCoincidencia(tenantId, filtros)),
+    ...exclusionesIncondicionales(),
+  };
 
   const busqueda = opciones.busqueda?.trim();
   if (busqueda) {
@@ -303,9 +355,10 @@ export async function listarAudiencia(
  * persona, y es a personas a quien llega la campaña.
  */
 export async function facetasSegmento(tenantId: TenantId): Promise<ISegmentFacetasResponse> {
-  const bajas = (await findScoped(Cliente, tenantId, { marketingOptOut: true }).distinct(
-    '_id',
-  )) as Types.ObjectId[];
+  // "Fuera de alcance" = baja de marketing o bloqueado (HU-MARK-07).
+  const bajas = (await findScoped(Cliente, tenantId, {
+    $or: [{ marketingOptOut: true }, { bloqueado: true }],
+  }).distinct('_id')) as Types.ObjectId[];
 
   const [etapas, etiquetas] = await Promise.all([
     aggregateScoped<{ _id: string; contactos: number }>(Lead, tenantId, [
@@ -314,7 +367,7 @@ export async function facetasSegmento(tenantId: TenantId): Promise<ISegmentFacet
       { $group: { _id: '$_id.estado', contactos: { $sum: 1 } } },
     ]),
     aggregateScoped<{ _id: Types.ObjectId; contactos: number }>(Cliente, tenantId, [
-      { $match: { marketingOptOut: { $ne: true } } },
+      { $match: exclusionesIncondicionales() },
       { $unwind: '$tagIds' },
       { $group: { _id: '$tagIds', contactos: { $sum: 1 } } },
     ]),
