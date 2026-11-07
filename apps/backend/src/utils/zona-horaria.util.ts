@@ -3,8 +3,8 @@
  * que conoce los cambios de horario de verano de cada zona. La aritmética de offsets a mano se
  * equivoca dos veces al año.
  *
- * Las comparten el trigger `horario` de flujos (HU-FLOW-04) y la política de ventanas de envío
- * (HU-CONF-01).
+ * Las comparten el trigger `horario` de flujos (HU-FLOW-04), la política de ventanas de envío
+ * (HU-CONF-01) y los rangos de la audiencia "mensajes recientes" (HU-MARK-07).
  */
 
 const DIAS_SEMANA: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -62,6 +62,7 @@ const dosDigitos = (n: number): string => String(n).padStart(2, '0');
 
 /** ¿La zona existe para `Intl`? Lo usa la validación Zod de la zona del tenant. */
 export function esZonaHorariaValida(zonaHoraria: string): boolean {
+  if (!zonaHoraria) return false;
   try {
     formateador(zonaHoraria);
     return true;
@@ -143,4 +144,21 @@ export function sumarDias(fecha: string, dias: number): string {
 export function diaSemanaDeFecha(fecha: string): number {
   const [anio, mes, dia] = fecha.split('-').map(Number) as [number, number, number];
   return new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
+}
+
+/** 00:00:00.000 del día `fecha` (`YYYY-MM-DD`) en la zona dada, como instante UTC. */
+export function inicioDelDiaEnZona(fecha: string, zonaHoraria: string): Date {
+  return localAUtc(fecha, '00:00', zonaHoraria);
+}
+
+/** 23:59:59.999 del día `fecha` (`YYYY-MM-DD`) en la zona dada: 1 ms antes del inicio del siguiente. */
+export function finDelDiaEnZona(fecha: string, zonaHoraria: string): Date {
+  return new Date(localAUtc(sumarDias(fecha, 1), '00:00', zonaHoraria).getTime() - 1);
+}
+
+/** Días de calendario entre dos `YYYY-MM-DD`, ambos incluidos (`2026-10-01`→`2026-10-01` = 1). */
+export function diasInclusivos(desde: string, hasta: string): number {
+  const a = Date.parse(`${desde}T00:00:00Z`);
+  const b = Date.parse(`${hasta}T00:00:00Z`);
+  return Math.round((b - a) / 86_400_000) + 1;
 }

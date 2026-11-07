@@ -39,6 +39,7 @@ function leerFiltros(params: URLSearchParams): LeadsFiltros {
     estado: params.get('estado') ?? undefined,
     semaforo: unaDe(SEMAFOROS, params.get('semaforo')),
     asesor: params.get('asesor') ?? undefined,
+    etiqueta: params.get('etiqueta') ?? undefined,
     desde: params.get('desde') ?? undefined,
     hasta: params.get('hasta') ?? undefined,
   };
@@ -94,7 +95,12 @@ export function LeadsPage(): React.ReactElement {
   }, [select]);
 
   const hayFiltros = Boolean(
-    filtros.estado ?? filtros.asesor ?? filtros.semaforo ?? filtros.desde ?? filtros.hasta,
+    filtros.estado ??
+      filtros.asesor ??
+      filtros.semaforo ??
+      filtros.etiqueta ??
+      filtros.desde ??
+      filtros.hasta,
   );
 
   /**
@@ -115,6 +121,7 @@ export function LeadsPage(): React.ReactElement {
       if (siguiente.estado) next.set('estado', siguiente.estado);
       if (siguiente.semaforo) next.set('semaforo', siguiente.semaforo);
       if (siguiente.asesor) next.set('asesor', siguiente.asesor);
+      if (siguiente.etiqueta) next.set('etiqueta', siguiente.etiqueta);
       if (siguiente.desde) next.set('desde', siguiente.desde);
       if (siguiente.hasta) next.set('hasta', siguiente.hasta);
 

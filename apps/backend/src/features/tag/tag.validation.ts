@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TAG_NOMBRE_MAX } from './tag.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
@@ -7,7 +8,7 @@ const nombre = z
   .string()
   .trim()
   .min(1, 'El nombre de la etiqueta no puede estar vacío.')
-  .max(30, 'El nombre no puede superar los 30 caracteres.');
+  .max(TAG_NOMBRE_MAX, `El nombre no puede superar los ${TAG_NOMBRE_MAX} caracteres.`);
 
 const color = z
   .string()

@@ -50,13 +50,26 @@ import {
   previewSegmento,
 } from './campaign.segment.service.js';
 import { marcarEntregado, registrarLectura } from './campaign.metrics.service.js';
-import type { ICliente } from '../cliente/cliente.types.js';
+import {
+  construirFiltroMensajesRecientes,
+  previewMensajesRecientes,
+  resolverRangoDelTenant,
+} from './campaign.audience-reciente.service.js';
+import { findOrCreateTagPorNombre, findTagById, findTagsByIds } from '../tag/tag.service.js';
+import type { ITagResponse } from '../tag/tag.types.js';
+import type { FilterQuery } from 'mongoose';
+import type { ICliente, IClienteDocument } from '../cliente/cliente.types.js';
 import type { LeanWhatsAppTemplate } from '../whatsapp-template/whatsapp-template.types.js';
 import type { MessageStatus } from '../message/message.types.js';
 import type {
   CampaignStartJobData,
+  AudienciaInputDTO,
   CreateCampaignDTO,
   EstadoDestinatario,
+  IAudienciaCampana,
+  IAudiencePreviewResponse,
+  SendCampaignDTO,
+  EtiquetaEnvioDTO,
   IImagenCampana,
   IImagenCampanaResponse,
   IImagenSubida,
@@ -102,7 +115,13 @@ function toImagenResponse(c: LeanCampaign): IImagenCampanaResponse | null {
   };
 }
 
-function toCampaignResponse(c: LeanCampaign): ICampaignResponse {
+/** Audiencia tal como se guarda, con el default de las campañas anteriores a HU-MARK-07. */
+function audienciaDe(c: LeanCampaign): IAudienciaCampana {
+  return c.audiencia ?? { tipo: 'segmento', rango: null, desde: null, hasta: null, zonaHoraria: null };
+}
+
+function toCampaignResponse(c: LeanCampaign, etiqueta: ITagResponse | null = null): ICampaignResponse {
+  const audiencia = audienciaDe(c);
   return {
     id: c._id.toString(),
     nombre: c.nombre,
@@ -119,8 +138,25 @@ function toCampaignResponse(c: LeanCampaign): ICampaignResponse {
     finalizadaAt: c.finalizadaAt ? c.finalizadaAt.toISOString() : null,
     retenidaHasta: c.retenidaHasta ? c.retenidaHasta.toISOString() : null,
     motivo: c.motivo,
+    audiencia: {
+      tipo: audiencia.tipo,
+      rango: audiencia.rango ?? null,
+      desde: audiencia.desde ? audiencia.desde.toISOString() : null,
+      hasta: audiencia.hasta ? audiencia.hasta.toISOString() : null,
+      zonaHoraria: audiencia.zonaHoraria ?? null,
+    },
+    etiqueta: etiqueta ? { id: etiqueta.id, nombre: etiqueta.nombre, color: etiqueta.color } : null,
     createdAt: (c.createdAt ?? new Date()).toISOString(),
   };
+}
+
+/**
+ * Respuesta con la etiqueta hidratada (HU-MARK-07). Una etiqueta borrada después del envío es una
+ * referencia colgada: se responde `null` en vez de romper el detalle.
+ */
+async function responder(tenantId: TenantId, c: LeanCampaign): Promise<ICampaignResponse> {
+  const etiqueta = c.tagId ? await findTagById(tenantId, c.tagId.toString()) : null;
+  return toCampaignResponse(c, etiqueta);
 }
 
 function toRecipientResponse(r: LeanCampaignRecipient): ICampaignRecipientResponse {
@@ -205,6 +241,31 @@ export async function previewSegment(
   ]);
 
   return { ...segmento, presupuesto };
+}
+
+/**
+ * Vista previa de la audiencia "mensajes recientes" (HU-MARK-07): conteo, muestra, resumen,
+ * presupuesto y el rango ya resuelto en la zona del tenant, para que el wizard muestre exactamente
+ * qué periodo se va a usar sin recalcular fechas en el navegador.
+ */
+export async function previewAudience(
+  tenantId: TenantId,
+  audiencia: Extract<AudienciaInputDTO, { tipo: 'mensajes_recientes' }>,
+): Promise<IAudiencePreviewResponse> {
+  const rango = await resolverRangoDelTenant(tenantId, audiencia);
+  const [audienciaPreview, presupuesto] = await Promise.all([
+    previewMensajesRecientes(tenantId, rango),
+    resolverPresupuesto(tenantId),
+  ]);
+  return {
+    ...audienciaPreview,
+    presupuesto,
+    rango: {
+      desde: rango.desde.toISOString(),
+      hasta: rango.hasta.toISOString(),
+      zonaHoraria: rango.zonaHoraria,
+    },
+  };
 }
 
 /** Contactos alcanzables por etapa y por etiqueta, para el constructor de audiencias. */
@@ -292,19 +353,43 @@ export async function createCampaign(
   const parametrosDinamicos = dto.parametrosDinamicos ?? [];
   assertParametrosDinamicos(dto.parametros, parametrosDinamicos);
 
+  // HU-MARK-07: el rango se resuelve UNA vez y se congela. El envío materializa con estos instantes,
+  // así lo que se revisó es lo que sale, aunque se envíe días después (criterio 6).
+  const audiencia = await resolverAudiencia(tenantId, dto.audiencia);
+  const esReciente = audiencia.tipo === 'mensajes_recientes';
+  const destinatariosPrevistos = esReciente
+    ? (await previewMensajesRecientes(tenantId, rangoCongelado(audiencia))).total
+    : 0;
+
+  // El id va antes que el documento: una etiqueta nueva nace apuntando a su campaña. Se resuelve
+  // antes de crear para que un `tagId` ajeno sea un 404 sin dejar una campaña a medias.
+  const campaignId = new Types.ObjectId();
+  const tagId = dto.etiqueta
+    ? await resolverEtiquetaEnvio(tenantId, campaignId.toString(), dto.etiqueta)
+    : null;
+  const programadaPara = dto.programadaPara ? new Date(dto.programadaPara) : null;
+
   const creada = await createScoped(Campaign, tenantId, {
+    _id: campaignId,
     nombre: dto.nombre,
-    filtros: dto.filtros,
+    // Una audiencia por fechas no segmenta: los filtros se guardan vacíos para que nadie los mezcle.
+    filtros: esReciente ? {} : dto.filtros,
+    audiencia,
+    totales: { destinatarios: destinatariosPrevistos },
     templateId: new Types.ObjectId(dto.templateId),
     parametros: dto.parametros,
     contenido: { imagen: reemplazo ? aImagenAlmacenada(reemplazo) : null },
     parametrosDinamicos,
-    estado: dto.programadaPara ? 'programada' : 'borrador',
-    programadaPara: dto.programadaPara ? new Date(dto.programadaPara) : null,
+    tagId,
+    estado: programadaPara ? 'programada' : 'borrador',
+    programadaPara,
     creadaPor: new Types.ObjectId(actorId),
   });
 
   const campana = creada.toObject() as LeanCampaign;
+
+  // Arranque exacto a la hora elegida; el barrido de 60 s queda de red de seguridad.
+  if (programadaPara) await encolarArranque(tenantId.toString(), campaignId.toString(), programadaPara);
 
   await recordAuditEvent(tenantId, {
     actorId,
@@ -312,12 +397,58 @@ export async function createCampaign(
     entidad: 'campaign',
     entidadId: campana._id.toString(),
     antes: {},
-    despues: { nombre: campana.nombre, estado: campana.estado },
+    despues: {
+      nombre: campana.nombre,
+      estado: campana.estado,
+      programadaPara: programadaPara ? programadaPara.toISOString() : null,
+      tagId: tagId ? tagId.toString() : null,
+    },
   });
 
   if (dto.lanzar) return launchCampaign(tenantId, actorId, campana._id.toString());
 
-  return toCampaignResponse(campana);
+  return responder(tenantId, campana);
+}
+
+/** Del DTO al subdocumento guardado. Sin audiencia, la de siempre: segmento por filtros. */
+async function resolverAudiencia(
+  tenantId: TenantId,
+  dto: AudienciaInputDTO | undefined,
+): Promise<IAudienciaCampana> {
+  if (!dto || dto.tipo === 'segmento') {
+    return { tipo: 'segmento', rango: null, desde: null, hasta: null, zonaHoraria: null };
+  }
+  const rango = await resolverRangoDelTenant(tenantId, dto);
+  return {
+    tipo: 'mensajes_recientes',
+    rango: dto.rango,
+    desde: rango.desde,
+    hasta: rango.hasta,
+    zonaHoraria: rango.zonaHoraria,
+  };
+}
+
+/** Los instantes congelados de una audiencia por fechas. Sin ellos la campaña está corrupta. */
+function rangoCongelado(a: IAudienciaCampana): { desde: Date; hasta: Date } {
+  if (!a.desde || !a.hasta) {
+    throw new AppError('La campaña no tiene el rango de fechas resuelto.', 409);
+  }
+  return { desde: new Date(a.desde), hasta: new Date(a.hasta) };
+}
+
+/**
+ * Filtro de `Cliente` con el que se materializa, según el tipo de audiencia (HU-MARK-07). Los dos
+ * caminos llevan las exclusiones incondicionales: opt-out y bloqueados.
+ */
+async function construirFiltroAudiencia(
+  tenantId: TenantId,
+  c: LeanCampaign,
+): Promise<FilterQuery<IClienteDocument>> {
+  const audiencia = audienciaDe(c);
+  if (audiencia.tipo === 'mensajes_recientes') {
+    return construirFiltroMensajesRecientes(tenantId, rangoCongelado(audiencia));
+  }
+  return construirFiltroSegmento(tenantId, c.filtros);
 }
 
 /**
@@ -330,9 +461,8 @@ export async function createCampaign(
 async function materializarDestinatarios(
   tenantId: TenantId,
   campaignId: Types.ObjectId,
-  filtros: ISegmentoFiltros,
+  filtro: FilterQuery<IClienteDocument>,
 ): Promise<number> {
-  const filtro = await construirFiltroSegmento(tenantId, filtros);
   const cursor = findScoped(Cliente, tenantId, filtro)
     .select('telefono')
     .lean<Pick<ICliente, 'telefono'> & { _id: Types.ObjectId }>()
@@ -381,7 +511,7 @@ export async function launchCampaign(
   // Idempotencia (criterio 12): relanzar algo ya en marcha devuelve lo que hay, sin duplicar
   // destinatarios ni volver a consumir cuota.
   if (campana.estado === 'en_curso' || campana.estado === 'completada') {
-    return toCampaignResponse(campana);
+    return responder(tenantId, campana);
   }
   if (campana.estado === 'cancelada') {
     throw new AppError('Una campaña cancelada no se puede relanzar.', 409);
@@ -405,7 +535,11 @@ export async function launchCampaign(
   // acepta, la campaña falla sin haber creado destinatarios que luego habría que dar por omitidos.
   await prepararImagenCabecera(tenantId, campana);
 
-  const destinatarios = await materializarDestinatarios(tenantId, campana._id, campana.filtros);
+  const destinatarios = await materializarDestinatarios(
+    tenantId,
+    campana._id,
+    await construirFiltroAudiencia(tenantId, campana),
+  );
 
   if (destinatarios === 0) {
     throw new AppError('El segmento no incluye a ningún contacto.', 422);
@@ -446,7 +580,70 @@ export async function launchCampaign(
     despues: { estado: 'en_curso', destinatarios },
   });
 
-  return toCampaignResponse(actualizada);
+  return responder(tenantId, actualizada);
+}
+
+// ─── Envío con etiqueta (HU-MARK-07) ────────────────────────────────────────────
+
+/**
+ * Lanza la campaña y fija la etiqueta que recibirá cada destinatario enviado con éxito.
+ *
+ * Todo lo que es "lanzar" —cuota, plantilla `APPROVED`, presupuesto del número, idempotencia— es
+ * `launchCampaign` tal cual: aquí solo se resuelve la etiqueta antes. Si el lanzamiento falla, una
+ * etiqueta recién creada se conserva vacía; reintentar con el mismo nombre la reutiliza.
+ */
+/**
+ * La etiqueta elegida al enviar o programar (HU-MARK-07): una existente por `tagId`, o una por
+ * nombre que se crea con `origen: 'campana'` (o se reutiliza si ya hay una que se llama igual).
+ */
+async function resolverEtiquetaEnvio(
+  tenantId: TenantId,
+  campaignId: string,
+  etiqueta: EtiquetaEnvioDTO,
+): Promise<Types.ObjectId> {
+  if ('tagId' in etiqueta) {
+    // De otro tenant o inexistente: 404 sin escribir nada (criterio 13).
+    const tag = await findTagById(tenantId, etiqueta.tagId);
+    if (!tag) throw new AppError('Etiqueta no encontrada.', 404);
+    return new Types.ObjectId(tag.id);
+  }
+  const tag = await findOrCreateTagPorNombre(tenantId, etiqueta.nombre, 'campana', campaignId);
+  return new Types.ObjectId(tag.id);
+}
+
+export async function sendCampaign(
+  tenantId: TenantId,
+  actorId: string,
+  campaignId: string,
+  dto: SendCampaignDTO,
+): Promise<ICampaignResponse> {
+  const campana = await getCampaignOrFail(tenantId, campaignId);
+
+  // Ya en marcha: lo mismo que `launchCampaign`, sin tocar la etiqueta que se eligió entonces.
+  if (campana.estado === 'en_curso' || campana.estado === 'completada') {
+    return responder(tenantId, campana);
+  }
+
+  const tagId = dto.etiqueta
+    ? await resolverEtiquetaEnvio(tenantId, campana._id.toString(), dto.etiqueta)
+    : (campana.tagId ?? null);
+
+  if (tagId && String(tagId) !== String(campana.tagId ?? '')) {
+    await findOneAndUpdateScoped(Campaign, tenantId, { _id: campana._id }, { $set: { tagId } });
+  }
+
+  const enviada = await launchCampaign(tenantId, actorId, campaignId);
+
+  await recordAuditEvent(tenantId, {
+    actorId,
+    accion: 'campaign.send',
+    entidad: 'campaign',
+    entidadId: campana._id.toString(),
+    antes: { estado: campana.estado },
+    despues: { estado: enviada.estado, tagId: tagId ? tagId.toString() : null },
+  });
+
+  return enviada;
 }
 
 // ─── Programación con imagen (HU-MARK-03) ───────────────────────────────────────
@@ -628,7 +825,7 @@ export async function scheduleCampaign(
     },
   });
 
-  return toCampaignResponse(campana);
+  return responder(tenantId, campana);
 }
 
 /**
@@ -719,7 +916,7 @@ export async function rescheduleCampaign(
     },
   });
 
-  return toCampaignResponse(actualizada);
+  return responder(tenantId, actualizada);
 }
 
 /**
@@ -744,7 +941,7 @@ export async function pauseCampaign(
   campaignId: string,
 ): Promise<ICampaignResponse> {
   const campana = await getCampaignOrFail(tenantId, campaignId);
-  if (campana.estado === 'pausada') return toCampaignResponse(campana);
+  if (campana.estado === 'pausada') return responder(tenantId, campana);
   if (campana.estado !== 'en_curso') {
     throw new AppError('Solo se puede pausar una campaña en curso.', 409, { estado: campana.estado });
   }
@@ -769,7 +966,7 @@ export async function pauseCampaign(
     despues: { estado: 'pausada' },
   });
 
-  return toCampaignResponse(actualizada);
+  return responder(tenantId, actualizada);
 }
 
 export async function resumeCampaign(
@@ -778,7 +975,7 @@ export async function resumeCampaign(
   campaignId: string,
 ): Promise<ICampaignResponse> {
   const campana = await getCampaignOrFail(tenantId, campaignId);
-  if (campana.estado === 'en_curso') return toCampaignResponse(campana);
+  if (campana.estado === 'en_curso') return responder(tenantId, campana);
   if (campana.estado !== 'pausada') {
     throw new AppError('Solo se puede reanudar una campaña pausada.', 409, { estado: campana.estado });
   }
@@ -808,7 +1005,7 @@ export async function resumeCampaign(
     despues: { estado: 'en_curso' },
   });
 
-  return toCampaignResponse(actualizada);
+  return responder(tenantId, actualizada);
 }
 
 export async function cancelCampaign(
@@ -817,7 +1014,7 @@ export async function cancelCampaign(
   campaignId: string,
 ): Promise<ICampaignResponse> {
   const campana = await getCampaignOrFail(tenantId, campaignId);
-  if (campana.estado === 'cancelada') return toCampaignResponse(campana);
+  if (campana.estado === 'cancelada') return responder(tenantId, campana);
   if (campana.estado === 'completada') {
     throw new AppError('La campaña ya terminó.', 409, { estado: campana.estado });
   }
@@ -856,7 +1053,7 @@ export async function cancelCampaign(
     despues: { estado: 'cancelada', omitidos: modifiedCount },
   });
 
-  return toCampaignResponse(actualizada);
+  return responder(tenantId, actualizada);
 }
 
 // ─── Lecturas ───────────────────────────────────────────────────────────────────
@@ -877,8 +1074,16 @@ export async function listCampaigns(
     countScoped(Campaign, tenantId, filtro),
   ]);
 
+  // Etiquetas en lote: una consulta por página, nunca N+1.
+  const etiquetas = await findTagsByIds(
+    tenantId,
+    campanas.flatMap((c) => (c.tagId ? [c.tagId.toString()] : [])),
+  );
+
   return {
-    data: campanas.map(toCampaignResponse),
+    data: campanas.map((c) =>
+      toCampaignResponse(c, c.tagId ? (etiquetas.get(c.tagId.toString()) ?? null) : null),
+    ),
     page: query.page,
     limit: query.limit,
     total,
@@ -917,7 +1122,7 @@ export async function getCampaign(
   ]);
 
   return {
-    ...toCampaignResponse(campana),
+    ...(await responder(tenantId, campana)),
     // `null` si la plantilla se borró del catálogo: la campaña histórica sigue siendo legible.
     plantilla: plantilla
       ? {
@@ -1028,10 +1233,55 @@ export async function applyDeliveryStatusToRecipient(
 
   if (!actualizado) return;
 
-  await findOneAndUpdateScoped(
+  const campana = await findOneAndUpdateScoped(
     Campaign,
     tenantId,
     { _id: actualizado.campaignId },
     { $inc: { 'totales.fallidos': 1 } },
+  ).lean<LeanCampaign | null>();
+
+  // HU-MARK-07: la etiqueta es de quien recibió el mensaje. Si Meta lo da por fallido después de
+  // aceptarlo, se retira — pero solo si la puso ESTE envío: a quien ya la tenía no se le quita.
+  if (campana?.tagId && actualizado.etiquetaAgregada === true) {
+    await findOneAndUpdateScoped(
+      Cliente,
+      tenantId,
+      { _id: actualizado.clienteId },
+      { $pull: { tagIds: campana.tagId } },
+    );
+    await findOneAndUpdateScoped(
+      CampaignRecipient,
+      tenantId,
+      { _id: actualizado._id },
+      { $set: { etiquetaAgregada: false } },
+    );
+  }
+}
+
+/**
+ * Pone la etiqueta de la campaña a un destinatario recién enviado (HU-MARK-07, criterio 8). Lo llama
+ * el worker justo después de marcarlo `enviado`, así "tiene la etiqueta" y "se le envió" coinciden.
+ *
+ * El filtro `tagIds: { $ne }` hace dos cosas a la vez: el `$addToSet` no puede duplicar, y saber si
+ * el documento cambió dice si la etiqueta la puso este envío o el contacto ya la tenía.
+ */
+export async function etiquetarDestinatario(
+  tenantId: TenantId,
+  tagId: Types.ObjectId,
+  destinatario: Pick<LeanCampaignRecipient, '_id' | 'clienteId'>,
+): Promise<void> {
+  const agregado = await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: destinatario.clienteId, tagIds: { $ne: tagId } },
+    { $addToSet: { tagIds: tagId } },
+  )
+    .select({ _id: 1 })
+    .lean();
+  await findOneAndUpdateScoped(
+    CampaignRecipient,
+    tenantId,
+    { _id: destinatario._id },
+    { $set: { etiquetaAgregada: agregado !== null } },
   );
 }

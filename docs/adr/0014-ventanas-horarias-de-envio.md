@@ -1,4 +1,4 @@
-# ADR 0013 — Ventanas horarias de envío: control único en `sendOutbound` y comportamiento fijo por categoría
+# ADR 0014 — Ventanas horarias de envío: control único en `sendOutbound` y comportamiento fijo por categoría
 
 **Estado:** aceptado · **Fecha:** 2026-11-03 · **Contexto:** HU-CONF-01 (horarios de envío)
 

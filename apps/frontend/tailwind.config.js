@@ -112,6 +112,11 @@ export default {
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out'
+  		},
+  		// Curva ease-out fuerte de la casa. Va como token porque `ease-[cubic-bezier(...)]` es
+  		// ambiguo: `tailwindcss-animate` también registra `ease-*` (animation-timing-function).
+  		transitionTimingFunction: {
+  			'out-strong': 'cubic-bezier(0.23, 1, 0.32, 1)'
   		}
   	}
   },

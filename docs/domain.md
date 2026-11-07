@@ -14,7 +14,7 @@
 | **Nivel de interés** | Señal inferida por IA: `frio | tibio | caliente`. |
 | **Objeción** | Motivo de duda inferido por IA: `precio | tiempo | confianza | otra`. |
 | **Catálogo** | Conjunto de productos/servicios que ofrece el tenant (genérico). |
-| **Campaña** | Difusión masiva segmentada a prospectos (remarketing, `HU-MARK-01`). Se segmenta por atributo personalizado del contacto (por ahí entra «grado»), `rolContacto` y **`Lead.semaforo`** —el eje comercial, no la etiqueta del hilo—, combinables. Ciclo: `borrador` → `programada` → `en_curso` ⇄ `pausada` → `completada` \| `cancelada` \| `fallida`. Al lanzar, el segmento se **congela** en `campaign_recipients`: quien entre después en los filtros no se incorpora, porque si no nadie podría decir a cuánta gente se escribió. La cadencia la fija el **tier y la calidad del número**, no el usuario (ver `integrations/meta-whatsapp.md` §5). |
+| **Campaña** | Difusión masiva segmentada a prospectos (remarketing, `HU-MARK-01`). Se segmenta por atributo personalizado del contacto (por ahí entra «grado»), `rolContacto` y **`Lead.semaforo`** —el eje comercial, no la etiqueta del hilo—, combinables. Ciclo: `borrador` → `programada` → `en_curso` ⇄ `pausada` → `completada` \| `cancelada` \| `fallida`. Al lanzar, el segmento se **congela** en `campaign_recipients`: quien entre después en los filtros no se incorpora, porque si no nadie podría decir a cuánta gente se escribió. La cadencia la fija el **tier y la calidad del número**, no el usuario (ver `integrations/meta-whatsapp.md` §5). Desde `HU-MARK-07` la audiencia puede ser también **«mensajes recientes»**: los contactos a quienes el tenant les envió algo en un rango (1 d, 3 d, 7 d o personalizado en la zona del tenant); el rango se congela al crear. Al enviar se puede elegir o crear una **etiqueta** que se pone solo a los enviados con éxito. Ninguna audiencia incluye contactos con baja (`marketingOptOut`) ni **bloqueados** (`Cliente.bloqueado`). |
 | **Métricas de campaña** | Desempeño de una campaña por destinatario (`HU-MARK-04`): **enviado** (Meta lo aceptó), **entregado**, **abierto** (`status: read`; **cota inferior**, porque no llega si el contacto apagó las confirmaciones de lectura), **respondido** (escribió después) y **convertido** (su lead entró a una etapa con `esConversion`). Responder implica leído y entregado. |
 | **Ventana de atribución** | Plazo tras el envío dentro del cual una respuesta (72 h) o una conversión (14 d) se le apunta a una campaña — siempre a la **última** que recibió el contacto (*last-touch*), nunca a una anterior. Configurable por env (`CAMPAIGN_REPLY_WINDOW_HOURS`, `CAMPAIGN_CONVERSION_WINDOW_DAYS`). |
 | **Baja de marketing** | `Cliente.marketingOptOut`. El contacto pidió no recibir campañas; el segmentador lo excluye **siempre**, no es un filtro que se pueda desactivar. Solo se respeta la marca: captarla (formularios, doble opt-in, palabra clave "BAJA") sigue siendo responsabilidad de la empresa. |
@@ -149,7 +149,7 @@ varios, se ejecuta un solo handoff: el del primero de la lista.
 Cada envío a un cliente declara una **categoría**, y la empresa decide por categoría si sale a
 cualquier hora (`libre`) o solo dentro de unas franjas (`restringido`). Todo envío pasa por un único
 control, en `sendOutbound`, después de la cuota y antes de llamar a Meta. Lo que pasa fuera de franja
-es **fijo por categoría**, no configurable (ADR 0013):
+es **fijo por categoría**, no configurable (ADR 0014):
 
 | Categoría | Qué es | De fábrica | Fuera de franja |
 |---|---|---|---|

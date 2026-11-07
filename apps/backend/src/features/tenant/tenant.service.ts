@@ -24,8 +24,10 @@ import type {
   ListTenantsQuery,
   TenantsListResponse,
   INotasDeVozConfig,
+  IAjustesTenantResponse,
+  UpdateAjustesTenantDTO,
 } from './tenant.types.js';
-import { NOTAS_DE_VOZ_DEFAULT } from './tenant.types.js';
+import { NOTAS_DE_VOZ_DEFAULT, ZONA_HORARIA_DEFAULT } from './tenant.types.js';
 
 /** Completa con los defaults lo que el tenant no configuró (HU-OMNI-07). */
 export function resolverNotasDeVoz(
@@ -286,6 +288,46 @@ export async function updateReminderConfig(
 
   if (!tenant) throw new AppError('Empresa no encontrada.', 404);
   return mapReminderToResponse(tenant);
+}
+
+/**
+ * Nombre de la **propia** empresa para encabezados de reportes (HU-PDF-01). Mismo contrato que
+ * `getReminderConfig`: el `tenantId` lo resuelve siempre el caller desde el token.
+ */
+export async function getNombreEmpresa(tenantId: string): Promise<string> {
+  const tenant = await Tenant.findById(tenantId).select('nombre').lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return tenant.nombre;
+}
+
+/**
+ * Zona horaria del **propio** tenant (HU-MARK-07). Mismo contrato que `getReminderConfig`: `Tenant`
+ * no lleva `tenantId` porque el documento ES el tenant, y el `tenantId` lo resuelve siempre el
+ * caller desde el token. Un tenant anterior al campo devuelve el default.
+ */
+export async function getZonaHorariaTenant(tenantId: string): Promise<string> {
+  const tenant = await Tenant.findById(tenantId).select('zonaHoraria').lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return tenant.zonaHoraria || ZONA_HORARIA_DEFAULT;
+}
+
+export async function getAjustesTenant(tenantId: string): Promise<IAjustesTenantResponse> {
+  return { zonaHoraria: await getZonaHorariaTenant(tenantId) };
+}
+
+export async function updateAjustesTenant(
+  tenantId: string,
+  dto: UpdateAjustesTenantDTO,
+): Promise<IAjustesTenantResponse> {
+  const tenant = await Tenant.findByIdAndUpdate(
+    tenantId,
+    { $set: { zonaHoraria: dto.zonaHoraria } },
+    { new: true, runValidators: true },
+  )
+    .select('zonaHoraria')
+    .lean<ITenantDocument>();
+  if (!tenant) throw new AppError('Empresa no encontrada.', 404);
+  return { zonaHoraria: tenant.zonaHoraria || ZONA_HORARIA_DEFAULT };
 }
 
 /**

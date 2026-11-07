@@ -11,6 +11,7 @@ import { Campaign } from '../features/campaign/campaign.model.js';
 import { CampaignRecipient } from '../features/campaign/campaign-recipient.model.js';
 import {
   encolarLote,
+  etiquetarDestinatario,
   launchCampaign,
   prepararImagenCabecera,
   resolverPresupuesto,
@@ -259,6 +260,21 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
         },
       );
       enviados += 1;
+
+      // HU-MARK-07 — etiqueta en el mismo paso que confirma el envío: nunca a un fallido, nunca a
+      // un omitido. Como la notificación de abajo, fuera del criterio de éxito: el mensaje ya salió
+      // y no puede volver a `fallido` porque etiquetar falle.
+      if (campana.tagId) {
+        try {
+          await etiquetarDestinatario(tenantId, campana.tagId, destinatario);
+        } catch (err) {
+          logger.warn('No se pudo etiquetar a un destinatario de campaña', {
+            campaignId,
+            clienteId,
+            error: String(err),
+          });
+        }
+      }
 
       // Fuera del criterio de éxito a propósito: el mensaje YA salió. Si avisar a la bandeja
       // falla, el destinatario sigue `enviado` y el hilo lo mostrará en el próximo refetch.

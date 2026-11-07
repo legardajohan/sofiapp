@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   diaSemanaDeFecha,
+  diasInclusivos,
   esZonaHorariaValida,
   fechaLocal,
+  finDelDiaEnZona,
+  inicioDelDiaEnZona,
   localAUtc,
   momentoLocal,
   sumarDias,
@@ -57,6 +60,29 @@ describe('zona-horaria.util', () => {
 
   it('esZonaHorariaValida', () => {
     expect(esZonaHorariaValida('America/Bogota')).toBe(true);
+    expect(esZonaHorariaValida('Europe/Madrid')).toBe(true);
     expect(esZonaHorariaValida('Marte/Olympus')).toBe(false);
+    expect(esZonaHorariaValida('')).toBe(false);
+  });
+
+  describe('HU-MARK-07 — rangos de día en zona', () => {
+    it('fechaLocal devuelve el día del calendario local', () => {
+      const instante = new Date('2026-10-31T02:00:00.000Z');
+      expect(fechaLocal(instante, 'America/Bogota')).toBe('2026-10-30');
+      expect(fechaLocal(instante, 'UTC')).toBe('2026-10-31');
+    });
+
+    it('inicioDelDiaEnZona y finDelDiaEnZona acotan el día local', () => {
+      expect(inicioDelDiaEnZona('2026-10-28', 'America/Bogota').toISOString()).toBe('2026-10-28T05:00:00.000Z');
+      expect(finDelDiaEnZona('2026-10-28', 'America/Bogota').toISOString()).toBe('2026-10-29T04:59:59.999Z');
+      // Día del cambio a invierno en Madrid: dura 25 h.
+      expect(inicioDelDiaEnZona('2026-10-25', 'Europe/Madrid').toISOString()).toBe('2026-10-24T22:00:00.000Z');
+      expect(finDelDiaEnZona('2026-10-25', 'Europe/Madrid').toISOString()).toBe('2026-10-25T22:59:59.999Z');
+    });
+
+    it('diasInclusivos cuenta ambos extremos', () => {
+      expect(diasInclusivos('2026-10-01', '2026-10-01')).toBe(1);
+      expect(diasInclusivos('2026-10-01', '2026-10-31')).toBe(31);
+    });
   });
 });

@@ -2,6 +2,7 @@ import { Document, Types } from 'mongoose';
 import type { EstadoComercial } from '../cliente/cliente.types.js';
 import type { MessagingTier, QualityRating } from '../channel/channel.types.js';
 import type { NivelInteres } from '../../integrations/llm/llm-provider.types.js';
+import type { RangoAudiencia, RangoPreset } from './campaign.rango.js';
 
 /**
  * Ciclo de vida de una campaña (HU-MARK-01).
@@ -159,6 +160,41 @@ export interface IImagenCampana {
   subidaMetaAt: Date | null;
 }
 
+/**
+ * Cómo se arma la audiencia (HU-MARK-07). `segmento` = los filtros de HU-MARK-01 (`filtros`);
+ * `mensajes_recientes` = los contactos a quienes el tenant les envió algo en un rango de fechas.
+ * Son alternativos: una campaña de mensajes recientes guarda `filtros` vacío.
+ */
+export const TIPOS_AUDIENCIA = ['segmento', 'mensajes_recientes'] as const;
+export type TipoAudiencia = (typeof TIPOS_AUDIENCIA)[number];
+
+/**
+ * Filtro aplicado, guardado para trazabilidad (criterio 6). En `mensajes_recientes`, `desde` y
+ * `hasta` son los instantes **ya resueltos y congelados** al crear la campaña: el envío materializa
+ * con ellos, no reevalúa "últimos 3 días" respecto al momento de enviar.
+ */
+export interface IAudienciaCampana {
+  tipo: TipoAudiencia;
+  rango: RangoAudiencia | null;
+  desde: Date | null;
+  hasta: Date | null;
+  /** Zona con la que se resolvió el rango; la misma con la que se muestra. */
+  zonaHoraria: string | null;
+}
+
+/** Entrada HTTP de la audiencia. Sin ella, `POST /campaigns` crea una campaña de segmento. */
+export type AudienciaInputDTO =
+  | { tipo: 'segmento' }
+  | { tipo: 'mensajes_recientes'; rango: RangoPreset }
+  | { tipo: 'mensajes_recientes'; rango: 'custom'; desde: string; hasta: string };
+
+/** Lo que el usuario elige como etiqueta al enviar: una existente o un nombre (nueva o reutilizada). */
+export type EtiquetaEnvioDTO = { tagId: string } | { nombre: string };
+
+export interface SendCampaignDTO {
+  etiqueta?: EtiquetaEnvioDTO;
+}
+
 export interface IContenidoCampana {
   imagen: IImagenCampana | null;
 }
@@ -197,6 +233,10 @@ export interface ICampaign {
   retenidaHasta?: Date | null;
   /** Por qué acabó `fallida` o `cancelada`. `null` mientras no aplique. */
   motivo: string | null;
+  /** HU-MARK-07. Ausente en las campañas anteriores: se leen como `{ tipo: 'segmento' }`. */
+  audiencia?: IAudienciaCampana;
+  /** Etiqueta que se pone a cada destinatario enviado con éxito (HU-MARK-07). */
+  tagId?: Types.ObjectId | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -229,6 +269,12 @@ export interface ICampaignRecipient {
   respondidoAt: Date | null;
   /** El lead entró a una etapa `esConversion` dentro de `CAMPAIGN_CONVERSION_WINDOW_DAYS`. */
   convertidoAt: Date | null;
+  /**
+   * `true` = la etiqueta de la campaña la puso ESTE envío; `false` = el contacto ya la tenía;
+   * `null` = la campaña no etiqueta o aún no se envió (HU-MARK-07). Es lo que permite retirar la
+   * etiqueta ante un `failed` tardío sin quitarle a nadie una que ya tenía.
+   */
+  etiquetaAgregada?: boolean | null;
 }
 
 export interface ICampaignRecipientDocument extends ICampaignRecipient, Document {
@@ -270,10 +316,14 @@ export interface CreateCampaignDTO {
   parametrosDinamicos?: IParametroDinamico[];
   /** `true` = crear y arrancar en la misma petición. Incompatible con `programadaPara`. */
   lanzar?: boolean;
-  /** ISO-8601. Deja la campaña en `programada`; la levanta el barrido al llegar la hora. */
+  /** ISO-8601, al menos un minuto en el futuro. Deja la campaña en `programada` y encola su arranque. */
   programadaPara?: string;
   /** HT-WA-04: imagen de reemplazo (`POST /campaigns/media`). Sin ella, la de la plantilla. */
   imagenHeaderUploadId?: string;
+  /** HU-MARK-07. Ausente = `{ tipo: 'segmento' }`. */
+  audiencia?: AudienciaInputDTO;
+  /** HU-MARK-07. Etiqueta para los enviados con éxito, al lanzar ahora o a la hora programada. */
+  etiqueta?: EtiquetaEnvioDTO;
 }
 
 /** Alta de una campaña programada (HU-MARK-03). La imagen llega aparte, como archivo multipart. */
@@ -333,6 +383,8 @@ export interface IResumenSegmento {
   coinciden: number;
   /** Pidieron la baja de marketing: se excluyen siempre (criterio 3 de HU-MARK-01). */
   bajas: number;
+  /** Bloqueados o inactivos (sin baja): se excluyen siempre (HU-MARK-07). */
+  bloqueados: number;
   /** Quitados a mano por el usuario (`excluirClienteIds`). */
   excluidosAMano: number;
   /** Fichas con un teléfono que ya aparece en otra ficha del segmento: recibirían el mensaje dos veces. */
@@ -350,6 +402,11 @@ export interface ISegmentPreviewResponse {
 }
 
 /** Cuántos contactos alcanzables (sin baja) hay en cada etapa y en cada etiqueta. */
+/** Vista previa de la audiencia "mensajes recientes": la del segmento + el rango resuelto. */
+export interface IAudiencePreviewResponse extends ISegmentPreviewResponse {
+  rango: { desde: string; hasta: string; zonaHoraria: string };
+}
+
 export interface ISegmentFacetasResponse {
   etapas: Array<{ key: string; contactos: number }>;
   etiquetas: Array<{ tagId: string; contactos: number }>;
@@ -385,6 +442,16 @@ export interface ICampaignResponse {
   /** HU-CONF-01. Retenida por la ventana horaria hasta esta hora (`null` = no lo está). */
   retenidaHasta: string | null;
   motivo: string | null;
+  /** Filtro de audiencia aplicado (HU-MARK-07), en ISO. */
+  audiencia: {
+    tipo: TipoAudiencia;
+    rango: RangoAudiencia | null;
+    desde: string | null;
+    hasta: string | null;
+    zonaHoraria: string | null;
+  };
+  /** Etiqueta generada o elegida al enviar; `null` si la campaña no etiqueta. */
+  etiqueta: { id: string; nombre: string; color: string } | null;
   createdAt: string;
 }
 
