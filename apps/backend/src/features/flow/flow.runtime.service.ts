@@ -15,8 +15,20 @@ import { FLOW_RESUME_JOB, flowRuntimeQueue } from '../../config/queues.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { createLeadFromConversation } from '../lead/lead.service.js';
-import { assignConversation, setConversationTags, setIaHabilitada } from '../conversation/conversation.service.js';
+import {
+  assignConversation,
+  marcarParaAsesor,
+  setConversationTags,
+  setIaHabilitada,
+} from '../conversation/conversation.service.js';
 import { sendOutbound } from '../message/message.service.js';
+import {
+  aperturaDeError,
+  consultarVentana,
+  esVentanaCerrada,
+  registrarRetencion,
+} from '../send-window/send-window.service.js';
+import type { CategoriaEnvio } from '../send-window/send-window.types.js';
 import { Message } from '../message/message.model.js';
 import type { IMessage } from '../message/message.types.js';
 import { searchKnowledge } from '../kb/kb.retrieval.service.js';
@@ -164,9 +176,20 @@ async function resolverRequiere(
   return { capturado: data[requiere.spec.campo] };
 }
 
+/**
+ * Categoría de envío de una pasada del motor (HU-CONF-01): la reacción a un entrante es una
+ * conversación en vivo (`ia`); la reanudación tras un nodo `espera`, un envío diferido (`flujo`).
+ */
+type CategoriaFlujo = Extract<CategoriaEnvio, 'ia' | 'flujo'>;
+
 /** Ejecuta un efecto y traga su propio error: un nodo mal configurado no puede tumbar el resto de
  *  efectos de la misma pasada ni la persistencia del `FlowState`. Queda registrado en el log. */
-async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efecto): Promise<void> {
+async function ejecutarEfecto(
+  tenantId: TenantId,
+  clienteId: string,
+  efecto: Efecto,
+  categoria: CategoriaFlujo,
+): Promise<void> {
   try {
     switch (efecto.tipo) {
       case 'enviar_mensaje': {
@@ -176,9 +199,10 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
             clienteId,
             { modo: 'plantilla', templateId: efecto.templateId, parametros: efecto.parametros ?? [] },
             'bot',
+            { categoria },
           );
         } else if (efecto.texto) {
-          await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: efecto.texto }, 'bot');
+          await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: efecto.texto }, 'bot', { categoria });
         }
         return;
       }
@@ -237,6 +261,19 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
         return;
     }
   } catch (err) {
+    if (esVentanaCerrada(err)) {
+      // Fuera del horario de envío (HU-CONF-01). En una reacción en vivo (`ia`) el mensaje se
+      // descarta y la conversación sube a un asesor, igual que una respuesta de Sofi; en una
+      // reanudación (`flujo`) solo pasa si la franja cerró a mitad de la pasada.
+      await registrarRetencion(tenantId, {
+        categoria,
+        accion: categoria === 'ia' ? 'descartado' : 'omitido',
+        siguienteApertura: aperturaDeError(err),
+        clienteId,
+      });
+      if (categoria === 'ia') await marcarParaAsesor(tenantId.toString(), clienteId);
+      return;
+    }
     logger.error('Fallo ejecutando un efecto del flujo (no propaga)', {
       tenantId: tenantId.toString(),
       clienteId,
@@ -248,6 +285,9 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
 
 /** Delay entre reintentos de un job diferido de `flow-runtime`. El envío pega contra la Graph API,
  *  así que un backoff exponencial modesto es preferible a martillar en caso de fallo transitorio. */
+/** Sin apertura en el horizonte de la política: se reevalúa en una hora por si el admin la cambia. */
+const REINTENTO_SIN_APERTURA_MS = 60 * 60_000;
+
 const RESUME_JOB_OPTS = {
   attempts: 3,
   backoff: { type: 'exponential' as const, delay: 5000 },
@@ -298,6 +338,7 @@ async function correrMotor(
   stateDoc: IFlowState | null,
   mensaje: string,
   resueltosIniciales: EntradaMotor['resueltos'],
+  categoria: CategoriaFlujo,
   metaMessageId?: string,
 ): Promise<void> {
   let estadoActual = stateDoc;
@@ -345,7 +386,7 @@ async function correrMotor(
       }
       continue;
     }
-    await ejecutarEfecto(tenantId, clienteId, efecto);
+    await ejecutarEfecto(tenantId, clienteId, efecto, categoria);
   }
 
   await persistirFlowState(tenantId, clienteId, flow, salida, metaMessageId, esperaToken);
@@ -385,7 +426,7 @@ export async function ejecutarFlujo(
     return 'trigger_no_cumplido';
   }
 
-  await correrMotor(tenantId, clienteId, flow, stateDoc, mensaje, undefined, metaMessageId);
+  await correrMotor(tenantId, clienteId, flow, stateDoc, mensaje, undefined, 'ia', metaMessageId);
   return 'atendido';
 }
 
@@ -441,5 +482,27 @@ export async function reanudarFlujo(tenantId: string, clienteId: string, token: 
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
   if (!cliente || !cliente.iaHabilitada) return;
 
-  await correrMotor(tenantId, clienteId, flow, stateDoc, '', { esperaCumplida: true });
+  // Ventana horaria (HU-CONF-01): fuera de franja el mismo job se re-encola hasta la apertura,
+  // ANTES de avanzar el motor, con el MISMO token. El `FlowState` no cambia, así que si el cliente
+  // responde antes, su avance regenera el token y este job caduca como cualquier otro.
+  const ventana = await consultarVentana(tenantId, 'flujo');
+  if (!ventana.permitido) {
+    const delay = ventana.siguienteApertura
+      ? Math.max(ventana.siguienteApertura.getTime() - Date.now(), 0)
+      : REINTENTO_SIN_APERTURA_MS;
+    await flowRuntimeQueue.add(
+      FLOW_RESUME_JOB,
+      { tipo: 'resume', tenantId, clienteId, token },
+      { delay, ...RESUME_JOB_OPTS },
+    );
+    await registrarRetencion(tenantId, {
+      categoria: 'flujo',
+      accion: 'reprogramado',
+      siguienteApertura: ventana.siguienteApertura,
+      clienteId,
+    });
+    return;
+  }
+
+  await correrMotor(tenantId, clienteId, flow, stateDoc, '', { esperaCumplida: true }, 'flujo');
 }

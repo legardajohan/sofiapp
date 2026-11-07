@@ -1,5 +1,6 @@
 import { normalizar } from './flow.engine.js';
 import type { IHorarioTrigger, ITriggerFlow } from './flow.types.js';
+import { momentoLocal } from '../../utils/zona-horaria.util.js';
 
 /** Lo que `evaluarTrigger` necesita saber del mensaje. Todo viene resuelto por el runtime: esta
  *  función es pura y no toca Mongo ni el reloj. */
@@ -8,22 +9,6 @@ export interface ContextoTrigger {
   /** El cliente no tenía mensajes suyos previos a este. */
   esPrimerMensaje: boolean;
   ahora: Date;
-}
-
-const DIAS_SEMANA: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-
-/** Día de la semana (0 = domingo) y hora `HH:mm` de `ahora` en la zona dada. `Intl` y no aritmética
- *  de offsets: respeta los cambios de horario de verano de cada zona. */
-function momentoLocal(ahora: Date, zonaHoraria: string): { dia: number; hora: string } {
-  const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: zonaHoraria,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(ahora);
-  const valor = (tipo: string): string => partes.find((p) => p.type === tipo)?.value ?? '';
-  return { dia: DIAS_SEMANA[valor('weekday')] ?? -1, hora: `${valor('hour')}:${valor('minute')}` };
 }
 
 function dentroDeHorario(horario: IHorarioTrigger, ahora: Date): boolean {

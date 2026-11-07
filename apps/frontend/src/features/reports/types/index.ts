@@ -1,7 +1,10 @@
 export type {
+  ActivityPeriodRow,
+  AdvisorActivity,
   AdvisorRow,
   AdvisorReportTotales,
   AdvisorReport,
+  Granularidad,
   HandoffMotivoRow,
   HandoffRate,
   MessageVolume,
@@ -10,6 +13,7 @@ export type {
   TopProducts,
 } from './domain.js';
 export type {
+  AdvisorActivityParams,
   AdvisorReportParams,
   HandoffRateParams,
   PeakHoursParams,

@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { assertVentanaEnvio } from '../send-window/send-window.service.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { findByIdScoped, findOneAndUpdateScoped } from '../../repositories/base.repository.js';
@@ -241,6 +242,9 @@ export async function enviarMediaSaliente(
   caption: string | undefined,
 ): Promise<IMessageDocument> {
   const tipo = clasificarArchivoSaliente(archivo.mimeType, archivo.buffer.byteLength);
+  // Ventana horaria (HU-CONF-01) antes de guardar y subir a Meta: fuera de franja no tiene sentido
+  // gastar la subida. `sendOutbound` lo vuelve a comprobar (lectura de caché).
+  await assertVentanaEnvio(tenantId, 'asesor', { clienteId });
 
   const storage = getMediaStorage();
   // La clave se construye con el `clienteId` como carpeta intermedia porque el mensaje aún no
@@ -276,6 +280,7 @@ export async function enviarMediaSaliente(
         ...(caption ? { caption } : {}),
       },
       'agent',
+      { categoria: 'asesor' },
     );
   } catch (err: unknown) {
     // Limpieza best-effort: si no se pudo enviar, el objeto que acabamos de guardar no lo va a
@@ -372,6 +377,8 @@ export async function enviarNotaDeVoz(
     });
   }
 
+  await assertVentanaEnvio(tenantId, 'asesor', { clienteId });
+
   const storage = getMediaStorage();
   const key = construirMediaKey(tenantId, clienteId, MIME_NOTA_DE_VOZ);
   const nombreArchivo = 'nota-de-voz.ogg';
@@ -405,6 +412,7 @@ export async function enviarNotaDeVoz(
         duracionSegundos: audio.duracionSegundos,
       },
       'agent',
+      { categoria: 'asesor' },
     );
   } catch (err: unknown) {
     // Misma limpieza best-effort que `enviarMediaSaliente` (allí se explica el `Promise.resolve()`).

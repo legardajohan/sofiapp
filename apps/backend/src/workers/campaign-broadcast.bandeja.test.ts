@@ -145,6 +145,7 @@ describe('HU-MARK-05 — worker de campañas y bandeja', () => {
       expect.objectContaining({ imagenCabecera: { metaMediaId: 'meta-img' } }),
       'bot',
       {
+        categoria: 'campana',
         campaignId: campana._id.toString(),
         mediaCabecera: { mediaKey: 'campaigns/c/imagen.png', mimeType: 'image/png', tamanoBytes: 900 },
       },

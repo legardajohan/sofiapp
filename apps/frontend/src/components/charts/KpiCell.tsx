@@ -23,6 +23,8 @@ export interface KpiCellProps {
   detailClassName?: string;
   /** Va entre el valor y el detalle (p. ej. el medidor `Progress` de la celda con acento). */
   children?: React.ReactNode;
+  /** Clases de la celda en la rejilla (p. ej. `col-span-2` cuando la franja tiene un número impar). */
+  className?: string;
 }
 
 /**
@@ -38,9 +40,10 @@ export function KpiCell({
   valueClassName,
   detailClassName,
   children,
+  className,
 }: KpiCellProps): React.ReactElement {
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1 p-5', accent ? 'bg-secondary' : 'bg-card')}>
+    <div className={cn('flex min-w-0 flex-col gap-1 p-5', accent ? 'bg-secondary' : 'bg-card', className)}>
       <div className="flex items-center justify-between gap-2">
         <span className={cn('text-sm', accent ? 'font-medium text-primary' : 'text-muted-foreground')}>{label}</span>
         <Icon

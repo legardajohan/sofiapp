@@ -1,5 +1,7 @@
 import { apiClient } from './apiClient.js';
 import type {
+  AdvisorActivity,
+  AdvisorActivityParams,
   AdvisorReport,
   AdvisorReportParams,
   HandoffRate,
@@ -27,5 +29,10 @@ export const getTopProducts = async (params: TopProductsParams): Promise<TopProd
 
 export const getPeakHours = async (params: PeakHoursParams): Promise<PeakHours> => {
   const res = await apiClient.get<PeakHours>('/reports/peak-hours', { params });
+  return res.data;
+};
+
+export const getAdvisorActivity = async (params: AdvisorActivityParams): Promise<AdvisorActivity> => {
+  const res = await apiClient.get<AdvisorActivity>('/reports/advisor-activity', { params });
   return res.data;
 };

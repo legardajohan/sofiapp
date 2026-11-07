@@ -72,7 +72,7 @@ describe('sendOutbound plantilla — contenido real en el hilo (HU-MARK-05)', ()
       modo: 'plantilla',
       templateId,
       parametros: ['Ana', 'sábado'],
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     // `plantilla` se conserva: el presupuesto de 24 h cuenta por este tipo.
     expect(message.tipo).toBe('plantilla');
@@ -108,7 +108,7 @@ describe('sendOutbound plantilla — contenido real en el hilo (HU-MARK-05)', ()
         imagenCabecera: { metaMediaId: 'meta-img-1' },
       },
       'bot',
-      {
+      { categoria: 'campana',
         campaignId,
         mediaCabecera: {
           mediaKey: 'campaigns/x/imagen.jpg',

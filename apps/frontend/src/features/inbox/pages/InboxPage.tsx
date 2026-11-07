@@ -9,6 +9,8 @@ import { InboxError } from '../components/InboxError.js';
 import { ContactPanel } from '../components/ContactPanel.js';
 import { MessageComposer } from '../components/MessageComposer.js';
 import { WindowClosedBanner } from '../components/WindowClosedBanner.js';
+import { SendWindowBanner } from '../components/SendWindowBanner.js';
+import { useVentanaCategoria } from '@/features/send-window/hooks/useVentanaCategoria.js';
 import { SendTemplateDialog } from '../components/SendTemplateDialog.js';
 import { useAuthStore } from '@/stores/authStore';
 import { HandoffBanner } from '../components/HandoffBanner.js';
@@ -116,6 +118,8 @@ export function InboxPage(): React.ReactElement {
 
   const markRead = useMarkRead();
   const sendReply = useSendReply(activeId);
+  // Horario de envío de la empresa para las respuestas del asesor (HU-CONF-01).
+  const ventanaAsesor = useVentanaCategoria('asesor');
   const sendMedia = useSendMedia(activeId);
   const sendAudio = useSendAudio(activeId);
   const configAudio = useConfigAudio();
@@ -354,6 +358,9 @@ export function InboxPage(): React.ReactElement {
                 condicion={active.handoff.condicion}
               />
             )}
+            {ventanaAsesor.cerrada && (
+              <SendWindowBanner apertura={ventanaAsesor.apertura} zonaHoraria={ventanaAsesor.zonaHoraria} />
+            )}
             {!active.ventana24hAbierta && (
               <WindowClosedBanner
                 {...(esAdmin ? { onEnviarPlantilla: () => setPlantillaOpen(true) } : {})}
@@ -364,7 +371,8 @@ export function InboxPage(): React.ReactElement {
                 la conversación que se abrió después. */}
             <MessageComposer
               key={activeId}
-              disabled={!active.ventana24hAbierta}
+              disabled={!active.ventana24hAbierta || ventanaAsesor.cerrada}
+              motivoBloqueo={ventanaAsesor.cerrada ? 'Fuera del horario de envío' : 'Ventana de 24 h cerrada'}
               pending={sendReply.isPending || sendMedia.isPending || sendAudio.isPending}
               onSend={(texto) => sendReply.mutateAsync(texto)}
               onSendMedia={(archivo, caption) => sendMedia.mutateAsync({ archivo, caption })}

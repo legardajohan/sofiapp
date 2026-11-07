@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { useNotificationsRealtime } from '@/features/notifications/hooks/useNotificationsRealtime';
+import { useActivityHeartbeat } from '@/features/activity/hooks/useActivityHeartbeat';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -8,6 +9,8 @@ export function AppLayout(): React.ReactElement {
   // Dueño de la conexión Socket.IO a nivel de sesión (HU-NOTIF-01): se monta una vez aquí, no en
   // `/inbox`, para que las notificaciones lleguen desde cualquier pantalla.
   useNotificationsRealtime();
+  // Tiempo activo del asesor (HU-REP-06): una vez por sesión, por el mismo motivo.
+  useActivityHeartbeat();
 
   return (
     <SidebarProvider>

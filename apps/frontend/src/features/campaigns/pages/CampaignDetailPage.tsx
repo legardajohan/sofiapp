@@ -122,7 +122,7 @@ export function CampaignDetailPage(): React.ReactElement {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-semibold text-foreground">{campana.nombre}</h1>
-            <CampaignStatusBadge estado={campana.estado} />
+            <CampaignStatusBadge estado={campana.estado} retenidaHasta={campana.retenidaHasta} />
           </div>
           {campana.motivo ? (
             <p className="mt-1 text-sm text-muted-foreground">{campana.motivo}</p>

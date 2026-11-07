@@ -5,18 +5,24 @@ import type { ISendMessageDto, ISendTemplateDto } from './message.types.js';
 export const sendController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const dto = req.body as ISendMessageDto;
-  const message = await sendMessage(tenantId, dto);
+  const message = await sendMessage(tenantId, dto, 'asesor');
   res.status(200).json({ id: message._id, status: message.status });
 };
 
 export const sendTemplateController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const { clienteId, templateId, parametros, imagenHeaderUploadId } = req.body as ISendTemplateDto;
-  const message = await sendOutbound(tenantId, clienteId, {
-    modo: 'plantilla',
-    templateId,
-    parametros,
-    ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
-  });
+  const message = await sendOutbound(
+    tenantId,
+    clienteId,
+    {
+      modo: 'plantilla',
+      templateId,
+      parametros,
+      ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
+    },
+    'agent',
+    { categoria: 'plantilla_manual' },
+  );
   res.status(200).json({ id: message._id, status: message.status });
 };

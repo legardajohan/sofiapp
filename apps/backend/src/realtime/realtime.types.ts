@@ -82,6 +82,8 @@ export type RealtimeEvent =
       campaignId: string;
       estado: EstadoCampana;
       totales: ITotalesCampana;
+      /** HU-CONF-01. Retenida por la ventana horaria hasta esta hora (`null` = no lo está). */
+      retenidaHasta: string | null;
     }
   | {
       /**

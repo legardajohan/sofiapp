@@ -1,7 +1,7 @@
 import { AppError } from '../../utils/AppError.js';
 import {
   diasInclusivos,
-  fechaEnZona,
+  fechaLocal,
   finDelDiaEnZona,
   inicioDelDiaEnZona,
 } from '../../utils/zona-horaria.util.js';
@@ -68,7 +68,7 @@ export function resolverRangoAudiencia(
   if (desde > hasta) {
     throw new AppError('La fecha de inicio no puede ser posterior a la de fin.', 400);
   }
-  if (hasta > fechaEnZona(ahora, zona)) {
+  if (hasta > fechaLocal(ahora, zona)) {
     throw new AppError('No se permiten fechas futuras en el rango.', 400);
   }
   if (diasInclusivos(desde, hasta) > maxDias) {

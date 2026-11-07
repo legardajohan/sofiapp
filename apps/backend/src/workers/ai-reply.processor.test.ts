@@ -68,6 +68,8 @@ import { logger } from '../utils/logger.js';
 import { MENSAJE_FALLO } from './ai-reply.messages.js';
 import { KbDocument } from '../features/kb/kb-document.model.js';
 import { AuditEvent } from '../features/audit/audit.model.js';
+import { limpiarCacheVentana } from '../features/send-window/send-window.service.js';
+import { cerrarHoy } from '../features/send-window/send-window.fixtures.js';
 
 const RESPUESTA = 'Atendemos de 8:00 a 18:00.';
 
@@ -908,5 +910,47 @@ describe('processAiReplyJob — tema de la conversación (HU-REP-03)', () => {
     expect(warn).toHaveBeenCalledWith('Tema: falló la clasificación de la conversación', expect.anything());
     expect((await Cliente.findById(clienteId).lean())?.temaIA).toBeUndefined();
     warn.mockRestore();
+  });
+});
+
+describe('processAiReplyJob — ventana horaria de `ia` (HU-CONF-01)', () => {
+  let tenantId: Types.ObjectId;
+
+  beforeEach(async () => {
+    tenantId = new Types.ObjectId();
+    limpiarCacheVentana();
+    mockChat.mockReset().mockResolvedValue({ data: RESPUESTA, cacheHit: false, retrievedChunks: [] });
+    mockReplyFromIa.mockReset().mockResolvedValue(undefined);
+    mockMarcarParaAsesor.mockReset().mockResolvedValue(undefined);
+    mockGetHandoffSettings.mockReset().mockResolvedValue(handoffSettings());
+  });
+
+  it('`ia` restringida y cerrada: no genera ni envía, marca para asesor y el job no falla', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', '¿Siguen abiertos?');
+    await cerrarHoy(tenantId, ['ia']);
+
+    await expect(
+      processAiReplyJob({ tenantId: tenantId.toString(), clienteId: clienteId.toString(), recibidoEn: Date.now() }),
+    ).resolves.toBeUndefined();
+
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(mockReplyFromIa).not.toHaveBeenCalled();
+    expect(mockMarcarParaAsesor).toHaveBeenCalledWith(tenantId.toString(), clienteId.toString());
+    const audit = await AuditEvent.findOne({ tenantId, accion: 'mensaje.retenido-horario' }).lean();
+    expect(audit?.despues).toMatchObject({ categoria: 'ia', accion: 'descartado' });
+  });
+
+  it('si la franja cierra mientras genera (423 al enviar), descarta y escala sin relanzar', async () => {
+    const clienteId = await crearCliente(tenantId, true);
+    await crearMensaje(tenantId, clienteId, 'user', '¿Siguen abiertos?');
+    mockReplyFromIa.mockRejectedValueOnce(new AppError('Fuera del horario', 423, { siguienteApertura: null }));
+
+    await expect(
+      processAiReplyJob({ tenantId: tenantId.toString(), clienteId: clienteId.toString(), recibidoEn: Date.now() }),
+    ).resolves.toBeUndefined();
+
+    expect(mockChat).toHaveBeenCalledTimes(1);
+    expect(mockMarcarParaAsesor).toHaveBeenCalledTimes(1);
   });
 });

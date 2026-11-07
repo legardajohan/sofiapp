@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { objectIdSchema } from '../../utils/validation.js';
-import { esZonaValida } from '../../utils/zona-horaria.util.js';
+import { esZonaHorariaValida } from '../../utils/zona-horaria.util.js';
 
 /**
  * Cotas del límite de notas de voz que puede fijar el superadmin (HU-OMNI-07). Viven aquí y no en
@@ -126,7 +126,7 @@ export const updateAjustesTenantSchema = z.object({
         .trim()
         .min(1)
         .max(64)
-        .refine(esZonaValida, { message: 'Zona horaria inválida: usa un nombre IANA, p. ej. America/Bogota.' }),
+        .refine(esZonaHorariaValida, { message: 'Zona horaria inválida: usa un nombre IANA, p. ej. America/Bogota.' }),
     })
     .strict(),
 });

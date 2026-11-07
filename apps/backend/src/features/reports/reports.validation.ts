@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DIA_MS } from '../../utils/date-range.util.js';
-import { RANGO_MAX_DIAS, TOP_DEFAULT, TOP_MAX, TZ_DEFAULT } from './reports.types.js';
+import { GRANULARIDADES, RANGO_MAX_DIAS, TOP_DEFAULT, TOP_MAX, TZ_DEFAULT } from './reports.types.js';
 
 const rangoQueryBase = z.object({
   desde: z.coerce.date().optional(),
@@ -49,16 +49,27 @@ export type TopProductsQuery = z.infer<typeof topProductsQuerySchema>['query'];
  */
 const ZONAS_VALIDAS: ReadonlySet<string> = new Set([...Intl.supportedValuesOf('timeZone'), TZ_DEFAULT]);
 
+/** `?tz=` común a los reportes que agrupan por día local (HU-REP-04, HU-REP-06). */
+const zonaQuery = z
+  .string()
+  .trim()
+  .max(64)
+  .refine((tz) => ZONAS_VALIDAS.has(tz), { message: 'Zona horaria desconocida. Usa un nombre IANA como America/Bogota.' })
+  .default(TZ_DEFAULT);
+
 export const peakHoursQuerySchema = z.object({
+  query: conReglasDeRango(rangoQueryBase.extend({ tz: zonaQuery })),
+});
+export type PeakHoursQuery = z.infer<typeof peakHoursQuerySchema>['query'];
+
+/** HU-REP-06: serie de tiempo activo por día, semana o mes, opcionalmente de un solo asesor. */
+export const advisorActivityQuerySchema = z.object({
   query: conReglasDeRango(
     rangoQueryBase.extend({
-      tz: z
-        .string()
-        .trim()
-        .max(64)
-        .refine((tz) => ZONAS_VALIDAS.has(tz), { message: 'Zona horaria desconocida. Usa un nombre IANA como America/Bogota.' })
-        .default(TZ_DEFAULT),
+      tz: zonaQuery,
+      granularidad: z.enum(GRANULARIDADES).default('dia'),
+      asesorId: z.string().regex(/^[0-9a-f]{24}$/i, 'ID de asesor inválido.').optional(),
     }),
   ),
 });
-export type PeakHoursQuery = z.infer<typeof peakHoursQuerySchema>['query'];
+export type AdvisorActivityQuery = z.infer<typeof advisorActivityQuerySchema>['query'];

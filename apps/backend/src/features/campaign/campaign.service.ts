@@ -36,6 +36,7 @@ import type { IUploadResponse } from '../media/media.types.js';
 import { WhatsAppTemplate } from '../whatsapp-template/whatsapp-template.model.js';
 import { getChannelCapacity } from '../channel/channel.service.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
+import { consultarVentana } from '../send-window/send-window.service.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { Message } from '../message/message.model.js';
 import { Campaign } from './campaign.model.js';
@@ -135,6 +136,7 @@ function toCampaignResponse(c: LeanCampaign, etiqueta: ITagResponse | null = nul
     programadaPara: c.programadaPara ? c.programadaPara.toISOString() : null,
     iniciadaAt: c.iniciadaAt ? c.iniciadaAt.toISOString() : null,
     finalizadaAt: c.finalizadaAt ? c.finalizadaAt.toISOString() : null,
+    retenidaHasta: c.retenidaHasta ? c.retenidaHasta.toISOString() : null,
     motivo: c.motivo,
     audiencia: {
       tipo: audiencia.tipo,
@@ -314,11 +316,26 @@ export async function encolarLote(
   );
 }
 
+/**
+ * HU-CONF-01, criterio 11. Programar una campaña para una hora en la que la ventana de envío de
+ * `campana` está cerrada es casi siempre un descuido (las 3 a. m. por un AM/PM mal puesto): se
+ * rechaza con 422 y la siguiente apertura, para que la UI ofrezca usarla. Con la política
+ * inactiva o la categoría libre, `consultarVentana` siempre permite.
+ */
+async function assertProgramacionEnFranja(tenantId: TenantId, programadaPara: Date): Promise<void> {
+  const ventana = await consultarVentana(tenantId, 'campana', programadaPara);
+  if (ventana.permitido) return;
+  throw new AppError('La hora elegida está fuera del horario de envío de campañas.', 422, {
+    siguienteApertura: ventana.siguienteApertura?.toISOString() ?? null,
+  });
+}
+
 export async function createCampaign(
   tenantId: TenantId,
   actorId: string,
   dto: CreateCampaignDTO,
 ): Promise<ICampaignResponse> {
+  if (dto.programadaPara) await assertProgramacionEnFranja(tenantId, new Date(dto.programadaPara));
   // Se valida la plantilla ANTES de crear nada: una campaña en borrador apuntando a una plantilla
   // rechazada es una trampa que solo explota al lanzar, cuando ya se invirtió tiempo en el wizard.
   await assertContenidoCompatible(
@@ -761,6 +778,7 @@ export async function scheduleCampaign(
   await assertContenidoCompatible(tenantId, dto.templateId, dto.parametros, !!imagen);
   const parametrosDinamicos = dto.parametrosDinamicos ?? [];
   assertParametrosDinamicos(dto.parametros, parametrosDinamicos);
+  await assertProgramacionEnFranja(tenantId, new Date(dto.programadaPara));
 
   // El id se genera aquí porque la clave de la imagen lo necesita antes de crear el documento.
   const campaignId = new Types.ObjectId();
@@ -845,6 +863,8 @@ export async function rescheduleCampaign(
     parametros,
     dto.parametrosDinamicos ?? campana.parametrosDinamicos ?? [],
   );
+
+  if (dto.programadaPara) await assertProgramacionEnFranja(tenantId, new Date(dto.programadaPara));
 
   const nuevaImagen =
     imagen && mimeType ? await guardarImagen(tenantId, campaignId, imagen, mimeType) : null;
