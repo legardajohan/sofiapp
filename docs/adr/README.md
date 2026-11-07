@@ -18,6 +18,7 @@ marca al anterior como *Reemplazado*.
 | [0010](0010-modelo-tech-provider.md) | SofiApp opera como Tech Provider frente a Meta, por ahora | Aceptada |
 | [0011](0011-reportes-por-subrol.md) | Los reportes de productividad del equipo se restringen por `subrol` | Aceptada |
 | [0012](0012-tema-por-conversacion.md) | El tema de cada conversación lo clasifica la IA contra los productos de la KB | Aceptada |
+| [0013](0013-pdf-pendientes-sincrono-pdfkit.md) | El PDF de pendientes se genera en el proceso web, síncrono, con pdfkit | Aceptada |
 
 ## Convención
 

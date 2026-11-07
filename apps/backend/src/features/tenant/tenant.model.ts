@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { FotografiaFinancieraSchema } from '../plan/plan.model.js';
-import type { ITenantDocument } from './tenant.types.js';
+import { ZONA_HORARIA_DEFAULT, type ITenantDocument } from './tenant.types.js';
 
 const CampoCapturaSchema = new Schema(
   {
@@ -62,6 +62,8 @@ const TenantSchema = new Schema<ITenantDocument>(
     kbVersion: { type: Number, default: 1 },
     recordatorio: { type: RecordatorioSchema, default: () => ({}) },
     notasDeVoz: { type: NotasDeVozSchema },
+    // HU-MARK-07. Ausente en tenants anteriores: se lee con `ZONA_HORARIA_DEFAULT`.
+    zonaHoraria: { type: String, trim: true, default: ZONA_HORARIA_DEFAULT },
   },
   { timestamps: true }
 );

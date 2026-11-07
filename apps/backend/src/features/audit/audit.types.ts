@@ -14,6 +14,10 @@ export type AuditAccion =
   | 'cliente.extract'
   | 'cliente.extract-confirm'
   | 'contact-note.create'
+  | 'contact-note.update'
+  | 'contact-note.delete'
+  | 'contact-note.pendiente-cerrar'
+  | 'contact-note.pendiente-reabrir'
   | 'lead.create'
   | 'lead.update'
   | 'lead.delete'
@@ -27,6 +31,7 @@ export type AuditAccion =
   // reconstruirse meses después.
   | 'campaign.create'
   | 'campaign.launch'
+  | 'campaign.send'
   | 'campaign.pause'
   | 'campaign.resume'
   | 'campaign.cancel'

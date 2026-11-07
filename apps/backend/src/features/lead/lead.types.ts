@@ -1,6 +1,8 @@
 import type { Document, Types } from 'mongoose';
 import type { EstadoComercial, IResumenResponse } from '../cliente/cliente.types.js';
 import type { ISemaforoResponse } from '../semaforo/semaforo.types.js';
+import type { ITagResponse } from '../tag/tag.types.js';
+import type { ICampanaDeClienteResponse } from '../campaign/campaign.historial-cliente.js';
 
 /**
  * De dónde nació el lead. Hoy solo se convierte desde una conversación, pero el discriminador
@@ -109,6 +111,13 @@ export interface ILeadResponse {
     convertidoPor: IRefResponse | null;
     convertidoAt: string;
   };
+  /**
+   * Etiquetas del contacto (HU-MARK-07): las que se le pusieron a mano en la bandeja y las que le
+   * dejaron las campañas (`origen: 'campana'`, con su `campaignId`). Viven en `Cliente.tagIds`.
+   */
+  etiquetas: ITagResponse[];
+  /** Campañas que recibió el contacto, de la más reciente a la más antigua (máx. 20). */
+  campanas: ICampanaDeClienteResponse[];
   createdAt: string;
 }
 
@@ -131,6 +140,8 @@ export interface ListLeadsQuery {
   estado?: string;
   asesor?: string;
   semaforo?: string;
+  /** `tagId` (HU-MARK-07): leads cuyo contacto lleva esa etiqueta. Otro tenant / inexistente → vacío. */
+  etiqueta?: string;
   desde?: Date;
   hasta?: Date;
 }
@@ -162,6 +173,8 @@ export interface ILeadListItemResponse {
   semaforo: ISemaforoResponse | null;
   /** Resumen IA de la conversación (HU-OMNI-03). `null` si nunca se generó. */
   resumen: IResumenResponse | null;
+  /** Etiquetas del contacto, también las que pusieron las campañas (HU-MARK-07). */
+  etiquetas: ITagResponse[];
   ultimoMensajeAt: string | null;
   createdAt: string;
 }

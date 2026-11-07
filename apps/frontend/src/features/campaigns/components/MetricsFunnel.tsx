@@ -90,7 +90,7 @@ export function MetricsFunnel({ metricas }: { metricas: MetricasCampana }): Reac
 
                     <div className="h-2.5 overflow-hidden rounded-[4px] bg-muted" aria-hidden>
                       <div
-                        className="h-full origin-left rounded-[4px] bg-primary transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
+                        className="h-full origin-left rounded-[4px] bg-primary transition-transform duration-300 ease-out-strong motion-reduce:transition-none"
                         style={{ transform: `scaleX(${fraccion})` }}
                       />
                     </div>

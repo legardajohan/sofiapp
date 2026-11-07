@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LeadDetailSheet } from './LeadDetailSheet.js';
-import { deleteLead, updateLeadEstado } from '../api.js';
+import { deleteLead, fetchLead, updateLeadEstado } from '../api.js';
 import type { LeadListItemDTO } from '../types.js';
 
 vi.mock('../api.js', () => ({
@@ -12,12 +12,19 @@ vi.mock('../api.js', () => ({
   deleteLead: vi.fn(),
   updateLeadSemaforo: vi.fn(),
   fetchHistorialSemaforo: vi.fn(),
+  fetchLead: vi.fn(),
 }));
 
 const mockUpdate = vi.mocked(updateLeadEstado);
 const mockDelete = vi.mocked(deleteLead);
 
-beforeEach(() => vi.clearAllMocks());
+const mockFetchLead = vi.mocked(fetchLead);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  // La ficha pide el detalle para el historial de campañas (HU-MARK-07). Por defecto, ninguna.
+  mockFetchLead.mockResolvedValue({ campanas: [] } as unknown as Awaited<ReturnType<typeof fetchLead>>);
+});
 
 function lead(over: Partial<LeadListItemDTO> = {}): LeadListItemDTO {
   return {
@@ -188,5 +195,53 @@ describe('LeadDetailSheet', () => {
     // No borra al instante: primero confirma, y el motivo es parte de la confirmación.
     expect(mockDelete).not.toHaveBeenCalled();
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  it('HU-MARK-07: muestra las etiquetas del contacto, también las de campaña', () => {
+    renderSheet(
+      lead({
+        etiquetas: [
+          { id: 't1', nombre: 'VIP', color: '#7C3AED', semaforo: null },
+          {
+            id: 't2',
+            nombre: 'Campaña Promo - 01/11/2026',
+            color: '#0EA5E9',
+            semaforo: null,
+            origen: 'campana',
+            campaignId: 'k1',
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByText('VIP')).toBeInTheDocument();
+    expect(screen.getByText('Campaña Promo - 01/11/2026')).toBeInTheDocument();
+  });
+
+  it('HU-MARK-07: sin etiquetas lo dice y explica de dónde salen', () => {
+    renderSheet(lead());
+    expect(screen.getByText(/Sin etiquetas/)).toBeInTheDocument();
+  });
+
+  it('HU-MARK-07: lista las campañas recibidas con enlace, estado y la etiqueta que dejó', async () => {
+    mockFetchLead.mockResolvedValue({
+      campanas: [
+        {
+          id: 'k1',
+          nombre: 'Promo noviembre',
+          estado: 'entregado',
+          enviadoAt: '2026-11-01T15:00:00.000Z',
+          etiqueta: { id: 't2', nombre: 'Seguimiento', color: '#0EA5E9' },
+        },
+        { id: 'k2', nombre: 'Aviso', estado: 'fallido', enviadoAt: null, etiqueta: null },
+      ],
+    } as unknown as Awaited<ReturnType<typeof fetchLead>>);
+    renderSheet(lead());
+
+    const enlace = await screen.findByRole('link', { name: 'Promo noviembre' });
+    expect(enlace).toHaveAttribute('href', '/campanas/k1');
+    expect(screen.getByText(/^Entregado el/)).toBeInTheDocument();
+    expect(screen.getByText('Seguimiento')).toBeInTheDocument();
+    expect(screen.getByText('Fallido')).toBeInTheDocument();
   });
 });

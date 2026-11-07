@@ -19,6 +19,7 @@ import { usePipeline } from '../hooks/usePipeline.js';
 import { usePipelineRealtime } from '../hooks/usePipelineRealtime.js';
 import { PipelineCard } from './PipelineCard.js';
 import { PipelineColumn } from './PipelineColumn.js';
+import { PendientesColumn } from './PendientesColumn.js';
 import { PipelineSkeleton } from './PipelineSkeleton.js';
 import type { PipelineFiltros } from '../types.js';
 
@@ -146,6 +147,8 @@ export function PipelineBoard({ filtros, onSelect, onVerEnTabla }: Props): React
           que el borde inferior, que es la superficie donde se sueltan las tarjetas, cambiara de
           sitio en cada movimiento. */}
       <div className="flex h-[min(70vh,44rem)] min-h-[24rem] gap-3 overflow-x-auto pb-3">
+        {/* HU-PDF-01: vista de seguimiento a la izquierda de las etapas; no recibe tarjetas. */}
+        <PendientesColumn />
         {data.columnas.map((columna) => (
           <PipelineColumn
             key={columna.etapa.key}

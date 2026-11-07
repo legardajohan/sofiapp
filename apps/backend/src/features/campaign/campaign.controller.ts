@@ -9,8 +9,10 @@ import {
   pauseCampaign,
   getSegmentFacetas,
   listSegmentAudience,
+  previewAudience,
   previewSegment,
   rescheduleCampaign,
+  sendCampaign,
   resumeCampaign,
   scheduleCampaign,
   subirImagenReemplazo,
@@ -24,8 +26,10 @@ import type {
   CreateCampaignBody,
   ListCampaignsQuery,
   ListRecipientsQuery,
+  PreviewAudienciaBody,
   PreviewSegmentoBody,
   RescheduleCampaignBody,
+  SendCampaignBody,
   ScheduleCampaignBody,
 } from './campaign.validation.js';
 
@@ -33,6 +37,13 @@ export const previewSegmentController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const { filtros } = req.body as PreviewSegmentoBody;
   res.status(200).json(await previewSegment(tenantId, filtros));
+};
+
+/** HU-MARK-07 — vista previa de la audiencia "mensajes recientes". */
+export const previewAudienceController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const { audiencia } = req.body as PreviewAudienciaBody;
+  res.status(200).json(await previewAudience(tenantId, audiencia));
 };
 
 export const getSegmentFacetasController: RequestHandler = async (req, res) => {
@@ -76,6 +87,13 @@ export const launchCampaignController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
   const id = req.params['id'] as string;
   res.status(200).json(await launchCampaign(tenantId, req.user!.sub, id));
+};
+
+/** HU-MARK-07 — lanza la campaña con (o sin) etiqueta para los destinatarios. */
+export const sendCampaignController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const id = req.params['id'] as string;
+  res.status(200).json(await sendCampaign(tenantId, req.user!.sub, id, req.body as SendCampaignBody));
 };
 
 export const pauseCampaignController: RequestHandler = async (req, res) => {
