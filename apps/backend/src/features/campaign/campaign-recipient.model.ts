@@ -21,6 +21,8 @@ const CampaignRecipientSchema = new Schema<ICampaignRecipientDocument>(
     leidoAt: { type: Date, default: null },
     respondidoAt: { type: Date, default: null },
     convertidoAt: { type: Date, default: null },
+    // HU-MARK-07 — ¿la etiqueta de la campaña la puso este envío? Ver `ICampaignRecipient`.
+    etiquetaAgregada: { type: Boolean, default: null },
   },
   { timestamps: true },
 );

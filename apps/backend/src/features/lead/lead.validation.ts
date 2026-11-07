@@ -99,6 +99,8 @@ export const listLeadsSchema = z.object({
       // Ya no es un enum cerrado: los semaforos son un catalogo por tenant (HU-CRM-04). Zod solo
       // comprueba la forma; que la clave exista en ESTE tenant lo valida el service.
       semaforo: z.string().trim().min(1).max(40).optional(),
+      // HU-MARK-07: un `tagId`. Que sea de ESTE tenant lo garantiza la consulta scoped del service.
+      etiqueta: objectId.optional(),
       desde: z.coerce.date({ invalid_type_error: 'Fecha «desde» inválida.' }).optional(),
       hasta: z.coerce.date({ invalid_type_error: 'Fecha «hasta» inválida.' }).optional(),
     })

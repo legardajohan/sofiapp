@@ -147,6 +147,9 @@ function toContactCard(
     documento: documento === null ? null : puedeVerSensibles ? documento : maskDocumento(documento),
     atributos: (c.atributos ?? []).map((a) => toAtributoResponse(a, puedeVerSensibles)),
     puedeVerSensibles,
+    // Los documentos anteriores a los campos no los llevan: ausente = no.
+    marketingOptOut: c.marketingOptOut === true,
+    bloqueado: c.bloqueado === true,
   };
 }
 
@@ -251,6 +254,8 @@ const CAMPOS_SIMPLES = [
   // HU-MARK-01. Encaja en el bucle tal cual: no es `nullable`, así que nunca cae en la rama de
   // `$unset`; `false` es un valor con significado ("sí acepta campañas") y se persiste.
   'marketingOptOut',
+  // HU-MARK-07. Mismo caso que `marketingOptOut`.
+  'bloqueado',
 ] as const;
 
 /** Campos sensibles y la columna (sufijo `Enc`, hoy en claro) donde se persisten. */

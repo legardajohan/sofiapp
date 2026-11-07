@@ -220,6 +220,11 @@ export interface ICliente {
    * `false`: ausente significa "no se ha pedido la baja", no "desconocido".
    */
   marketingOptOut: boolean;
+  /**
+   * Contacto bloqueado o inactivo (HU-MARK-07): no se le escribe por campaña. Se excluye **siempre**
+   * de toda audiencia, igual que `marketingOptOut`, y con el mismo `$ne: true` (ausente = activo).
+   */
+  bloqueado: boolean;
 }
 
 export interface IClienteDocument extends ICliente, Document {}
@@ -261,6 +266,10 @@ export interface IContactCardResponse {
    * valor. Sin esto no podría distinguir un correo enmascarado de uno que casualmente lo parece.
    */
   puedeVerSensibles: boolean;
+  /** Baja de campañas (HU-MARK-01). */
+  marketingOptOut: boolean;
+  /** Bloqueado / inactivo (HU-MARK-07): fuera de toda campaña. */
+  bloqueado: boolean;
 }
 
 /** Atributo tal como lo consume la ficha: `oculto` marca los que llegaron enmascarados. */
@@ -295,6 +304,8 @@ export interface UpdateClienteDTO {
   atributos?: IAtributoPersonalizado[];
   /** Baja de campañas (HU-MARK-01). Sin `null`: es un interruptor, no un campo que se vacíe. */
   marketingOptOut?: boolean;
+  /** HU-MARK-07. Interruptor, como `marketingOptOut`. */
+  bloqueado?: boolean;
 }
 
 /** Datos de contacto extraídos por IA, tal como los consume la ficha. */

@@ -112,7 +112,23 @@ describe('LeadsTable', () => {
   it('un lead sin semáforo muestra un guion, no una celda vacía', () => {
     render(<LeadsTable {...props} datos={pagina([lead({ semaforo: null })])} />);
 
-    expect(screen.getByText('—')).toBeInTheDocument();
+    // Tercera columna: Lead, Estado, Semáforo.
+    expect(screen.getAllByRole('cell')[2]).toHaveTextContent('—');
+  });
+
+  it('HU-MARK-07: muestra hasta dos etiquetas del contacto y resume el resto', () => {
+    const etiquetas = ['VIP', 'Campaña Promo - 01/11/2026', 'Feria'].map((nombre, i) => ({
+      id: `t${i}`,
+      nombre,
+      color: '#7C3AED',
+      semaforo: null,
+    }));
+    render(<LeadsTable {...props} datos={pagina([lead({ etiquetas })])} />);
+
+    expect(screen.getByText('VIP')).toBeInTheDocument();
+    expect(screen.getByText('Campaña Promo - 01/11/2026')).toBeInTheDocument();
+    expect(screen.queryByText('Feria')).not.toBeInTheDocument();
+    expect(screen.getByText('+1')).toHaveAttribute('title', 'Feria');
   });
 
   it('un lead sin responsable ni actividad no deja huecos mudos', () => {

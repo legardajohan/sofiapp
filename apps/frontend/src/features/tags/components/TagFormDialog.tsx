@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TagChip } from './TagChip.js';
 import { TagColorPicker } from './TagColorPicker.js';
-import type { TagDTO } from '../types.js';
+import { TAG_NOMBRE_MAX, type TagDTO } from '../types.js';
 
 interface Props {
   /** `null` = crear; un tag = editar. */
@@ -76,10 +76,10 @@ export function TagFormDialog({
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Pendiente de pago"
-              maxLength={30}
+              maxLength={TAG_NOMBRE_MAX}
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">{nombreLimpio.length}/30</p>
+            <p className="text-xs text-muted-foreground">{nombreLimpio.length}/{TAG_NOMBRE_MAX}</p>
           </div>
 
           <TagColorPicker value={color} onChange={setColor} />

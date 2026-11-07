@@ -43,6 +43,10 @@
     maxDuracionSegundos: Number?,  // Zod exige 5..900
     maxBytes: Number?,             // Zod exige 100 KB..16 MB
   }?,
+  // HU-MARK-07: zona IANA de la empresa. Única fuente para resolver días de calendario del tenant
+  // (rango personalizado de la audiencia «mensajes recientes»). La edita su admin con
+  // PATCH /api/tenants/me/ajustes. Ausente en tenants anteriores = default.
+  zonaHoraria: String,            // default "America/Bogota"
   createdAt, updatedAt
 }
 // Índices: { slug: 1 } unique
@@ -169,6 +173,9 @@
   // Se consulta con `$ne: true`, no con `false`: los contactos anteriores al campo no lo llevan,
   // y ausente significa "no ha pedido la baja", no "desconocido".
   marketingOptOut: Boolean,       // default false
+  // Bloqueado / inactivo (HU-MARK-07). Misma regla que el opt-out: fuera de TODA audiencia, con
+  // `$ne: true`. Se alterna desde la ficha (PATCH /api/clientes/:id).
+  bloqueado: Boolean,             // default false
   // Última clasificación de intención de compra por IA (HU-IA-05). Sin índice: se proyecta al abrir
   // la conversación, nadie filtra la bandeja por esto.
   semaforoIA: {                   // subdoc con _id: false; ausente si la IA nunca clasificó
@@ -234,6 +241,7 @@
 //          { tenantId: 1, telefono: 1 }
 //          { tenantId: 1, nivelInteres: 1 }   (segmentación de campañas)
 //          { tenantId: 1, marketingOptOut: 1 } (HU-MARK-01: está en TODOS los segmentos)
+//          { tenantId: 1, bloqueado: 1 } (HU-MARK-07: idem)
 //          { tenantId: 1, rolContacto: 1 }     (HU-MARK-01: uno de los tres ejes de segmentación)
 //          { ventana24hExpiraEn: 1, iaHabilitada: 1 }   — índice sin tenantId como prefijo
 //          (HU-FLOW-02): el barrido de recordatorios es cross-tenant por naturaleza (una sola
@@ -330,6 +338,8 @@
 //                                                          por createdAt de HU-REP-01/02/03—)
 ```
 
+> HU-MARK-07: índice `{ tenantId: 1, direccion: 1, createdAt: -1 }` para la audiencia «mensajes recientes» (salientes del tenant en un rango, agrupados por contacto). Equivale al `{ tenantId, sentAt }` que pedía la HU: el instante de envío es `createdAt`.
+
 ## whatsapp_templates  (catálogo de plantillas HSM, espejo de Meta — HT-WA-02)
 ```js
 {
@@ -423,9 +433,11 @@
 {
   _id: ObjectId,
   tenantId: ObjectId,             // required + index
-  nombre: String,                 // 1..30, único por tenant ignorando mayúsculas/acentos
+  nombre: String,                 // 1..60 (HU-MARK-07; antes 30), único por tenant ignorando mayúsculas/acentos
   color: String,                  // "#RRGGBB" elegido por el admin: es DATO, no un token de diseño
   semaforo: "azul" | "rojo" | "naranja" | "verde" | undefined,
+  origen: "manual" | "campana",   // HU-MARK-07. default "manual"; "campana" = la generó un envío
+  campaignId: ObjectId|null,      // HU-MARK-07. campaña que la generó, si origen = "campana"
   createdAt, updatedAt
 }
 ```
@@ -544,6 +556,15 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   creadaPor: ObjectId,            // ref User
   iniciadaAt: ISODate|null, finalizadaAt: ISODate|null,
   motivo: String|null,            // por qué acabó `fallida` o `cancelada`
+  // HU-MARK-07: filtro de audiencia aplicado, para trazabilidad. `desde`/`hasta` son instantes
+  // RESUELTOS y congelados al crear; el envío materializa con ellos. Default { tipo: "segmento" }.
+  audiencia: {
+    tipo: "segmento" | "mensajes_recientes",
+    rango: "1d" | "3d" | "7d" | "custom" | null,
+    desde: Date|null, hasta: Date|null,
+    zonaHoraria: String|null,
+  },
+  tagId: ObjectId|null,           // HU-MARK-07: etiqueta para los destinatarios enviados con éxito
   createdAt, updatedAt
 }
 // Índices: { tenantId: 1, createdAt: -1 } · { tenantId: 1, estado: 1, createdAt: -1 }
@@ -569,6 +590,8 @@ CRM-04, IA-05 y MARK-01 las resuelven.
 > lanzamiento y los `campaign_recipients` se materializan ahí. Un contacto que empiece a cumplir los
 > filtros a mitad del envío **no** se incorpora: si no, nadie podría decir a cuánta gente se escribió.
 
+> HU-MARK-07: índice `{ tenantId: 1, tagId: 1 }` («campañas que generaron esta etiqueta»).
+
 ## campaign_recipients  (auditoría de envío por destinatario)
 ```js
 {
@@ -580,6 +603,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   estado: "pendiente" | "enviado" | "entregado" | "fallido" | "omitido",
   metaMessageId: String|null,     // puente con los `statuses` del webhook
   error: String?,
+  etiquetaAgregada: Boolean|null, // HU-MARK-07: true = la etiqueta la puso ESTE envío (para retirarla ante un `failed` tardío)
   enviadoAt: ISODate?,
   // HU-MARK-04 — eventos que alimentan las métricas. `null` = no ocurrió (o fila anterior a la
   // medición). Se escriben una sola vez: cada escritura va condicionada a que sigan en `null`.
@@ -896,9 +920,20 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   clienteId: ObjectId,            // ref Cliente — el contacto al que pertenece
   autorId: ObjectId,              // ref User — quién la escribió
   textoEnc: String,               // 1..2000; sufijo `Enc` histórico — se persiste en claro
+  pendiente: Boolean,             // HU-PDF-01, default false; ausente en notas antiguas = false
+  // HU-PDF-01 A1 — solo con `pendiente: true`; `null` en una nota normal:
+  programadoDia: String | null,   // día civil "YYYY-MM-DD"; sin elegir = día del alta en la zona del usuario
+  programadoHora: String | null,  // "HH:mm" de reloj; null = pendiente de todo el día
+  estadoPendiente: "abierto" | "cerrado" | null,
+  cerradoAt: Date | null,
+  cerradoPorId: ObjectId | null,  // ref User — quién lo cerró
   createdAt, updatedAt
 }
 // Índice: { tenantId: 1, clienteId: 1, createdAt: -1 }   (es exactamente la consulta de la tarjeta)
+// Índices parciales (HU-PDF-01 A1), partialFilterExpression: { pendiente: true }:
+//   { tenantId: 1, estadoPendiente: 1, programadoDia: 1, programadoHora: 1, createdAt: 1, _id: 1 }
+//     (abiertos en orden de agenda y rango del PDF por día programado)
+//   { tenantId: 1, estadoPendiente: 1, cerradoAt: -1, _id: -1 }   (historial de cerrados)
 ```
 > **Colección propia, no un subdocumento de `clientes`.** Mismo motivo que `messages`: el documento
 > del contacto no debe crecer sin techo, y paginar o auditar notas sueltas desde un array embebido
@@ -910,8 +945,14 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > `coordinator`/`secretary` recibe `403` tanto al leerlas como al crearlas. Consecuencia de producto
 > asumida a conciencia.
 
-> **Solo se agrega.** No hay editar ni borrar: una nota es un asiento del historial. Tampoco hay
-> adjuntos.
+> **Se edita y se borra desde HU-PDF-01.** Hasta entonces la nota solo se agregaba; la historia de
+> pendientes necesita cambiar su texto, activar o quitar el pendiente y eliminarla
+> (`PATCH`/`DELETE /api/clientes/:clienteId/notas/:notaId`). Cada cambio se audita
+> (`contact-note.update|delete`) **sin el texto**. Sigue sin haber adjuntos.
+
+> **El pendiente es un atributo de la nota, no una colección.** `pendiente: true` hace que la nota
+> aparezca en la columna «Pendientes» del embudo y en su PDF. Así texto, vida y borrado son los de
+> la nota y no hay copia que sincronizar (HU-PDF-01).
 
 ## contact_options  (catálogos de interés / objeción / rol — HU-CRM-02)
 ```js

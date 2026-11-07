@@ -13,7 +13,9 @@ import {
   createCampaignSchema,
   listCampaignsSchema,
   listRecipientsSchema,
+  previewAudienciaSchema,
   previewSegmentoSchema,
+  sendCampaignSchema,
   segmentoFacetasSchema,
   rescheduleCampaignSchema,
   scheduleCampaignSchema,
@@ -32,7 +34,9 @@ import {
   listRecipientsController,
   listSegmentAudienceController,
   pauseCampaignController,
+  previewAudienceController,
   previewSegmentController,
+  sendCampaignController,
   rescheduleCampaignController,
   resumeCampaignController,
   scheduleCampaignController,
@@ -53,6 +57,16 @@ router.post(
   campaignRoles,
   validate(previewSegmentoSchema),
   asyncHandler(previewSegmentController),
+);
+
+// HU-MARK-07 — audiencia por mensajes recientes. Literal: ANTES de `/:id`.
+router.post(
+  '/audience/preview',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(previewAudienciaSchema),
+  asyncHandler(previewAudienceController),
 );
 
 // HT-WA-04 — imagen de reemplazo en dos pasos: responde un `uploadId` que consume `POST /campaigns`
@@ -173,6 +187,16 @@ router.post(
   campaignRoles,
   validate(transicionSchema),
   asyncHandler(launchCampaignController),
+);
+
+// HU-MARK-07 — lanzar con etiqueta para los destinatarios enviados con éxito.
+router.post(
+  '/:id/send',
+  authenticateJWT,
+  requireTenant,
+  campaignRoles,
+  validate(sendCampaignSchema),
+  asyncHandler(sendCampaignController),
 );
 
 router.post(

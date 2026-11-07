@@ -22,19 +22,24 @@ import {
   fetchSegmentFacetas,
   launchCampaign,
   pauseCampaign,
+  previewAudiencia,
   previewSegmento,
   rescheduleCampaign,
   resumeCampaign,
   scheduleCampaign,
+  sendCampaign,
 } from '../api.js';
 import type {
   AudienciaContactoDTO,
+  AudiencePreviewDTO,
+  AudienciaRecienteInput,
   CampaignDTO,
   CampaignDetalleDTO,
   CampaignMetricsDTO,
   CampaignsOverviewDTO,
   CampaignRecipientDTO,
   CreateCampaignPayload,
+  EtiquetaEnvio,
   EstadoCampana,
   EstadoDestinatario,
   PagedDTO,
@@ -141,6 +146,24 @@ export function useSegmentPreview(
 }
 
 /** Cuántos contactos hay por etapa y etiqueta. Cambia despacio: un minuto de caché sobra. */
+/**
+ * Vista previa de la audiencia por mensajes recientes (HU-MARK-07). `null` = todavía no hay un
+ * rango completo (p. ej. personalizado sin la fecha de fin): no se pregunta nada al servidor.
+ */
+export function useAudiencePreview(
+  audiencia: AudienciaRecienteInput | null,
+  enabled: boolean,
+): UseQueryResult<AudiencePreviewDTO> {
+  return useQuery({
+    queryKey: ['campaign-audience', audiencia],
+    queryFn: () => previewAudiencia(audiencia!),
+    enabled: enabled && audiencia !== null,
+    placeholderData: keepPreviousData,
+    // El rango rodante se mueve con el reloj: una cifra de hace un minuto ya no es "las últimas 24 h".
+    staleTime: 30_000,
+  });
+}
+
 export function useSegmentFacetas(enabled: boolean): UseQueryResult<SegmentFacetasDTO> {
   return useQuery({
     queryKey: ['campaign-segment', 'facetas'],
@@ -263,6 +286,24 @@ export const useLaunchCampaign = (): UseMutationResult<CampaignDTO, unknown, str
     (c) => `«${c.nombre}» empezó a enviarse`,
     'No se pudo lanzar la campaña.',
   );
+
+/** HU-MARK-07 — lanza un borrador y, si se eligió, etiqueta a quienes lo reciban con éxito. */
+export function useSendCampaign(): UseMutationResult<
+  CampaignDTO,
+  unknown,
+  { id: string; etiqueta?: EtiquetaEnvio }
+> {
+  const invalidar = useInvalidarCampanas();
+  return useMutation({
+    mutationFn: ({ id, etiqueta }: { id: string; etiqueta?: EtiquetaEnvio }) =>
+      sendCampaign(id, etiqueta),
+    onSuccess: (campana) => {
+      invalidar();
+      toast.success(`«${campana.nombre}» empezó a enviarse`);
+    },
+    onError: (error) => toast.error(motivo(error, 'No se pudo lanzar la campaña.')),
+  });
+}
 
 export const usePauseCampaign = (): UseMutationResult<CampaignDTO, unknown, string> =>
   useTransicion(pauseCampaign, (c) => `«${c.nombre}» está en pausa`, 'No se pudo pausar la campaña.');

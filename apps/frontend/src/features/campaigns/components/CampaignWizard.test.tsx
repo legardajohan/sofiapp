@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -285,5 +285,64 @@ describe('CampaignWizard', () => {
         parametrosDinamicos: [{ indice: 0, campo: 'nombre' }],
       }),
     );
+  });
+
+  describe('cuándo sale', () => {
+    beforeEach(() => {
+      // Solo se falsea el reloj: los temporizadores reales siguen, que es lo que usa userEvent.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 8, 10, 10, 0));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function irALaRevision(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await waitFor(() => expect(screen.getByText('120')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Continuar' }));
+      await user.click(await screen.findByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: /promo_matriculas/ }));
+      await user.click(screen.getByRole('button', { name: 'Continuar' }));
+      await user.type(screen.getByLabelText('Nombre de la campaña'), 'Matrículas 2026');
+    }
+
+    it('por defecto sale ahora; al programar pide día y hora y manda programadaPara', async () => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderWizard();
+      await irALaRevision(user);
+
+      expect(screen.getByText('¿Cuándo sale?')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Enviar ahora' })).toHaveAttribute('data-state', 'on');
+
+      await user.click(screen.getByRole('radio', { name: 'Programar' }));
+      expect(screen.getByRole('button', { name: 'Programar campaña' })).toBeDisabled();
+
+      await user.click(await screen.findByRole('button', { name: /15 de septiembre/i }));
+      expect(screen.getByText(/Sale el/)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Programar campaña' }));
+
+      const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(payload).toMatchObject({
+        nombre: 'Matrículas 2026',
+        programadaPara: new Date(2026, 8, 15, 9, 0).toISOString(),
+      });
+      expect(payload).not.toHaveProperty('lanzar');
+    });
+
+    it('volver a «Enviar ahora» lanza sin hora', async () => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderWizard();
+      await irALaRevision(user);
+
+      await user.click(screen.getByRole('radio', { name: 'Programar' }));
+      await user.click(await screen.findByRole('button', { name: /15 de septiembre/i }));
+      await user.click(screen.getByRole('radio', { name: 'Enviar ahora' }));
+      await user.click(screen.getByRole('button', { name: /Enviar a 120/ }));
+
+      const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(payload).toMatchObject({ lanzar: true });
+      expect(payload).not.toHaveProperty('programadaPara');
+    });
   });
 });

@@ -5,7 +5,9 @@ import {
   COMBINACIONES_SEGMENTO,
   ESTADOS_CAMPANA,
   MIMES_IMAGEN_CAMPANA,
+  TIPOS_AUDIENCIA,
 } from './campaign.types.js';
+import { RANGOS_AUDIENCIA } from './campaign.rango.js';
 import type { ICampaignDocument, IParametroDinamico } from './campaign.types.js';
 
 /**
@@ -83,6 +85,21 @@ const ContenidoSchema = new Schema(
   { _id: false },
 );
 
+/**
+ * Filtro de audiencia aplicado (HU-MARK-07). Guarda los instantes **resueltos**, no "últimos 3 días":
+ * es lo que hace auditable la campaña y lo que el envío usa para materializar.
+ */
+const AudienciaSchema = new Schema(
+  {
+    tipo: { type: String, enum: TIPOS_AUDIENCIA, required: true, default: 'segmento' },
+    rango: { type: String, enum: RANGOS_AUDIENCIA, default: null },
+    desde: { type: Date, default: null },
+    hasta: { type: Date, default: null },
+    zonaHoraria: { type: String, default: null },
+  },
+  { _id: false },
+);
+
 const ParametroDinamicoSchema = new Schema<IParametroDinamico>(
   {
     indice: { type: Number, required: true, min: 0 },
@@ -110,6 +127,9 @@ const CampaignSchema = new Schema<ICampaignDocument>(
     iniciadaAt: { type: Date, default: null },
     finalizadaAt: { type: Date, default: null },
     motivo: { type: String, default: null },
+    // HU-MARK-07. Default de segmento: las campañas anteriores se leen exactamente como antes.
+    audiencia: { type: AudienciaSchema, required: true, default: () => ({ tipo: 'segmento' }) },
+    tagId: { type: Schema.Types.ObjectId, ref: 'Tag', default: null },
   },
   { timestamps: true },
 );
@@ -119,6 +139,8 @@ CampaignSchema.index({ tenantId: 1, createdAt: -1 });
 CampaignSchema.index({ tenantId: 1, estado: 1, createdAt: -1 });
 // Resumen de métricas del período (HU-MARK-04): campañas iniciadas en un rango.
 CampaignSchema.index({ tenantId: 1, iniciadaAt: -1 });
+// "Campañas que generaron esta etiqueta" (HU-MARK-07).
+CampaignSchema.index({ tenantId: 1, tagId: 1 });
 
 // Disparador de las campañas programadas. **No empieza por `tenantId`, y es deliberado**: el
 // barrido es cross-tenant por naturaleza (una pasada para toda la plataforma), igual que el de
