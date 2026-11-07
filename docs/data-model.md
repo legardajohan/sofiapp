@@ -886,6 +886,34 @@ cualquier intento de guardarlo es un 400.
 > `tipo` queda abierto a futuros disparadores, pero hoy solo escriben `handoffConversation()` y
 > `assignConversation()` (`conversation.service.ts`).
 
+## actividad_asesores  (tiempo activo del asesor por hora — HU-REP-06)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  userId: ObjectId,               // ref User — el asesor que latió
+  hora: Date,                     // inicio de la hora UTC (min/s/ms a 0)
+  segundosActivos: Number,        // suma del crédito de los latidos de esa hora
+  primerLatido: Date,
+  ultimoLatido: Date
+}
+// Índices: { tenantId: 1, userId: 1, hora: 1 } único · { tenantId: 1, hora: 1, userId: 1 } ·
+//          TTL { hora: 1 } ~400 días
+```
+> Una cubeta por asesor y hora **UTC**, alimentada por `POST /api/activity/heartbeat`. Por hora y no
+> por segmentos inicio/fin: el reporte reagrupa por día, semana o mes en la zona del visor sin partir
+> segmentos en la medianoche local (error acotado en zonas con desfase de media hora). Un latido que
+> cruza el cambio de hora reparte su crédito entre las dos cubetas.
+
+## actividad_cursores  (último latido aceptado de cada asesor — HU-REP-06)
+```js
+{ _id: ObjectId, tenantId: ObjectId, userId: ObjectId, ultimoLatido: Date }
+// Índices: { tenantId: 1, userId: 1 } único
+```
+> Serializa las pestañas: cada latido mueve el cursor con un `findOneAndUpdate` atómico (`$max`) y
+> acredita solo lo transcurrido desde el anterior, venga de la pestaña que venga. Por eso dos
+> pestañas abiertas no suman el doble.
+
 ## semaforos  (semaforización comercial de leads — HU-CRM-04)
 
 Catálogo por tenant de cómo cada empresa clasifica sus oportunidades. Mismo patrón que

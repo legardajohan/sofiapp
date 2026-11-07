@@ -42,7 +42,7 @@ describe('GET /api/reports/by-advisor — HU-REP-01', () => {
     const res = await get(token('admin', subrol));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['generadoAt', 'porAsesor', 'rango', 'sinAsignar', 'totales']);
-    expect(res.body.totales).toEqual({ asesores: 0, conversacionesAtendidas: 0, asignadasActivas: 0, ventas: 0, tasaCierre: 0 });
+    expect(res.body.totales).toEqual({ asesores: 0, conversacionesAtendidas: 0, asignadasActivas: 0, ventas: 0, tasaCierre: 0, segundosActivos: 0 });
   });
 
   it('sin query, el rango son los últimos 30 días', async () => {

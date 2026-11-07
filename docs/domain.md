@@ -302,6 +302,15 @@ Limitación aceptada: `Message` no registra **qué** usuario respondió, así qu
 dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
 `admin` sin subrol (ADR 0011).
 
+**Tiempo activo (HU-REP-06):** tiempo en que el asesor tuvo SofiApp **visible y en uso**: pestaña
+visible e interacción (teclado, clic, scroll, toque, foco) en los últimos 5 min. Mientras se cumple,
+el navegador late cada 60 s; el servidor acredita cada latido con su propio reloj —lo transcurrido
+desde el último latido del asesor, con tope de intervalo + tolerancia—, así que varias pestañas no
+suman. Pestaña oculta, equipo suspendido o navegador cerrado dejan de contar en ≤ 1 intervalo. Se
+mide desde HU-REP-06: no hay historia anterior. La columna y el KPI usan el mismo rango UTC del
+reporte; la gráfica por día/semana (lunes)/mes agrupa en la zona del navegador
+(`GET /api/reports/advisor-activity`).
+
 ## 5ter. Tasa de escalamiento IA → asesor (HU-REP-02)
 
 Definiciones únicas que usa `GET /api/reports/handoff-rate`. Cuadran con los handoffs registrados:

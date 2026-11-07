@@ -1,7 +1,8 @@
-import { DollarSign, Headset, MessageSquareReply, UserCheck } from 'lucide-react';
+import { DollarSign, Headset, MessageSquareReply, Timer, UserCheck } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { KpiCell, KpiStripCard, KpiStripSkeleton } from '@/components/charts/KpiCell';
 import { formatEntero, formatPorcentaje } from '@/lib/format';
+import { formatDuracion } from '../lib/duracion-format.js';
 import type { AdvisorReport } from '../types/index.js';
 
 interface Props {
@@ -10,15 +11,17 @@ interface Props {
 }
 
 // Mismo lenguaje que el KpiStrip del tablero global (HU-SAAS-03): una franja con divisores de 1px.
-const COLUMNAS = 'grid-cols-2 xl:grid-cols-4';
+// Cinco celdas: en dos columnas, Ventas ocupa la fila entera para que no quede un hueco.
+const COLUMNAS = 'grid-cols-2 xl:grid-cols-5';
 
 /** Totales del equipo en el periodo. La celda con acento es Ventas, con su tasa de cierre. */
 export function AdvisorKpiStrip({ report, isLoading }: Props): React.ReactElement {
   if (isLoading || !report) {
-    return <KpiStripSkeleton count={4} columns={COLUMNAS} />;
+    return <KpiStripSkeleton count={5} columns={COLUMNAS} />;
   }
 
   const { totales, sinAsignar } = report;
+  const conTiempo = report.porAsesor.filter((f) => f.segundosActivos > 0).length;
 
   return (
     <KpiStripCard columns={COLUMNAS}>
@@ -45,7 +48,18 @@ export function AdvisorKpiStrip({ report, isLoading }: Props): React.ReactElemen
         detail="A cargo de un asesor y con mensajes"
       />
       <KpiCell
+        icon={Timer}
+        label="Tiempo activo"
+        value={formatDuracion(totales.segundosActivos)}
+        detail={
+          conTiempo > 0
+            ? `Promedio de ${formatDuracion(totales.segundosActivos / conTiempo)} por asesor`
+            : 'Nadie registró actividad en el periodo'
+        }
+      />
+      <KpiCell
         accent
+        className="col-span-2 xl:col-span-1"
         icon={DollarSign}
         label="Ventas cerradas"
         value={formatEntero(totales.ventas)}
