@@ -10,6 +10,8 @@ import { metaWhatsAppClient } from '../../integrations/meta/meta-whatsapp.client
 import { sandboxMessagingProvider } from '../../integrations/messaging/sandbox-messaging.provider.js';
 import { getIntegrationWithToken } from '../channel/channel.service.js';
 import { assertWithinQuota, incrementUsage } from '../usage/usage.service.js';
+import { assertVentanaEnvio } from '../send-window/send-window.service.js';
+import type { CategoriaEnvio } from '../send-window/send-window.types.js';
 import {
   assertContenidoCompatible,
   buildTemplatePayload,
@@ -175,8 +177,8 @@ export async function sendOutbound(
   tenantId: TenantId,
   clienteId: string,
   contenido: ContenidoOutbound,
-  sender: Sender = 'agent',
-  contexto: ContextoEnvio = {},
+  sender: Sender,
+  contexto: ContextoEnvio,
 ): Promise<IMessageDocument> {
   const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
 
@@ -186,6 +188,9 @@ export async function sendOutbound(
 
   // Cuota de mensajes (outbound): bloqueo duro antes de cualquier decisión. HU-SAAS-02.
   await assertWithinQuota(tenantId, 'mensajesMes');
+  // Ventana horaria de envío (HU-CONF-01): después de la cuota y ANTES de tocar Meta o el
+  // contador. Fuera de franja lanza 423; cada llamador decide qué hacer con él según su categoría.
+  await assertVentanaEnvio(tenantId, contexto.categoria, { clienteId });
 
   if (!cliente) throw new AppError('Cliente no encontrado.', 404);
 
@@ -372,11 +377,14 @@ export async function sendOutbound(
 export async function sendMessage(
   tenantId: TenantId,
   dto: ISendMessageDto,
+  categoria: CategoriaEnvio,
 ): Promise<IMessageDocument> {
   // `dto.sender` se propaga a propósito: es lo que distingue la respuesta automática de Sofi
   // (`'bot'`) de la de un asesor (`'agent'`, el default de `sendOutbound`). Perderlo aquí guarda
   // todo como 'agent' y rompe HU-IA-01 en la bandeja, la auditoría y el transcript del resumen.
-  return sendOutbound(tenantId, dto.clienteId, { modo: 'texto', texto: dto.texto }, dto.sender);
+  return sendOutbound(tenantId, dto.clienteId, { modo: 'texto', texto: dto.texto }, dto.sender ?? 'agent', {
+    categoria,
+  });
 }
 
 /**

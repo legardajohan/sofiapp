@@ -11,11 +11,18 @@ import { Campaign } from '../features/campaign/campaign.model.js';
 import { CampaignRecipient } from '../features/campaign/campaign-recipient.model.js';
 import {
   encolarLote,
+  etiquetarDestinatario,
   launchCampaign,
   prepararImagenCabecera,
   resolverPresupuesto,
 } from '../features/campaign/campaign.service.js';
 import { sendOutbound } from '../features/message/message.service.js';
+import {
+  aperturaDeError,
+  consultarVentana,
+  esVentanaCerrada,
+  registrarRetencion,
+} from '../features/send-window/send-window.service.js';
 import { notificarSaliente } from '../features/conversation/conversation.service.js';
 import type { IMessageSource } from '../features/conversation/conversation.mapper.js';
 import { Cliente } from '../features/cliente/cliente.model.js';
@@ -50,7 +57,48 @@ async function emitirProgreso(tenantId: string, campana: LeanCampaign): Promise<
     campaignId: campana._id.toString(),
     estado: campana.estado,
     totales: campana.totales,
+    retenidaHasta: campana.retenidaHasta ? campana.retenidaHasta.toISOString() : null,
   });
+}
+
+/** Sin apertura en el horizonte de la política: se reevalúa en una hora por si el admin la cambia. */
+const REEVALUAR_VENTANA_MS = 60 * 60_000;
+
+/**
+ * Retiene la campaña hasta la siguiente apertura de la ventana horaria (HU-CONF-01): re-encola el
+ * siguiente lote con `delay`, marca `retenidaHasta` y lo emite. La campaña sigue `en_curso` y nadie
+ * queda `fallido`. La auditoría se escribe solo en la TRANSICIÓN a retenida: un lote que se
+ * re-evalúa y sigue cerrado no vuelve a auditar.
+ */
+async function retenerPorVentana(
+  tenantId: string,
+  campana: LeanCampaign,
+  lote: number,
+  siguienteApertura: Date | null,
+): Promise<void> {
+  const campaignId = campana._id.toString();
+  const ahora = Date.now();
+  const delay = siguienteApertura ? Math.max(siguienteApertura.getTime() - ahora, 0) : REEVALUAR_VENTANA_MS;
+  const retenidaHasta = new Date(ahora + delay);
+
+  await encolarLote(tenantId, campaignId, lote + 1, delay);
+  const actualizada = await findOneAndUpdateScoped(
+    Campaign,
+    tenantId,
+    { _id: campana._id },
+    { $set: { retenidaHasta } },
+    { new: true },
+  ).lean<LeanCampaign | null>();
+  if (actualizada) await emitirProgreso(tenantId, actualizada);
+
+  if (!campana.retenidaHasta) {
+    await registrarRetencion(tenantId, {
+      categoria: 'campana',
+      accion: 'retenido',
+      siguienteApertura,
+      campaignId,
+    });
+  }
 }
 
 /**
@@ -109,6 +157,17 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
     return;
   }
 
+  // Ventana horaria (HU-CONF-01), antes del presupuesto: fuera de franja no se gasta nada.
+  const ventana = await consultarVentana(tenantId, 'campana');
+  if (!ventana.permitido) {
+    await retenerPorVentana(tenantId, campana, lote, ventana.siguienteApertura);
+    return;
+  }
+  if (campana.retenidaHasta) {
+    // Pasó la ventana: se limpia la marca. El progreso del final del lote la emite ya en `null`.
+    await findOneAndUpdateScoped(Campaign, tenantId, { _id: campana._id }, { $set: { retenidaHasta: null } });
+  }
+
   const presupuesto = await resolverPresupuesto(tenantId);
 
   if (presupuesto.disponible <= 0) {
@@ -165,6 +224,8 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
 
   let enviados = 0;
   let fallidos = 0;
+  /** La franja cerró a mitad del lote: `undefined` = no pasó; si no, la siguiente apertura. */
+  let cierreAMitad: Date | null | undefined;
 
   for (const [indice, destinatario] of destinatarios.entries()) {
     const clienteId = destinatario.clienteId.toString();
@@ -182,7 +243,7 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
           ...(imagenCabecera ? { imagenCabecera } : {}),
         },
         'bot',
-        { campaignId, ...(mediaCabecera ? { mediaCabecera } : {}) },
+        { categoria: 'campana', campaignId, ...(mediaCabecera ? { mediaCabecera } : {}) },
       );
 
       await findOneAndUpdateScoped(
@@ -200,6 +261,21 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
       );
       enviados += 1;
 
+      // HU-MARK-07 — etiqueta en el mismo paso que confirma el envío: nunca a un fallido, nunca a
+      // un omitido. Como la notificación de abajo, fuera del criterio de éxito: el mensaje ya salió
+      // y no puede volver a `fallido` porque etiquetar falle.
+      if (campana.tagId) {
+        try {
+          await etiquetarDestinatario(tenantId, campana.tagId, destinatario);
+        } catch (err) {
+          logger.warn('No se pudo etiquetar a un destinatario de campaña', {
+            campaignId,
+            clienteId,
+            error: String(err),
+          });
+        }
+      }
+
       // Fuera del criterio de éxito a propósito: el mensaje YA salió. Si avisar a la bandeja
       // falla, el destinatario sigue `enviado` y el hilo lo mostrará en el próximo refetch.
       try {
@@ -212,6 +288,12 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
         });
       }
     } catch (err) {
+      if (esVentanaCerrada(err)) {
+        // La franja cerró a mitad del lote: no es un fallo del destinatario. Se corta el lote sin
+        // marcarlo y se retiene la campaña; el destinatario sigue `pendiente` para el próximo.
+        cierreAMitad = aperturaDeError(err);
+        break;
+      }
       // Deliberadamente por destinatario: un número dado de baja, un contacto borrado o un 470 de
       // Meta son casos de UNA fila. Propagar tumbaría el lote entero y BullMQ reintentaría envíos
       // ya hechos.
@@ -240,6 +322,11 @@ export async function processCampaignJob(data: CampaignJobData): Promise<void> {
     { $inc: { 'totales.enviados': enviados, 'totales.fallidos': fallidos } },
     { new: true },
   ).lean<LeanCampaign | null>();
+
+  if (cierreAMitad !== undefined) {
+    await retenerPorVentana(tenantId, actualizada ?? campana, lote, cierreAMitad);
+    return;
+  }
 
   if (actualizada) await emitirProgreso(tenantId, actualizada);
 

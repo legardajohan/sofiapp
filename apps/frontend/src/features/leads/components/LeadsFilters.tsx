@@ -15,6 +15,7 @@ import { useEstados } from '../../estados/hooks/useEstados.js';
 import { NuevoEstadoDialog } from './NuevoEstadoDialog.js';
 import { SemaforosDialog } from './SemaforosDialog.js';
 import { useSemaforos } from '../../semaforos/hooks/useSemaforos.js';
+import { useTags } from '../../tags/hooks/useTags.js';
 import { RANGOS, fechasARango, rangoAFechas, type RangoKey } from '../lib/format.js';
 import type { LeadsFiltros } from '../types.js';
 
@@ -54,6 +55,7 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
   const usuarios = useTenantUsers();
   const estados = useEstados();
   const semaforos = useSemaforos();
+  const etiquetas = useTags();
 
   /**
    * "Personalizado" no se deduce de las fechas: sin fechas puestas, `fechasARango` devolvería
@@ -64,7 +66,12 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
   const rangoDeFechas = fechasARango({ desde: filtros.desde, hasta: filtros.hasta });
   const rango: RangoKey = personalizado ? 'personalizado' : rangoDeFechas;
   const hayFiltros = Boolean(
-    filtros.estado ?? filtros.asesor ?? filtros.semaforo ?? filtros.desde ?? filtros.hasta,
+    filtros.estado ??
+      filtros.asesor ??
+      filtros.semaforo ??
+      filtros.etiqueta ??
+      filtros.desde ??
+      filtros.hasta,
   );
 
   function cambiarRango(key: RangoKey): void {
@@ -148,6 +155,36 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
                 {u.nombre}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </Campo>
+
+      {/* HU-MARK-07: por aquí se sigue a los destinatarios de una campaña, con la etiqueta que les
+          puso el envío. Las de semaforización no se ofrecen: para eso está el filtro de al lado. */}
+      <Campo label="Etiqueta" htmlFor="filtro-etiqueta">
+        <Select
+          value={filtros.etiqueta ?? TODOS}
+          onValueChange={(v) => onChange({ etiqueta: v === TODOS ? undefined : v })}
+        >
+          <SelectTrigger id="filtro-etiqueta" className="h-9 w-56">
+            <SelectValue placeholder="Etiqueta" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODOS}>Cualquier etiqueta</SelectItem>
+            {(etiquetas.data ?? [])
+              .filter((t) => t.semaforo === null)
+              .map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: t.color }}
+                    />
+                    <span className="truncate">{t.nombre}</span>
+                  </span>
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </Campo>

@@ -22,6 +22,13 @@ import { extraerDatosSiHaceFalta } from '../features/ai/ai-extract.service.js';
 import { clasificarTemaSiHaceFalta } from '../features/ai/ai-topic.service.js';
 import { construirHistorial } from '../features/ai/ai-shared.js';
 import { MENSAJE_FALLO } from './ai-reply.messages.js';
+import { descartarIaPorVentana } from './ai-ventana.js';
+import {
+  aperturaDeError,
+  consultarVentana,
+  esVentanaCerrada,
+  registrarRetencion,
+} from '../features/send-window/send-window.service.js';
 
 /**
  * El texto entrante NO viaja en el job: cuando se encola ya está persistido como `Message`, así que
@@ -63,6 +70,15 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
   // comprobación es sobre el historial que ya se leyó, así que no añade consulta (HU-IA-02).
   const ultimo = historial[historial.length - 1];
   if (!ultimo || ultimo.role !== 'user') return null;
+
+  // Ventana horaria de `ia` (HU-CONF-01) ANTES de generar: fuera de franja la respuesta no saldría,
+  // así que no se paga la generación. Sofi se calla y la conversación sube a un asesor. Se devuelve
+  // el historial para que la clasificación del semáforo siga corriendo.
+  const ventana = await consultarVentana(tenantId, 'ia');
+  if (!ventana.permitido) {
+    await descartarIaPorVentana(tenantId, clienteId, ventana.siguienteApertura);
+    return historial;
+  }
 
   // Se lee UNA vez y se reutiliza en los dos puntos de evaluación (HU-IA-03). Con la configuración
   // apagada —el estado de fábrica— `evaluarAntesDeGenerar` devuelve "no dispara" sin mirar nada,
@@ -112,6 +128,11 @@ async function ejecutarAutoReply(data: AiReplyJobData): Promise<ChatTurn[] | nul
   try {
     await replyFromIa(tenantId, clienteId, resultado.data);
   } catch (err: unknown) {
+    // La franja cerró mientras se generaba (423): mismo destino que el chequeo previo.
+    if (esVentanaCerrada(err)) {
+      await descartarIaPorVentana(tenantId, clienteId, aperturaDeError(err));
+      return historial;
+    }
     // Fuera de la ventana de 24 h o cuota de mensajes agotada: son condiciones esperables del
     // negocio, no un fallo del job. Propagarlas haría que BullMQ reintentase y volviese a pagar la
     // generación para fallar exactamente igual.
@@ -201,7 +222,15 @@ async function ejecutarHandoff(
   try {
     await replyFromIa(tenantId, clienteId, texto);
   } catch (err: unknown) {
-    if (err instanceof AppError) {
+    if (esVentanaCerrada(err)) {
+      // Fuera de franja: el aviso no sale, pero la transferencia sigue igual (HU-CONF-01).
+      await registrarRetencion(tenantId, {
+        categoria: 'ia',
+        accion: 'descartado',
+        siguienteApertura: aperturaDeError(err),
+        clienteId,
+      });
+    } else if (err instanceof AppError) {
       logger.warn('Aviso de handoff no enviado', { tenantId, clienteId, motivo: err.message });
     } else {
       throw err;
@@ -228,7 +257,14 @@ async function avisarDeFalloYEscalar(tenantId: string, clienteId: string): Promi
   try {
     await replyFromIa(tenantId, clienteId, MENSAJE_FALLO);
   } catch (err: unknown) {
-    if (err instanceof AppError) {
+    if (esVentanaCerrada(err)) {
+      await registrarRetencion(tenantId, {
+        categoria: 'ia',
+        accion: 'descartado',
+        siguienteApertura: aperturaDeError(err),
+        clienteId,
+      });
+    } else if (err instanceof AppError) {
       logger.warn('Aviso de fallo no enviado', { tenantId, clienteId, motivo: err.message });
     } else {
       logger.error('Aviso de fallo: error inesperado', { tenantId, clienteId, error: String(err) });

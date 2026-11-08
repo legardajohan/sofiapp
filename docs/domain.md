@@ -14,7 +14,7 @@
 | **Nivel de interés** | Señal inferida por IA: `frio | tibio | caliente`. |
 | **Objeción** | Motivo de duda inferido por IA: `precio | tiempo | confianza | otra`. |
 | **Catálogo** | Conjunto de productos/servicios que ofrece el tenant (genérico). |
-| **Campaña** | Difusión masiva segmentada a prospectos (remarketing, `HU-MARK-01`). Se segmenta por atributo personalizado del contacto (por ahí entra «grado»), `rolContacto` y **`Lead.semaforo`** —el eje comercial, no la etiqueta del hilo—, combinables. Ciclo: `borrador` → `programada` → `en_curso` ⇄ `pausada` → `completada` \| `cancelada` \| `fallida`. Al lanzar, el segmento se **congela** en `campaign_recipients`: quien entre después en los filtros no se incorpora, porque si no nadie podría decir a cuánta gente se escribió. La cadencia la fija el **tier y la calidad del número**, no el usuario (ver `integrations/meta-whatsapp.md` §5). |
+| **Campaña** | Difusión masiva segmentada a prospectos (remarketing, `HU-MARK-01`). Se segmenta por atributo personalizado del contacto (por ahí entra «grado»), `rolContacto` y **`Lead.semaforo`** —el eje comercial, no la etiqueta del hilo—, combinables. Ciclo: `borrador` → `programada` → `en_curso` ⇄ `pausada` → `completada` \| `cancelada` \| `fallida`. Al lanzar, el segmento se **congela** en `campaign_recipients`: quien entre después en los filtros no se incorpora, porque si no nadie podría decir a cuánta gente se escribió. La cadencia la fija el **tier y la calidad del número**, no el usuario (ver `integrations/meta-whatsapp.md` §5). Desde `HU-MARK-07` la audiencia puede ser también **«mensajes recientes»**: los contactos a quienes el tenant les envió algo en un rango (1 d, 3 d, 7 d o personalizado en la zona del tenant); el rango se congela al crear. Al enviar se puede elegir o crear una **etiqueta** que se pone solo a los enviados con éxito. Ninguna audiencia incluye contactos con baja (`marketingOptOut`) ni **bloqueados** (`Cliente.bloqueado`). |
 | **Métricas de campaña** | Desempeño de una campaña por destinatario (`HU-MARK-04`): **enviado** (Meta lo aceptó), **entregado**, **abierto** (`status: read`; **cota inferior**, porque no llega si el contacto apagó las confirmaciones de lectura), **respondido** (escribió después) y **convertido** (su lead entró a una etapa con `esConversion`). Responder implica leído y entregado. |
 | **Ventana de atribución** | Plazo tras el envío dentro del cual una respuesta (72 h) o una conversión (14 d) se le apunta a una campaña — siempre a la **última** que recibió el contacto (*last-touch*), nunca a una anterior. Configurable por env (`CAMPAIGN_REPLY_WINDOW_HOURS`, `CAMPAIGN_CONVERSION_WINDOW_DAYS`). |
 | **Baja de marketing** | `Cliente.marketingOptOut`. El contacto pidió no recibir campañas; el segmentador lo excluye **siempre**, no es un filtro que se pueda desactivar. Solo se respeta la marca: captarla (formularios, doble opt-in, palabra clave "BAJA") sigue siendo responsabilidad de la empresa. |
@@ -148,6 +148,39 @@ varios, se ejecuta un solo handoff: el del primero de la lista.
 > Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
 > que no tienen dueño.
 
+## 4ter. Horarios de envío (HU-CONF-01)
+
+Cada envío a un cliente declara una **categoría**, y la empresa decide por categoría si sale a
+cualquier hora (`libre`) o solo dentro de unas franjas (`restringido`). Todo envío pasa por un único
+control, en `sendOutbound`, después de la cuota y antes de llamar a Meta. Lo que pasa fuera de franja
+es **fijo por categoría**, no configurable (ADR 0014):
+
+| Categoría | Qué es | De fábrica | Fuera de franja |
+|---|---|---|---|
+| `asesor` | Texto, media y voz desde la bandeja; `POST /messages/send` | libre | **Bloquear**: 423 con `siguienteApertura`; la bandeja muestra el banner |
+| `plantilla_manual` | Plantilla suelta (`POST /messages/template`) | restringido | **Bloquear**: 423 |
+| `ia` | Respuestas, handoff, aviso de fallo y acuse de Sofi; flujo en reacción a un entrante | libre | **Descartar y escalar**: no sale y la conversación sube a un asesor |
+| `flujo` | Mensaje de un flujo tras un nodo `espera` | restringido | **Reprogramar**: el job `resume` se re-encola hasta la apertura, mismo token |
+| `recordatorio` | Recordatorio de la ventana de 24 h | restringido | **Adelantar**: si la ventana vence fuera de horario, sale antes, en el último tramo abierto. Si está en plazo pero aún cerrado, espera a la apertura sin marcar idempotencia |
+| `campana` | Lotes de campañas | restringido | **Retener**: el lote se re-encola hasta la apertura; la campaña sigue `en_curso` con `retenidaHasta` |
+
+- La política nace **desactivada**. Franjas de fábrica de las categorías restringidas: lun–sáb 08:00–19:00.
+- **Un día local** = sus franjas semanales más la cola de las nocturnas del día anterior; si la fecha
+  tiene una **excepción** aplicable a la categoría, manda la excepción sobre el día entero.
+- **Siguiente apertura**: se busca en los 14 días siguientes; si no hay, `null` (y los llamadores
+  que reprograman reevalúan en 1 h).
+- **Plazo efectivo del recordatorio**: el último momento en que todavía se le puede escribir dentro
+  del horario antes de que venza la ventana de 24 h — el propio vencimiento si cae dentro del
+  horario, o si no el cierre del último tramo abierto antes de él. El recordatorio sale
+  `antelacionMinutos` antes de ese plazo. Ejemplo: horario 08:00–19:00, antelación 2 h, ventana que
+  vence a las 23:00 → sale desde las 17:00, no se pierde. Si no queda ningún momento abierto antes
+  del vencimiento (p. ej. todo el resto de la ventana cae en un festivo cerrado), no hay recordatorio
+  posible. Un job que corre con la ventana ya vencida sigue la regla de HU-FLOW-02 (plantilla HSM o 422).
+- **Programar una campaña** para una hora cerrada responde 422 con `siguienteApertura`.
+- Cada retención deja el log `send_window.retenido` y se audita (`campaign.retenida-horario` una vez
+  por transición; `mensaje.retenido-horario` en `flujo`, `recordatorio` e `ia`). Los cambios de la
+  configuración se auditan como `send-window.update`.
+
 ## 5. Semaforización (HU-OMNI-04)
 
 **Semaforización** es el vocabulario compartido con el que el CRM expresa, de un vistazo, en qué
@@ -272,6 +305,15 @@ Definiciones únicas que usa `GET /api/reports/by-advisor`. Cuadran con la bande
 Limitación aceptada: `Message` no registra **qué** usuario respondió, así que una reasignación
 dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
 `admin` sin subrol (ADR 0011).
+
+**Tiempo activo (HU-REP-06):** tiempo en que el asesor tuvo SofiApp **visible y en uso**: pestaña
+visible e interacción (teclado, clic, scroll, toque, foco) en los últimos 5 min. Mientras se cumple,
+el navegador late cada 60 s; el servidor acredita cada latido con su propio reloj —lo transcurrido
+desde el último latido del asesor, con tope de intervalo + tolerancia—, así que varias pestañas no
+suman. Pestaña oculta, equipo suspendido o navegador cerrado dejan de contar en ≤ 1 intervalo. Se
+mide desde HU-REP-06: no hay historia anterior. La columna y el KPI usan el mismo rango UTC del
+reporte; la gráfica por día/semana (lunes)/mes agrupa en la zona del navegador
+(`GET /api/reports/advisor-activity`).
 
 ## 5ter. Tasa de escalamiento IA → asesor (HU-REP-02)
 

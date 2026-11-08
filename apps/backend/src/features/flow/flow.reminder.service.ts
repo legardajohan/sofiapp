@@ -1,3 +1,10 @@
+import {
+  aperturaDeError,
+  consultarVentana,
+  esVentanaCerrada,
+  registrarRetencion,
+  ultimoMomentoDeEnvio,
+} from '../send-window/send-window.service.js';
 import { Types } from 'mongoose';
 import { env } from '../../config/env.js';
 import { FLOW_REMINDER_JOB, flowRuntimeQueue } from '../../config/queues.js';
@@ -24,6 +31,31 @@ const REMINDER_JOB_OPTS = {
  * tenant candidato — eso se filtra después, por tenant, en `ejecutarBarridoRecordatorios`.
  */
 const MAX_ANTELACION_MINUTOS = 1440;
+
+/**
+ * ¿Toca enviar ya el recordatorio de una ventana que vence en `expira`? (HU-CONF-01)
+ *
+ * El recordatorio sale `antelacionMinutos` antes del **plazo efectivo**: el último momento en que
+ * todavía se le puede escribir dentro del horario de envío de `recordatorio`. Si la ventana vence
+ * dentro del horario (o no hay horario), el plazo es el propio vencimiento —el comportamiento de
+ * siempre—. Si vence fuera, el plazo se ADELANTA al cierre del último tramo abierto: así una ventana
+ * que vence a las 23:00 con horario hasta las 19:00 recibe el recordatorio antes de las 19:00, en
+ * vez de perderse. Sin ningún momento abierto antes del vencimiento, no hay recordatorio posible.
+ */
+async function enPlazoDeRecordatorio(
+  tenantId: string,
+  expira: Date,
+  antelacionMinutos: number,
+  ahora: Date,
+): Promise<boolean> {
+  // Ya vencida (el job corrió tarde): sigue en plazo, como siempre. `sendOutbound` lo manda como
+  // plantilla HSM o lo omite con 422 (HU-FLOW-02, criterio 9); el horario lo decide el chequeo
+  // posterior de `consultarVentana`.
+  if (expira.getTime() <= ahora.getTime()) return true;
+  const plazo = await ultimoMomentoDeEnvio(tenantId, 'recordatorio', expira, ahora);
+  if (!plazo) return false;
+  return plazo.getTime() - ahora.getTime() <= antelacionMinutos * 60_000;
+}
 
 export interface ICandidatoRecordatorio {
   tenantId: string;
@@ -82,12 +114,20 @@ export async function filtrarPorConfiguracionTenant(
 
   const configPorTenant = new Map(tenants.map((t) => [t._id.toString(), t.recordatorio]));
 
-  return candidatos.filter((c) => {
+  const elegibles: ICandidatoRecordatorio[] = [];
+  for (const c of candidatos) {
     const config = configPorTenant.get(c.tenantId);
-    if (!config?.activo) return false;
-    const msRestantes = c.ventana24hExpiraEn.getTime() - ahora.getTime();
-    return msRestantes <= config.antelacionMinutos * 60_000;
-  });
+    if (!config?.activo) continue;
+    if (!(await enPlazoDeRecordatorio(c.tenantId, c.ventana24hExpiraEn, config.antelacionMinutos, ahora))) {
+      continue;
+    }
+    // En plazo pero con el horario aún cerrado (p. ej. la antelación empieza antes de que abra el
+    // tramo): no se encola. El siguiente barrido dentro del horario lo recoge, y así no se deja un
+    // rastro de "omitido" cada diez minutos mientras tanto.
+    if (!(await consultarVentana(c.tenantId, 'recordatorio', ahora)).permitido) continue;
+    elegibles.push(c);
+  }
+  return elegibles;
 }
 
 /**
@@ -130,9 +170,33 @@ export async function enviarRecordatorio(tenantId: string, clienteId: string): P
   // envío, `ventana24hExpiraEn` ya se recalculó más lejos en el futuro y la conversación dejó de
   // estar en la franja de antelación — es la señal de "hubo actividad después" sin necesitar un
   // campo aparte para detectarlo.
+  // Con horario de envío, el plazo se mide contra el último momento abierto antes del vencimiento
+  // (HU-CONF-01): ver `enPlazoDeRecordatorio`.
   const ahora = new Date();
-  const msRestantes = cliente.ventana24hExpiraEn.getTime() - ahora.getTime();
-  if (msRestantes > tenant.recordatorio.antelacionMinutos * 60_000) return;
+  if (
+    !(await enPlazoDeRecordatorio(
+      tenantId,
+      cliente.ventana24hExpiraEn,
+      tenant.recordatorio.antelacionMinutos,
+      ahora,
+    ))
+  ) {
+    return;
+  }
+
+  // Ventana horaria (HU-CONF-01) ANTES del marcado de idempotencia. El barrido ya no encola fuera de
+  // franja, así que esto cubre la carrera de un tramo que cierra entre el barrido y el job: se omite
+  // sin marcar y un barrido posterior dentro de franja lo envía si sigue elegible.
+  const ventana = await consultarVentana(tenantId, 'recordatorio', ahora);
+  if (!ventana.permitido) {
+    await registrarRetencion(tenantId, {
+      categoria: 'recordatorio',
+      accion: 'omitido',
+      siguienteApertura: ventana.siguienteApertura,
+      clienteId,
+    });
+    return;
+  }
 
   // Idempotencia: marca ANTES de enviar, con un filtro que excluye el caso ya marcado para esta
   // MISMA ventana. Dos barridos solapados no producen dos envíos.
@@ -159,8 +223,26 @@ export async function enviarRecordatorio(tenantId: string, clienteId: string): P
           : undefined,
       },
       'bot',
+      { categoria: 'recordatorio' },
     );
   } catch (err) {
+    // La franja cerró entre la consulta y el envío (423): se deshace el marcado para que el
+    // siguiente barrido dentro de franja lo reintente, como si nunca se hubiera intentado.
+    if (esVentanaCerrada(err)) {
+      await findOneAndUpdateScoped(
+        Cliente,
+        tenantId,
+        { _id: new Types.ObjectId(clienteId) },
+        { $set: { recordatorioEnviadoParaVentana: cliente.recordatorioEnviadoParaVentana ?? null } },
+      );
+      await registrarRetencion(tenantId, {
+        categoria: 'recordatorio',
+        accion: 'omitido',
+        siguienteApertura: aperturaDeError(err),
+        clienteId,
+      });
+      return;
+    }
     // Fuera de ventana sin plantilla utilizable (422) o cuota agotada (429): se omite y queda
     // registrado, sin reintentos infinitos. Cualquier otro error (transitorio) sí se propaga para
     // que BullMQ reintente el job.

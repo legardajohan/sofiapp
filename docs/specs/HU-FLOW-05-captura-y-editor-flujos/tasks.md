@@ -170,7 +170,7 @@
 - [x] `docs/data-model.md`: `contact_fields`; config de `captura`; nota de `atributos` (key del catálogo).
 - [x] `docs/domain.md`: glosario e invariantes.
 - [x] `docs/api-contract.md`: `/api/campos-contacto` y el `400` del PATCH de clientes.
-- [x] `docs/adr/0013-catalogo-campos-contacto.md`.
+- [x] `docs/adr/0015-catalogo-campos-contacto.md`.
 - [x] `docs/data-model.md` / `docs/api-contract.md`: `nombre` del nodo, `advertencias`, `FLOW_CON_ERRORES`.
 - [x] `.test-chat/00-flows-documentation.md`: destino de captura, fin del bug de efectos, §7 (huérfano ya
       no bloquea guardar), nombres de nodo y borrado con `Supr` (fuera de git).

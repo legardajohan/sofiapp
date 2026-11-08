@@ -21,15 +21,18 @@ import tagRoutes from './features/tag/tag.routes.js';
 import leadRoutes from './features/lead/lead.routes.js';
 import estadoRoutes from './features/estado/estado.routes.js';
 import pipelineRoutes from './features/pipeline/pipeline.routes.js';
+import pendienteRoutes from './features/pendiente/pendiente.routes.js';
 import semaforoRoutes from './features/semaforo/semaforo.routes.js';
 import authRoutes from './features/auth/auth.routes.js';
 import tenantAdminRoutes from './features/tenant/tenant.routes.js';
+import tenantAjustesRoutes from './features/tenant/tenant-ajustes.routes.js';
 import planAdminRoutes from './features/plan/plan.routes.js';
 import platformSettingsRoutes from './features/platform-settings/platform-settings.routes.js';
 import exchangeRateRoutes from './features/exchange-rate/exchange-rate.routes.js';
 import costCatalogRoutes from './features/cost-catalog/cost-catalog.routes.js';
 import adminMetricsRoutes from './features/admin-metrics/admin-metrics.routes.js';
 import reportsRoutes from './features/reports/reports.routes.js';
+import activityRoutes from './features/activity/activity.routes.js';
 import channelRoutes from './features/channel/channel.routes.js';
 import messageRoutes from './features/message/message.routes.js';
 import webhookRoutes from './features/webhook/webhook.routes.js';
@@ -51,6 +54,8 @@ import sandboxRoutes from './features/sandbox/sandbox.routes.js';
 import campaignRoutes from './features/campaign/campaign.routes.js';
 import mediaRoutes from './features/media/media.routes.js';
 import notificationRoutes from './features/notification/notification.routes.js';
+import sendWindowRoutes from './features/send-window/send-window.routes.js';
+import { suscribirInvalidacionVentana } from './features/send-window/send-window.service.js';
 
 const app = express();
 
@@ -107,9 +112,12 @@ app.use('/api/conversations', conversationRoutes);
 // `media.routes.ts` y `docs/multi-tenancy.md`.
 app.use('/api/media', mediaRoutes);
 app.use('/api/tags', tagRoutes);
+// Ajustes de la propia empresa (HU-MARK-07): `/me`, el tenant sale del token.
+app.use('/api/tenants/me', tenantAjustesRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/estados', estadoRoutes);
 app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/pendientes', pendienteRoutes);
 app.use('/api/semaforos', semaforoRoutes);
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/users', userRoutes);
@@ -123,6 +131,8 @@ app.use('/api/sandbox', sandboxRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/send-window', sendWindowRoutes);
+app.use('/api/activity', activityRoutes);
 
 app.use(errorHandler);
 
@@ -144,6 +154,8 @@ if (env.NODE_ENV !== 'test') {
 
   // El puente Redis solo se conecta fuera de los tests (evita handles abiertos sin Redis).
   subscribeRealtime(io);
+  // Invalidación de la caché de ventanas de envío publicada por otros procesos (HU-CONF-01).
+  suscribirInvalidacionVentana();
   mongoose
     .connect(env.MONGODB_URI)
     .then(async () => {

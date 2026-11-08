@@ -31,6 +31,10 @@ export interface ContactPatchPayload {
   rolContacto?: string | null;
   /** Solo `key` y `valor`: la etiqueta y `sensible` los fija el catálogo de campos (HU-FLOW-05). */
   atributos?: AtributoPatch[];
+  /** HU-MARK-01. */
+  marketingOptOut?: boolean;
+  /** HU-MARK-07. */
+  bloqueado?: boolean;
 }
 
 // ─── Catálogos de interés / objeción / rol (HU-CRM-02) ──────────────────────────
@@ -100,7 +104,36 @@ export interface NotaDTO {
   id: string;
   texto: string;
   autor: { id: string; nombre: string | null };
+  /** La nota es además un pendiente del embudo (HU-PDF-01). */
+  pendiente: boolean;
+  /** Día civil `YYYY-MM-DD` del pendiente (HU-PDF-01 A1). `null` si la nota no es pendiente. */
+  programadoDia: string | null;
+  /** `HH:mm`, o `null` si es de todo el día. */
+  programadoHora: string | null;
+  estadoPendiente: EstadoPendiente | null;
+  cerradoAt: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** Ciclo de vida de un pendiente: cerrado = cumplido y archivado en el historial. */
+export type EstadoPendiente = 'abierto' | 'cerrado';
+
+/** Programación al crear una nota pendiente. Sin día, el backend la deja para hoy. */
+export interface NuevaNota {
+  texto: string;
+  pendiente: boolean;
+  programadoDia?: string;
+  programadoHora?: string;
 }
 
 export type NotasPage = Paginated<NotaDTO>;
+
+/** Lo que se puede cambiar de una nota existente. Al menos uno de los dos. */
+export interface CambiosNota {
+  texto?: string;
+  pendiente?: boolean;
+  programadoDia?: string;
+  /** `null` quita la hora: el pendiente pasa a ser de todo el día. */
+  programadoHora?: string | null;
+}

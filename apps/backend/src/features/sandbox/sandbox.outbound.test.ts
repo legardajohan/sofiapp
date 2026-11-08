@@ -92,7 +92,7 @@ describe('sendOutbound con un cliente de prueba (criterio 4)', () => {
       ventana24hExpiraEn: new Date(Date.now() - 60_000),
     });
 
-    const msg = await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'hola desde la prueba' }, 'bot');
+    const msg = await sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'hola desde la prueba' }, 'bot', { categoria: 'ia' });
 
     expect(sendTextMock).not.toHaveBeenCalled();
     expect(sendTemplateMock).not.toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe('sendOutbound con un cliente de prueba (criterio 4)', () => {
       ventana24hExpiraEn: new Date(Date.now() - 60_000),
     });
 
-    const msg = await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: 'hola' }, 'bot');
+    const msg = await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: 'hola' }, 'bot', { categoria: 'ia' });
     expect(msg.tipo).toBe('texto');
     expect(sendTextMock).not.toHaveBeenCalled();
   });
@@ -136,7 +136,7 @@ describe('sendOutbound con un cliente de prueba (criterio 4)', () => {
       modo: 'plantilla',
       templateId: String(plantilla._id),
       parametros: ['Ana'],
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     expect(sendTemplateMock).not.toHaveBeenCalled();
     expect(msg.tipo).toBe('plantilla');
@@ -155,7 +155,7 @@ describe('sendOutbound con un cliente de prueba (criterio 4)', () => {
         mediaKey: 'k',
         mimeType: 'image/png',
         tamanoBytes: 1,
-      }),
+      }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 422 });
     expect(sendMediaMock).not.toHaveBeenCalled();
   });
@@ -165,7 +165,7 @@ describe('sendOutbound con un cliente de prueba (criterio 4)', () => {
     const clienteId = await crearCliente(tenantId, { ventana24hExpiraEn: new Date(Date.now() + 60_000) });
 
     await expect(
-      sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'hola' }),
+      sendOutbound(tenantId, clienteId, { modo: 'texto', texto: 'hola' }, 'agent', { categoria: 'asesor' }),
     ).rejects.toMatchObject({ statusCode: 429 });
     expect(sendTextMock).not.toHaveBeenCalled();
   });

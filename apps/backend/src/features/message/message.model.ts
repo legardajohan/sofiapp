@@ -120,6 +120,10 @@ MessageSchema.index({ tenantId: 1, tipo: 1, createdAt: -1 });
 // 03). Los dos índices de arriba exigen `clienteId` o `tipo`: sin este, cada reporte recorrería
 // todos los mensajes del tenant. Cuesta una entrada más por escritura; lo pagan cuatro reportes.
 MessageSchema.index({ tenantId: 1, createdAt: 1 });
+// Audiencia "mensajes recientes" (HU-MARK-07): salientes del tenant en un rango, agrupados por
+// contacto. Con `direccion` delante del rango el `$match` no recorre los entrantes, que son la mitad
+// del historial o más.
+MessageSchema.index({ tenantId: 1, direccion: 1, createdAt: -1 });
 // Media que todavía no se ha descargado (HU-OMNI-06). PARCIAL a propósito: solo interesa lo
 // pendiente —unas decenas de documentos en régimen normal— y un índice completo sobre `media.estado`
 // pagaría por cada mensaje de texto del sistema a cambio de nada.

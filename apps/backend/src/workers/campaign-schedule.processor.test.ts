@@ -232,7 +232,7 @@ describe('HU-MARK-03 — lote con imagen de cabecera', () => {
       },
       'bot',
       // HU-MARK-05: el mensaje del hilo queda ligado a la campaña.
-      { campaignId: campana._id.toString() },
+      { categoria: 'campana', campaignId: campana._id.toString() },
     );
   });
 

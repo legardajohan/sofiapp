@@ -10,6 +10,9 @@ import type {
   EstadoCampana,
   EstadoDestinatario,
   AudienciaContactoDTO,
+  AudiencePreviewDTO,
+  AudienciaRecienteInput,
+  EtiquetaEnvio,
   PagedDTO,
   SegmentFacetasDTO,
   RescheduleCampaignPayload,
@@ -29,6 +32,22 @@ import type {
 export async function previewSegmento(filtros: SegmentoFiltros): Promise<SegmentPreviewDTO> {
   const { data } = await apiClient.post<SegmentPreviewDTO>('/campaigns/segmento/preview', {
     filtros,
+  });
+  return data;
+}
+
+/** HU-MARK-07 — a quién se le escribió en el rango, y el rango resuelto en la zona del tenant. */
+export async function previewAudiencia(audiencia: AudienciaRecienteInput): Promise<AudiencePreviewDTO> {
+  const { data } = await apiClient.post<AudiencePreviewDTO>('/campaigns/audience/preview', {
+    audiencia,
+  });
+  return data;
+}
+
+/** HU-MARK-07 — lanza la campaña; con `etiqueta`, se la pone a cada destinatario enviado con éxito. */
+export async function sendCampaign(id: string, etiqueta?: EtiquetaEnvio): Promise<CampaignDTO> {
+  const { data } = await apiClient.post<CampaignDTO>(`/campaigns/${id}/send`, {
+    ...(etiqueta ? { etiqueta } : {}),
   });
   return data;
 }
@@ -84,11 +103,16 @@ export async function fetchRecipients(
  */
 export async function createCampaign({
   imagen,
+  etiqueta,
   ...payload
 }: CreateCampaignPayload): Promise<CampaignDTO> {
   const imagenHeaderUploadId = imagen ? (await uploadHeaderImage(imagen)).uploadId : undefined;
+  // HU-MARK-07: la etiqueta viaja en el alta, tanto si se lanza ya como si queda programada. Un
+  // borrador no la lleva: se elige al enviarlo.
+  const conEtiqueta = Boolean((payload.lanzar || payload.programadaPara) && etiqueta);
   const { data } = await apiClient.post<CampaignDTO>('/campaigns', {
     ...payload,
+    ...(conEtiqueta ? { etiqueta } : {}),
     ...(imagenHeaderUploadId ? { imagenHeaderUploadId } : {}),
   });
   return data;

@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Loader2, NotebookPen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useCreateNota, useNotas } from '../hooks/useNotas.js';
 import { esSinPermiso } from '../lib/errors.js';
-import { fechaCompleta, fechaHora } from '../lib/fecha.js';
+import { NotaItem } from './NotaItem.js';
+import { ProgramacionPendiente } from './ProgramacionPendiente.js';
 
 interface Props {
   clienteId: string;
@@ -25,6 +28,13 @@ export function ContactNotesCard({
   puedeVerSensibles,
 }: Props): React.ReactElement | null {
   const [texto, setTexto] = useState('');
+  // HU-PDF-01: apagado por defecto y de vuelta a apagado tras cada nota. Que se quedara encendido
+  // convertiría en pendientes, sin querer, las notas que vienen detrás.
+  const [pendiente, setPendiente] = useState(false);
+  // HU-PDF-01 A1: sin elegir nada, el pendiente es de hoy y de todo el día.
+  const [programadoDia, setProgramadoDia] = useState<string | null>(null);
+  const [programadoHora, setProgramadoHora] = useState<string | null>(null);
+  const switchId = useId();
   const { data, isLoading, error } = useNotas(clienteId, puedeVerSensibles);
   const crear = useCreateNota(clienteId);
 
@@ -38,7 +48,22 @@ export function ContactNotesCard({
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
     if (!puedeGuardar) return;
-    crear.mutate(texto.trim(), { onSuccess: () => setTexto('') });
+    crear.mutate(
+      {
+        texto: texto.trim(),
+        pendiente,
+        ...(pendiente && programadoDia ? { programadoDia } : {}),
+        ...(pendiente && programadoHora ? { programadoHora } : {}),
+      },
+      {
+        onSuccess: () => {
+          setTexto('');
+          setPendiente(false);
+          setProgramadoDia(null);
+          setProgramadoHora(null);
+        },
+      },
+    );
   }
 
   return (
@@ -70,20 +95,7 @@ export function ContactNotesCard({
       ) : (
         <ul className="space-y-2.5">
           {notas.map((nota) => (
-            <li key={nota.id} className="space-y-0.5 border-l-2 border-border pl-2.5">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {nota.texto}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                <span className="font-medium text-foreground/70">
-                  {nota.autor.nombre ?? 'Usuario eliminado'}
-                </span>
-                {' · '}
-                <time dateTime={nota.createdAt} title={fechaCompleta(nota.createdAt)}>
-                  {fechaHora(nota.createdAt)}
-                </time>
-              </p>
-            </li>
+            <NotaItem key={nota.id} clienteId={clienteId} nota={nota} />
           ))}
         </ul>
       )}
@@ -99,6 +111,30 @@ export function ContactNotesCard({
           disabled={crear.isPending}
           onChange={(e) => setTexto(e.target.value)}
         />
+        <div className="flex items-center gap-2">
+          <Switch
+            id={switchId}
+            checked={pendiente}
+            onCheckedChange={setPendiente}
+            disabled={crear.isPending}
+          />
+          <Label htmlFor={switchId} className="cursor-pointer text-xs font-normal text-foreground">
+            Marcar como pendiente
+          </Label>
+        </div>
+        {pendiente && (
+          // Entra con un fundido corto bajo el interruptor que la reveló: es respuesta directa al
+          // gesto del usuario, no decoración.
+          <div className="motion-safe:duration-150 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1">
+            <ProgramacionPendiente
+              dia={programadoDia}
+              hora={programadoHora}
+              onDiaChange={setProgramadoDia}
+              onHoraChange={setProgramadoHora}
+              disabled={crear.isPending}
+            />
+          </div>
+        )}
         <Button
           type="submit"
           variant="outline"
@@ -111,6 +147,8 @@ export function ContactNotesCard({
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               Guardando…
             </>
+          ) : pendiente ? (
+            'Agregar nota y pendiente'
           ) : (
             'Agregar nota'
           )}

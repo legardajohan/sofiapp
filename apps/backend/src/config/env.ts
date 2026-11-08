@@ -157,6 +157,13 @@ const EnvSchema = z.object({
   REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().positive().default(600_000),
   REMINDER_SWEEP_BATCH: z.coerce.number().positive().default(200),
 
+  // HU-REP-06 — tiempo activo del asesor. Cada cuánto late una pestaña activa y cuánto retraso se le
+  // perdona a un latido antes de tratar el hueco como inactividad. Deben coincidir con las
+  // constantes del frontend (`features/activity`): si el navegador late más despacio que esto, cada
+  // latido parecería el primero tras un hueco y el tiempo saldría recortado.
+  ACTIVITY_HEARTBEAT_MS: z.coerce.number().int().positive().default(60_000),
+  ACTIVITY_TOLERANCIA_MS: z.coerce.number().int().nonnegative().default(30_000),
+
   // HU-MARK-01 — campañas. Los cuatro primeros gobiernan el *pacing*: cuánto se manda de golpe,
   // cada cuánto como mínimo, qué fracción del tier de Meta se considera gastable y cada cuánto se
   // vuelve a preguntar por el tier del número.
@@ -182,6 +189,8 @@ const EnvSchema = z.object({
   // ella, quien vuelve seis meses después contaría como éxito de una campaña ya olvidada.
   CAMPAIGN_REPLY_WINDOW_HOURS: z.coerce.number().int().positive().default(72),
   CAMPAIGN_CONVERSION_WINDOW_DAYS: z.coerce.number().int().positive().default(14),
+  // HU-MARK-07 — tope del rango personalizado de la audiencia "mensajes recientes", en días.
+  CAMPAIGN_AUDIENCE_MAX_DAYS: z.coerce.number().int().positive().default(90),
 
   // ─── Media de la conversación (HU-OMNI-06, ADR-0008) ─────────────────────────────
   // `local` por defecto: el entorno de desarrollo no necesita credenciales ni infraestructura

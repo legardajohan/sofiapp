@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   fetchConfigAudio,
   fetchThread,
@@ -12,6 +12,8 @@ import {
   setSofiEnabled,
 } from '../api.js';
 import { errorMessage } from '../lib/errors.js';
+import { STATUS_KEY } from '@/features/send-window/hooks/useSendWindowStatus.js';
+import { aperturaDeVentanaCerrada, textoReapertura } from '@/features/send-window/lib/ventana-cerrada.js';
 import type { ConfigAudioDTO, MessageDTO, Paginated } from '../types.js';
 
 export function useThread(conversationId: string | null) {
@@ -20,6 +22,21 @@ export function useThread(conversationId: string | null) {
     queryFn: () => fetchThread(conversationId as string),
     enabled: !!conversationId,
   });
+}
+
+/**
+ * Error de un envío del asesor. Un 423 es el horario de envío de la empresa (HU-CONF-01): se dice
+ * cuándo podrá enviar y se refresca el estado de la ventana, para que el banner aparezca aunque la
+ * franja haya cerrado después del último sondeo.
+ */
+function avisarErrorDeEnvio(qc: QueryClient, titulo: string, error: unknown): void {
+  const apertura = aperturaDeVentanaCerrada(error);
+  if (apertura !== undefined) {
+    void qc.invalidateQueries({ queryKey: STATUS_KEY });
+    toast.error('Fuera del horario de envío', { description: textoReapertura(apertura) });
+    return;
+  }
+  toast.error(titulo, { description: errorMessage(error, 'Inténtalo de nuevo.') });
 }
 
 export function useSendReply(conversationId: string | null) {
@@ -34,9 +51,7 @@ export function useSendReply(conversationId: string | null) {
     // veía desaparecer su mensaje sin que llegara a ningún lado ni saber por qué (HU-OMNI-07). El
     // backend manda el motivo ya redactado: ventana de 24 h (422), cuota, o el rechazo de Meta.
     onError: (error: unknown) => {
-      toast.error('No se pudo enviar el mensaje', {
-        description: errorMessage(error, 'Inténtalo de nuevo.'),
-      });
+      avisarErrorDeEnvio(qc, 'No se pudo enviar el mensaje', error);
     },
   });
 }
@@ -64,9 +79,7 @@ export function useSendMedia(conversationId: string | null) {
       // Sin esto un envío fallido era SILENCIOSO: el asesor veía la ventana seguir abierta sin
       // saber si el problema era el tamaño, el tipo o la ventana de 24 h cerrada. El backend manda
       // el motivo ya redactado en cada caso (413, 415, 422).
-      toast.error('No se pudo enviar el archivo', {
-        description: errorMessage(error, 'Inténtalo de nuevo.'),
-      });
+      avisarErrorDeEnvio(qc, 'No se pudo enviar el archivo', error);
     },
     onSettled: () => setProgreso(null),
   });
@@ -93,9 +106,7 @@ export function useSendAudio(conversationId: string | null) {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (error: unknown) => {
-      toast.error('No se pudo enviar la nota de voz', {
-        description: errorMessage(error, 'Inténtalo de nuevo.'),
-      });
+      avisarErrorDeEnvio(qc, 'No se pudo enviar la nota de voz', error);
     },
     onSettled: () => setProgreso(null),
   });

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { MOTIVO_DATOS_SENSIBLES } from '@/lib/roles';
 import type { ContactCardDTO, DatosExtraidosDTO } from '@/features/inbox/types';
@@ -68,6 +69,9 @@ interface Campos {
   objecionPrincipal: string;
   rolContacto: string;
   atributos: AtributoInput[];
+  /** HU-MARK-01 / HU-MARK-07: interruptores de campañas. */
+  marketingOptOut: boolean;
+  bloqueado: boolean;
 }
 
 /** Campos que se sembraron desde la extracción de IA, para poder señalarlos en la UI. */
@@ -119,6 +123,8 @@ function desdeContacto(
       valor: a.oculto ? '' : a.valor,
       sensible: a.sensible,
     })),
+    marketingOptOut: c.marketingOptOut === true,
+    bloqueado: c.bloqueado === true,
   };
 }
 
@@ -197,6 +203,11 @@ export function ContactEditDialog({
 
     const original = JSON.stringify(contacto.atributos.map((a) => ({ key: a.key, valor: a.valor })));
     if (JSON.stringify(limpios) !== original) patch.atributos = limpios;
+
+    if (campos.marketingOptOut !== (contacto.marketingOptOut === true)) {
+      patch.marketingOptOut = campos.marketingOptOut;
+    }
+    if (campos.bloqueado !== (contacto.bloqueado === true)) patch.bloqueado = campos.bloqueado;
 
     return patch;
   }
@@ -368,6 +379,27 @@ export function ContactEditDialog({
             errores={errores.atributos}
           />
 
+          {/* HU-MARK-07: lo que deja a alguien fuera de toda campaña, diga lo que diga el filtro. */}
+          <fieldset className="space-y-3 rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-medium text-foreground">Campañas</legend>
+            <InterruptorCampana
+              id="contacto-optout"
+              titulo="No quiere recibir campañas"
+              ayuda="Pidió la baja. No entra en ninguna audiencia."
+              checked={campos.marketingOptOut}
+              disabled={guardar.isPending}
+              onChange={(marketingOptOut) => setCampos((c) => ({ ...c, marketingOptOut }))}
+            />
+            <InterruptorCampana
+              id="contacto-bloqueado"
+              titulo="Bloqueado o inactivo"
+              ayuda="El número no se usa o no se le debe escribir. Tampoco entra en campañas."
+              checked={campos.bloqueado}
+              disabled={guardar.isPending}
+              onChange={(bloqueado) => setCampos((c) => ({ ...c, bloqueado }))}
+            />
+          </fieldset>
+
           {/* El toast se pierde si el asesor está mirando el formulario. El fallo se cuenta también
               donde ocurrió, junto al botón que acaba de pulsar. */}
           {guardar.isError && (
@@ -409,6 +441,43 @@ export function ContactEditDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Un interruptor con su explicación: lo que hace cuenta tanto como el nombre. */
+function InterruptorCampana({
+  id,
+  titulo,
+  ayuda,
+  checked,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  titulo: string;
+  ayuda: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (valor: boolean) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-0.5">
+        <Label htmlFor={id} className="text-sm font-normal text-foreground">
+          {titulo}
+        </Label>
+        <p id={`${id}-ayuda`} className="text-xs text-muted-foreground">
+          {ayuda}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        aria-describedby={`${id}-ayuda`}
+        onCheckedChange={onChange}
+      />
+    </div>
   );
 }
 

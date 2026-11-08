@@ -58,7 +58,16 @@ export interface ITenant {
    * lo configuró usa `NOTAS_DE_VOZ_DEFAULT`. Lo edita el superadmin desde el CRUD de empresas.
    */
   notasDeVoz?: Partial<INotasDeVozConfig>;
+  /**
+   * Zona horaria IANA de la empresa (HU-MARK-07). Es la única fuente para resolver fechas de
+   * calendario del tenant (p. ej. el rango personalizado de una audiencia): dos administradores en
+   * zonas distintas tienen que ver la misma audiencia.
+   */
+  zonaHoraria?: string;
 }
+
+/** Zona por defecto: la del primer cliente y la de la mayoría de empresas del producto. */
+export const ZONA_HORARIA_DEFAULT = 'America/Bogota';
 
 export interface INotasDeVozConfig {
   /** Tope de la grabación. El frontend corta al llegar; el servidor lo vuelve a medir. */
@@ -82,6 +91,15 @@ export interface IReminderConfig {
 }
 
 export interface ITenantDocument extends ITenant, Document {}
+
+// DTOs de ajustes del propio tenant (HU-MARK-07), editados por su `admin`
+export interface UpdateAjustesTenantDTO {
+  zonaHoraria: string;
+}
+
+export interface IAjustesTenantResponse {
+  zonaHoraria: string;
+}
 
 // DTOs para HU-SAAS-01
 

@@ -8,6 +8,7 @@ import { filtroClientesReales, matchClientesReales } from '../cliente/cliente.fi
 import { Lead } from '../lead/lead.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
 import { User } from '../users/user.model.js';
+import { ActividadAsesor } from '../activity/activity.model.js';
 import { KEY_ESTADO_VENTA } from '../estado/estado.types.js';
 import { MOTIVOS_HANDOFF, type HandoffMotivo } from '../ai/ai-handoff.types.js';
 import { listarProductosKb } from '../kb/kb-productos.reader.js';
@@ -17,6 +18,9 @@ import {
   DESFASE_MAX_MS,
   RANGO_DEFAULT_DIAS,
   RANGO_MAX_DIAS,
+  type Granularidad,
+  type IActivityPeriodRow,
+  type IAdvisorActivityResponse,
   type IAdvisorReportResponse,
   type IAdvisorRow,
   type IHandoffRateResponse,
@@ -27,6 +31,7 @@ import {
   type ITopProductsResponse,
 } from './reports.types.js';
 import type {
+  AdvisorActivityQuery,
   AdvisorReportQuery,
   HandoffRateQuery,
   PeakHoursQuery,
@@ -144,6 +149,18 @@ async function contarVentas(tenantOid: Types.ObjectId, r: Rango): Promise<Map<st
   return toMap(rows);
 }
 
+/**
+ * Tiempo activo (HU-REP-06): segundos de las cubetas horarias de `ActividadAsesor` cuya hora cae en
+ * el rango, por asesor. Mismo rango UTC que el resto del reporte, para que la fila cuadre consigo misma.
+ */
+async function sumarActividad(tenantOid: Types.ObjectId, r: Rango): Promise<Map<string | null, number>> {
+  const rows = await aggregateScoped<Conteo>(ActividadAsesor, tenantOid, [
+    { $match: { hora: { $gte: r.desde, $lte: r.hasta } } },
+    { $group: { _id: '$userId', n: { $sum: '$segundosActivos' } } },
+  ]);
+  return toMap(rows);
+}
+
 function compararFilas(a: IAdvisorRow, b: IAdvisorRow): number {
   return b.conversacionesAtendidas - a.conversacionesAtendidas || a.nombre.localeCompare(b.nombre, 'es');
 }
@@ -156,10 +173,11 @@ export async function getAdvisorReport(
   const rango = resolverRango(q, now);
   const tenantOid = new Types.ObjectId(tenantId);
 
-  const [atendidas, asignadas, ventas, usuarios] = await Promise.all([
+  const [atendidas, asignadas, ventas, actividad, usuarios] = await Promise.all([
     contarAtendidas(tenantOid, rango),
     contarAsignadasActivas(tenantOid, rango),
     contarVentas(tenantOid, rango),
+    sumarActividad(tenantOid, rango),
     findScoped(User, tenantOid, {})
       .select({ nombre: 1, activo: 1 })
       .lean<Array<{ _id: Types.ObjectId; nombre: string; activo?: boolean }>>(),
@@ -174,8 +192,10 @@ export async function getAdvisorReport(
       asignadasActivas: asignadas.get(id) ?? 0,
       ventas: ventas.get(id) ?? 0,
     };
+    const segundosActivos = Math.round(actividad.get(id) ?? 0);
     const activo = u.activo !== false;
-    const tieneCifras = fila.conversacionesAtendidas + fila.asignadasActivas + fila.ventas > 0;
+    const tieneCifras =
+      fila.conversacionesAtendidas + fila.asignadasActivas + fila.ventas + segundosActivos > 0;
     usados.add(id);
     // Un inactivo sin cifras en el periodo no aporta nada y ensuciaría la gráfica.
     if (!activo && !tieneCifras) continue;
@@ -185,6 +205,7 @@ export async function getAdvisorReport(
       activo,
       ...fila,
       tasaCierre: ratio(fila.ventas, fila.conversacionesAtendidas),
+      segundosActivos,
     });
   }
   porAsesor.sort(compararFilas);
@@ -195,7 +216,7 @@ export async function getAdvisorReport(
     [...m.entries()].reduce((s, [k, n]) => (k !== null && usados.has(k) ? s : s + n), 0);
   const sinAsignar = { conversacionesAtendidas: huerfanos(atendidas), ventas: huerfanos(ventas) };
 
-  const suma = (k: 'conversacionesAtendidas' | 'asignadasActivas' | 'ventas'): number =>
+  const suma = (k: 'conversacionesAtendidas' | 'asignadasActivas' | 'ventas' | 'segundosActivos'): number =>
     porAsesor.reduce((s, f) => s + f[k], 0);
   const totalAtendidas = suma('conversacionesAtendidas') + sinAsignar.conversacionesAtendidas;
   const totalVentas = suma('ventas') + sinAsignar.ventas;
@@ -209,6 +230,7 @@ export async function getAdvisorReport(
       asignadasActivas: suma('asignadasActivas'),
       ventas: totalVentas,
       tasaCierre: ratio(totalVentas, totalAtendidas),
+      segundosActivos: suma('segundosActivos'),
     },
     porAsesor,
     sinAsignar,
@@ -532,5 +554,107 @@ export async function getPeakHours(
     porDia,
     pico: iHora === -1 ? null : { hora: iHora, entrantes: porHora[iHora]!.entrantes },
     diaPico: iDia === -1 ? null : { fecha: porDia[iDia]!.fecha, entrantes: porDia[iDia]!.entrantes },
+  };
+}
+
+/* ─────────────────────────── HU-REP-06 — Tiempo activo del asesor ─────────────────────────── */
+
+interface FilaActividad {
+  _id: { dia: string; u: Types.ObjectId };
+  s: number;
+}
+
+/**
+ * Primer día del periodo al que pertenece `dia` (`YYYY-MM-DD`): el propio día, el lunes de su semana
+ * ISO o el día 1 de su mes. Aritmética de calendario pura, sin zona: `dia` ya es un día local.
+ */
+export function periodoDe(dia: string, granularidad: Granularidad): string {
+  if (granularidad === 'dia') return dia;
+  if (granularidad === 'mes') return `${dia.slice(0, 7)}-01`;
+  const fecha = new Date(`${dia}T00:00:00Z`);
+  const desdeLunes = (fecha.getUTCDay() + 6) % 7;
+  return diaIso(new Date(fecha.getTime() - desdeLunes * DIA_MS));
+}
+
+/**
+ * Segundos activos por `{ día local, asesor }`. Igual que las horas pico, los días del rango se leen
+ * EN la zona: ventana UTC ensanchada ±14 h sobre el índice `{ tenantId, hora, userId }` y filtro fino
+ * por día local. Las cubetas son horas UTC, así que en zonas con desfase de media hora una cubeta
+ * entera cae del lado de su inicio (error acotado, documentado en el spec).
+ */
+async function sumarActividadPorDia(
+  tenantOid: Types.ObjectId,
+  r: Rango,
+  tz: string,
+  asesorId: string | undefined,
+): Promise<FilaActividad[]> {
+  return aggregateScoped<FilaActividad>(ActividadAsesor, tenantOid, [
+    {
+      $match: {
+        hora: {
+          $gte: new Date(r.desde.getTime() - DESFASE_MAX_MS),
+          $lte: new Date(r.hasta.getTime() + DESFASE_MAX_MS),
+        },
+        ...(asesorId ? { userId: new Types.ObjectId(asesorId) } : {}),
+      },
+    },
+    { $addFields: { dia: { $dateToString: { format: '%Y-%m-%d', date: '$hora', timezone: tz } } } },
+    { $match: { dia: { $gte: diaIso(r.desde), $lte: diaIso(r.hasta) } } },
+    { $group: { _id: { dia: '$dia', u: '$userId' }, s: { $sum: '$segundosActivos' } } },
+  ]);
+}
+
+export async function getAdvisorActivity(
+  tenantId: string,
+  q: AdvisorActivityQuery,
+  now: Date = new Date(),
+): Promise<IAdvisorActivityResponse> {
+  const rango = resolverRango(q, now);
+  const tenantOid = new Types.ObjectId(tenantId);
+  const filas = await sumarActividadPorDia(tenantOid, rango, q.tz, q.asesorId);
+
+  // Todos los periodos del rango, en orden, para que la gráfica no tenga huecos.
+  const periodos = new Map<string, Map<string, number>>();
+  for (const dia of diasDelRango(rango)) {
+    const p = periodoDe(dia, q.granularidad);
+    if (!periodos.has(p)) periodos.set(p, new Map());
+  }
+
+  const totalPorAsesor = new Map<string, number>();
+  for (const { _id, s } of filas) {
+    const porAsesor = periodos.get(periodoDe(_id.dia, q.granularidad));
+    if (!porAsesor) continue;
+    const id = String(_id.u);
+    porAsesor.set(id, (porAsesor.get(id) ?? 0) + s);
+    totalPorAsesor.set(id, (totalPorAsesor.get(id) ?? 0) + s);
+  }
+
+  // Solo usuarios que existen en el tenant: el tiempo de un usuario borrado no tiene a quién pintarse.
+  const usuarios = await findScoped(User, tenantOid, {
+    _id: { $in: [...totalPorAsesor.keys()].map((id) => new Types.ObjectId(id)) },
+  })
+    .select({ nombre: 1 })
+    .lean<Array<{ _id: Types.ObjectId; nombre: string }>>();
+  const nombres = new Map(usuarios.map((u) => [String(u._id), u.nombre]));
+
+  const asesores = [...totalPorAsesor.entries()]
+    .filter(([id]) => nombres.has(id))
+    .map(([asesorId, s]) => ({ asesorId, nombre: nombres.get(asesorId) ?? '', totalSegundos: Math.round(s) }))
+    .sort((a, b) => b.totalSegundos - a.totalSegundos || a.nombre.localeCompare(b.nombre, 'es'));
+
+  const filasPeriodo: IActivityPeriodRow[] = [...periodos.entries()].map(([periodo, porAsesor]) => {
+    const lista = asesores
+      .map(({ asesorId }) => ({ asesorId, segundos: Math.round(porAsesor.get(asesorId) ?? 0) }))
+      .filter((f) => f.segundos > 0);
+    return { periodo, totalSegundos: lista.reduce((t, f) => t + f.segundos, 0), porAsesor: lista };
+  });
+
+  return {
+    generadoAt: now.toISOString(),
+    rango: { desde: rango.desde.toISOString(), hasta: rango.hasta.toISOString() },
+    granularidad: q.granularidad,
+    timezone: q.tz,
+    asesores,
+    periodos: filasPeriodo,
   };
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { createScoped } from '../repositories/base.repository.js';
 import { Cliente } from '../features/cliente/cliente.model.js';
@@ -31,6 +31,10 @@ vi.mock('../features/campaign/campaign.service.js', async (original) => {
 import { campaignQueue } from '../config/queues.js';
 import { processCampaignJob } from './campaign-broadcast.processor.js';
 import type { LeanCampaign } from '../features/campaign/campaign.types.js';
+import { AuditEvent } from '../features/audit/audit.model.js';
+import { AppError } from '../utils/AppError.js';
+import { limpiarCacheVentana } from '../features/send-window/send-window.service.js';
+import { abrir, aperturaManana, cerrarHoy } from '../features/send-window/send-window.fixtures.js';
 
 const tenantId = new Types.ObjectId();
 
@@ -246,5 +250,82 @@ describe('HU-MARK-01 — worker de difusión de campañas', () => {
   it('una campaña que ya no existe no rompe el worker', async () => {
     await expect(processCampaignJob(job(new Types.ObjectId()))).resolves.toBeUndefined();
     expect(sendOutbound).not.toHaveBeenCalled();
+  });
+});
+
+describe('HU-CONF-01 — campañas fuera de la ventana horaria', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    limpiarCacheVentana();
+    sendOutbound.mockImplementation(() => Promise.resolve({ metaMessageId: `wamid.${Math.random()}` }));
+    resolverPresupuesto.mockResolvedValue(presupuesto(800));
+    await Promise.all([Campaign.syncIndexes(), CampaignRecipient.syncIndexes()]);
+  });
+
+  afterEach(() => limpiarCacheVentana());
+
+  const auditorias = (): Promise<number> =>
+    AuditEvent.countDocuments({ tenantId, accion: 'campaign.retenida-horario' });
+
+  it('lote en hora cerrada: se re-encola hasta la apertura, sin fallidos, con `retenidaHasta` auditado una vez', async () => {
+    const campaignId = await crearCampana('en_curso', 3);
+    await cerrarHoy(tenantId, ['campana']);
+    const apertura = aperturaManana();
+
+    await processCampaignJob(job(campaignId));
+
+    expect(sendOutbound).not.toHaveBeenCalled();
+    expect(await CampaignRecipient.countDocuments({ tenantId, estado: 'fallido' })).toBe(0);
+    const [, datos, opciones] = vi.mocked(campaignQueue.add).mock.calls[0] as [string, { lote: number }, { delay: number }];
+    expect(datos.lote).toBe(1);
+    expect(Math.abs(Date.now() + opciones.delay - apertura.getTime())).toBeLessThan(5_000);
+
+    const campana = await Campaign.findById(campaignId).lean<LeanCampaign>();
+    expect(campana?.estado).toBe('en_curso');
+    expect(Math.abs((campana?.retenidaHasta?.getTime() ?? 0) - apertura.getTime())).toBeLessThan(5_000);
+    expect(publishRealtime).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'campaign:progress', retenidaHasta: expect.any(String) }),
+    );
+    expect(await auditorias()).toBe(1);
+
+    // El lote re-evaluado sigue cerrado: no vuelve a auditar.
+    await processCampaignJob(job(campaignId, 1));
+    expect(await auditorias()).toBe(1);
+  });
+
+  it('al reanudar en franja limpia `retenidaHasta` y envía', async () => {
+    const campaignId = await crearCampana('en_curso', 2);
+    await cerrarHoy(tenantId, ['campana']);
+    await processCampaignJob(job(campaignId));
+
+    await abrir(tenantId);
+    await processCampaignJob(job(campaignId, 1));
+
+    expect(sendOutbound).toHaveBeenCalledTimes(2);
+    const campana = await Campaign.findById(campaignId).lean<LeanCampaign>();
+    expect(campana?.retenidaHasta).toBeNull();
+    expect(publishRealtime).toHaveBeenLastCalledWith(expect.objectContaining({ retenidaHasta: null }));
+  });
+
+  it('si la franja cierra a mitad del lote, corta sin marcar fallidos y retiene', async () => {
+    const campaignId = await crearCampana('en_curso', 3);
+    const apertura = aperturaManana();
+    sendOutbound
+      .mockResolvedValueOnce({ metaMessageId: 'wamid.ok' })
+      .mockRejectedValueOnce(
+        new AppError('Fuera del horario', 423, { categoria: 'campana', siguienteApertura: apertura.toISOString() }),
+      );
+
+    await processCampaignJob(job(campaignId));
+
+    expect(sendOutbound).toHaveBeenCalledTimes(2);
+    expect(await CampaignRecipient.countDocuments({ tenantId, estado: 'enviado' })).toBe(1);
+    expect(await CampaignRecipient.countDocuments({ tenantId, estado: 'pendiente' })).toBe(2);
+    expect(await CampaignRecipient.countDocuments({ tenantId, estado: 'fallido' })).toBe(0);
+    const campana = await Campaign.findById(campaignId).lean<LeanCampaign>();
+    expect(campana?.totales.enviados).toBe(1);
+    expect(campana?.retenidaHasta).not.toBeNull();
+    expect(campaignQueue.add).toHaveBeenCalledTimes(1);
+    expect(await auditorias()).toBe(1);
   });
 });

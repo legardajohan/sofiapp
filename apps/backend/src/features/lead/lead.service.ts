@@ -16,6 +16,10 @@ import { toResumenResponse } from '../cliente/cliente.mapper.js';
 import type { ICliente, IResumenIA } from '../cliente/cliente.types.js';
 import type { IPaginated } from '../conversation/conversation.types.js';
 import { Tag } from '../tag/tag.model.js';
+import { findTagsByIds } from '../tag/tag.service.js';
+import type { ITagResponse } from '../tag/tag.types.js';
+import { listCampanasDeCliente } from '../campaign/campaign.historial-cliente.js';
+import type { ICampanaDeClienteResponse } from '../campaign/campaign.historial-cliente.js';
 import { SEMAFORO_SLUGS, type SemaforoSlug } from '../tag/tag.types.js';
 import { findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
@@ -53,6 +57,18 @@ const TELEFONO_DUPLICADO = 'Ya existe un lead con ese teléfono.';
 /** Forma lean mínima del contacto que la respuesta del lead necesita. */
 interface IContactoLean extends Pick<ICliente, 'nombre' | 'telefono' | 'esPrueba'> {
   _id: Types.ObjectId;
+  tagIds?: Types.ObjectId[];
+}
+
+/** Ids → etiquetas, en el orden del contacto. Un id cuya etiqueta se borró simplemente no sale. */
+function resolverEtiquetas(
+  tagIds: Types.ObjectId[] | undefined,
+  tagMap: Map<string, ITagResponse>,
+): ITagResponse[] {
+  return (tagIds ?? []).flatMap((id) => {
+    const tag = tagMap.get(String(id));
+    return tag ? [tag] : [];
+  });
 }
 
 /**
@@ -73,6 +89,8 @@ function toLeadResponse(
   contacto: IContactoLean,
   userMap: Map<string, IUserResponse>,
   semaforo: ISemaforoResponse | null,
+  etiquetas: ITagResponse[] = [],
+  campanas: ICampanaDeClienteResponse[] = [],
 ): ILeadResponse {
   return {
     id: String(lead._id),
@@ -92,6 +110,8 @@ function toLeadResponse(
       convertidoPor: toRef(lead.origen.convertidoPor, userMap),
       convertidoAt: lead.origen.convertidoAt.toISOString(),
     },
+    etiquetas,
+    campanas,
     createdAt: lead.createdAt.toISOString(),
   };
 }
@@ -212,12 +232,21 @@ export async function getLeadById(tenantId: TenantId, leadId: string): Promise<I
     telefono: lead.telefono,
   };
 
-  const [userMap, semaforo] = await Promise.all([
+  const [userMap, semaforo, tagMap, campanas] = await Promise.all([
     resolveUsuarios(tenantId, lead),
     findSemaforoByKey(tenantId, lead.semaforo),
+    findTagsByIds(tenantId, (contactoSeguro.tagIds ?? []).map(String)),
+    listCampanasDeCliente(tenantId, lead.clienteId),
   ]);
 
-  return toLeadResponse(lead, contactoSeguro, userMap, semaforo);
+  return toLeadResponse(
+    lead,
+    contactoSeguro,
+    userMap,
+    semaforo,
+    resolverEtiquetas(contactoSeguro.tagIds, tagMap),
+    campanas,
+  );
 }
 
 /**
@@ -439,6 +468,7 @@ function leerSlug(valor: unknown): string | null {
 /** Proyección de `Cliente` que el listado necesita para hidratar el resumen. */
 interface IClienteListSource {
   _id: Types.ObjectId;
+  tagIds?: Types.ObjectId[];
   resumenIA?: IResumenIA;
   ultimoMensajeAt?: Date;
 }
@@ -486,6 +516,7 @@ function toLeadListItemResponse(
   userMap: Map<string, IUserResponse>,
   clienteMap: Map<string, IClienteListSource>,
   semaforoMap: Map<string, ISemaforoResponse>,
+  tagMap: Map<string, ITagResponse>,
   puedeVerSensibles: boolean,
 ): ILeadListItemResponse {
   const cliente = clienteMap.get(String(lead.clienteId));
@@ -500,6 +531,7 @@ function toLeadListItemResponse(
     responsable: toRef(lead.responsableId, userMap),
     conversacionId: String(lead.origen.conversacionId),
     resumen: cliente ? toResumenResponse(cliente, puedeVerSensibles) : null,
+    etiquetas: resolverEtiquetas(cliente?.tagIds, tagMap),
     ultimoMensajeAt: cliente?.ultimoMensajeAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),
   };
@@ -526,27 +558,31 @@ export async function hidratarLeadsParaListado(
 ): Promise<ILeadListItemResponse[]> {
   if (leads.length === 0) return [];
 
-  // Los clientes del conjunto, con SOLO lo que la tabla pinta: resumen y último mensaje. El
-  // semáforo ya no sale de aquí (es campo del lead, HU-CRM-04), así que `tagIds` dejó de hacer falta.
+  // Los clientes del conjunto, con SOLO lo que la tabla pinta: resumen, último mensaje y sus
+  // etiquetas (HU-MARK-07: también las que dejaron las campañas).
   const clientes = await findScoped(Cliente, tenantId, {
     _id: { $in: leads.map((l) => l.clienteId) },
   })
-    .select({ _id: 1, resumenIA: 1, ultimoMensajeAt: 1 })
+    .select({ _id: 1, tagIds: 1, resumenIA: 1, ultimoMensajeAt: 1 })
     .lean<IClienteListSource[]>();
 
   const clienteMap = new Map(clientes.map((c) => [String(c._id), c]));
 
-  // Responsables y catálogo de semáforos de todo el conjunto, una consulta cada uno.
-  const [userMap, semaforoMap] = await Promise.all([
+  // Responsables, catálogo de semáforos y etiquetas de todo el conjunto, una consulta cada uno.
+  const [userMap, semaforoMap, tagMap] = await Promise.all([
     findUsersByIds(
       tenantId,
       leads.map((l) => String(l.responsableId)),
     ),
     mapaSemaforos(tenantId),
+    findTagsByIds(
+      tenantId,
+      [...new Set(clientes.flatMap((c) => (c.tagIds ?? []).map(String)))],
+    ),
   ]);
 
   return leads.map((lead) =>
-    toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, puedeVerSensibles),
+    toLeadListItemResponse(lead, userMap, clienteMap, semaforoMap, tagMap, puedeVerSensibles),
   );
 }
 
@@ -732,6 +768,19 @@ export async function listLeads(
   // peor que devolver vacío.
   if (query.semaforo && !(await existeSemaforo(tenantId, query.semaforo))) {
     return { data: [], page, limit, total: 0 };
+  }
+
+  // Etiqueta (HU-MARK-07): vive en el contacto, no en el lead, así que se resuelve con un salto
+  // previo por `Cliente.tagIds` (índice `{ tenantId, tagIds }`). Un `tagId` de otra empresa no casa
+  // con ningún contacto de esta, y el listado sale vacío por construcción.
+  if (query.etiqueta) {
+    const clientes = await findScoped(Cliente, tenantId, {
+      tagIds: new Types.ObjectId(query.etiqueta),
+    })
+      .select({ _id: 1 })
+      .lean<{ _id: Types.ObjectId }[]>();
+    if (clientes.length === 0) return { data: [], page, limit, total: 0 };
+    filter.clienteId = { $in: clientes.map((c) => c._id) };
   }
 
   const [leads, total] = await Promise.all([

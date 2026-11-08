@@ -94,7 +94,7 @@ Incluye:
   - `docs/data-model.md`: `contact_fields`, nueva config de `captura`, regla de `atributos`.
   - `docs/domain.md`: glosario (*Campo del contacto*, *Campo personalizado*, *Destino de captura*).
   - `docs/api-contract.md`: endpoints de `/api/campos-contacto` y el `400` nuevo del PATCH.
-  - `docs/adr/0013-catalogo-campos-contacto.md`: claves canónicas por tenant.
+  - `docs/adr/0015-catalogo-campos-contacto.md`: claves canónicas por tenant.
   - `docs/data-model.md` / `docs/api-contract.md`: `nombre` del nodo, `advertencias` al guardar y el
     `400 FLOW_CON_ERRORES` al activar.
   - `.test-chat/00-flows-documentation.md` §7 (huérfano deja de ser error de guardado).

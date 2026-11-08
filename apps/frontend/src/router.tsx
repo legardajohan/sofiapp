@@ -53,6 +53,11 @@ const AssistantConfigPage = lazy(() =>
 // HU-IA-08: chat de prueba del asistente.
 const AssistantTestPage = lazy(() =>
   import('./features/assistant-sandbox/index.js').then((m) => ({ default: m.AssistantTestPage })),
+
+);
+const SendWindowPage = lazy(() =>
+  import('./features/send-window/index.js').then((m) => ({ default: m.SendWindowPage })),
+
 );
 const HandoffSettingsPage = lazy(() =>
   import('./features/handoff/index.js').then((m) => ({ default: m.HandoffSettingsPage })),
@@ -184,6 +189,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <AssistantTestPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/send-hours',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <SendWindowPage />
                 </Suspense>
               </RequireRole>
             ),

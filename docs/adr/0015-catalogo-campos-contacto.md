@@ -1,4 +1,4 @@
-# ADR 0013 — Catálogo de campos del contacto y validación de flujos en tres niveles
+# ADR 0015 — Catálogo de campos del contacto y validación de flujos en tres niveles
 
 **Estado:** aceptado · **Fecha:** 2026-11-07 · **Contexto:** HU-FLOW-05 (captura estructurada y editor de flujos)
 

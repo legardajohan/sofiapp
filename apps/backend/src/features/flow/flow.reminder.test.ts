@@ -16,7 +16,13 @@ import { MetaIntegration } from '../channel/channel.model.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { WhatsAppTemplate } from '../whatsapp-template/whatsapp-template.model.js';
 import type { ITenantDocument } from '../tenant/tenant.types.js';
-import { buscarCandidatos, enviarRecordatorio } from './flow.reminder.service.js';
+import { buscarCandidatos, enviarRecordatorio, filtrarPorConfiguracionTenant } from './flow.reminder.service.js';
+import { SendWindowConfig } from '../send-window/send-window.model.js';
+import { CONFIG_DEFECTO } from '../send-window/send-window.types.js';
+import { fechaLocal, momentoLocal, sumarDias } from '../../utils/zona-horaria.util.js';
+import { AuditEvent } from '../audit/audit.model.js';
+import { limpiarCacheVentana } from '../send-window/send-window.service.js';
+import { abrir, aperturaManana, cerrarHoy } from '../send-window/send-window.fixtures.js';
 
 async function crearIntegracion(tenantId: Types.ObjectId): Promise<void> {
   await createScoped(MetaIntegration, tenantId, {
@@ -268,3 +274,100 @@ describe('Regla de no duplicar la ventana', () => {
     expect(metaWhatsAppClient.sendTemplate).toHaveBeenCalledOnce();
   });
 });
+
+describe('enviarRecordatorio — ventana horaria de envío (HU-CONF-01)', () => {
+  afterEach(() => limpiarCacheVentana());
+
+  it('en plazo pero con el horario aún cerrado: no envía ni marca; tras la apertura, lo envía', async () => {
+    // El plazo es el propio vencimiento (cae dentro del horario de mañana) y la antelación ya lo
+    // cubre, pero ahora mismo no se puede escribir.
+    // Hoy cerrado; la ventana vence mañana a las 00:01. Antelación con tope de 24 h (el máximo).
+    const vence = aperturaManana().getTime() + 60_000;
+    const antelacionMinutos = Math.min(Math.ceil((vence - Date.now()) / 60_000) + 5, 1440);
+    const tenant = await crearTenantConRecordatorio({ antelacionMinutos });
+    await crearIntegracion(tenant._id);
+    const { clienteId } = await crearClienteVentana(tenant._id, vence - Date.now());
+    vi.mocked(metaWhatsAppClient.sendText).mockResolvedValue({ messageId: `wamid.REM-${Math.random()}` });
+    await cerrarHoy(tenant._id, ['recordatorio']);
+
+    // El barrido ni siquiera lo encola mientras esté cerrado.
+    expect(await filtrarPorConfiguracionTenant(await buscarCandidatos(new Date()), new Date())).toEqual([]);
+
+    await enviarRecordatorio(tenant._id.toString(), clienteId);
+    expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
+    const sinMarcar = await Cliente.findById(clienteId).lean();
+    expect(sinMarcar?.recordatorioEnviadoParaVentana ?? null).toBeNull();
+    expect(
+      await AuditEvent.countDocuments({ tenantId: tenant._id, accion: 'mensaje.retenido-horario' }),
+    ).toBe(1);
+
+    await abrir(tenant._id);
+    await enviarRecordatorio(tenant._id.toString(), clienteId);
+
+    expect(metaWhatsAppClient.sendText).toHaveBeenCalledTimes(1);
+    const marcado = await Cliente.findById(clienteId).lean();
+    expect(marcado?.recordatorioEnviadoParaVentana).toBeTruthy();
+  });
+
+  it('si la ventana vence fuera de horario, el recordatorio se ADELANTA al último tramo abierto', async () => {
+    // Antelación de 2 h, pero la ventana vence dentro de 5 h, cuando el horario ya cerró: hoy solo
+    // queda abierto hasta dentro de una hora y mañana está cerrado.
+    const tenant = await crearTenantConRecordatorio({ antelacionMinutos: 120 });
+    await crearIntegracion(tenant._id);
+    const { clienteId } = await crearClienteVentana(tenant._id, 5 * 60 * 60_000);
+    vi.mocked(metaWhatsAppClient.sendText).mockResolvedValue({ messageId: `wamid.REM-${Math.random()}` });
+
+    // Sin horario se comporta como siempre: a 5 h del vencimiento aún no toca.
+    await enviarRecordatorio(tenant._id.toString(), clienteId);
+    expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
+
+    await abiertoSoloLaProximaHora(tenant._id);
+
+    const elegibles = await filtrarPorConfiguracionTenant(await buscarCandidatos(new Date()), new Date());
+    expect(elegibles.map((c) => c.clienteId)).toEqual([clienteId]);
+
+    await enviarRecordatorio(tenant._id.toString(), clienteId);
+    expect(metaWhatsAppClient.sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin ningún momento abierto antes del vencimiento no hay recordatorio posible', async () => {
+    const tenant = await crearTenantConRecordatorio({ antelacionMinutos: 120 });
+    await crearIntegracion(tenant._id);
+    // Vence antes de las 00:00 de mañana (lo más tarde, a 1 min de la medianoche) con hoy cerrado.
+    const hastaMedianoche = aperturaManana().getTime() - Date.now();
+    const { clienteId } = await crearClienteVentana(tenant._id, Math.max(hastaMedianoche - 60_000, 30_000));
+    await cerrarHoy(tenant._id, ['recordatorio']);
+
+    expect(await filtrarPorConfiguracionTenant(await buscarCandidatos(new Date()), new Date())).toEqual([]);
+    await enviarRecordatorio(tenant._id.toString(), clienteId);
+    expect(metaWhatsAppClient.sendText).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Política con `recordatorio` abierto solo desde ahora hasta dentro de una hora (excepción de hoy
+ * con esa franja) y mañana cerrado. Tope 24:00 si la hora pasa de la medianoche.
+ */
+async function abiertoSoloLaProximaHora(tenantId: Types.ObjectId): Promise<void> {
+  const zona = 'America/Bogota';
+  const ahora = new Date();
+  const hoy = fechaLocal(ahora, zona);
+  const { hora } = momentoLocal(new Date(ahora.getTime() + 60 * 60_000), zona);
+  const hasta = fechaLocal(new Date(ahora.getTime() + 60 * 60_000), zona) === hoy ? hora : '24:00';
+  await SendWindowConfig.create({
+    tenantId,
+    activo: true,
+    zonaHoraria: zona,
+    reglas: CONFIG_DEFECTO.reglas.map((r) =>
+      r.categoria === 'recordatorio'
+        ? { categoria: 'recordatorio', modo: 'restringido', franjas: [{ dias: [0, 1, 2, 3, 4, 5, 6], desde: '00:00', hasta: '24:00' }] }
+        : r,
+    ),
+    excepciones: [
+      { fecha: hoy, tipo: 'franjas', franjas: [{ desde: '00:00', hasta }], categorias: ['recordatorio'] },
+      { fecha: sumarDias(hoy, 1), tipo: 'cerrado', categorias: ['recordatorio'] },
+    ],
+    version: 1,
+  });
+  limpiarCacheVentana();
+}

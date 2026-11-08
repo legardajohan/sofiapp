@@ -6,12 +6,14 @@ import { authorizeSubrol, SUBROLES_REPORTES } from '../../middlewares/authorize-
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
+  advisorActivityQuerySchema,
   advisorReportQuerySchema,
   handoffRateQuerySchema,
   peakHoursQuerySchema,
   topProductsQuerySchema,
 } from './reports.validation.js';
 import {
+  getAdvisorActivityController,
   getAdvisorReportController,
   getHandoffRateController,
   getPeakHoursController,
@@ -63,6 +65,17 @@ router.get(
   authorizeSubrol(SUBROLES_REPORTES),
   validate(peakHoursQuerySchema),
   asyncHandler(getPeakHoursController),
+);
+
+// HU-REP-06: tiempo activo por día, semana o mes. Mismo gate que el reporte por asesor (ADR 0011).
+router.get(
+  '/advisor-activity',
+  authenticateJWT,
+  requireTenant,
+  authorize(['admin']),
+  authorizeSubrol(SUBROLES_REPORTES),
+  validate(advisorActivityQuerySchema),
+  asyncHandler(getAdvisorActivityController),
 );
 
 export default router;

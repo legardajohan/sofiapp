@@ -29,16 +29,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiUrl } from '@/api/apiClient';
+import { CampaignAudienceSummary } from '../components/CampaignAudienceSummary.js';
 import { CampaignMetricsPanel } from '../components/CampaignMetricsPanel.js';
 import { CampaignProgress } from '../components/CampaignProgress.js';
 import { CampaignStatusBadge } from '../components/CampaignStatusBadge.js';
 import { MessagePreview } from '../components/MessagePreview.js';
 import { RescheduleDialog } from '../components/RescheduleDialog.js';
+import { SendCampaignDialog } from '../components/SendCampaignDialog.js';
 import {
   useCampaign,
   useCampaignRealtime,
   useCancelCampaign,
-  useLaunchCampaign,
+  useSendCampaign,
   usePauseCampaign,
   useRecipients,
   useRescheduleCampaign,
@@ -71,6 +73,7 @@ export function CampaignDetailPage(): React.ReactElement {
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoDestinatario | undefined>();
   const [confirmarCancelar, setConfirmarCancelar] = useState(false);
   const [reprogramarOpen, setReprogramarOpen] = useState(false);
+  const [enviarOpen, setEnviarOpen] = useState(false);
 
   const { data: campana, isPending } = useCampaign(id);
   const { data: destinatarios } = useRecipients(id, {
@@ -79,7 +82,7 @@ export function CampaignDetailPage(): React.ReactElement {
   });
   useCampaignRealtime();
 
-  const lanzar = useLaunchCampaign();
+  const lanzar = useSendCampaign();
   const pausar = usePauseCampaign();
   const reanudar = useResumeCampaign();
   const cancelar = useCancelCampaign();
@@ -119,7 +122,7 @@ export function CampaignDetailPage(): React.ReactElement {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-semibold text-foreground">{campana.nombre}</h1>
-            <CampaignStatusBadge estado={campana.estado} />
+            <CampaignStatusBadge estado={campana.estado} retenidaHasta={campana.retenidaHasta} />
           </div>
           {campana.motivo ? (
             <p className="mt-1 text-sm text-muted-foreground">{campana.motivo}</p>
@@ -135,7 +138,7 @@ export function CampaignDetailPage(): React.ReactElement {
           {campana.estado === 'borrador' ? (
             <Button
               disabled={ocupado}
-              onClick={() => lanzar.mutate(campana.id)}
+              onClick={() => setEnviarOpen(true)}
               className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
             >
               Enviar ahora
@@ -172,6 +175,8 @@ export function CampaignDetailPage(): React.ReactElement {
           ) : null}
         </div>
       </header>
+
+      <CampaignAudienceSummary campana={campana} />
 
       <section className="rounded-lg border border-border bg-card p-5">
         <CampaignProgress campana={campana} />
@@ -277,6 +282,19 @@ export function CampaignDetailPage(): React.ReactElement {
           }
         />
       ) : null}
+
+      <SendCampaignDialog
+        open={enviarOpen}
+        onOpenChange={setEnviarOpen}
+        campana={campana}
+        pending={lanzar.isPending}
+        onConfirm={(etiqueta) =>
+          lanzar.mutate(
+            { id: campana.id, ...(etiqueta ? { etiqueta } : {}) },
+            { onSuccess: () => setEnviarOpen(false) },
+          )
+        }
+      />
 
       <AlertDialog open={confirmarCancelar} onOpenChange={setConfirmarCancelar}>
         <AlertDialogContent>

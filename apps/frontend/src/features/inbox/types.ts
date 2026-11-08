@@ -182,6 +182,10 @@ export interface ContactCardDTO {
    * formato: un correo enmascarado y uno real son ambos cadenas.
    */
   puedeVerSensibles: boolean;
+  /** Pidió no recibir campañas (HU-MARK-01). Opcional: backend anterior. */
+  marketingOptOut?: boolean;
+  /** Bloqueado o inactivo: fuera de toda campaña (HU-MARK-07). Opcional: backend anterior. */
+  bloqueado?: boolean;
 }
 
 /** Atributo personalizado del contacto. `oculto` marca los que llegaron enmascarados. */

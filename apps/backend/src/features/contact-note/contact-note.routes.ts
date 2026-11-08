@@ -8,8 +8,18 @@ import {
 } from '../../middlewares/authorize-subrol.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
-import { createNotaSchema, listNotasSchema } from './contact-note.validation.js';
-import { createNotaController, listNotasController } from './contact-note.controller.js';
+import {
+  createNotaSchema,
+  deleteNotaSchema,
+  listNotasSchema,
+  updateNotaSchema,
+} from './contact-note.validation.js';
+import {
+  createNotaController,
+  deleteNotaController,
+  listNotasController,
+  updateNotaController,
+} from './contact-note.controller.js';
 
 // `mergeParams` para que `:clienteId` del montaje (`/api/clientes/:clienteId/notas`) llegue a los
 // controllers y a los schemas de params.
@@ -35,6 +45,25 @@ router.get(
   ...notasRoles,
   validate(listNotasSchema),
   asyncHandler(listNotasController),
+);
+
+// HU-PDF-01: editar texto / pendiente y borrar. Mismo gate que leer: quien ve la nota la gestiona.
+router.patch(
+  '/:notaId',
+  authenticateJWT,
+  requireTenant,
+  ...notasRoles,
+  validate(updateNotaSchema),
+  asyncHandler(updateNotaController),
+);
+
+router.delete(
+  '/:notaId',
+  authenticateJWT,
+  requireTenant,
+  ...notasRoles,
+  validate(deleteNotaSchema),
+  asyncHandler(deleteNotaController),
 );
 
 export default router;

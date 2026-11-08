@@ -1,12 +1,15 @@
 import { apiClient } from '../../api/apiClient.js';
+import { zonaDelNavegador } from '@/lib/agenda';
 import type { ContactCardDTO } from '@/features/inbox/types';
 import type {
   BorradoOpcionDTO,
   CampoContactoDTO,
+  CambiosNota,
   ContactPatchPayload,
   CrearCampoPayload,
   NotaDTO,
   NotasPage,
+  NuevaNota,
   OpcionDTO,
   OpcionesPorTipo,
   TipoOpcion,
@@ -29,9 +32,34 @@ export async function fetchNotas(clienteId: string, page = 1): Promise<NotasPage
   return data;
 }
 
-export async function createNota(clienteId: string, texto: string): Promise<NotaDTO> {
-  const { data } = await apiClient.post<NotaDTO>(`/clientes/${clienteId}/notas`, { texto });
+/**
+ * Crea una nota. La zona del navegador viaja siempre: con ella el backend decide qué día es «hoy»
+ * para un pendiente sin fecha elegida (HU-PDF-01 A1).
+ */
+export async function createNota(clienteId: string, nota: NuevaNota): Promise<NotaDTO> {
+  const { data } = await apiClient.post<NotaDTO>(`/clientes/${clienteId}/notas`, {
+    ...nota,
+    tz: zonaDelNavegador(),
+  });
   return data;
+}
+
+/** Edita el texto y/o el pendiente de una nota (HU-PDF-01). */
+export async function updateNota(
+  clienteId: string,
+  notaId: string,
+  cambios: CambiosNota,
+): Promise<NotaDTO> {
+  const { data } = await apiClient.patch<NotaDTO>(
+    `/clientes/${clienteId}/notas/${notaId}`,
+    { ...cambios, tz: zonaDelNavegador() },
+  );
+  return data;
+}
+
+/** Borra la nota y, con ella, su pendiente. */
+export async function deleteNota(clienteId: string, notaId: string): Promise<void> {
+  await apiClient.delete(`/clientes/${clienteId}/notas/${notaId}`);
 }
 
 // ─── Catálogos de interés / objeción / rol (HU-CRM-02) ──────────────────────────

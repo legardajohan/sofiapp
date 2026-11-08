@@ -32,7 +32,11 @@ export function TagChip({ tag, onRemove, className }: Props): React.ReactElement
       )}
       style={{ backgroundColor: bg, color: fg, borderColor: border }}
     >
-      <span className="truncate">{tag.nombre}</span>
+      {/* `title` y no Tooltip: un chip se pinta decenas de veces por pantalla, y un Tooltip por
+          chip montaría decenas de portales para cubrir solo los nombres largos (hasta 60). */}
+      <span className="truncate" title={tag.nombre.length > 24 ? tag.nombre : undefined}>
+        {tag.nombre}
+      </span>
       {onRemove && (
         <button
           type="button"

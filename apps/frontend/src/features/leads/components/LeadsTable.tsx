@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { tagColors } from '@/features/tags/lib/tag-color';
+import { LeadEtiquetas } from './LeadEtiquetas.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -136,6 +137,9 @@ function Fila({
       <TableCell>
         <SemaforoCell semaforo={lead.semaforo} />
       </TableCell>
+      <TableCell>
+        <LeadEtiquetas etiquetas={lead.etiquetas} max={2} />
+      </TableCell>
       <TableCell className="text-secondary-foreground">
         {lead.responsable?.nombre ?? 'Sin responsable'}
       </TableCell>
@@ -227,6 +231,7 @@ export function LeadsTable({
                 <TableHead>Lead</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Semáforo</TableHead>
+                <TableHead>Etiquetas</TableHead>
                 <TableHead>Responsable</TableHead>
                 <TableHead>Última actividad</TableHead>
                 <TableHead className="text-right">Creado</TableHead>

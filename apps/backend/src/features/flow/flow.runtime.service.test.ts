@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { createScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
@@ -17,6 +17,8 @@ vi.mock('../../services/ai/ai-service.singleton.js', () => ({
 }));
 // Evita conexión a Redis: `flow.runtime.service.ts` encola en `flowRuntimeQueue` al programar
 // una espera (HU-FLOW-02).
+// `marcarParaAsesor` publica en tiempo real: sin Redis en los tests (HU-CONF-01).
+vi.mock('../../realtime/realtime.publisher.js', () => ({ publishRealtime: vi.fn() }));
 vi.mock('../../config/queues.js', () => ({
   FLOW_RESUME_JOB: 'resume',
   FLOW_REMINDER_JOB: 'reminder',
@@ -26,6 +28,10 @@ vi.mock('../../config/queues.js', () => ({
 import { Flow, FlowState } from './flow.model.js';
 import { ejecutarFlujo, reanudarFlujo } from './flow.runtime.service.js';
 import type { IArista, INodo } from './flow.types.js';
+import { AuditEvent } from '../audit/audit.model.js';
+import { AppError } from '../../utils/AppError.js';
+import { limpiarCacheVentana } from '../send-window/send-window.service.js';
+import { aperturaManana, cerrarHoy } from '../send-window/send-window.fixtures.js';
 
 const tenantId = new Types.ObjectId();
 
@@ -192,6 +198,7 @@ describe('ejecutarFlujo — nodo kb', () => {
       clienteId,
       expect.objectContaining({ modo: 'auto' }),
       'bot',
+      { categoria: 'ia' },
     );
   });
 });
@@ -285,6 +292,7 @@ describe('reanudarFlujo — HU-FLOW-02', () => {
       clienteId,
       expect.objectContaining({ texto: 'Ya volviste' }),
       'bot',
+      { categoria: 'flujo' },
     );
     const state = await FlowState.findOne({ clienteId }).lean();
     expect(state?.esperaToken).toBeFalsy();
@@ -456,5 +464,52 @@ describe('correrMotor — ningún efecto de un turno se pierde (HU-FLOW-05, crit
     const state = await FlowState.findOne({ clienteId }).lean();
     expect(state?.nodoActualId).toBe('c1');
     expect(state?.esperandoRespuesta).toBe(true);
+  });
+});
+
+describe('HU-CONF-01 — ventana horaria en el motor de flujos', () => {
+  afterEach(() => limpiarCacheVentana());
+
+  it('reanudarFlujo con `flujo` cerrado: re-encola el mismo token hasta la apertura y no toca el FlowState', async () => {
+    await crearFlowActivo([nodoEspera, nodoFinEspera], [{ id: 'a1', from: 'esp1', to: 'fin' }], 'esp1');
+    const clienteId = await crearCliente(true);
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'hola');
+    const llamadasPrevias = flowRuntimeQueueAddMock.mock.calls.length;
+    const { token } = flowRuntimeQueueAddMock.mock.calls[llamadasPrevias - 1]?.[1] as { token: string };
+    const antes = await FlowState.findOne({ clienteId }).lean();
+    sendOutboundMock.mockClear();
+
+    await cerrarHoy(tenantId, ['flujo']);
+    await reanudarFlujo(tenantId.toString(), clienteId, token);
+
+    expect(sendOutboundMock).not.toHaveBeenCalled();
+    expect(flowRuntimeQueueAddMock).toHaveBeenCalledTimes(llamadasPrevias + 1);
+    const [nombre, datos, opciones] = flowRuntimeQueueAddMock.mock.calls[llamadasPrevias] as [
+      string,
+      { token: string; tipo: string },
+      { delay: number },
+    ];
+    expect(nombre).toBe('resume');
+    expect(datos).toMatchObject({ tipo: 'resume', token });
+    expect(Math.abs(Date.now() + opciones.delay - aperturaManana().getTime())).toBeLessThan(5_000);
+
+    const despues = await FlowState.findOne({ clienteId }).lean();
+    expect(despues?.esperaToken).toBe(antes?.esperaToken);
+    expect(despues?.nodoActualId).toBe(antes?.nodoActualId);
+    expect(await AuditEvent.countDocuments({ tenantId, accion: 'mensaje.retenido-horario' })).toBe(1);
+  });
+
+  it('flujo reactivo (`ia`) que recibe 423: no relanza y marca la conversación para un asesor', async () => {
+    await crearFlowActivo([nodoKb], [], 'kb1');
+    const clienteId = await crearCliente(true);
+    chatMock.mockResolvedValueOnce({ data: 'respuesta', confianza: 0.9 });
+    sendOutboundMock.mockRejectedValueOnce(new AppError('Fuera del horario', 423, { siguienteApertura: null }));
+
+    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBe('atendido');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.noLeidos).toBe(1);
+    const audit = await AuditEvent.findOne({ tenantId, accion: 'mensaje.retenido-horario' }).lean();
+    expect(audit?.despues).toMatchObject({ categoria: 'ia', accion: 'descartado' });
   });
 });

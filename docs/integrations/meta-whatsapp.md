@@ -153,6 +153,11 @@ margen sobre los mensajes) queda registrada como decisión futura en
 - Reintentos con backoff exponencial; logging por canal.
 - **Ventana de 24h:** fuera de la ventana de servicio solo se puede enviar **plantillas HSM**
   aprobadas. Dentro de la ventana, texto libre.
+- **Horario de envío de la empresa (HU-CONF-01):** `sendOutbound` exige una `categoria` en su
+  contexto y, tras `assertWithinQuota` y **antes** de cualquier llamada a la Graph API, aplica
+  `assertVentanaEnvio`. Fuera de franja lanza 423 y no llama a Meta ni cuenta cuota. Cada llamador
+  decide qué hacer con el 423 según su categoría (`docs/domain.md` §4ter). Es independiente de la
+  ventana de 24 h: un mensaje puede estar dentro de una y fuera de la otra.
 
 ## 4. Plantillas HSM (HT-WA-02)
 
