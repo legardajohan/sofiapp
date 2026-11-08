@@ -42,9 +42,15 @@ interface Props {
   audioProgress: number | null;
   /** Límite de grabación del tenant: la grabación se corta sola al llegar. */
   maxDuracionAudio: number;
+  /**
+   * Por qué está bloqueado el campo, dicho en el propio placeholder. Por defecto, la ventana de
+   * 24 h; HU-CONF-01 añade el horario de envío de la empresa.
+   */
+  motivoBloqueo?: string;
 }
 
 export function MessageComposer({
+  motivoBloqueo = 'Ventana de 24 h cerrada',
   disabled,
   pending,
   onSend,
@@ -292,7 +298,7 @@ export function MessageComposer({
               submit();
             }
           }}
-          placeholder={disabled ? 'Ventana de 24 h cerrada' : 'Escribe un mensaje…'}
+          placeholder={disabled ? motivoBloqueo : 'Escribe un mensaje…'}
           disabled={bloqueado}
           rows={1}
           className={cn('max-h-40 min-h-[40px] resize-none')}

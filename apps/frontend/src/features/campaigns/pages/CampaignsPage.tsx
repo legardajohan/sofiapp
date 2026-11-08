@@ -213,7 +213,7 @@ export function CampaignsPage(): React.ReactElement {
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <CampaignStatusBadge estado={c.estado} />
+                    <CampaignStatusBadge estado={c.estado} retenidaHasta={c.retenidaHasta} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     {formatearNumero(c.totales.destinatarios)}

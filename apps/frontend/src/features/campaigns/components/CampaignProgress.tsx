@@ -1,4 +1,8 @@
+import { Clock } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { cuandoAbre } from '@/features/send-window/lib/formato.js';
+
+const zonaNavegador = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 import { formatearNumero, porcentaje } from '../lib/pacing.js';
 import type { CampaignDetalleDTO } from '../types.js';
 
@@ -16,6 +20,17 @@ export function CampaignProgress({ campana }: { campana: CampaignDetalleDTO }): 
 
   return (
     <div className="space-y-4">
+      {campana.estado === 'en_curso' && campana.retenidaHasta ? (
+        // HU-CONF-01: la barra no se mueve porque el horario de envío está cerrado, no porque se
+        // haya parado. Se dice para que nadie la pause y la reanude a mano.
+        <p
+          role="status"
+          className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-sm text-secondary-foreground"
+        >
+          <Clock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          Esperando a que abra el horario de envío. Sigue sola {cuandoAbre(campana.retenidaHasta, zonaNavegador())}.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
         <p className="text-sm text-foreground">
           <span className="font-semibold tabular-nums">{formatearNumero(procesados)}</span> de{' '}

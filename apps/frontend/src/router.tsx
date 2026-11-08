@@ -49,6 +49,9 @@ const AiContextPage = lazy(() =>
 const AssistantConfigPage = lazy(() =>
   import('./features/ai-assistant/index.js').then((m) => ({ default: m.AssistantConfigPage })),
 );
+const SendWindowPage = lazy(() =>
+  import('./features/send-window/index.js').then((m) => ({ default: m.SendWindowPage })),
+);
 const HandoffSettingsPage = lazy(() =>
   import('./features/handoff/index.js').then((m) => ({ default: m.HandoffSettingsPage })),
 );
@@ -169,6 +172,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <AssistantConfigPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/send-hours',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <SendWindowPage />
                 </Suspense>
               </RequireRole>
             ),

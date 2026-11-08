@@ -185,6 +185,11 @@ export interface CampaignDTO {
   programadaPara: string | null;
   iniciadaAt: string | null;
   finalizadaAt: string | null;
+  /**
+   * HU-CONF-01. La campaña sigue `en_curso`, pero espera a que abra el horario de envío: hasta
+   * esta hora. `null` = no está retenida.
+   */
+  retenidaHasta: string | null;
   motivo: string | null;
   /** HU-MARK-07. Opcionales: backend anterior. */
   audiencia?: AudienciaCampanaDTO;

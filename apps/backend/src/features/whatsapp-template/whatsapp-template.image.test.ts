@@ -472,7 +472,7 @@ describe('Envío con imagen por defecto o de reemplazo (criterios 8, 10-13)', ()
       templateId,
       parametros: ['Luis'],
       imagenHeaderUploadId: uploadId,
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     const components = mockSendTemplate.mock.calls[0]![3] as unknown[];
     expect(components[0]).toEqual({
@@ -510,7 +510,7 @@ describe('HU-MARK-05 · el hilo guarda la imagen que el cliente vio de verdad', 
       templateId,
       parametros: ['Luis'],
       imagenHeaderUploadId: uploadId,
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;
     expect(mensaje.texto).toBe('Hola Luis, mira la promo');
@@ -530,7 +530,7 @@ describe('HU-MARK-05 · el hilo guarda la imagen que el cliente vio de verdad', 
       modo: 'plantilla',
       templateId,
       parametros: ['Luis'],
-    });
+    }, 'agent', { categoria: 'asesor' });
 
     const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;
     expect(mensaje.media).toMatchObject({
@@ -565,7 +565,7 @@ describe('HU-MARK-05 · el hilo guarda la imagen que el cliente vio de verdad', 
         ...(imagenCabecera ? { imagenCabecera } : {}),
       },
       'bot',
-      { campaignId: campana.id },
+      { categoria: 'campana', campaignId: campana.id },
     );
 
     const defecto = (await leerPlantilla(tenantId, templateId)).imagenDefecto;

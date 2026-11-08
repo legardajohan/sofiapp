@@ -1,6 +1,13 @@
 import type { Request, Response } from 'express';
-import { getAdvisorReport, getHandoffRate, getPeakHours, getTopProducts } from './reports.service.js';
+import {
+  getAdvisorActivity,
+  getAdvisorReport,
+  getHandoffRate,
+  getPeakHours,
+  getTopProducts,
+} from './reports.service.js';
 import type {
+  AdvisorActivityQuery,
   AdvisorReportQuery,
   HandoffRateQuery,
   PeakHoursQuery,
@@ -28,5 +35,11 @@ export async function getTopProductsController(req: Request, res: Response): Pro
 export async function getPeakHoursController(req: Request, res: Response): Promise<void> {
   const tenantId = req.user!.tenantId!.toString();
   const report = await getPeakHours(tenantId, req.validatedQuery as unknown as PeakHoursQuery);
+  res.json(report);
+}
+
+export async function getAdvisorActivityController(req: Request, res: Response): Promise<void> {
+  const tenantId = req.user!.tenantId!.toString();
+  const report = await getAdvisorActivity(tenantId, req.validatedQuery as unknown as AdvisorActivityQuery);
   res.json(report);
 }

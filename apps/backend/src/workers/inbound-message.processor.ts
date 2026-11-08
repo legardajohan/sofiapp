@@ -13,6 +13,8 @@ import { resolveWebhookTenant } from '../features/webhook/webhook.service.js';
 import { upsertByMetaUser } from '../features/cliente/cliente.service.js';
 import { saveMessage, updateDeliveryStatus } from '../features/message/message.service.js';
 import { notifyInboundMessage, replyFromIa } from '../features/conversation/conversation.service.js';
+import { aperturaDeError, esVentanaCerrada } from '../features/send-window/send-window.service.js';
+import { descartarIaPorVentana } from './ai-ventana.js';
 import { Message } from '../features/message/message.model.js';
 import { ejecutarFlujo } from '../features/flow/flow.runtime.service.js';
 import { getActiveFlow } from '../features/flow/flow.service.js';
@@ -88,6 +90,12 @@ async function acusarNoTexto(tenantId: string, clienteId: string): Promise<void>
   try {
     await replyFromIa(tenantId, clienteId, MENSAJE_SOLO_TEXTO);
   } catch (err: unknown) {
+    // Fuera de la ventana horaria de `ia` (HU-CONF-01): el acuse se descarta y la conversación
+    // sube a un asesor, como cualquier otro mensaje de Sofi.
+    if (esVentanaCerrada(err)) {
+      await descartarIaPorVentana(tenantId, clienteId, aperturaDeError(err));
+      return;
+    }
     // Fuera de la ventana de 24 h o cuota agotada. No puede tumbar la ingesta del mensaje, que ya
     // está guardado y notificado: el acuse es un extra, no el trabajo principal de este worker.
     if (err instanceof AppError) {

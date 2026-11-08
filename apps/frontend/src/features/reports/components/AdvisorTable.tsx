@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { formatEntero, formatPorcentaje } from '@/lib/format';
+import { formatDuracion, formatHorasMinutos } from '../lib/duracion-format.js';
 import type { AdvisorReport, AdvisorRow } from '../types/index.js';
 
 interface Props {
@@ -14,7 +15,7 @@ interface Props {
   isLoading: boolean;
 }
 
-type Campo = 'nombre' | 'conversacionesAtendidas' | 'asignadasActivas' | 'ventas' | 'tasaCierre';
+type Campo = 'nombre' | 'conversacionesAtendidas' | 'asignadasActivas' | 'ventas' | 'tasaCierre' | 'segundosActivos';
 type Orden = 'asc' | 'desc';
 
 const COLUMNAS: Array<{ key: Campo; label: string; numerica: boolean }> = [
@@ -23,6 +24,7 @@ const COLUMNAS: Array<{ key: Campo; label: string; numerica: boolean }> = [
   { key: 'asignadasActivas', label: 'Asignadas activas', numerica: true },
   { key: 'ventas', label: 'Ventas', numerica: true },
   { key: 'tasaCierre', label: 'Tasa de cierre', numerica: true },
+  { key: 'segundosActivos', label: 'Tiempo activo', numerica: true },
 ];
 
 function ordenar(filas: AdvisorRow[], campo: Campo, orden: Orden): AdvisorRow[] {
@@ -135,6 +137,9 @@ export function AdvisorTable({ report, isLoading }: Props): React.ReactElement {
                     <TableCell className="text-right tabular-nums">
                       {f.conversacionesAtendidas === 0 ? '—' : formatPorcentaje(f.tasaCierre)}
                     </TableCell>
+                    <TableCell className="text-right tabular-nums" title={formatDuracion(f.segundosActivos)}>
+                      {f.segundosActivos === 0 ? '—' : formatHorasMinutos(f.segundosActivos)}
+                    </TableCell>
                   </TableRow>
                 ))}
 
@@ -144,6 +149,7 @@ export function AdvisorTable({ report, isLoading }: Props): React.ReactElement {
                   <TableCell className="text-right tabular-nums">{formatEntero(sinAsignar.conversacionesAtendidas)}</TableCell>
                   <TableCell className="text-right">—</TableCell>
                   <TableCell className="text-right tabular-nums">{formatEntero(sinAsignar.ventas)}</TableCell>
+                  <TableCell className="text-right">—</TableCell>
                   <TableCell className="text-right">—</TableCell>
                 </TableRow>
               )}
@@ -156,6 +162,7 @@ export function AdvisorTable({ report, isLoading }: Props): React.ReactElement {
                   <TableCell className="text-right tabular-nums">{formatEntero(report.totales.asignadasActivas)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatEntero(report.totales.ventas)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatPorcentaje(report.totales.tasaCierre)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatHorasMinutos(report.totales.segundosActivos)}</TableCell>
                 </TableRow>
               </TableFooter>
             )}

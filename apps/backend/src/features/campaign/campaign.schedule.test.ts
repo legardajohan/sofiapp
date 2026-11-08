@@ -5,7 +5,7 @@
  * cancelar y la subida única de la imagen a Meta al arrancar. El multipart se prueba aparte en
  * `campaign.schedule.routes.test.ts`.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Readable } from 'node:stream';
 import { Types } from 'mongoose';
 import { createScoped, findByIdScoped } from '../../repositories/base.repository.js';
@@ -52,6 +52,8 @@ import {
   scheduleCampaign,
 } from './campaign.service.js';
 import type { IImagenSubida, LeanCampaign, ScheduleCampaignDTO } from './campaign.types.js';
+import { limpiarCacheVentana } from '../send-window/send-window.service.js';
+import { aperturaManana, cerrarHoy } from '../send-window/send-window.fixtures.js';
 
 const tenantId = new Types.ObjectId();
 const actorId = new Types.ObjectId().toString();
@@ -364,4 +366,33 @@ describe('HU-MARK-03 — programar campañas con imagen', () => {
       expect(detalle.imagen?.url).toContain(`/media/campaigns/${campana.id}/imagen?t=`);
     });
   });
+
+  describe('HU-CONF-01 — ventana horaria de campañas', () => {
+    afterEach(() => limpiarCacheVentana());
+
+    it('programar en hora cerrada → 422 con siguienteApertura, sin guardar nada', async () => {
+      await cerrarHoy(tenantId, ['campana']);
+
+      await expect(scheduleCampaign(tenantId, actorId, dto(), PNG)).rejects.toMatchObject({
+        statusCode: 422,
+        details: { siguienteApertura: aperturaManana().toISOString() },
+      });
+      expect(await Campaign.countDocuments({ tenantId })).toBe(0);
+      expect(storage.guardar).not.toHaveBeenCalled();
+    });
+
+    it('reprogramar a una hora cerrada → 422; a la siguiente apertura, se acepta', async () => {
+      const campana = await scheduleCampaign(tenantId, actorId, dto({ templateId: plantillaTexto, programadaPara: new Date(Date.now() + 3 * MS_DIA).toISOString() }), undefined);
+      await cerrarHoy(tenantId, ['campana']);
+
+      await expect(
+        rescheduleCampaign(tenantId, actorId, campana.id, { programadaPara: enUnaHora() }, undefined),
+      ).rejects.toMatchObject({ statusCode: 422 });
+
+      const apertura = aperturaManana().toISOString();
+      const actualizada = await rescheduleCampaign(tenantId, actorId, campana.id, { programadaPara: apertura }, undefined);
+      expect(actualizada.programadaPara).toBe(apertura);
+    });
+  });
 });
+

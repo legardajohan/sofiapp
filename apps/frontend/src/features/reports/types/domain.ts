@@ -11,6 +11,8 @@ export interface AdvisorRow {
   ventas: number;
   /** Fracción 0–1. */
   tasaCierre: number;
+  /** Tiempo activo en SofiApp dentro del rango (HU-REP-06), en segundos. */
+  segundosActivos: number;
 }
 
 export interface AdvisorReportTotales {
@@ -19,6 +21,7 @@ export interface AdvisorReportTotales {
   asignadasActivas: number;
   ventas: number;
   tasaCierre: number;
+  segundosActivos: number;
 }
 
 export interface AdvisorReport {
@@ -97,4 +100,26 @@ export interface PeakHours {
   porDia: Array<MessageVolume & { fecha: string }>;
   pico: { hora: number; entrantes: number } | null;
   diaPico: { fecha: string; entrantes: number } | null;
+}
+
+/** Granularidad de la serie de tiempo activo (HU-REP-06). */
+export type Granularidad = 'dia' | 'semana' | 'mes';
+
+/** Espejo de `IActivityPeriodRow` del backend (HU-REP-06). */
+export interface ActivityPeriodRow {
+  /** `YYYY-MM-DD` del primer día del periodo (lunes para semana, día 1 para mes). */
+  periodo: string;
+  totalSegundos: number;
+  porAsesor: Array<{ asesorId: string; segundos: number }>;
+}
+
+/** Espejo de `IAdvisorActivityResponse` del backend (HU-REP-06). */
+export interface AdvisorActivity {
+  generadoAt: string;
+  rango: { desde: string; hasta: string };
+  granularidad: Granularidad;
+  timezone: string;
+  /** Ordenados por tiempo total, de mayor a menor. */
+  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number }>;
+  periodos: ActivityPeriodRow[];
 }

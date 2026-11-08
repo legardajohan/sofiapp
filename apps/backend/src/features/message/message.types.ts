@@ -1,4 +1,5 @@
 import { Document, Types } from 'mongoose';
+import type { CategoriaEnvio } from '../send-window/send-window.types.js';
 import type { TipoMediaSaliente } from '../media/media.types.js';
 import type { IArchivoImagen } from '../whatsapp-template/whatsapp-template.types.js';
 
@@ -158,6 +159,11 @@ export interface IPlantillaEnviada {
  * plantilla; el resto de modos lo ignora.
  */
 export interface ContextoEnvio {
+  /**
+   * Categoría del envío para la política de ventanas horarias (HU-CONF-01). OBLIGATORIA a
+   * propósito: un llamador nuevo que la olvide no compila, en vez de colarse sin control.
+   */
+  categoria: CategoriaEnvio;
   campaignId?: string;
   /** Imagen de cabecera ya guardada en nuestro almacenamiento: el hilo la pinta sin re-subirla. */
   mediaCabecera?: IArchivoImagen;

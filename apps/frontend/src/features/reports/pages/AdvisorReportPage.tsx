@@ -9,6 +9,10 @@ import { useAdvisorReport, ADVISOR_REPORT_KEY } from '../hooks/useAdvisorReport.
 import { AdvisorKpiStrip } from '../components/AdvisorKpiStrip.js';
 import { AdvisorBarsChart } from '../components/AdvisorBarsChart.js';
 import { AdvisorTable } from '../components/AdvisorTable.js';
+import { AdvisorActivityChart } from '../components/AdvisorActivityChart.js';
+import { useAdvisorActivity } from '../hooks/useAdvisorActivity.js';
+import { useActivityParams } from '../hooks/use-activity-params.js';
+import { ZONA_DEL_VISOR } from '../lib/zona-visor.js';
 
 const PRESETS: readonly PeriodoPreset[] = ['7d', '30d', 'mes', 'personalizado'];
 
@@ -28,6 +32,13 @@ export function AdvisorReportPage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });
   const tablero = useDashboardRefresh(ADVISOR_REPORT_KEY);
   const { data, dataUpdatedAt, isPending, isError, refetch } = useAdvisorReport(period.rango);
+  const filtros = useActivityParams();
+  // Siempre todos los asesores: el filtro se aplica en la gráfica para que el color siga al asesor.
+  const actividad = useAdvisorActivity({
+    ...period.rango,
+    granularidad: filtros.granularidad,
+    ...(ZONA_DEL_VISOR ? { tz: ZONA_DEL_VISOR } : {}),
+  });
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
@@ -35,7 +46,7 @@ export function AdvisorReportPage(): React.ReactElement {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Productividad por asesor</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {data ? rangoLegible(data.rango.desde, data.rango.hasta) : 'Conversaciones atendidas y ventas cerradas por cada asesor'}
+            {data ? rangoLegible(data.rango.desde, data.rango.hasta) : 'Conversaciones atendidas, ventas cerradas y tiempo activo de cada asesor'}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -68,6 +79,14 @@ export function AdvisorReportPage(): React.ReactElement {
         <>
           <AdvisorKpiStrip report={data} isLoading={isPending} />
           <AdvisorBarsChart asesores={data?.porAsesor} isLoading={isPending} />
+          <AdvisorActivityChart
+            actividad={actividad.data}
+            isLoading={actividad.isPending}
+            granularidad={filtros.granularidad}
+            onGranularidad={filtros.setGranularidad}
+            asesorId={filtros.asesorId}
+            onAsesor={filtros.setAsesorId}
+          />
           <AdvisorTable report={data} isLoading={isPending} />
         </>
       )}
