@@ -163,6 +163,38 @@ describe('SandboxChat (HU-IA-08)', () => {
     expect(screen.getByText(/se transferiría a ana pérez a una persona/i)).toBeInTheDocument();
   });
 
+  it('muestra la tarjeta «Dato guardado» con la etiqueta del campo y su valor (HU-FLOW-05, criterio 14)', async () => {
+    mockSession.mockResolvedValue(sesion({ mensajes: [mensaje()] }));
+    renderChat();
+    await screen.findByText('Hola');
+
+    act(() => {
+      handlers.get('sandbox:effect')?.({
+        type: 'sandbox:effect',
+        efecto: { tipo: 'dato_guardado', campo: 'Colegio', valor: 'La Salle', sensible: false },
+        at: '2026-10-01T10:00:06.000Z',
+      });
+    });
+
+    expect(await screen.findByText(/Dato guardado en la ficha — Colegio: La Salle/)).toBeInTheDocument();
+  });
+
+  it('un dato sensible llega enmascarado y así se muestra', async () => {
+    mockSession.mockResolvedValue(sesion({ mensajes: [mensaje()] }));
+    renderChat();
+    await screen.findByText('Hola');
+
+    act(() => {
+      handlers.get('sandbox:effect')?.({
+        type: 'sandbox:effect',
+        efecto: { tipo: 'dato_guardado', campo: 'Correo', valor: '••••••', sensible: true },
+        at: '2026-10-01T10:00:06.000Z',
+      });
+    });
+
+    expect(await screen.findByText(/Dato guardado en la ficha — Correo: ••••••/)).toBeInTheDocument();
+  });
+
   it('tras una transferencia el campo se bloquea y dice cómo seguir', async () => {
     mockSession.mockResolvedValue(sesion({ iaHabilitada: false, mensajes: [mensaje()] }));
     renderChat();

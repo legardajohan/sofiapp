@@ -159,10 +159,10 @@
   correoEnc: String?,             // sufijo `Enc` histórico; el cifrado en reposo está desactivado
   documentoEnc: String?,          // documento de identidad, igual
   atributos: [{                   // subdoc con _id: false; orden significativo (el que dio el asesor)
-    key: String,                  // slug 1..40, /^[a-z0-9][a-z0-9_-]*$/; estable aunque cambie el label
-    label: String,                // 1..60
+    key: String,                  // clave de un campo del catálogo `contact_fields` (HU-FLOW-05); estable
+    label: String,                // 1..60; copiada del catálogo
     valor: String,                // 1..500; en claro (con `sensible` solo cambia quién puede leerlo)
-    sensible: Boolean             // default false
+    sensible: Boolean             // default false; copiado del catálogo
   }],
   tagIds: [ObjectId],             // ref Tag (HU-OMNI-04). Sustituye al antiguo `tags: [String]`
   // Baja de campañas (HU-MARK-01). El segmentador lo excluye SIEMPRE, no es un filtro opcional.
@@ -626,6 +626,7 @@ CRM-04, IA-05 y MARK-01 las resuelven.
   nombre: String,
   nodos: [ {
     id: String,
+    nombre: String?,               // HU-FLOW-05 · nombre propio del nodo, 1..60; ausente = el título del tipo
     tipo: "mensaje" | "captura" | "condicion" | "intencion" | "kb" | "accion" | "handoff" | "espera" | "ia",
     posicion: { x: Number, y: Number },
     config: Object                 // unión discriminada por `tipo`, ver detalle abajo
@@ -651,7 +652,7 @@ clave extra es un 400, no un campo ignorado):
 | `tipo` | `config` |
 |---|---|
 | `mensaje` | `{ texto?, templateId?, parametros? }` |
-| `captura` | `{ campo, descripcion, tipoDato: "texto"\|"numero"\|"fecha"\|"booleano", pregunta, reintentos }` |
+| `captura` | `{ campo, descripcion, tipoDato: "texto"\|"numero"\|"fecha"\|"booleano", pregunta, reintentos, destino?, saltarSiExiste?, sobrescribir? }` — HU-FLOW-05: `destino` = `{ tipo: "variable" }` (solo `FlowState.variables`, lo de siempre) \| `{ tipo: "contacto", campo: "nombre"\|"correo"\|"documento"\|"rolContacto" }` \| `{ tipo: "atributo", key }` (campo activo del catálogo `contact_fields`). Con destino de ficha el servicio fija `campo` = el campo fijo o la `key`, y `tipoDato` (texto o el del catálogo); `saltarSiExiste` (def. `true`) no pregunta si la ficha ya tiene el dato y `sobrescribir` (def. `false`) decide si se reemplaza. El valor queda siempre también en `var:<campo>`. Un flujo sin `destino` se lee como `variable`. |
 | `condicion` | `{ variable: "ultimo_mensaje"\|"var:<nombre>", ramas: [{ operador: "igual_a"\|"contiene"\|"opcion_elegida", valor, nodoDestino }], ramaPorDefecto }` |
 | `intencion` | `{ etiquetas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto }` |
 | `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
@@ -662,6 +663,21 @@ clave extra es un 400, no un campo ignorado):
 
 `tipo: "api"` queda **reservado** en el vocabulario del constructor pero no tiene rama en la unión:
 cualquier intento de guardarlo es un 400.
+
+**Validación en tres niveles (HU-FLOW-05).** Guardar un flujo a medias no se pierde, pero activarlo
+exige que esté completo:
+- **Forma** (`400`, bloquea guardar): nombre vacío, ids de nodo repetidos, `entrada` inexistente,
+  enums o tipos inválidos, campos no permitidos, topes numéricos fuera de rango. Es lo que no se
+  puede persistir.
+- **Conexión** (advertencia, no bloquea guardar): nodo huérfano; rama, salida o `ramaPorDefecto` sin
+  destino (`''` se acepta) o con destino inexistente.
+- **Contenido** (advertencia, no bloquea guardar): nodo a medias — pregunta, descripción o nombre del
+  dato vacíos; `mensaje` sin texto ni plantilla; `condicion`/`intencion`/`ia` sin ramas, etiquetas o
+  salidas; objetivo de `ia` de menos de 10 caracteres; `kb` sin pregunta o respaldo; `accion` sin
+  etiquetas o asesor; `captura` a un campo personalizado sin elegir.
+Las reglas de conexión y contenido viven en una sola función pura, `analizarGrafo`
+(`@sofiapp/shared`), que usan el backend y el editor. Un flujo con advertencias **nunca queda
+activo**. Una rama sin destino en un flujo en borrador (chat de prueba) termina el flujo sin romperlo.
 
 ## flow_states  (estado de ejecución del runtime — implementado en HU-FLOW-01-V2, HU-FLOW-02)
 ```js
@@ -958,6 +974,43 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > (ámbar), caliente `#DC2626` (rojo). Los hex salen de la misma gama que ofrece el selector de
 > etiquetas, para que el CRM entero hable de "rojo" con un único rojo. La UI nunca los pinta crudos:
 > pasan por `tagColors`, que garantiza 4.5:1 en claro y en oscuro.
+
+## contact_fields  (catálogo de campos personalizados del contacto — HU-FLOW-05)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  key: String,                    // 1..40, slug derivado del label AL CREARLO; NO cambia al renombrar
+  label: String,                  // 1..60
+  labelNormalizado: String,       // sin mayúsculas, tildes ni espacios repetidos: hace única la etiqueta
+  tipoDato: "texto" | "numero" | "fecha" | "booleano",   // default "texto"
+  sensible: Boolean,              // default false; oculta el valor a quien no tenga el subrol (ADR 0006)
+  orden: Number,
+  activo: Boolean,                // false = archivado
+  createdAt, updatedAt
+}
+```
+Índices:
+- `{ tenantId: 1, key: 1 }` **unique** y `{ tenantId: 1, labelNormalizado: 1 }` **unique**, incluidos los
+  archivados: reutilizar la clave o la etiqueta de uno archivado duplicaría el valor que ya llevan
+  los contactos. Crear uno con el nombre de un archivado lo **reactiva**.
+- `{ tenantId: 1, activo: 1, orden: 1 }` — la lectura del catálogo.
+
+> **Una sola clave por dato en toda la empresa.** Antes la `key` de cada atributo era un slug del
+> texto que tecleaba cada asesor en cada contacto: «Colegio» e «Institución» eran dos atributos y
+> ni los flujos ni la segmentación de campañas (`filtros.atributos[].key`) los juntaban. Ahora el
+> campo se define una vez y lo comparten la ficha y el nodo `captura`. `Cliente.atributos[].key`
+> **debe** existir en este catálogo (`PATCH /api/clientes/:id` → `400` si no); la etiqueta y
+> `sensible` los fija el catálogo, no el body.
+
+> **Claves reservadas.** `nombre`, `name`, `correo`, `email`, `documento`, `telefono`, `celular`,
+> `rol`, `rolcontacto`, `nivelinteres` y `objecionprincipal` (normalizadas: sin tildes ni
+> separadores) no pueden ser clave ni etiqueta de un campo personalizado: ya son datos fijos.
+
+> **Backfill idempotente al arrancar** (`seed/backfill-contact-fields.ts`): por tenant, cada `key`
+> presente en `Cliente.atributos` y ausente del catálogo se registra con el primer `label` y
+> `sensible` por OR. Al editar una ficha antigua, los atributos heredados que aún no estén se
+> registran en el momento.
 
 ## handoff_settings  (cuándo y a quién transfiere Sofi — HU-IA-03 · HU-IA-07)
 ```js

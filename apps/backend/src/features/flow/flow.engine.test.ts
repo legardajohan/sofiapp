@@ -365,3 +365,133 @@ describe('flow.engine — nodo ia (HU-FLOW-03)', () => {
     expect(salida.efectos.map((e) => (e as { texto?: string }).texto)).toEqual(['Vamos a comprar']);
   });
 });
+
+describe('flow.engine — ramas sin destino de un flujo guardado a medias (HU-FLOW-05, criterio 24)', () => {
+  const posicion = { x: 0, y: 0 };
+  const rama: IRamaCondicion = { operador: 'contiene', valor: 'si', nodoDestino: '' };
+  const f = flow(
+    [
+      {
+        id: 'c1',
+        posicion,
+        tipo: 'condicion',
+        config: { tipo: 'condicion', variable: 'ultimo_mensaje', ramas: [rama], ramaPorDefecto: '' },
+      },
+    ],
+    [],
+    'c1',
+  );
+
+  it('un destino vacío termina el flujo sin romperlo (sin efecto de error)', () => {
+    const salida = avanzar({ flow: f, state: null, mensaje: 'si' });
+    expect(salida.nodoSiguiente).toBeNull();
+    expect(salida.efectos.some((e) => e.tipo === 'error')).toBe(false);
+  });
+
+  it('también por la rama por defecto cuando ninguna coincide', () => {
+    const salida = avanzar({ flow: f, state: null, mensaje: 'no' });
+    expect(salida.nodoSiguiente).toBeNull();
+    expect(salida.efectos.some((e) => e.tipo === 'error')).toBe(false);
+  });
+});
+
+describe('flow.engine — captura con destino en la ficha (HU-FLOW-05, criterios 7-10)', () => {
+  const posicion = { x: 0, y: 0 };
+  const capturaNombre = (extra: Record<string, unknown> = {}): INodo => ({
+    id: 'c1',
+    posicion,
+    tipo: 'captura',
+    config: {
+      tipo: 'captura',
+      campo: 'nombre',
+      descripcion: 'Nombre del cliente',
+      tipoDato: 'texto',
+      pregunta: '¿Cómo se llama?',
+      reintentos: 1,
+      destino: { tipo: 'contacto', campo: 'nombre' },
+      ...extra,
+    } as INodo['config'],
+  });
+  const fin: INodo = { id: 'fin', posicion, tipo: 'mensaje', config: { tipo: 'mensaje', texto: 'Gracias' } };
+  const f = (nodo: INodo): IFlow => flow([nodo, fin], [{ id: 'a1', from: 'c1', to: 'fin' }], 'c1');
+  const textos = (efectos: { tipo: string; texto?: string }[]): (string | undefined)[] =>
+    efectos.filter((e) => e.tipo === 'enviar_mensaje').map((e) => e.texto);
+
+  it('si el contacto YA tiene el dato, no pregunta: lo copia a var:<campo> y sigue en el mismo turno', () => {
+    const salida = avanzar({ flow: f(capturaNombre()), state: null, mensaje: 'hola', contacto: { nombre: 'Ana' } });
+    expect(textos(salida.efectos)).toEqual(['Gracias']); // sin la pregunta
+    expect(salida.variables['nombre']).toBe('Ana');
+    expect(salida.efectos.some((e) => e.tipo === 'guardar_dato')).toBe(false);
+  });
+
+  it('con saltarSiExiste:false pregunta aunque el contacto ya tenga el dato', () => {
+    const salida = avanzar({
+      flow: f(capturaNombre({ saltarSiExiste: false })),
+      state: null,
+      mensaje: 'hola',
+      contacto: { nombre: 'Ana' },
+    });
+    expect(textos(salida.efectos)).toEqual(['¿Cómo se llama?']);
+    expect(salida.esperandoRespuesta).toBe(true);
+  });
+
+  it('sin el dato en la ficha pregunta y espera', () => {
+    const salida = avanzar({ flow: f(capturaNombre()), state: null, mensaje: 'hola', contacto: {} });
+    expect(textos(salida.efectos)).toEqual(['¿Cómo se llama?']);
+    expect(salida.esperandoRespuesta).toBe(true);
+  });
+
+  it('al capturar, deja el valor en la variable Y emite el efecto guardar_dato', () => {
+    const salida = avanzar({
+      flow: f(capturaNombre({ sobrescribir: true })),
+      state: estado('c1'),
+      mensaje: 'soy Ana',
+      resueltos: { capturado: 'Ana' },
+    });
+    expect(salida.variables['nombre']).toBe('Ana');
+    expect(salida.efectos).toContainEqual({
+      tipo: 'guardar_dato',
+      destino: { tipo: 'contacto', campo: 'nombre' },
+      valor: 'Ana',
+      sobrescribir: true,
+    });
+  });
+
+  it('sobrescribir por defecto es false', () => {
+    const salida = avanzar({
+      flow: f(capturaNombre()),
+      state: estado('c1'),
+      mensaje: 'soy Ana',
+      resueltos: { capturado: 'Ana' },
+    });
+    expect(salida.efectos).toContainEqual(expect.objectContaining({ tipo: 'guardar_dato', sobrescribir: false }));
+  });
+
+  it('destino variable o ausente (flujo legado): sin efecto guardar_dato y sin saltar la pregunta', () => {
+    for (const extra of [{ destino: { tipo: 'variable' } }, { destino: undefined }]) {
+      const nodo = capturaNombre(extra);
+      const pregunta = avanzar({ flow: f(nodo), state: null, mensaje: 'hola', contacto: { nombre: 'Ana' } });
+      expect(textos(pregunta.efectos)).toEqual(['¿Cómo se llama?']);
+      const captura = avanzar({ flow: f(nodo), state: estado('c1'), mensaje: 'Ana', resueltos: { capturado: 'Ana' } });
+      expect(captura.efectos.some((e) => e.tipo === 'guardar_dato')).toBe(false);
+      expect(captura.variables['nombre']).toBe('Ana');
+    }
+  });
+
+  it('la petición a la IA lleva el destino (el runtime lo usa para acotar el rol)', () => {
+    const salida = avanzar({ flow: f(capturaNombre()), state: estado('c1'), mensaje: 'Ana' });
+    expect(salida.requiere).toMatchObject({ tipo: 'captura', destino: { tipo: 'contacto', campo: 'nombre' } });
+  });
+
+  it('una captura fallida sigue esperando sin pedir otra extracción', () => {
+    const salida = avanzar({
+      flow: f(capturaNombre()),
+      state: estado('c1'),
+      mensaje: 'no sé',
+      resueltos: { capturaFallida: true },
+    });
+    expect(salida.requiere).toBeUndefined();
+    expect(salida.esperandoRespuesta).toBe(true);
+    expect(salida.nodoSiguiente).toBe('c1');
+  });
+});

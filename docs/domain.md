@@ -26,7 +26,11 @@
 | **Variable de contacto** | Hueco `{{n}}` de una campaña que se rellena por destinatario con su `nombre` o `telefono` (`HU-MARK-05`). Lleva un texto de respaldo para el contacto que no tiene el dato: Meta rechaza un parámetro vacío. |
 | **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los subroles autorizados. |
 | **Dato sensible** | Dato personal del contacto que se cifra en reposo y solo se muestra en claro a los subroles autorizados: correo, documento, notas y los atributos personalizados marcados `sensible` (HU-CRM-02, ADR 0006). Al resto le llega enmascarado. |
-| **Atributo personalizado** | Par etiqueta/valor libre sobre un contacto (`Cliente.atributos`), con una marca `sensible` por campo. Sustituye a `customFields`. |
+| **Atributo personalizado** | Valor de un **campo personalizado** sobre un contacto (`Cliente.atributos`). Su clave, etiqueta y marca `sensible` salen del catálogo de la empresa (HU-FLOW-05). Sustituye a `customFields`. |
+| **Campo personalizado** | Dato propio de una empresa (colegio, ciudad, presupuesto…) definido **una vez** en el catálogo `contact_fields` (clave, etiqueta, tipo, sensible). Lo comparten la ficha del contacto y el nodo `captura`; así cada dato tiene una sola clave. Borrarlo lo **archiva**. |
+| **Campo del contacto (fijo)** | Dato con columna propia en la ficha: `nombre`, `correo`, `documento`, `rolContacto`. Un nodo `captura` puede escribir en ellos; el teléfono no (el webhook lo reescribe). |
+| **Destino de captura** | Dónde deja su dato un nodo `captura`: solo en una variable del flujo, en un campo fijo del contacto o en un campo personalizado. |
+| **Advertencia de flujo** | Problema de conexión o de contenido de un flujo guardado a medias (nodo suelto, rama sin destino, nodo incompleto). No impide guardar, pero impide **activar**. |
 
 ## 2. Entidades del dominio
 

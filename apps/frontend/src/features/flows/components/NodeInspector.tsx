@@ -13,10 +13,12 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { CapturaForm } from './CapturaForm.js';
 import { ConditionEditor, type OpcionDestino } from './ConditionEditor.js';
 import { DestinoSelect } from './DestinoSelect.js';
 import { IaOutputsEditor } from './IaOutputsEditor.js';
 import { NODE_VISUALS } from './nodeVisuals.js';
+import { nombreDeNodo } from '../lib/graph.js';
 import type { ConfigNodo, EstadoComercial, IEtiquetaIntencion, INodo } from '../types.js';
 
 /** Mismo umbral que `ConditionEditor` (criterio 7 de HU-FLOW-01-V3): a partir de este largo, la
@@ -56,51 +58,6 @@ function MensajeForm({ config, onChange }: FormProps<'mensaje'>): React.ReactEle
         rows={4}
       />
     </Field>
-  );
-}
-
-function CapturaForm({ config, onChange }: FormProps<'captura'>): React.ReactElement {
-  return (
-    <div className="space-y-4">
-      <Field label="Pregunta que se le hace al cliente">
-        <Textarea
-          value={config.pregunta}
-          onChange={(e) => onChange({ ...config, pregunta: e.target.value })}
-          placeholder="¿Cuál es tu correo?"
-          rows={2}
-        />
-      </Field>
-      <Field label="Nombre del dato (variable)">
-        <Input
-          value={config.campo}
-          onChange={(e) => onChange({ ...config, campo: e.target.value })}
-          placeholder="correo"
-        />
-      </Field>
-      <Field label="Qué se espera (para la IA que extrae la respuesta)">
-        <Input
-          value={config.descripcion}
-          onChange={(e) => onChange({ ...config, descripcion: e.target.value })}
-          placeholder="Correo electrónico del cliente"
-        />
-      </Field>
-      <Field label="Tipo de dato">
-        <Select
-          value={config.tipoDato}
-          onValueChange={(v) => onChange({ ...config, tipoDato: v as typeof config.tipoDato })}
-        >
-          <SelectTrigger className="h-9 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="texto">Texto</SelectItem>
-            <SelectItem value="numero">Número</SelectItem>
-            <SelectItem value="fecha">Fecha</SelectItem>
-            <SelectItem value="booleano">Sí / No</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
-    </div>
   );
 }
 
@@ -459,7 +416,11 @@ function IaForm({ config, opcionesDestino, onChange }: FormProps<'ia'>): React.R
 interface NodeInspectorProps {
   nodo: INodo | null;
   esEntrada: boolean;
+  /** Error de forma que devolvió el servidor al guardar. */
   error?: string;
+  /** Lo que le falta al nodo, en vivo (HU-FLOW-05). Vacío = listo. */
+  problemas?: string[];
+  onNombreChange: (nombre: string) => void;
   opcionesDestino: OpcionDestino[];
   onChange: (config: ConfigNodo) => void;
   onDelete: () => void;
@@ -475,6 +436,8 @@ export function NodeInspector({
   nodo,
   esEntrada,
   error,
+  problemas = [],
+  onNombreChange,
   opcionesDestino,
   onChange,
   onDelete,
@@ -500,7 +463,8 @@ export function NodeInspector({
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{visual.label}</p>
+          <p className="truncate text-sm font-medium text-foreground">{nombreDeNodo(nodo)}</p>
+          {nodo.nombre?.trim() ? <p className="truncate text-xs text-muted-foreground">{visual.label}</p> : null}
           {esEntrada ? <p className="text-xs text-primary">Nodo de inicio</p> : null}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -528,10 +492,33 @@ export function NodeInspector({
         </div>
       </div>
 
-      {error ? (
-        <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive-subtle px-3 py-2 text-xs text-destructive">
+      {/* Nombre propio del nodo (HU-FLOW-05): hace legible un flujo con varios nodos del mismo tipo. */}
+      <div className="space-y-1.5 border-b border-border px-4 py-3">
+        <Label htmlFor="nodo-nombre" className="text-xs text-muted-foreground">
+          Nombre del nodo
+        </Label>
+        <Input
+          id="nodo-nombre"
+          value={nodo.nombre ?? ''}
+          maxLength={60}
+          onChange={(e) => onNombreChange(e.target.value)}
+          placeholder={visual.label}
+          className="h-8 text-sm"
+        />
+      </div>
+
+      {error || problemas.length > 0 ? (
+        <div
+          role="alert"
+          className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive-subtle px-3 py-2 text-xs text-destructive"
+        >
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{error}</span>
+          <ul className="space-y-1">
+            {error ? <li>{error}</li> : null}
+            {problemas.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -540,7 +527,7 @@ export function NodeInspector({
           <MensajeForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
         ) : null}
         {nodo.config.tipo === 'captura' ? (
-          <CapturaForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
+          <CapturaForm config={nodo.config} onChange={onChange} />
         ) : null}
         {nodo.config.tipo === 'condicion' ? (
           <ConditionEditor

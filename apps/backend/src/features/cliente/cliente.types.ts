@@ -285,6 +285,35 @@ export interface IAtributoResponse {
 }
 
 /**
+ * Atributo tal como llega en el parche de la ficha (HU-FLOW-05). La `key` debe existir en el catálogo
+ * de campos de la empresa; `label` y `sensible` se **ignoran** si vienen (clientes antiguos aún los
+ * envían) y se toman del catálogo, para que un mismo campo se llame y proteja igual en todos los contactos.
+ */
+export interface IAtributoEntrada {
+  key: string;
+  valor: string;
+  label?: string;
+  sensible?: boolean;
+}
+
+/** A dónde puede escribir un flujo en la ficha (HU-FLOW-05). */
+export type DestinoContacto =
+  | { tipo: 'contacto'; campo: 'nombre' | 'correo' | 'documento' | 'rolContacto' }
+  | { tipo: 'atributo'; key: string };
+
+export type MotivoDatoNoGuardado = 'ya_existia' | 'invalido' | 'campo_archivado' | 'contacto_inexistente';
+
+export interface GuardarDatoResultado {
+  escrito: boolean;
+  /** Presente cuando `escrito` es `false`. */
+  motivo?: MotivoDatoNoGuardado;
+  /** Etiqueta legible del campo escrito y su valor (enmascarado si es sensible), para el chat de prueba. */
+  etiqueta?: string;
+  valorVisible?: string;
+  sensible?: boolean;
+}
+
+/**
  * Parche de la ficha (HU-CRM-02). Semántica explícita: un campo **ausente** no se toca; un campo
  * enviado como **`null`** se borra. Sin esa distinción no habría forma de vaciar un dato mal
  * escrito. `atributos` viaja completo (reemplazo, no merge): es una lista corta que la UI edita de
@@ -304,7 +333,7 @@ export interface UpdateClienteDTO {
   nivelInteres?: OpcionContactoKey | null;
   objecionPrincipal?: OpcionContactoKey | null;
   rolContacto?: OpcionContactoKey | null;
-  atributos?: IAtributoPersonalizado[];
+  atributos?: IAtributoEntrada[];
   /** Baja de campañas (HU-MARK-01). Sin `null`: es un interruptor, no un campo que se vacíe. */
   marketingOptOut?: boolean;
 }

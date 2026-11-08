@@ -8,6 +8,12 @@ export interface AtributoInput {
   sensible: boolean;
 }
 
+/** Lo que viaja al guardar un atributo: el campo del catálogo (`key`) y su valor. */
+export interface AtributoPatch {
+  key: string;
+  valor: string;
+}
+
 /**
  * Parche de la ficha. `undefined` = no se toca; `null` = se borra. Es la misma semántica que aplica
  * el backend, así que el formulario solo manda lo que cambió.
@@ -23,7 +29,8 @@ export interface ContactPatchPayload {
   nivelInteres?: string | null;
   objecionPrincipal?: string | null;
   rolContacto?: string | null;
-  atributos?: AtributoInput[];
+  /** Solo `key` y `valor`: la etiqueta y `sensible` los fija el catálogo de campos (HU-FLOW-05). */
+  atributos?: AtributoPatch[];
 }
 
 // ─── Catálogos de interés / objeción / rol (HU-CRM-02) ──────────────────────────
@@ -53,6 +60,40 @@ export interface BorradoOpcionDTO {
   eliminada: boolean;
   enUso: number;
   opcion: OpcionDTO | null;
+}
+
+// ─── Campos personalizados por empresa (HU-FLOW-05) ─────────────────────────────
+
+export const TIPOS_DATO_CAMPO = ['texto', 'numero', 'fecha', 'booleano'] as const;
+export type TipoDatoCampo = (typeof TIPOS_DATO_CAMPO)[number];
+
+export const TIPO_DATO_LABEL: Record<TipoDatoCampo, string> = {
+  texto: 'Texto',
+  numero: 'Número',
+  fecha: 'Fecha',
+  booleano: 'Sí / No',
+};
+
+/**
+ * Un campo del catálogo de la empresa: lo comparten la ficha del contacto y el nodo `captura` de los
+ * flujos, así que cada dato tiene UNA sola clave (`key`) en todos lados.
+ */
+export interface CampoContactoDTO {
+  id: string;
+  /** Lo que queda grabado en el contacto. No cambia al renombrar. */
+  key: string;
+  label: string;
+  tipoDato: TipoDatoCampo;
+  sensible: boolean;
+  orden: number;
+  /** `false` = archivado: no se ofrece para elegir, pero los contactos que lo tienen lo conservan. */
+  activo: boolean;
+}
+
+export interface CrearCampoPayload {
+  label: string;
+  tipoDato: TipoDatoCampo;
+  sensible?: boolean;
 }
 
 export interface NotaDTO {

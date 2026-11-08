@@ -21,6 +21,13 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { findTagsByIds } from '../tag/tag.service.js';
 import type { ITagResponse } from '../tag/tag.types.js';
 import { assertOpcionesValidas } from '../contact-option/contact-option.service.js';
+import {
+  assertKeysDelCatalogo,
+  getCamposPorKey,
+  registrarCamposHeredados,
+} from '../contact-field/contact-field.service.js';
+import { MAX_CAMPOS_POR_CONTACTO } from '../contact-field/contact-field.types.js';
+import { ACTOR_SISTEMA_FLUJO } from '../../utils/actor-sistema.util.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import {
   fromStoredOptional,
@@ -33,6 +40,9 @@ import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.typ
 import type {
   CampoExtraido,
   CanalOrigen,
+  DestinoContacto,
+  GuardarDatoResultado,
+  IAtributoEntrada,
   IAtributoPersonalizado,
   IAtributoResponse,
   ICliente,
@@ -274,10 +284,40 @@ function resumirAtributos(atributos: IAtributoPersonalizado[]): Record<string, u
  * **entran**, cuenta reemplazar la lista de atributos cuando la actual **ya tiene** alguno sensible:
  * `atributos` viaja completo, así que sustituirla es también una forma de borrar un dato protegido.
  */
-function tocaDatosSensibles(dto: UpdateClienteDTO, actuales: IAtributoPersonalizado[]): boolean {
+function tocaDatosSensibles(
+  dto: UpdateClienteDTO,
+  entrantes: IAtributoPersonalizado[] | undefined,
+  actuales: IAtributoPersonalizado[],
+): boolean {
   if (dto.correo !== undefined || dto.documento !== undefined) return true;
-  if (dto.atributos === undefined) return false;
-  return dto.atributos.some((a) => a.sensible) || actuales.some((a) => a.sensible);
+  if (entrantes === undefined) return false;
+  return entrantes.some((a) => a.sensible) || actuales.some((a) => a.sensible);
+}
+
+/**
+ * HU-FLOW-05. Resuelve los atributos del parche contra el catálogo de campos de la empresa:
+ *  - cada `key` debe existir y estar activa; una archivada solo se acepta si el contacto YA la tenía;
+ *  - `label` y `sensible` salen del catálogo, no del body (un asesor no puede marcar como no sensible
+ *    un campo que la empresa definió sensible, ni renombrarlo solo en su contacto).
+ * Antes registra en el catálogo los atributos que el contacto ya tenía y aún no estaban en él
+ * (heredados de antes de esta historia o creados por la extracción con IA): sin eso, volver a guardar
+ * una ficha antigua daría `400` por un dato que ya era suyo.
+ */
+async function resolverAtributosConCatalogo(
+  tenantId: string | Types.ObjectId,
+  entrantes: IAtributoEntrada[],
+  actuales: IAtributoPersonalizado[],
+): Promise<IAtributoPersonalizado[]> {
+  await registrarCamposHeredados(tenantId, actuales);
+  const campos = await assertKeysDelCatalogo(
+    tenantId,
+    entrantes.map((a) => a.key),
+    { archivadasPermitidas: actuales.map((a) => a.key) },
+  );
+  return entrantes.map((a) => {
+    const campo = campos.get(a.key)!;
+    return { key: a.key, label: campo.label, sensible: campo.sensible, valor: a.valor };
+  });
 }
 
 /**
@@ -301,7 +341,11 @@ export async function updateCliente(
   if (!cliente) throw new AppError('Contacto no encontrado.', 404);
 
   const atributosActuales = cliente.atributos ?? [];
-  if (tocaDatosSensibles(dto, atributosActuales) && !puedeVerSensibles) {
+  const atributosNuevos =
+    dto.atributos === undefined
+      ? undefined
+      : await resolverAtributosConCatalogo(tenantId, dto.atributos, atributosActuales);
+  if (tocaDatosSensibles(dto, atributosNuevos, atributosActuales) && !puedeVerSensibles) {
     throw new AppError('No tienes permiso para editar los datos sensibles del contacto.', 403);
   }
 
@@ -341,15 +385,15 @@ export async function updateCliente(
     else $set[columna] = toStoredValue(valor);
   }
 
-  if (dto.atributos !== undefined) {
-    $set['atributos'] = dto.atributos.map((a) => ({
+  if (atributosNuevos !== undefined) {
+    $set['atributos'] = atributosNuevos.map((a) => ({
       key: a.key,
       label: a.label,
       sensible: a.sensible,
       valor: a.sensible ? toStoredValue(a.valor) : a.valor,
     }));
     antes['atributos'] = resumirAtributos(atributosActuales);
-    despues['atributos'] = resumirAtributos(dto.atributos);
+    despues['atributos'] = resumirAtributos(atributosNuevos);
   }
 
   const update: Record<string, unknown> = {};
@@ -387,6 +431,160 @@ export async function updateCliente(
   const leadId = (await findLeadIdsByClientes(tenantId, [clienteId])).get(clienteId) ?? null;
 
   return toContactCard(actualizado, tagMap, puedeVerSensibles, leadId);
+}
+
+// ─── Escritura desde un flujo (HU-FLOW-05) ──────────────────────────────────────
+
+const TEXTO_FICHA = z.string().trim().min(1).max(120);
+const CORREO_FICHA = z.string().trim().toLowerCase().email().max(160);
+
+/** Convierte lo extraído por la IA a texto según el `tipoDato` del campo; `null` si no es válido. */
+function normalizarPorTipo(valor: unknown, tipoDato: 'texto' | 'numero' | 'fecha' | 'booleano'): string | null {
+  const texto = typeof valor === 'string' ? valor.trim() : typeof valor === 'number' || typeof valor === 'boolean' ? String(valor) : '';
+  if (!texto) return null;
+  switch (tipoDato) {
+    case 'texto':
+      return texto.length <= 500 ? texto : null;
+    case 'numero': {
+      const n = Number(texto.replace(',', '.'));
+      return Number.isFinite(n) ? String(n) : null;
+    }
+    case 'fecha': {
+      const iso = /^(\d{4}-\d{2}-\d{2})(?:T.*)?$/.exec(texto);
+      if (!iso || Number.isNaN(Date.parse(texto))) return null;
+      return iso[1]!;
+    }
+    case 'booleano': {
+      const v = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (['si', 'true', 'yes', '1'].includes(v)) return 'sí';
+      if (['no', 'false', '0'].includes(v)) return 'no';
+      return null;
+    }
+  }
+}
+
+/**
+ * Escribe en la ficha el dato que un nodo `captura` obtuvo (HU-FLOW-05). Lo llama el runtime del motor
+ * como sistema, no un humano: por eso no pasa por `updateCliente` (que reemplaza el arreglo de
+ * atributos completo y exige el permiso de subrol de un asesor) sino que **fusiona por `key`** y no
+ * toca los demás atributos.
+ *
+ * Nunca lanza por un dato malo: un valor inválido, un campo archivado o un dato que ya existía se
+ * devuelven como `motivo` y el flujo sigue (el valor ya quedó en `var:<campo>`). Todo va con alcance
+ * de tenant: `guardar_dato` solo puede escribir en el `Cliente` del tenant del flujo.
+ */
+export async function guardarDatoDesdeFlujo(
+  tenantId: string | Types.ObjectId,
+  clienteId: string,
+  destino: DestinoContacto,
+  valor: unknown,
+  opciones: { sobrescribir: boolean },
+): Promise<GuardarDatoResultado> {
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean<IClienteLean>();
+  if (!cliente) return { escrito: false, motivo: 'contacto_inexistente' };
+
+  if (destino.tipo === 'contacto') {
+    const { campo } = destino;
+    const actual =
+      campo === 'correo'
+        ? fromStoredOptional(cliente.correoEnc)
+        : campo === 'documento'
+          ? fromStoredOptional(cliente.documentoEnc)
+          : (cliente[campo] ?? null);
+    if (actual && !opciones.sobrescribir) return { escrito: false, motivo: 'ya_existia' };
+
+    let nuevo: string;
+    if (campo === 'rolContacto') {
+      const clave = typeof valor === 'string' ? valor.trim() : '';
+      try {
+        await assertOpcionesValidas(tenantId, { rol: clave });
+      } catch (err) {
+        if (err instanceof AppError) return { escrito: false, motivo: 'invalido' };
+        throw err;
+      }
+      nuevo = clave;
+    } else {
+      const r = (campo === 'correo' ? CORREO_FICHA : TEXTO_FICHA).safeParse(valor);
+      if (!r.success) return { escrito: false, motivo: 'invalido' };
+      nuevo = r.data;
+    }
+
+    const sensible = campo === 'correo' || campo === 'documento';
+    const columna = campo === 'correo' ? 'correoEnc' : campo === 'documento' ? 'documentoEnc' : campo;
+    await findOneAndUpdateScoped(
+      Cliente,
+      tenantId,
+      { _id: new Types.ObjectId(clienteId) },
+      { $set: { [columna]: sensible ? toStoredValue(nuevo) : nuevo } },
+    );
+    await recordAuditEvent(tenantId, {
+      actorId: ACTOR_SISTEMA_FLUJO,
+      accion: 'cliente.update',
+      entidad: 'cliente',
+      entidadId: clienteId,
+      antes: { [campo]: actual ? (sensible ? SENSIBLE_MARKER : actual) : null },
+      despues: { [campo]: sensible ? SENSIBLE_MARKER : nuevo },
+    });
+    return {
+      escrito: true,
+      etiqueta: { nombre: 'Nombre', correo: 'Correo', documento: 'Documento', rolContacto: 'Rol' }[campo],
+      valorVisible: sensible ? MASK_VALOR : nuevo,
+      sensible,
+    };
+  }
+
+  // Campo personalizado del catálogo de la empresa.
+  const campo = (await getCamposPorKey(tenantId, [destino.key])).get(destino.key);
+  if (!campo) return { escrito: false, motivo: 'invalido' };
+  if (!campo.activo) return { escrito: false, motivo: 'campo_archivado' };
+
+  const normalizado = normalizarPorTipo(valor, campo.tipoDato);
+  if (normalizado === null) return { escrito: false, motivo: 'invalido' };
+
+  const actuales = cliente.atributos ?? [];
+  const existente = actuales.find((a) => a.key === campo.key);
+  if (existente && !opciones.sobrescribir) return { escrito: false, motivo: 'ya_existia' };
+  if (!existente && actuales.length >= MAX_CAMPOS_POR_CONTACTO) return { escrito: false, motivo: 'invalido' };
+
+  const guardado = campo.sensible ? toStoredValue(normalizado) : normalizado;
+  const entrada: IAtributoPersonalizado = {
+    key: campo.key,
+    label: campo.label,
+    sensible: campo.sensible,
+    valor: guardado,
+  };
+  // Fusión por `key`: se actualiza ese elemento o se agrega al final; el resto no se toca.
+  await findOneAndUpdateScoped(
+    Cliente,
+    tenantId,
+    { _id: new Types.ObjectId(clienteId) },
+    existente
+      ? {
+          $set: {
+            'atributos.$[a].valor': guardado,
+            'atributos.$[a].label': campo.label,
+            'atributos.$[a].sensible': campo.sensible,
+          },
+        }
+      : { $push: { atributos: entrada } },
+    existente ? { arrayFilters: [{ 'a.key': campo.key }] } : {},
+  );
+
+  const despuesLista = existente ? actuales.map((a) => (a.key === campo.key ? entrada : a)) : [...actuales, entrada];
+  await recordAuditEvent(tenantId, {
+    actorId: ACTOR_SISTEMA_FLUJO,
+    accion: 'cliente.update',
+    entidad: 'cliente',
+    entidadId: clienteId,
+    antes: { atributos: resumirAtributos(actuales) },
+    despues: { atributos: resumirAtributos(despuesLista) },
+  });
+  return {
+    escrito: true,
+    etiqueta: campo.label,
+    valorVisible: campo.sensible ? MASK_VALOR : normalizado,
+    sensible: campo.sensible,
+  };
 }
 
 // ─── Extracción de datos de contacto por IA (HU-OMNI-03) ────────────────────────

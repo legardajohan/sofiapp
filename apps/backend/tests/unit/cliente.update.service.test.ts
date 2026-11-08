@@ -1,7 +1,8 @@
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 import { Cliente } from '../../src/features/cliente/cliente.model.js';
 import { AuditEvent } from '../../src/features/audit/audit.model.js';
+import { ContactField } from '../../src/features/contact-field/contact-field.model.js';
 
 vi.mock('../../src/realtime/realtime.publisher.js', () => ({
   publishRealtime: vi.fn(),
@@ -29,6 +30,15 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
   const tenantId = new Types.ObjectId();
   const actorId = new Types.ObjectId().toString();
   let seq = 0;
+
+  // HU-FLOW-05: los atributos de la ficha ahora salen del catálogo de campos de la empresa.
+  beforeEach(async () => {
+    await ContactField.deleteMany({});
+    await ContactField.create([
+      { tenantId, key: 'colegio', label: 'Colegio', labelNormalizado: 'colegio', tipoDato: 'texto', sensible: false, orden: 0 },
+      { tenantId, key: 'eps', label: 'EPS', labelNormalizado: 'eps', tipoDato: 'texto', sensible: true, orden: 1 },
+    ]);
+  });
 
   async function seedCliente(over: Record<string, unknown> = {}): Promise<string> {
     const cliente = await Cliente.create({
@@ -201,6 +211,66 @@ describe('cliente.service — updateCliente (HU-CRM-02)', () => {
     expect(doc?.atributos).toHaveLength(1);
   });
 
+  // ─── Atributos contra el catálogo de campos (HU-FLOW-05, criterio 15) ─────────
+
+  it('un atributo con una clave que NO está en el catálogo → 400 y no escribe nada', async () => {
+    const id = await seedCliente();
+    await expect(
+      updateCliente(tenantId, actorId, id, { atributos: [{ key: 'inventado', valor: 'x' }] }, true),
+    ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('inventado') });
+    expect((await Cliente.findById(id).lean())?.atributos).toHaveLength(0);
+  });
+
+  it('la etiqueta y `sensible` salen del catálogo: lo que mande el body se ignora', async () => {
+    const id = await seedCliente();
+    await updateCliente(
+      tenantId,
+      actorId,
+      id,
+      { atributos: [{ key: 'eps', label: 'Otra cosa', valor: 'Sura', sensible: false }] },
+      true,
+    );
+    const [eps] = (await Cliente.findById(id).lean())!.atributos;
+    expect(eps).toMatchObject({ key: 'eps', label: 'EPS', sensible: true });
+  });
+
+  it('sin permiso de sensibles, no se puede esquivar el gate mandando `sensible: false`', async () => {
+    const id = await seedCliente();
+    await expect(
+      updateCliente(tenantId, actorId, id, { atributos: [{ key: 'eps', valor: 'Sura', sensible: false }] }, false),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('un campo archivado que el contacto YA tenía se conserva; no se puede agregar a otro contacto', async () => {
+    const conAtributo = await seedCliente({
+      atributos: [{ key: 'colegio', label: 'Colegio', valor: 'San José', sensible: false }],
+    });
+    const sinAtributo = await seedCliente();
+    await ContactField.updateOne({ tenantId, key: 'colegio' }, { activo: false });
+
+    await expect(
+      updateCliente(tenantId, actorId, conAtributo, { atributos: [{ key: 'colegio', valor: 'La Salle' }] }, true),
+    ).resolves.toBeDefined();
+    await expect(
+      updateCliente(tenantId, actorId, sinAtributo, { atributos: [{ key: 'colegio', valor: 'La Salle' }] }, true),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('un atributo heredado que aún no estaba en el catálogo se registra y no tumba el guardado', async () => {
+    const id = await seedCliente({
+      atributos: [{ key: 'interes', label: 'Interés', valor: 'Intensivo', sensible: false }],
+    });
+    await updateCliente(
+      tenantId,
+      actorId,
+      id,
+      { atributos: [{ key: 'interes', valor: 'Sabatino' }] },
+      true,
+    );
+    expect((await Cliente.findById(id).lean())?.atributos[0]?.valor).toBe('Sabatino');
+    expect(await ContactField.countDocuments({ tenantId, key: 'interes' })).toBe(1);
+  });
+
   // ─── Enmascarado en lectura ───────────────────────────────────────────────────
 
   it('sin permiso, la lectura devuelve los sensibles enmascarados', async () => {
@@ -323,10 +393,10 @@ describe('updateClienteSchema — validación en el borde (HU-CRM-02)', () => {
     ).toBe(false);
   });
 
-  it('`sensible` es opcional y cae a false', () => {
-    const res = validarBody({ atributos: [{ key: 'eps', label: 'EPS', valor: 'Sura' }] });
+  it('`label` y `sensible` son opcionales: los fija el catálogo de campos (HU-FLOW-05)', () => {
+    const res = validarBody({ atributos: [{ key: 'eps', valor: 'Sura' }] });
     expect(res.success).toBe(true);
-    if (res.success) expect(res.data.body.atributos?.[0]?.sensible).toBe(false);
+    if (res.success) expect(res.data.body.atributos?.[0]?.sensible).toBeUndefined();
   });
 
   // ─── Nombre no vaciable y atributos sin repetir ───────────────────────────────
@@ -350,31 +420,18 @@ describe('updateClienteSchema — validación en el borde (HU-CRM-02)', () => {
   });
 
 
-  it('rechaza un atributo sin nombre o sin valor', () => {
-    expect(validarBody({ atributos: [{ key: 'eps', label: '  ', valor: 'Sura' }] }).success).toBe(
-      false,
-    );
-    expect(validarBody({ atributos: [{ key: 'eps', label: 'EPS', valor: '  ' }] }).success).toBe(
-      false,
-    );
+  it('rechaza un atributo sin valor', () => {
+    expect(validarBody({ atributos: [{ key: 'eps', valor: '  ' }] }).success).toBe(false);
   });
 
-  it('rechaza dos atributos con el mismo nombre, aunque difieran en mayúsculas o tildes', () => {
-    const repetido = validarBody({
+  it('la unicidad de la etiqueta ya no se valida aquí: la garantiza el catálogo (una clave = un campo)', () => {
+    const res = validarBody({
       atributos: [
         { key: 'colegio', label: 'Colegio', valor: 'San José' },
         { key: 'colegio-2', label: 'colegio', valor: 'Otro' },
       ],
     });
-    expect(repetido.success).toBe(false);
-
-    const conTilde = validarBody({
-      atributos: [
-        { key: 'accion', label: 'Acción', valor: 'A' },
-        { key: 'accion-2', label: 'accion', valor: 'B' },
-      ],
-    });
-    expect(conTilde.success).toBe(false);
+    expect(res.success).toBe(true);
   });
 
   it('rechaza dos atributos con la misma clave', () => {

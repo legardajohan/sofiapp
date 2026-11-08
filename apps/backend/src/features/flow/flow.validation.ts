@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
+import { CAMPOS_FIJOS_CONTACTO } from '../contact-field/contact-field.types.js';
 import { OPERADORES, TIPOS_NODO } from './flow.types.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
@@ -13,115 +14,143 @@ const variableCondicion = z
     message: 'La variable debe ser "ultimo_mensaje" o "var:<nombre>".',
   });
 
-const ramaCondicion = z
-  .object({
-    operador: z.enum(OPERADORES),
-    valor: z.string().min(1, 'La rama necesita un valor.'),
-    nodoDestino: z.string().min(1),
-  })
-  .strict();
-
-const etiquetaIntencion = z
-  .object({
-    etiqueta: z.string().min(1),
-    descripcion: z.string().min(1),
-    nodoDestino: z.string().min(1),
-  })
-  .strict();
-
-const salidaIa = z
-  .object({
-    etiqueta: z.string().min(1).max(40),
-    descripcion: z.string().min(1).max(500),
-    nodoDestino: z.string().min(1),
-  })
-  .strict();
-
-const efectoAccion = z.discriminatedUnion('tipo', [
-  z.object({ tipo: z.literal('cambiar_estado'), estado: z.enum(ESTADOS_COMERCIALES) }).strict(),
-  z.object({ tipo: z.literal('aplicar_etiquetas'), tagIds: z.array(objectId).min(1) }).strict(),
-  z.object({ tipo: z.literal('crear_lead') }).strict(),
-  z.object({ tipo: z.literal('asignar_asesor'), asesorId: objectId }).strict(),
-]);
-
 /**
+ * Config de un nodo, en dos versiones (HU-FLOW-05):
+ *  - **estricta**: un nodo completo y listo para correr. Es la red de seguridad al activar.
+ *  - **guardable**: la misma forma pero tolerando un nodo A MEDIAS (textos y destinos vacíos, listas
+ *    sin elementos). Es la que se aplica al guardar: un borrador incompleto se puede guardar, y lo que
+ *    le falta lo reporta `analizarGrafo` (`@sofiapp/shared`), que además impide ACTIVARLO.
+ * Tipos, enums, topes numéricos y campos no permitidos se exigen igual en las dos: son errores de
+ * forma que la interfaz no deja cometer y que no se pueden persistir.
+ *
  * Unión discriminada por `tipo`, `.strict()` en cada rama: es lo que hace exigible el criterio
  * anti-duplicación de KB (10 del `spec`). `condicion`/`intencion` no tienen ningún campo de texto
  * de respuesta — una clave extra como `respuesta` o `texto` en esas ramas es un 400 de Zod, no un
  * campo ignorado en silencio. `tipo: 'api'` no aparece en ninguna rama: cae fuera de la unión y
  * también termina en 400 (reservado, no implementado en esta spec).
  */
-const configNodo = z.discriminatedUnion('tipo', [
-  z
+function construirConfigNodo(estricto: boolean) {
+  const minLista = estricto ? 1 : 0;
+  /** Texto obligatorio solo en la versión estricta. */
+  const texto = estricto ? z.string().min(1) : z.string();
+  const asesorId = estricto ? objectId : z.string().regex(/^([0-9a-fA-F]{24})?$/, 'ID inválido.');
+
+  const ramaCondicion = z
     .object({
-      tipo: z.literal('mensaje'),
-      texto: z.string().min(1).optional(),
-      templateId: z.string().min(1).optional(),
-      parametros: z.array(z.string()).optional(),
+      operador: z.enum(OPERADORES),
+      valor: estricto ? z.string().min(1, 'La rama necesita un valor.') : z.string(),
+      nodoDestino: texto,
     })
-    .strict(),
-  z
+    .strict();
+
+  const etiquetaIntencion = z
+    .object({ etiqueta: texto, descripcion: texto, nodoDestino: texto })
+    .strict();
+
+  const salidaIa = z
     .object({
-      tipo: z.literal('captura'),
-      campo: z.string().min(1),
-      descripcion: z.string().min(1),
-      tipoDato: z.enum(['texto', 'numero', 'fecha', 'booleano']),
-      pregunta: z.string().min(1),
-      reintentos: z.number().int().min(0),
+      etiqueta: estricto ? z.string().min(1).max(40) : z.string().max(40),
+      descripcion: estricto ? z.string().min(1).max(500) : z.string().max(500),
+      nodoDestino: texto,
     })
-    .strict(),
-  z
-    .object({
-      tipo: z.literal('condicion'),
-      variable: variableCondicion,
-      ramas: z.array(ramaCondicion).min(1, 'La condición necesita al menos una rama.'),
-      ramaPorDefecto: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      tipo: z.literal('intencion'),
-      etiquetas: z.array(etiquetaIntencion).min(1),
-      ramaPorDefecto: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      tipo: z.literal('kb'),
-      pregunta: z.string().min(1),
-      kSobrescrito: z.number().int().positive().optional(),
-      siNoHayRespuesta: z.string().min(1),
-    })
-    .strict(),
-  z.object({ tipo: z.literal('accion'), efecto: efectoAccion }).strict(),
-  z
-    .object({
-      tipo: z.literal('handoff'),
-      motivo: z.string().optional(),
-      notificarAsesorId: objectId.optional(),
-    })
-    .strict(),
-  z.object({ tipo: z.literal('espera'), minutos: z.number().int().positive() }).strict(),
-  z
-    .object({
-      tipo: z.literal('ia'),
-      objetivo: z.string().min(10).max(2000),
-      salidas: z.array(salidaIa).min(1).max(8),
-      ramaPorDefecto: z.string().min(1),
-      // Tope duro (criterio 4 del spec): no se puede guardar un nodo `ia` capaz de conversar
-      // indefinidamente.
-      maxTurnos: z.number().int().min(1).max(10),
-      usarKb: z.boolean(),
-    })
-    .strict(),
-]);
+    .strict();
+
+  const efectoAccion = z.discriminatedUnion('tipo', [
+    z.object({ tipo: z.literal('cambiar_estado'), estado: z.enum(ESTADOS_COMERCIALES) }).strict(),
+    z.object({ tipo: z.literal('aplicar_etiquetas'), tagIds: z.array(objectId).min(minLista) }).strict(),
+    z.object({ tipo: z.literal('crear_lead') }).strict(),
+    z.object({ tipo: z.literal('asignar_asesor'), asesorId }).strict(),
+  ]);
+
+  /** HU-FLOW-05. La existencia de la `key` en el catálogo la comprueba el service (necesita `tenantId`). */
+  const destinoCaptura = z.discriminatedUnion('tipo', [
+    z.object({ tipo: z.literal('variable') }).strict(),
+    z.object({ tipo: z.literal('contacto'), campo: z.enum(CAMPOS_FIJOS_CONTACTO) }).strict(),
+    z.object({ tipo: z.literal('atributo'), key: texto }).strict(),
+  ]);
+
+  return z.discriminatedUnion('tipo', [
+    z
+      .object({
+        tipo: z.literal('mensaje'),
+        texto: (estricto ? z.string().min(1) : z.string()).optional(),
+        templateId: (estricto ? z.string().min(1) : z.string()).optional(),
+        parametros: z.array(z.string()).optional(),
+      })
+      .strict(),
+    z
+      .object({
+        tipo: z.literal('captura'),
+        campo: texto,
+        descripcion: texto,
+        tipoDato: z.enum(['texto', 'numero', 'fecha', 'booleano']),
+        pregunta: texto,
+        reintentos: z.number().int().min(0),
+        destino: destinoCaptura.optional(),
+        saltarSiExiste: z.boolean().optional(),
+        sobrescribir: z.boolean().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        tipo: z.literal('condicion'),
+        variable: variableCondicion,
+        ramas: z.array(ramaCondicion).min(minLista, 'La condición necesita al menos una rama.'),
+        ramaPorDefecto: texto,
+      })
+      .strict(),
+    z
+      .object({
+        tipo: z.literal('intencion'),
+        etiquetas: z.array(etiquetaIntencion).min(minLista),
+        ramaPorDefecto: texto,
+      })
+      .strict(),
+    z
+      .object({
+        tipo: z.literal('kb'),
+        pregunta: texto,
+        kSobrescrito: z.number().int().positive().optional(),
+        siNoHayRespuesta: texto,
+      })
+      .strict(),
+    z.object({ tipo: z.literal('accion'), efecto: efectoAccion }).strict(),
+    z
+      .object({
+        tipo: z.literal('handoff'),
+        motivo: z.string().optional(),
+        notificarAsesorId: objectId.optional(),
+      })
+      .strict(),
+    z.object({ tipo: z.literal('espera'), minutos: z.number().int().positive() }).strict(),
+    z
+      .object({
+        tipo: z.literal('ia'),
+        objetivo: z.string().min(estricto ? 10 : 0).max(2000),
+        salidas: z.array(salidaIa).min(minLista).max(8),
+        ramaPorDefecto: texto,
+        // Tope duro (criterio 4 del spec): no se puede guardar un nodo `ia` capaz de conversar
+        // indefinidamente.
+        maxTurnos: z.number().int().min(1).max(10),
+        usarKb: z.boolean(),
+      })
+      .strict(),
+  ]);
+}
+
+/** Red de seguridad al ACTIVAR: la misma exigencia que tenía el guardado antes de HU-FLOW-05. */
+export const configNodoEstricto = construirConfigNodo(true);
+/** Lo que se acepta al GUARDAR: nodos a medias incluidos. */
+const configNodoGuardable = construirConfigNodo(false);
 
 const nodo = z
   .object({
     id: z.string().min(1),
     tipo: z.enum(TIPOS_NODO),
     posicion,
-    config: configNodo,
+    /** Nombre propio del nodo (HU-FLOW-05): hace legibles los flujos con varios nodos del mismo tipo. */
+    nombre: z.string().trim().min(1).max(60).optional(),
+    config: configNodoGuardable,
   })
   .strict()
   .refine((n) => n.config.tipo === n.tipo, {
@@ -197,6 +226,8 @@ const grafoFlow = z
     trigger: triggerFlow.optional(),
     estado: z.enum(['borrador', 'publicado']).optional(),
     activo: z.boolean().optional(),
+    /** Solo al editar un flujo ACTIVO con errores: confirma guardarlo desactivado (HU-FLOW-05). */
+    confirmarDesactivar: z.boolean().optional(),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -213,63 +244,8 @@ const grafoFlow = z
         path: ['entrada'],
       });
     }
-
-    const validarDestino = (id: string, path: (string | number)[]): void => {
-      if (!idSet.has(id)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Referencia a un nodo inexistente: "${id}".`,
-          path,
-        });
-      }
-    };
-
-    data.aristas.forEach((a, i) => {
-      validarDestino(a.from, ['aristas', i, 'from']);
-      validarDestino(a.to, ['aristas', i, 'to']);
-    });
-
-    const destinosConEntrada = new Set(data.aristas.map((a) => a.to));
-
-    data.nodos.forEach((n, i) => {
-      if (n.config.tipo === 'condicion') {
-        n.config.ramas.forEach((r, j) => {
-          validarDestino(r.nodoDestino, ['nodos', i, 'config', 'ramas', j, 'nodoDestino']);
-          destinosConEntrada.add(r.nodoDestino);
-        });
-        validarDestino(n.config.ramaPorDefecto, ['nodos', i, 'config', 'ramaPorDefecto']);
-        destinosConEntrada.add(n.config.ramaPorDefecto);
-      }
-      if (n.config.tipo === 'intencion') {
-        n.config.etiquetas.forEach((e, j) => {
-          validarDestino(e.nodoDestino, ['nodos', i, 'config', 'etiquetas', j, 'nodoDestino']);
-          destinosConEntrada.add(e.nodoDestino);
-        });
-        validarDestino(n.config.ramaPorDefecto, ['nodos', i, 'config', 'ramaPorDefecto']);
-        destinosConEntrada.add(n.config.ramaPorDefecto);
-      }
-      if (n.config.tipo === 'ia') {
-        n.config.salidas.forEach((s, j) => {
-          validarDestino(s.nodoDestino, ['nodos', i, 'config', 'salidas', j, 'nodoDestino']);
-          destinosConEntrada.add(s.nodoDestino);
-        });
-        validarDestino(n.config.ramaPorDefecto, ['nodos', i, 'config', 'ramaPorDefecto']);
-        destinosConEntrada.add(n.config.ramaPorDefecto);
-      }
-    });
-
-    // Huérfano: ni entrada del flujo, ni destino de ninguna arista, ni destino declarado por una
-    // rama de condicion/intencion.
-    data.nodos.forEach((n, i) => {
-      if (n.id === data.entrada) return;
-      if (!destinosConEntrada.has(n.id)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Nodo huérfano (sin arista entrante): "${n.id}".`,
-          path: ['nodos', i],
-        });
-      }
-    });
+    // Los destinos inexistentes o vacíos y los nodos huérfanos ya NO se rechazan aquí: son errores de
+    // conexión que `analizarGrafo` reporta como advertencias y que solo bloquean ACTIVAR el flujo.
   });
 
 export const listFlowsSchema = z.object({ body: empty, params: empty, query: empty });

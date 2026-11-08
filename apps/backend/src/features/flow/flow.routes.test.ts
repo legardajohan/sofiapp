@@ -84,13 +84,32 @@ describe('POST /api/flows — cadena de middlewares y contrato HTTP', () => {
     expect(res.status).toBe(403);
   });
 
-  it('grafo inválido (nodo huérfano) → 400 con el detalle de Zod', async () => {
+  it('un nodo suelto se GUARDA con una advertencia y el flujo no queda activo (HU-FLOW-05)', async () => {
     const res = await post(
       makeToken(tenantId.toString(), 'admin'),
       flowValido({
         nodos: [
           { id: 'n1', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Hola' } },
           { id: 'huerfano', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: '¿?' } },
+        ],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.activo).toBe(false);
+    expect(res.body.advertencias).toEqual([expect.objectContaining({ nodoId: 'huerfano', codigo: 'NODO_HUERFANO' })]);
+  });
+
+  it('un grafo de forma inválida (tipo de dato fuera del enum) → 400 con el detalle de Zod', async () => {
+    const res = await post(
+      makeToken(tenantId.toString(), 'admin'),
+      flowValido({
+        nodos: [
+          {
+            id: 'n1',
+            tipo: 'captura',
+            posicion,
+            config: { tipo: 'captura', campo: 'a', descripcion: 'b', tipoDato: 'otro', pregunta: 'c', reintentos: 1 },
+          },
         ],
       }),
     );
@@ -237,5 +256,140 @@ describe('GET/PUT /api/flows/reminder — HU-FLOW-02 (rutas literales antes de /
 
     const tenantADoc = await Tenant.findById(tenantId).lean();
     expect(tenantADoc?.recordatorio?.texto).toBe('Recordatorio de A');
+  });
+});
+
+
+describe('Guardar y activar con errores — HU-FLOW-05 (criterios 20-29)', () => {
+  let tenantId: Types.ObjectId;
+  let token: string;
+
+  const nodoSuelto = { id: 'suelto', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Perdido' } };
+  const conSuelto = (overrides: Record<string, unknown> = {}): Record<string, unknown> =>
+    flowValido({
+      nodos: [{ id: 'n1', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Hola' } }, nodoSuelto],
+      ...overrides,
+    });
+  const iaRecienCreada = {
+    id: 'ia1',
+    tipo: 'ia',
+    posicion,
+    config: { tipo: 'ia', objetivo: '', salidas: [], ramaPorDefecto: '', maxTurnos: 3, usarKb: true },
+  };
+
+  beforeEach(async () => {
+    await Flow.deleteMany({});
+    await Flow.syncIndexes();
+    tenantId = new Types.ObjectId();
+    token = makeToken(tenantId.toString(), 'admin');
+  });
+
+  it('un nodo a medias (IA recién creada) se guarda y queda reportado como contenido incompleto', async () => {
+    const res = await post(
+      token,
+      flowValido({
+        nodos: [{ id: 'n1', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Hola' } }, iaRecienCreada],
+        aristas: [{ id: 'a1', from: 'n1', to: 'ia1' }],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.advertencias.map((e: { codigo: string }) => e.codigo)).toContain('CONTENIDO_INCOMPLETO');
+  });
+
+  it('crear con `activo: true` y errores → 400 FLOW_CON_ERRORES, sin crear nada', async () => {
+    const res = await post(token, conSuelto({ activo: true }));
+    expect(res.status).toBe(400);
+    expect(res.body.codigo).toBe('FLOW_CON_ERRORES');
+    expect(res.body.errores).toEqual([expect.objectContaining({ nodoId: 'suelto' })]);
+    expect(await Flow.countDocuments({})).toBe(0);
+  });
+
+  it('activar un flujo guardado con errores → 400 y el flujo activo anterior SIGUE activo', async () => {
+    const bueno = await post(token, flowValido({ nombre: 'Bueno' })).expect(201);
+    await put(token, bueno.body.id, flowValido({ nombre: 'Bueno', activo: true })).expect(200);
+    const roto = await post(token, conSuelto({ nombre: 'Roto' })).expect(201);
+
+    const res = await put(token, roto.body.id, conSuelto({ nombre: 'Roto', activo: true }));
+
+    expect(res.status).toBe(400);
+    expect(res.body.codigo).toBe('FLOW_CON_ERRORES');
+    expect((await Flow.findById(bueno.body.id).lean())?.activo).toBe(true);
+    expect((await Flow.findById(roto.body.id).lean())?.activo).toBe(false);
+  });
+
+  it('corregir los errores permite activar', async () => {
+    const roto = await post(token, conSuelto()).expect(201);
+    const res = await put(
+      token,
+      roto.body.id,
+      conSuelto({ activo: true, aristas: [{ id: 'a1', from: 'n1', to: 'suelto' }] }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.activo).toBe(true);
+    expect(res.body.advertencias).toEqual([]);
+  });
+
+  it('editar un flujo ACTIVO dejándolo con errores sin confirmar → 409 y no se guarda nada', async () => {
+    const creado = await post(token, flowValido({ nombre: 'En producción' })).expect(201);
+    await put(token, creado.body.id, flowValido({ nombre: 'En producción', activo: true })).expect(200);
+    const antes = await Flow.findById(creado.body.id).lean();
+
+    const res = await put(token, creado.body.id, conSuelto({ nombre: 'En producción' }));
+
+    expect(res.status).toBe(409);
+    expect(res.body.codigo).toBe('FLOW_ACTIVO_CON_ERRORES');
+    expect(res.body.errores).toHaveLength(1);
+    const despues = await Flow.findById(creado.body.id).lean();
+    expect(despues?.activo).toBe(true);
+    expect(despues?.nodos).toHaveLength(antes?.nodos.length ?? 0);
+    expect(despues?.version).toBe(antes?.version);
+  });
+
+  it('con `confirmarDesactivar: true` guarda los cambios y deja el flujo INACTIVO', async () => {
+    const creado = await post(token, flowValido({ nombre: 'En producción' })).expect(201);
+    await put(token, creado.body.id, flowValido({ nombre: 'En producción', activo: true })).expect(200);
+
+    const res = await put(token, creado.body.id, conSuelto({ nombre: 'En producción', confirmarDesactivar: true }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.activo).toBe(false);
+    expect(res.body.desactivado).toBe(true);
+    expect(res.body.advertencias).toHaveLength(1);
+    const guardado = await Flow.findById(creado.body.id).lean();
+    expect(guardado?.activo).toBe(false);
+    expect(guardado?.nodos).toHaveLength(2);
+    expect(await Flow.countDocuments({ activo: true })).toBe(0);
+  });
+
+  it('un flujo ACTIVO editado sin errores se guarda y sigue activo (sin confirmación)', async () => {
+    const creado = await post(token, flowValido()).expect(201);
+    await put(token, creado.body.id, flowValido({ activo: true })).expect(200);
+
+    const res = await put(token, creado.body.id, flowValido({ nombre: 'Renombrado' }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.activo).toBe(true);
+    expect(res.body.desactivado).toBe(false);
+  });
+
+  it('un flujo INACTIVO con errores se guarda directo, sin confirmación', async () => {
+    const creado = await post(token, flowValido()).expect(201);
+    const res = await put(token, creado.body.id, conSuelto());
+    expect(res.status).toBe(200);
+    expect(res.body.activo).toBe(false);
+    expect(res.body.desactivado).toBe(false);
+  });
+
+  it('el nombre del nodo se guarda y vuelve en la respuesta', async () => {
+    const res = await post(
+      token,
+      flowValido({
+        nodos: [
+          { id: 'n1', tipo: 'mensaje', nombre: 'Saludo inicial', posicion, config: { tipo: 'mensaje', texto: 'Hola' } },
+        ],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.nodos[0].nombre).toBe('Saludo inicial');
   });
 });

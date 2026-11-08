@@ -61,23 +61,12 @@ const atributoSchema = z.object({
     .min(1)
     .max(40)
     .regex(/^[a-z0-9][a-z0-9_-]*$/, 'La clave solo admite minúsculas, números, guion y guion bajo.'),
-  label: z.string().trim().min(1, 'El atributo necesita un nombre.').max(60),
+  // HU-FLOW-05: etiqueta y `sensible` los fija el catálogo de campos de la empresa. Se siguen
+  // aceptando (y se ignoran) para no romper a los clientes que aún los envían.
+  label: z.string().trim().max(60).optional(),
   valor: z.string().trim().min(1, 'El atributo necesita un valor.').max(500),
-  sensible: z.boolean().default(false),
+  sensible: z.boolean().optional(),
 });
-
-/**
- * Compara etiquetas como las lee una persona: "Colegio", "colegio" y "COLEGIO " son el mismo
- * atributo. Sin esta normalización la lista admitiría tres filas que en pantalla se leen igual y
- * nadie sabría cuál manda.
- */
-function normalizarLabel(label: string): string {
-  return label
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
 
 /**
  * Un atributo repetido no es un error de forma sino de contenido, así que no lo puede atrapar el
@@ -89,7 +78,6 @@ const atributosSchema = z
   .max(30, 'Un contacto admite como máximo 30 atributos personalizados.')
   .superRefine((atributos, ctx) => {
     const keys = new Set<string>();
-    const labels = new Set<string>();
 
     atributos.forEach((atributo, i) => {
       if (keys.has(atributo.key)) {
@@ -100,16 +88,8 @@ const atributosSchema = z
         });
       }
       keys.add(atributo.key);
-
-      const label = normalizarLabel(atributo.label);
-      if (labels.has(label)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [i, 'label'],
-          message: `El atributo "${atributo.label}" está repetido.`,
-        });
-      }
-      labels.add(label);
+      // La unicidad de la etiqueta ya no se valida aquí: una `key` = un campo del catálogo, y es el
+      // catálogo (`contact_fields`) quien impide dos campos con la misma etiqueta.
     });
   });
 

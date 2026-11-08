@@ -67,6 +67,9 @@
 | `tipoDato` | `texto` · `numero` · `fecha` · `booleano` | Tipo esperado del valor. |
 | `pregunta` | string | Lo que se le envía al cliente al llegar al nodo. |
 | `reintentos` | entero ≥ 0 | **Hoy no se usa** en ejecución. |
+| `destino` | `variable` · `contacto` · `atributo` | **Dónde se guarda** la respuesta (HU-FLOW-05). Ver abajo. Sin `destino` = `variable`. |
+| `saltarSiExiste` | boolean (def. `true`) | Solo con destino de ficha: si el contacto ya tiene el dato, **no pregunta** y sigue. |
+| `sobrescribir` | boolean (def. `false`) | Solo con destino de ficha: si ya hay un dato, `false` no lo pisa y `true` lo reemplaza. |
 
 ```json
 { "tipo": "captura", "campo": "grado", "tipoDato": "texto", "reintentos": 1,
@@ -74,6 +77,16 @@
   "descripcion": "Grado escolar. Devuelve exactamente: '11', '10', '9', 'graduado' u 'otro'." }
 ```
 - Flujo: llega → envía `pregunta` → espera → con la respuesta la IA extrae → guarda `variables[campo]` → sigue.
+
+**Guardar en la ficha del contacto (HU-FLOW-05).** El inspector tiene el selector **«Guardar en»**:
+
+| Destino | Qué hace |
+|---|---|
+| **Variable del flujo** | Como siempre: solo vive en este flujo. |
+| **Dato del contacto** | Escribe `nombre`, `correo`, `documento` o `rolContacto` en la ficha. (El teléfono no: el webhook lo reescribe.) |
+| **Campo personalizado** | Escribe en un campo del catálogo de tu empresa (colegio, ciudad…). «Crear campo…» lo abre sin salir del editor. |
+
+Con destino de ficha, el **nombre de la variable y el tipo de dato los fija el destino** (siempre `var:nombre`, `var:colegio`…, nunca un sinónimo) y el valor queda **también** en `var:<campo>`, así que una `condicion` posterior lo puede leer. El `correo` debe ser válido; el `rolContacto` solo acepta una opción **activa** de tu catálogo de roles (la IA recibe la lista); un dato inválido no se escribe, pero el flujo sigue. `saltarSiExiste` evita preguntar lo que ya se sabe. ⚠️ El **nombre** de un contacto que escribió por WhatsApp ya viene del perfil de Meta: con `saltarSiExiste` activo, esa pregunta se salta.
 - ⚠️ Si la IA **no logra extraer** el dato, el nodo se queda esperando **sin volver a preguntar**. Por eso, en `descripcion` da siempre un valor de escape ("si no lo dice, devuelve 'sin_dato'").
 - 💡 Tip: pide a la IA valores **normalizados** en `descripcion`; así la `condicion` siguiente compara contra pocos valores fijos.
 
@@ -212,17 +225,33 @@ Se evalúan **solo cuando el flujo va a empezar** (no si ya está en curso). Si 
 
 ---
 
-## 7. Validaciones al guardar (por qué un flujo puede no guardarse)
+## 7. Qué se puede guardar y qué se puede activar
 
-| Regla | Mensaje típico |
-|---|---|
-| Nombre 1–120 caracteres. | Nombre inválido. |
-| Al menos 1 nodo y sin ids repetidos. | Nodo duplicado. |
-| `entrada` debe existir. | Nodo de entrada inexistente. |
-| Cada conexión y cada rama apuntan a nodos existentes. | Destino inexistente. |
-| **Sin huérfanos**: todo nodo (salvo la entrada) recibe al menos una conexión o rama. | Nodo huérfano. |
-| Campos de más en un nodo → rechazo (esquema estricto). | Campo no permitido. |
-| `ia`: objetivo ≥10 caracteres, 1–8 salidas, `maxTurnos` 1–10. | — |
+Desde HU-FLOW-05, **guardar un flujo a medias no se pierde**: si te falta conectar un nodo o completar
+una pregunta, se guarda igual (inactivo) y el editor te dice qué falta. Lo que **no** se puede hacer con
+un flujo incompleto es **activarlo**.
+
+| Nivel | Qué es | ¿Bloquea guardar? | ¿Bloquea activar? |
+|---|---|---|---|
+| **Forma** | Nombre vacío, ids de nodo repetidos, `entrada` inexistente, enum/tipo inválido, campos no permitidos, `maxTurnos` fuera de 1–10, `espera` ≤ 0. | **Sí** (`400`) | Sí |
+| **Conexión** | Nodo **huérfano** (sin conexión de entrada, salvo la entrada); rama, salida o rama por defecto **sin destino**; destino que ya no existe. | No (advertencia) | **Sí** |
+| **Contenido** | Nodo **a medias**: pregunta/descripción/nombre del dato vacíos; `mensaje` sin texto ni plantilla; `condicion`/`intencion`/`ia` sin ramas, etiquetas o salidas; objetivo de `ia` < 10 caracteres; `kb` sin pregunta o respaldo; `accion` sin etiquetas o asesor; `captura` a un campo personalizado sin elegir. | No (advertencia) | **Sí** |
+
+- **El editor lo muestra en vivo.** Cada nodo está en **rojo** (con lo que le falta) o en **verde**; al
+  corregirlo pasa a verde al instante, sin guardar. El botón **Activar** se deshabilita mientras haya rojos.
+- **Editar un flujo que está en producción** y dejarlo con errores: al guardar aparece un aviso con tres
+  salidas — *Guardar y desactivar* (queda inactivo y Sofi atiende hasta que lo corrijas y lo actives),
+  *No guardar* (sales; los cambios quedan como borrador en tu navegador) y *Cancelar*.
+- **Si se cae la conexión** al guardar, el editor conserva lo que escribiste y lo guarda como borrador local;
+  al volver puedes **Recuperar** o **Descartar**.
+- Una rama sin destino en un flujo en borrador (chat de prueba) **termina el flujo** sin romperlo; en
+  WhatsApp real no ocurre, porque un flujo con errores no se puede activar.
+
+**Teclado y nombres.** Selecciona un enlace o un nodo y pulsa **Supr** o **Retroceso** para borrarlo (no
+actúa si estás escribiendo en un campo). Borrar el enlace de una rama deja ese destino vacío (el nodo se
+pone en rojo); borrar un nodo vacía las ramas que apuntaban a él; el **nodo de inicio** no se puede borrar
+mientras haya otros. Cada nodo acepta un **nombre propio** (hasta 60 caracteres) que se ve en el lienzo, en
+los desplegables de destino y en los mensajes de error.
 
 ---
 
@@ -233,3 +262,5 @@ Se evalúan **solo cuando el flujo va a empezar** (no si ya está en curso). Si 
 - Campos guardados pero **sin efecto** en ejecución: `captura.reintentos`, `kb.kSobrescrito`, `handoff.notificarAsesorId`.
 - Las salidas del nodo `ia` se asignan desde el inspector (arrastrar no las conecta).
 - Un solo flujo activo por empresa (los demás quedan para el chat de prueba).
+- **Corregido en HU-FLOW-05:** antes, lo que un nodo hacía **antes** de llegar a un nodo que consulta a la IA
+  (`kb → ia`, `accion → ia`: mensajes de la KB, etiquetas, estado) se perdía. Ya no: se ejecutan todos los efectos del turno, en orden.

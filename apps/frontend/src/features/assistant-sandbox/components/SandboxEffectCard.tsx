@@ -5,6 +5,7 @@ import {
   FileSearch,
   Flag,
   Loader2,
+  Save,
   Tags,
   UserCheck,
   UserPlus,
@@ -64,6 +65,8 @@ function describir(efecto: SandboxEfecto): Descripcion {
         .join(' · ');
       return { icono: FileSearch, texto: campos ? `Datos detectados — ${campos}` : 'Sin datos nuevos de contacto' };
     }
+    case 'dato_guardado':
+      return { icono: Save, texto: `Dato guardado en la ficha — ${efecto.campo}: ${efecto.valor}` };
     case 'handoff': {
       const motivo = MOTIVO_HANDOFF[efecto.motivo] ?? efecto.motivo;
       const destino = efecto.asesor ? ` a ${efecto.asesor.nombre}` : '';

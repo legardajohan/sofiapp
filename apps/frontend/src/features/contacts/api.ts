@@ -2,7 +2,9 @@ import { apiClient } from '../../api/apiClient.js';
 import type { ContactCardDTO } from '@/features/inbox/types';
 import type {
   BorradoOpcionDTO,
+  CampoContactoDTO,
   ContactPatchPayload,
+  CrearCampoPayload,
   NotaDTO,
   NotasPage,
   OpcionDTO,
@@ -63,4 +65,32 @@ export async function updateContactOption(
 export async function deleteContactOption(id: string): Promise<BorradoOpcionDTO> {
   const { data } = await apiClient.delete<BorradoOpcionDTO>(`/opciones-contacto/${id}`);
   return data;
+}
+
+// ─── Campos personalizados por empresa (HU-FLOW-05) ─────────────────────────────
+
+/** Catálogo de campos del tenant. Con `incluirArchivados` trae también los retirados (el gestor). */
+export async function fetchContactFields(incluirArchivados = false): Promise<CampoContactoDTO[]> {
+  const { data } = await apiClient.get<CampoContactoDTO[]>('/campos-contacto', {
+    params: incluirArchivados ? { incluirArchivados: 'true' } : undefined,
+  });
+  return data;
+}
+
+export async function createContactField(payload: CrearCampoPayload): Promise<CampoContactoDTO> {
+  const { data } = await apiClient.post<CampoContactoDTO>('/campos-contacto', payload);
+  return data;
+}
+
+export async function updateContactField(
+  id: string,
+  cambios: Partial<CrearCampoPayload>,
+): Promise<CampoContactoDTO> {
+  const { data } = await apiClient.patch<CampoContactoDTO>(`/campos-contacto/${id}`, cambios);
+  return data;
+}
+
+/** El borrado archiva: los contactos que ya tienen el campo lo conservan. */
+export async function archiveContactField(id: string): Promise<void> {
+  await apiClient.delete(`/campos-contacto/${id}`);
 }

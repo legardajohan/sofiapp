@@ -81,16 +81,46 @@ function ejecutarNodo(
       };
 
     case 'captura': {
+      const destino = config.destino ?? { tipo: 'variable' as const };
+      const aFicha = destino.tipo !== 'variable';
+
       if (entrada.resueltos?.capturado !== undefined) {
+        // El valor queda SIEMPRE en `var:<campo>` (las condiciones lo leen de ahí); con destino de
+        // ficha, además se pide al runtime que lo escriba en el contacto.
         return {
-          efectos: [],
+          efectos: aFicha
+            ? [
+                {
+                  tipo: 'guardar_dato',
+                  destino,
+                  valor: entrada.resueltos.capturado,
+                  sobrescribir: config.sobrescribir ?? false,
+                },
+              ]
+            : [],
           siguiente: siguienteLineal(aristas, nodo.id),
           variables: { ...variables, [config.campo]: entrada.resueltos.capturado },
           esperandoRespuesta: false,
         };
       }
+      // La IA no pudo extraer el dato: se queda esperando la siguiente respuesta con UNA sola llamada
+      // en este mensaje (antes reintentaba la extracción hasta agotar el tope de resoluciones).
+      if (entrada.resueltos?.capturaFallida) {
+        return { efectos: [], siguiente: nodo.id, variables, esperandoRespuesta: true };
+      }
       // Primer paso al nodo: hace la pregunta y se queda esperando la respuesta del cliente.
       if (entrada.state?.nodoActualId !== nodo.id) {
+        // HU-FLOW-05: si la ficha ya tiene el dato, no se vuelve a preguntar; se copia a `var:<campo>`
+        // y el flujo sigue en el mismo turno.
+        const guardado = aFicha && (config.saltarSiExiste ?? true) ? entrada.contacto?.[config.campo] : undefined;
+        if (guardado) {
+          return {
+            efectos: [],
+            siguiente: siguienteLineal(aristas, nodo.id),
+            variables: { ...variables, [config.campo]: guardado },
+            esperandoRespuesta: false,
+          };
+        }
         return {
           efectos: [{ tipo: 'enviar_mensaje', texto: config.pregunta }],
           siguiente: nodo.id,
@@ -112,6 +142,7 @@ function ejecutarNodo(
             tipo: config.tipoDato,
             requerido: true,
           },
+          destino,
         },
       };
     }
@@ -266,7 +297,11 @@ export function avanzar(entrada: EntradaMotor): SalidaMotor {
       };
     }
 
-    const resultado = ejecutarNodo(nodo, nodo.config, entrada, variables, flow.aristas);
+    const bruto = ejecutarNodo(nodo, nodo.config, entrada, variables, flow.aristas);
+    // Un destino vacío (`''`) es una rama sin conectar de un flujo guardado a medias (HU-FLOW-05):
+    // en el chat de prueba termina el flujo en vez de romperlo. En producción no ocurre, porque un
+    // flujo con ramas sin destino no se puede activar.
+    const resultado = bruto.siguiente === '' ? { ...bruto, siguiente: null } : bruto;
     efectos.push(...resultado.efectos);
     variables = resultado.variables;
 

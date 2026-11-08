@@ -13,7 +13,11 @@ import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { FLOW_RESUME_JOB, flowRuntimeQueue } from '../../config/queues.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
+import { ACTOR_SISTEMA_FLUJO } from '../../utils/actor-sistema.util.js';
+import { fromStoredOptional, fromStoredValue } from '../../utils/field-crypto.util.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { guardarDatoDesdeFlujo } from '../cliente/cliente.service.js';
+import { listContactOptionsByTipo } from '../contact-option/contact-option.service.js';
 import { createLeadFromConversation } from '../lead/lead.service.js';
 import {
   assignConversation,
@@ -66,14 +70,6 @@ async function construirHistorial(
     .filter((m) => m.texto)
     .map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', content: m.texto! }) as ChatTurn);
 }
-
-/**
- * Actor sintético para las auditorías que disparan los efectos `crear_lead`/`asignar_asesor` del
- * motor de flujos: no hay un usuario humano detrás. `recordAuditEvent` no valida que `actorId`
- * resuelva a un `User` real (`findUsersByIds` simplemente no lo encuentra), así que el evento queda
- * igual de trazable — solo sin nombre de asesor.
- */
-const ACTOR_SISTEMA_FLUJO = '000000000000000000000000';
 
 /** Tope de rondas `requiere` → resolver → reentrar dentro de una sola llamada. Cubre la cadena
  *  real (intención, o kb, o una captura ya respondida) sin arriesgarse a un bucle infinito si el
@@ -166,15 +162,28 @@ async function resolverRequiere(
   }
 
   // 'captura'
+  let spec = requiere.spec;
+  if (requiere.destino?.tipo === 'contacto' && requiere.destino.campo === 'rolContacto') {
+    // HU-FLOW-05: el rol es un catálogo por empresa; la IA solo puede devolver una de sus claves
+    // ACTIVAS, que es lo único que `guardarDatoDesdeFlujo` va a aceptar.
+    const claves = (await listContactOptionsByTipo(tenantId, 'rol')).filter((o) => o.activo).map((o) => o.key);
+    spec = {
+      ...spec,
+      descripcion: `${spec.descripcion} Devuelve exactamente una de estas claves: ${claves.join(', ')}. Si ninguna corresponde, déjalo vacío.`,
+    };
+  }
   const schema = z.record(z.string(), z.unknown());
   const { data } = await ai.extract<Record<string, unknown>>({
     tenantId: tenantOid,
     esPrueba,
     historial,
     schema,
-    camposObjetivo: [requiere.spec],
+    camposObjetivo: [spec],
   });
-  return { capturado: data[requiere.spec.campo] };
+  const capturado = data[requiere.spec.campo];
+  return capturado === undefined || capturado === null || capturado === ''
+    ? { capturaFallida: true }
+    : { capturado };
 }
 
 /** Ejecuta un efecto y traga su propio error: un nodo mal configurado no puede tumbar el resto de
@@ -240,6 +249,27 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
         }
         return;
       }
+      case 'guardar_dato': {
+        const r = await guardarDatoDesdeFlujo(tenantId, clienteId, efecto.destino, efecto.valor, {
+          sobrescribir: efecto.sobrescribir,
+        });
+        if (r.escrito) {
+          await emitirEfectoPrueba(tenantId, clienteId, {
+            tipo: 'dato_guardado',
+            campo: r.etiqueta ?? '',
+            valor: r.valorVisible ?? '',
+            sensible: r.sensible ?? false,
+          });
+        } else {
+          // No es un fallo del flujo: el valor ya quedó en `var:<campo>`. Se deja rastro para depurar.
+          logger.warn('guardar_dato no escribió en la ficha', {
+            tenantId: tenantId.toString(),
+            clienteId,
+            motivo: r.motivo,
+          });
+        }
+        return;
+      }
       case 'asignar_asesor':
         await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
         return;
@@ -273,6 +303,38 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
       error: String(err),
     });
   }
+}
+
+/**
+ * Foto de la ficha que necesita el motor (HU-FLOW-05), leída UNA vez por mensaje: campos fijos y
+ * atributos por `key`. Solo se carga si el flujo tiene alguna `captura` que guarda en la ficha, para
+ * no pagar la lectura en los demás. Los atributos sensibles se descifran: viven solo en memoria, el
+ * motor únicamente los copia a `var:<campo>`.
+ */
+async function cargarContacto(
+  tenantId: TenantId,
+  clienteId: string,
+  flow: IFlowLean,
+): Promise<Record<string, string> | undefined> {
+  const usaFicha = flow.nodos.some(
+    (n) => n.config.tipo === 'captura' && n.config.destino !== undefined && n.config.destino.tipo !== 'variable',
+  );
+  if (!usaFicha) return undefined;
+
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) return undefined;
+
+  const foto: Record<string, string> = {};
+  if (cliente.nombre) foto['nombre'] = cliente.nombre;
+  const correo = fromStoredOptional(cliente.correoEnc);
+  if (correo) foto['correo'] = correo;
+  const documento = fromStoredOptional(cliente.documentoEnc);
+  if (documento) foto['documento'] = documento;
+  if (cliente.rolContacto) foto['rolContacto'] = cliente.rolContacto;
+  for (const a of cliente.atributos ?? []) {
+    foto[a.key] = a.sensible ? fromStoredValue(a.valor) : a.valor;
+  }
+  return foto;
 }
 
 /** Delay entre reintentos de un job diferido de `flow-runtime`. El envío pega contra la Graph API,
@@ -334,9 +396,15 @@ async function correrMotor(
   let estadoActual = stateDoc;
   let resueltos = resueltosIniciales;
   let salida: SalidaMotor | undefined;
+  // Los efectos de TODAS las rondas se acumulan: `avanzar` retoma desde el nodo pendiente y reinicia
+  // su lista en cada llamada, así que acumular no duplica nada. Antes solo se ejecutaban los de la
+  // última ronda y todo lo emitido antes de un nodo con `requiere` (kb → ia, accion → ia) se perdía.
+  const efectos: Efecto[] = [];
+  const contacto = await cargarContacto(tenantId, clienteId, flow);
 
   for (let ronda = 0; ronda < TOPE_RESOLUCIONES; ronda += 1) {
-    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos });
+    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos, contacto });
+    efectos.push(...salida.efectos);
     if (!salida.requiere) break;
 
     resueltos = await resolverRequiere(tenantId, clienteId, salida.requiere, mensaje);
@@ -355,7 +423,7 @@ async function correrMotor(
 
   let esperaToken: string | undefined;
   let esperaHasta: Date | undefined;
-  for (const efecto of salida.efectos) {
+  for (const efecto of efectos) {
     if (efecto.tipo === 'programar_espera') {
       try {
         const token = randomUUID();

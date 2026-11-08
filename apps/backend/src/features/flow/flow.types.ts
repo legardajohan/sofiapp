@@ -1,6 +1,8 @@
 import type { Document, Types } from 'mongoose';
 import type { EstadoComercial } from '../cliente/cliente.types.js';
+import type { ErrorGrafo } from '@sofiapp/shared';
 import type { SlotSpec } from '../../integrations/llm/llm-provider.types.js';
+import type { CampoFijoContacto } from '../contact-field/contact-field.types.js';
 
 export const TIPOS_NODO = [
   'mensaje',
@@ -36,6 +38,8 @@ export interface IPosicion {
 
 interface INodoBase {
   id: string;
+  /** Nombre propio que le da el usuario (HU-FLOW-05). Sin él el editor muestra el título del tipo. */
+  nombre?: string;
   posicion: IPosicion;
 }
 
@@ -65,6 +69,19 @@ export type EfectoAccion =
   | { tipo: 'crear_lead' }
   | { tipo: 'asignar_asesor'; asesorId: string };
 
+/**
+ * Dónde deja su dato un nodo `captura` (HU-FLOW-05). `variable` es el comportamiento de siempre
+ * (solo `FlowState.variables`); `contacto` escribe un campo fijo de la ficha; `atributo` escribe un
+ * campo personalizado del catálogo de la empresa.
+ */
+export type DestinoCaptura =
+  | { tipo: 'variable' }
+  | { tipo: 'contacto'; campo: CampoFijoContacto }
+  | { tipo: 'atributo'; key: string };
+
+/** Destinos que llegan a la ficha del contacto (todos menos `variable`). */
+export type DestinoFicha = Exclude<DestinoCaptura, { tipo: 'variable' }>;
+
 /** Config por tipo de nodo. Unión discriminada por `tipo`: Zod la valida con `.strict()` por rama
  *  y TypeScript la estrecha. Es la pieza que hace estructural la regla anti-duplicación de KB —
  *  `condicion`/`intencion` no tienen NINGÚN campo de texto de respuesta. */
@@ -77,6 +94,12 @@ export type ConfigNodo =
       tipoDato: 'texto' | 'numero' | 'fecha' | 'booleano';
       pregunta: string;
       reintentos: number;
+      /** Ausente en flujos anteriores a HU-FLOW-05: se trata como `{ tipo: 'variable' }`. */
+      destino?: DestinoCaptura;
+      /** Solo con destino de ficha. Por defecto `true`: no se pregunta lo que el contacto ya tiene. */
+      saltarSiExiste?: boolean;
+      /** Solo con destino de ficha. Por defecto `false`: no se pisa un dato ya registrado. */
+      sobrescribir?: boolean;
     }
   | {
       tipo: 'condicion';
@@ -200,6 +223,8 @@ export type Efecto =
    */
   | { tipo: 'programar_espera'; minutos: number }
   | EfectoAccion
+  /** HU-FLOW-05: el dato capturado debe quedar en la ficha del contacto. */
+  | { tipo: 'guardar_dato'; destino: DestinoFicha; valor: unknown; sobrescribir: boolean }
   | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
   | { tipo: 'error'; mensaje: string };
 
@@ -209,10 +234,18 @@ export interface EntradaMotor {
   state: IFlowState | null;
   /** Texto del último mensaje del cliente que disparó esta invocación. */
   mensaje: string;
+  /**
+   * HU-FLOW-05: foto de la ficha del contacto (campos fijos y atributos por `key`), leída UNA vez por
+   * mensaje. Es lo que permite a una `captura` saltarse la pregunta si el dato ya existe sin que el
+   * motor deje de ser puro.
+   */
+  contacto?: Record<string, string>;
   /** Resultados de operaciones asíncronas resueltas FUERA del motor por el runtime. */
   resueltos?: {
     intencion?: string;
     capturado?: unknown;
+    /** La IA no logró extraer el dato de la captura: el nodo sigue esperando, sin repetir la llamada. */
+    capturaFallida?: true;
     respuestaKb?: string;
     /** HU-FLOW-02: el job diferido del nodo `espera` despertó y el plazo ya se cumplió. */
     esperaCumplida?: true;
@@ -224,7 +257,7 @@ export interface EntradaMotor {
 export type RequiereMotor =
   | { tipo: 'intencion'; etiquetas: string[] }
   | { tipo: 'kb'; pregunta: string; kSobrescrito?: number }
-  | { tipo: 'captura'; spec: SlotSpec }
+  | { tipo: 'captura'; spec: SlotSpec; destino?: DestinoCaptura }
   | { tipo: 'ia'; objetivo: string; salidas: ISalidaIa[]; usarKb: boolean };
 
 export interface SalidaMotor {
@@ -257,6 +290,8 @@ export interface UpdateFlowDTO {
   trigger?: ITriggerFlow;
   estado?: EstadoFlow;
   activo?: boolean;
+  /** Confirma guardar desactivado un flujo ACTIVO que quedó con errores (HU-FLOW-05, criterio 23). */
+  confirmarDesactivar?: boolean;
 }
 
 export interface IFlowResponse {
@@ -272,6 +307,14 @@ export interface IFlowResponse {
   activo: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Respuesta de crear/actualizar: el flujo más lo que quedó pendiente de corregir (HU-FLOW-05). */
+export interface IFlowSaveResponse extends IFlowResponse {
+  /** Errores de conexión y de contenido con los que se guardó. Vacío = listo para activar. */
+  advertencias: ErrorGrafo[];
+  /** `true` cuando el flujo estaba activo y se guardó desactivado por `confirmarDesactivar`. */
+  desactivado: boolean;
 }
 
 export interface IFlowListItemResponse {

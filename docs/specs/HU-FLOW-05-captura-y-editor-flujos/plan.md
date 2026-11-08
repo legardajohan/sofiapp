@@ -1,5 +1,7 @@
 # HU-FLOW-05 — Plan técnico (CÓMO)
 
+> Partes: A–F captura estructurada y motor · **G–J editor de flujos** (errores, borrado, nombres).
+
 ## Archivos a crear / tocar
 
 ```
@@ -48,6 +50,18 @@ apps/frontend/src/
 └── features/assistant-sandbox/
     ├── types.ts                                   # efecto dato_guardado
     └── components/SandboxEffectCard.tsx           # tarjeta "Dato guardado"
+
+packages/shared/src/
+├── flow-graph.ts                                  # NUEVO: analizarGrafo (pura) + tipos ErrorGrafo
+├── flow-graph.test.ts                             # NUEVO
+└── index.ts                                       # exporta flow-graph
+
+(backend, además) features/flow/: flow.validation.ts (dos niveles, `nombre`), flow.service.ts (advertencias /
+FLOW_CON_ERRORES al activar), flow.model.ts (`nombre` en el nodo), flow.controller.ts (devuelve `advertencias`).
+(frontend, además) features/flows/: lib/graph.ts (adaptador nodos/edges de React Flow → analizarGrafo),
+hooks/useGraphErrors.ts, hooks/useSaveFlow.ts, components/FlowCanvas.tsx (teclas), components/nodes/FlowNode.tsx
+(rojo/verde, nombre), components/NodeInspector.tsx (campo Nombre), components/DestinoSelect.tsx (nombres),
+pages/FlowEditorPage.tsx (barra de errores, Activar).
 
 docs/
 ├── data-model.md · domain.md · api-contract.md
@@ -218,6 +232,135 @@ El valor sensible viaja enmascarado (mismo helper de máscara de la ficha).
   `Switch` *Saltar si ya existe* / *Sobrescribir* con texto de ayuda; para rol, chips de las opciones.
 - `SandboxEffectCard`: variante `dato_guardado` con icono, etiqueta y valor.
 
+### G. Validación del grafo en dos niveles
+
+**`packages/shared/src/flow-graph.ts`** — pura, sin dependencias de Zod ni de React Flow:
+
+```ts
+export type CodigoErrorGrafo =
+  | 'NODO_HUERFANO' | 'DESTINO_VACIO' | 'DESTINO_INEXISTENTE' | 'CONTENIDO_INCOMPLETO';
+export interface ErrorGrafo { nodoId: string; codigo: CodigoErrorGrafo; mensaje: string }
+
+export interface NodoGrafo {
+  id: string;
+  nombre?: string;
+  config: { tipo: string; /* ramas | etiquetas | salidas | ramaPorDefecto con nodoDestino */ };
+}
+export function analizarGrafo(
+  nodos: readonly NodoGrafo[],
+  aristas: readonly { from: string; to: string }[],
+  entrada: string,
+): ErrorGrafo[];
+```
+
+Reglas (las mismas que hoy hay dentro del `superRefine`, ahora sin lanzar):
+- `NODO_HUERFANO`: nodo distinto de `entrada` sin arista ni rama entrante.
+- `DESTINO_VACIO`: `nodoDestino`/`ramaPorDefecto` igual a `''` en `condicion`, `intencion` o `ia`.
+- `DESTINO_INEXISTENTE`: arista o rama que apunta a un id que no está en `nodos`.
+- El mensaje usa `nombre` si existe, si no el id: «“Captura grado” no tiene conexión de entrada».
+- Los destinos **vacíos no cuentan** como conexión entrante.
+- `CONTENIDO_INCOMPLETO`: reglas escritas a mano por tipo de nodo (la lista del criterio 20), con un
+  mensaje que dice **qué falta** («“IA Intensivo”: falta el objetivo (mínimo 10 caracteres)»).
+- **Consistencia con Zod:** `flow-graph.test.ts` recorre un conjunto de configs y exige que
+  `analizarGrafo` no reporte contenido ⇔ `configNodo` estricto (`flow.validation.ts`) las acepte. Así
+  las dos listas no se desfasan.
+
+**`flow.validation.ts` — dos esquemas por nodo, uno solo de contenido:**
+- `configNodoEstricto` = el `configNodo` actual (con `min(1)`, `min(10)`, `.min(1)` de arrays). Se
+  conserva intacto y se usa **solo al activar** (red de seguridad frente a `analizarGrafo`).
+- `configNodoGuardable` = el mismo esquema **relajado**: strings sin `min`, `objetivo` solo `max(2000)`,
+  `ramas`/`etiquetas`/`salidas` sin mínimo (la `ia` mantiene `max(8)`), `nodoDestino` y `ramaPorDefecto`
+  `z.string()`, `tagIds` y `asesorId` aceptan vacío. Sigue `.strict()` y con los tipos/enums/topes
+  numéricos (`maxTurnos` 1–10, `minutos` > 0) como errores de forma.
+- El `superRefine` conserva solo lo de forma (ids repetidos, `entrada` existente) y **deja de** reportar
+  huérfanos y destinos. `nodo` gana `nombre: z.string().trim().min(1).max(60).optional()`.
+- El nodo nuevo del editor (`configPorDefecto`) debe ser **guardable** tal cual (campos vacíos): hoy
+  habría rebotado con `400`.
+
+**`flow.service.ts`** (`createFlow` / `updateFlow`), tras validar la forma y el catálogo de captura:
+
+```ts
+const errores = analizarGrafo(dto.nodos, dto.aristas, dto.entrada);
+if (errores.length > 0 && dto.activo === true && !flowYaActivo)
+  throw new AppError('El flujo tiene conexiones o nodos sin completar.', 400, { codigo: 'FLOW_CON_ERRORES', errores });
+if (errores.length > 0 && flowYaActivo && dto.activo !== false) {
+  if (!dto.confirmarDesactivar)                          // sin confirmación: no se guarda nada
+    throw new AppError('El flujo activo tiene errores; confirma para guardarlo desactivado.', 409,
+      { codigo: 'FLOW_ACTIVO_CON_ERRORES', errores });
+  dto = { ...dto, activo: false };                       // con confirmación: se guarda y se desactiva
+}
+if (dto.activo === true || flowYaActivo) assertConfigsEstrictas(dto.nodos); // red de seguridad
+// con errores y sin activar: se guarda con activo: false
+return { flow, advertencias: errores };
+```
+
+- `desactivarFlowActivo` solo se llama **después** de pasar la validación, para que un `400` no deje al
+  tenant sin flujo activo.
+- `flowYaActivo` = el documento ya tenía `activo: true` y el DTO no lo desactiva.
+- `confirmarDesactivar` es un booleano **opcional del body** (`z.boolean().optional()`, no se persiste).
+  La respuesta incluye `desactivado: true` cuando se aplicó. Sin flujo activo tras esto, el motor
+  simplemente no interviene (`getFlowActivo` → `null`) y responde Sofi: no hace falta tocar el runtime.
+- El `409` y el `400` van antes de `desactivarFlowActivo`/escritura: un rechazo no cambia nada.
+- Verificar que `AppError` admite detalles extra; si no, extenderlo en `utils` (sin romper el formato de
+  `docs/api-contract.md`: `{ success:false, error:{ code, message, details } }`).
+- **Motor:** `avanzar` trata un `nodoDestino` vacío como fin del flujo (criterio 24). Test.
+
+### H. Editor: errores en vivo y activación
+
+- `lib/graph.ts`: convierte `nodes`/`edges` de React Flow al formato de `analizarGrafo`. Las ramas de
+  `condicion`/`intencion`/`ia` viven en `node.data.nodo.config`; las aristas lineales, en `edges`.
+- **Borrador local** (`hooks/useFlowDraft.ts`): serializa `{ nodos, aristas, entrada, nombre, trigger,
+  guardadoEn }` en `localStorage` (clave `flow-draft:<tenantId>:<flowId|nuevo>`), con *debounce* de
+  ~1 s y `try/catch` en cada acceso (puede estar bloqueado). Al montar, si hay borrador más nuevo que
+  `flow.updatedAt`, muestra un `Alert` con **Recuperar** / **Descartar**. Se borra al guardar bien.
+  `useSaveFlow` pasa `onError` a un toast con *Reintentar*; no vacía el estado.
+- `useGraphErrors(nodes, edges, entrada)`: `useMemo` sobre `analizarGrafo` → `Record<nodoId, ErrorGrafo[]>`
+  y `total`. **Reemplaza** al `nodeErrors` del store como fuente del rojo; `useFlowStore.nodeErrors`
+  queda solo para los errores de forma que devuelve el servidor (Zod) y se limpia al editar ese nodo.
+- `FlowNode`: tres estados visuales con tokens semánticos del proyecto — **error** (borde `destructive`,
+  icono y primera línea del mensaje), **correcto** (indicador verde con check) y **neutro** mientras el
+  usuario no ha tocado el nodo. Pasa a verde en el mismo render en que `analizarGrafo` deja de reportarlo.
+  `aria-live="polite"` en el contador, no en cada nodo.
+- `useSaveFlow`: usa `advertencias` solo para un toast («Guardado con 2 advertencias») y para
+  sincronizar; ya no pinta de rojo desde el `400`.
+- `ConfirmarGuardadoActivoDialog.tsx` (shadcn `AlertDialog`; instalar con la CLI 3.8.5 si falta):
+  lista de nodos con error (con `nombreDeNodo`), el texto del efecto y tres botones. Se abre desde
+  `onGuardar` **antes** de llamar a la API cuando `flow.activo && total > 0`; si aun así el servidor
+  responde `409 FLOW_ACTIVO_CON_ERRORES` (el cálculo local quedó desfasado), abre el mismo modal con
+  los `errores` del servidor. *No guardar* navega a `/flows` y deja el borrador local; *Cancelar*
+  devuelve el foco al botón Guardar.
+- `FlowEditorPage`: barra con contador (clic → `fitView` al primer nodo con error y selección); *Activar*
+  `disabled` con `Tooltip` si `total > 0`; si el servidor responde `FLOW_CON_ERRORES`, se marcan
+  `error.details.errores` y se selecciona el primero.
+
+### I. Editor: borrado con teclado
+
+- `FlowCanvas`: `deleteKeyCode={['Delete', 'Backspace']}` (React Flow ignora la tecla con el foco en
+  `input`/`textarea`).
+- **Verificado en el código:** las líneas de rama se derivan de `config` en `FlowEditorPage.tsx`
+  (`edgesDerivados`, ~140-161) con id `derivado_${nodoId}_${handleId}` y **`deletable: false`**, así que
+  hoy ni `Supr` ni `Retroceso` pueden borrarlas; solo las aristas lineales (`edgesManuales`) se borran.
+  Cambio: `deletable: true` y añadir `data: { nodoId, handleId }` a cada arista derivada.
+- `onEdgesDelete(edges)`: por cada arista derivada → `actualizarDestinoDeRama(nodoId, handleId, '')`
+  (ya existe, línea ~177); por cada arista lineal → la quita de `edges` (RF ya lo hace con
+  `onEdgesChange`).
+- **Verificado:** `eliminarNodoSeleccionado` (~234-240) quita el nodo y sus aristas **lineales**, pero
+  **no limpia las ramas de otros nodos que lo apuntaban** (referencias colgantes que luego el servidor
+  rechaza) y deja `entrada = ''` si era el inicio. Se reemplaza por la función única `borrarNodos(ids)`
+  (limpia ramas + bloquea la entrada) usada por el botón y por `onBeforeDelete`.
+- `onBeforeDelete`/`onNodesDelete`: rechaza (con toast) borrar el nodo `entrada` si hay más nodos; al
+  borrar un nodo, vacía las ramas que lo apuntaban (misma utilidad `limpiarDestino(config, nodoId)`).
+- El botón «Eliminar» del inspector reutiliza la misma función que la tecla.
+
+### J. Nombres de nodo
+
+- Backend: `nombre` en `flow.validation.ts` (nodo), `flow.types.ts` (`IFlowNode`) y `flow.model.ts`
+  (campo `nombre: { type: String }` en el subesquema del nodo, no dentro de `config`) y en la respuesta.
+- Frontend: `FlowNodeData.nombre?`; `NodeInspector` arriba un `Input` *Nombre del nodo* (máx. 60,
+  placeholder = título por tipo); `FlowNode` muestra `nombre ?? título`; helper único
+  `nombreDeNodo(nodo)` (= `nombre?.trim() || NODE_VISUALS[tipo].label`) usado por el nodo, por
+  `DestinoSelect` (opciones `nombre · tipo`) y por los mensajes de `analizarGrafo`.
+
 ## Notas
 
 - **Compatibilidad hacia atrás:** los tres campos nuevos de `captura` son opcionales en Zod y en el
@@ -233,11 +376,22 @@ El valor sensible viaja enmascarado (mismo helper de máscara de la ficha).
 - **Archivado a mitad de un flujo:** si una key se archiva después de guardar el flujo, el runtime no
   escribe (motivo `campo_archivado`), deja el dato en la variable y lo registra en el log. El editor
   marca el nodo con un aviso al abrirlo.
-- `.test-chat/00-flows-documentation.md` (fuera de git) se actualiza al final para reflejar el destino
-  y la corrección del motor.
+- `.test-chat/00-flows-documentation.md` (fuera de git) se actualiza al final para reflejar el destino,
+  la corrección del motor, el guardado con advertencias (§7: el huérfano deja de ser error de guardado),
+  los nombres de nodo y el borrado con `Supr`.
+- **Tests que cambian de significado:** `flow.validation.test.ts` («un nodo huérfano … → falla») y
+  `flow.routes.test.ts:87` («grafo inválido (nodo huérfano) → 400») pasan a «→ 200 con advertencia» al
+  guardar y «→ 400 `FLOW_CON_ERRORES`» al activar. El test de «alcanzable solo desde una salida de ia»
+  se mueve a `flow-graph.test.ts`.
+- **Decisión registrada:** guardar un flujo ya activo con errores exige confirmación explícita
+  (`409 FLOW_ACTIVO_CON_ERRORES` → modal → `confirmarDesactivar: true`); al confirmar se guarda
+  **inactivo**. Nunca se desactiva en silencio ni se guarda activo con errores.
+- **Orden de implementación sugerido:** motor (A) → `analizarGrafo` + backend (G) → editor (H, I, J) →
+  captura (B–F). Así el editor nuevo ya trae la validación antes de tocar `CapturaForm`.
 
 ## Verificación
 
+- `pnpm --filter @sofiapp/shared typecheck` · `pnpm --filter @sofiapp/shared build` (el backend y el web consumen `dist`)
 - `pnpm --filter @sofiapp/api typecheck` · `pnpm --filter @sofiapp/api test`
 - `pnpm --filter @sofiapp/web build && pnpm --filter @sofiapp/web lint && pnpm --filter @sofiapp/web test`
 - Checklist de PR de `docs/multi-tenancy.md` §9.

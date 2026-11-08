@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { analizarGrafo } from '@sofiapp/shared';
 import { createFlowSchema } from './flow.validation.js';
 
 const posicion = { x: 0, y: 0 };
@@ -30,17 +31,26 @@ function parse(body: unknown) {
   return createFlowSchema.safeParse({ body, params: {}, query: {} });
 }
 
+/** Parsea y devuelve los códigos que reporta `analizarGrafo` (conexión y contenido) sobre el resultado. */
+function advertenciasDe(body: unknown): string[] {
+  const r = parse(body);
+  if (!r.success) throw new Error('El cuerpo no pasó la validación de forma.');
+  const { nodos, aristas, entrada } = r.data.body;
+  return analizarGrafo(nodos, aristas, entrada).map((e) => e.codigo);
+}
+
 describe('flow.validation — validación de grafo en el borde', () => {
   it('un flujo válido pasa', () => {
     expect(parse(base()).success).toBe(true);
   });
 
-  it('una arista que apunta a un id inexistente → 400 (falla la validación)', () => {
+  it('una arista que apunta a un id inexistente se GUARDA (error de conexión, no de forma) y se reporta', () => {
     const body = base({ aristas: [{ id: 'a1', from: 'n1', to: 'no-existe' }] });
-    expect(parse(body).success).toBe(false);
+    expect(parse(body).success).toBe(true);
+    expect(advertenciasDe(body)).toContain('DESTINO_INEXISTENTE');
   });
 
-  it('un nodo huérfano (sin arista entrante y distinto de la entrada) → falla', () => {
+  it('un nodo huérfano se GUARDA y se reporta como advertencia (solo bloquea activar)', () => {
     const body = base({
       nodos: [
         { id: 'n1', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'Hola' } },
@@ -48,7 +58,8 @@ describe('flow.validation — validación de grafo en el borde', () => {
       ],
       entrada: 'n1',
     });
-    expect(parse(body).success).toBe(false);
+    expect(parse(body).success).toBe(true);
+    expect(advertenciasDe(body)).toEqual(['NODO_HUERFANO']);
   });
 
   it('el nodo de entrada debe existir entre los nodos declarados', () => {
@@ -148,9 +159,10 @@ describe('flow.validation — nodo ia (HU-FLOW-03)', () => {
     expect(parse(body).success).toBe(false);
   });
 
-  it('salidas: [] → 400', () => {
+  it('salidas: [] se GUARDA (nodo a medias) y se reporta como contenido incompleto', () => {
     const body = base({ nodos: [nodoIa({ salidas: [] }), destino], entrada: 'n1' });
-    expect(parse(body).success).toBe(false);
+    expect(parse(body).success).toBe(true);
+    expect(advertenciasDe(body)).toContain('CONTENIDO_INCOMPLETO');
   });
 
   it('una clave extra en el config de un nodo ia → 400 (.strict())', () => {
@@ -158,12 +170,13 @@ describe('flow.validation — nodo ia (HU-FLOW-03)', () => {
     expect(parse(body).success).toBe(false);
   });
 
-  it('un nodoDestino de salida que no existe → 400', () => {
+  it('un nodoDestino de salida que no existe se GUARDA y se reporta', () => {
     const body = base({
       nodos: [nodoIa({ salidas: [{ etiqueta: 'x', descripcion: 'y', nodoDestino: 'no-existe' }] }), destino],
       entrada: 'n1',
     });
-    expect(parse(body).success).toBe(false);
+    expect(parse(body).success).toBe(true);
+    expect(advertenciasDe(body)).toContain('DESTINO_INEXISTENTE');
   });
 
   it('un nodo alcanzable solo desde una salida de ia no se reporta como huérfano (criterio 5)', () => {
@@ -178,6 +191,53 @@ describe('flow.validation — nodo ia (HU-FLOW-03)', () => {
       entrada: 'n1',
     });
     expect(parse(body).success).toBe(true);
+  });
+});
+
+describe('flow.validation — guardar un nodo a medias y nombres de nodo (HU-FLOW-05)', () => {
+  const conNodo = (config: Record<string, unknown>): unknown =>
+    base({
+      nodos: [
+        { id: 'n1', tipo: config['tipo'], posicion, config },
+        { id: 'n2', tipo: 'mensaje', posicion, config: { tipo: 'mensaje', texto: 'x' } },
+      ],
+      aristas: [{ id: 'a1', from: 'n1', to: 'n2' }],
+    });
+
+  it.each([
+    ['mensaje sin texto', { tipo: 'mensaje', texto: '' }],
+    ['captura vacía', { tipo: 'captura', campo: '', descripcion: '', tipoDato: 'texto', pregunta: '', reintentos: 1 }],
+    ['condicion sin ramas', { tipo: 'condicion', variable: 'ultimo_mensaje', ramas: [], ramaPorDefecto: '' }],
+    ['intencion sin etiquetas', { tipo: 'intencion', etiquetas: [], ramaPorDefecto: '' }],
+    ['kb sin respaldo', { tipo: 'kb', pregunta: 'ultimo_mensaje', siNoHayRespuesta: '' }],
+    ['accion sin etiquetas', { tipo: 'accion', efecto: { tipo: 'aplicar_etiquetas', tagIds: [] } }],
+    ['accion sin asesor', { tipo: 'accion', efecto: { tipo: 'asignar_asesor', asesorId: '' } }],
+    ['ia recién creada', { tipo: 'ia', objetivo: '', salidas: [], ramaPorDefecto: '', maxTurnos: 3, usarKb: true }],
+  ])('un nodo %s se guarda', (_titulo, config) => {
+    expect(parse(conNodo(config)).success).toBe(true);
+  });
+
+  it('los errores de FORMA siguen bloqueando: tipo de dato inválido, maxTurnos fuera de rango, campo extra', () => {
+    expect(
+      parse(conNodo({ tipo: 'captura', campo: 'a', descripcion: 'b', tipoDato: 'otro', pregunta: 'c', reintentos: 1 })).success,
+    ).toBe(false);
+    expect(
+      parse(conNodo({ tipo: 'ia', objetivo: '', salidas: [], ramaPorDefecto: '', maxTurnos: 0, usarKb: true })).success,
+    ).toBe(false);
+    expect(parse(conNodo({ tipo: 'mensaje', texto: 'x', respuesta: 'colado' })).success).toBe(false);
+    expect(parse(conNodo({ tipo: 'espera', minutos: 0 })).success).toBe(false);
+  });
+
+  it('`nombre` del nodo: opcional, recortado, 1–60 caracteres', () => {
+    const conNombre = (nombre: unknown): unknown =>
+      base({
+        nodos: [{ id: 'n1', tipo: 'mensaje', nombre, posicion, config: { tipo: 'mensaje', texto: 'x' } }],
+        entrada: 'n1',
+      });
+    expect(parse(conNombre('Saludo inicial')).success).toBe(true);
+    expect(parse(conNombre('a'.repeat(60))).success).toBe(true);
+    expect(parse(conNombre('a'.repeat(61))).success).toBe(false);
+    expect(parse(conNombre('   ')).success).toBe(false);
   });
 });
 

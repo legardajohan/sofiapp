@@ -20,6 +20,8 @@ export type SandboxEfecto =
   | { tipo: 'estado_comercial'; estado: string }
   | { tipo: 'semaforo'; clave: string }
   | { tipo: 'datos_extraidos'; campos: Record<string, string> }
+  /** HU-FLOW-05: un nodo `captura` dejó un dato en la ficha. `valor` va enmascarado si es sensible. */
+  | { tipo: 'dato_guardado'; campo: string; valor: string; sensible: boolean }
   | { tipo: 'handoff'; motivo: string; asesor: { id: string; nombre: string } | null }
   | { tipo: 'espera'; hasta: string }
   | { tipo: 'flujo_fin' };
