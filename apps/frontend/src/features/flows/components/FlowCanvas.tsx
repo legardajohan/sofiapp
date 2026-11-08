@@ -15,6 +15,7 @@ import {
   type OnEdgesDelete,
   type OnNodesDelete,
   type ReactFlowInstance,
+  type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -48,6 +49,10 @@ interface FlowCanvasProps {
   onBeforeDelete: OnBeforeDelete;
   /** Entrega la instancia de React Flow (para centrar la cámara en un nodo con error). */
   onInit?: (instancia: ReactFlowInstance) => void;
+  /** Encuadre que dejó el usuario; si existe, se restaura en vez de recalcularlo con `fitView`. */
+  vistaInicial?: Viewport | null;
+  /** Se llama al terminar de mover o hacer zoom, con el encuadre actual. */
+  onVistaCambiada?: (vista: Viewport) => void;
   onNodeClick: (nodeId: string) => void;
   onPaneClick: () => void;
 }
@@ -62,6 +67,8 @@ export function FlowCanvas({
   onNodesDelete,
   onBeforeDelete,
   onInit,
+  vistaInicial,
+  onVistaCambiada,
   onNodeClick,
   onPaneClick,
 }: FlowCanvasProps): React.ReactElement {
@@ -90,7 +97,9 @@ export function FlowCanvas({
         onNodeClick={(_e, node) => onNodeClick(node.id)}
         onPaneClick={onPaneClick}
         defaultEdgeOptions={defaultEdgeOptions}
-        fitView
+        fitView={!vistaInicial}
+        defaultViewport={vistaInicial ?? undefined}
+        onMoveEnd={onVistaCambiada ? (_e, vista) => onVistaCambiada(vista) : undefined}
         fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.4}
         maxZoom={1.5}

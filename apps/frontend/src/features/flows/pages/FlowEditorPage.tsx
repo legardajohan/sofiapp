@@ -12,7 +12,7 @@ import {
   type OnNodesDelete,
   type ReactFlowInstance,
 } from '@xyflow/react';
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, PanelRightOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ErrorGrafo } from '@sofiapp/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuthStore } from '@/stores/authStore';
 import { AddNodeMenu } from '../components/AddNodeMenu.js';
 import { ActivateFlowDialog } from '../components/ActivateFlowDialog.js';
+import { ConfirmarBorradoNodoDialog } from '../components/ConfirmarBorradoNodoDialog.js';
 import { ConfirmarGuardadoActivoDialog } from '../components/ConfirmarGuardadoActivoDialog.js';
 import { EmptyFlowState } from '../components/EmptyFlowState.js';
 import { FlowCanvas } from '../components/FlowCanvas.js';
@@ -38,6 +39,7 @@ import {
   NODE_VISUALS,
 } from '../components/nodeVisuals.js';
 import type { FlowNodeData } from '../components/nodes/FlowNode.js';
+import type { GravedadNodo } from '../components/nodes/ProblemaNodo.js';
 import { useFlow } from '../hooks/useFlow.js';
 import { useFlowDraft } from '../hooks/useFlowDraft.js';
 import { useFlows } from '../hooks/useFlows.js';
@@ -55,6 +57,7 @@ import { detalleDeGuardado } from '../lib/errors.js';
 import { configSinDestinos, nombreDeNodo, ramaDeLinea } from '../lib/graph.js';
 import { validarTrigger } from '../lib/trigger.js';
 import { useFlowStore } from '../useFlowStore.js';
+import { claveVista, guardarVista, leerVista } from '../lib/viewport.js';
 import {
   TRIGGER_POR_DEFECTO,
   type ConfigNodo,
@@ -128,8 +131,23 @@ export function FlowEditorPage(): React.ReactElement {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const instancia = useRef<ReactFlowInstance | null>(null);
+  // Nodos recién creados que el usuario todavía no abandonó: mientras lo configura por primera vez no
+  // se le marca ningún error (ni en el lienzo ni en el panel); se evalúan al salir de ellos.
+  const [sinEvaluar, setSinEvaluar] = useState<ReadonlySet<string>>(new Set());
+  const seleccionPrevia = useRef<string | null>(null);
+  // El panel derecho se puede ocultar con un nodo seleccionado; elegir otro nodo lo vuelve a abrir.
+  const [panelOculto, setPanelOculto] = useState(false);
+  const [borradoPendiente, setBorradoPendiente] = useState<{
+    nodos: string[];
+    conexiones: string[];
+    resolver: (confirmado: boolean) => void;
+  } | null>(null);
 
   const claveDraft = claveBorrador(usuarioId, esNuevo ? undefined : id);
+  // Encuadre (zoom y desplazamiento) que dejó el usuario la última vez: al volver se restaura en vez de
+  // recalcular el encuadre, que movía todo de sitio aunque los nodos estuvieran en su lugar.
+  const claveDeVista = esNuevo ? null : claveVista(usuarioId, id);
+  const vistaGuardada = useMemo(() => (claveDeVista ? leerVista(claveDeVista) : null), [claveDeVista]);
   const grafo = useGraphErrors(nodes, edges, entrada);
 
   const hidratado = useRef<string | undefined>(undefined);
@@ -182,6 +200,27 @@ export function FlowEditorPage(): React.ReactElement {
       : { nombre: flow.nombre, nodos: flow.nodos, aristas: flow.aristas, entrada: flow.entrada },
   );
 
+  // Al abandonar un nodo (otro nodo, o clic en el lienzo) deja de ser «recién creado» y se evalúa.
+  useEffect(() => {
+    const previa = seleccionPrevia.current;
+    seleccionPrevia.current = selectedNodeId;
+    if (previa && previa !== selectedNodeId) {
+      setSinEvaluar((actual) => {
+        if (!actual.has(previa)) return actual;
+        const siguiente = new Set(actual);
+        siguiente.delete(previa);
+        return siguiente;
+      });
+    }
+  }, [selectedNodeId]);
+
+  // Ámbar si al nodo solo le falta configuración; rojo si hay algo roto (enlace sin destino, huérfano).
+  const gravedadDe = useCallback(
+    (nodeId: string): GravedadNodo =>
+      (grafo.porNodo.get(nodeId) ?? []).every((e) => e.codigo === 'CONTENIDO_INCOMPLETO') ? 'pendiente' : 'error',
+    [grafo.porNodo],
+  );
+
   const decoratedNodes = useMemo(
     () =>
       nodes.map((n) => ({
@@ -191,10 +230,12 @@ export function FlowEditorPage(): React.ReactElement {
           esEntrada: n.id === entrada,
           error: nodeErrors[n.id],
           // Calculado en vivo con `analizarGrafo`: en cuanto se corrige, el nodo pasa de rojo a verde.
-          problemas: (grafo.porNodo.get(n.id) ?? []).map((e) => e.mensaje),
+          // Un nodo recién creado no muestra estado hasta que se sale de él.
+          problemas: sinEvaluar.has(n.id) ? undefined : (grafo.porNodo.get(n.id) ?? []).map((e) => e.mensaje),
+          gravedad: gravedadDe(n.id),
         },
       })),
-    [nodes, entrada, nodeErrors, grafo.porNodo],
+    [nodes, entrada, nodeErrors, grafo.porNodo, sinEvaluar, gravedadDe],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -327,6 +368,46 @@ export function FlowEditorPage(): React.ReactElement {
     });
   }, []);
 
+  /** Conexiones (entrantes y salientes) que se perderían al borrar `ids`, redactadas «A → B». */
+  const conexionesDe = useCallback(
+    (ids: ReadonlySet<string>): string[] => {
+      const vistas = new Set<string>();
+      const textos: string[] = [];
+      for (const linea of edgesParaCanvas) {
+        if (!ids.has(linea.source) && !ids.has(linea.target)) continue;
+        if (vistas.has(linea.id)) continue;
+        vistas.add(linea.id);
+        const de = nodoPorId.get(linea.source);
+        const a = nodoPorId.get(linea.target);
+        const etiqueta = typeof linea.data?.['etiqueta'] === 'string' ? ` (${linea.data['etiqueta']})` : '';
+        textos.push(`${de ? nombreDeNodo(de) : 'Nodo'} → ${a ? nombreDeNodo(a) : 'Nodo'}${etiqueta}`);
+      }
+      return textos;
+    },
+    [edgesParaCanvas, nodoPorId],
+  );
+
+  const nombresDe = useCallback(
+    (ids: ReadonlySet<string>): string[] =>
+      [...ids].map((idNodo) => {
+        const nodo = nodoPorId.get(idNodo);
+        return nodo ? nombreDeNodo(nodo) : 'Nodo';
+      }),
+    [nodoPorId],
+  );
+
+  /** Con conexiones, pregunta antes de borrar (el aviso dice cuáles se quitan); sin ellas, borra directo. */
+  const confirmarBorrado = useCallback(
+    (ids: ReadonlySet<string>): Promise<boolean> => {
+      const conexiones = conexionesDe(ids);
+      if (conexiones.length === 0) return Promise.resolve(true);
+      return new Promise<boolean>((resolver) => {
+        setBorradoPendiente({ nodos: nombresDe(ids), conexiones, resolver });
+      });
+    },
+    [conexionesDe, nombresDe],
+  );
+
   const onBeforeDelete: OnBeforeDelete = useCallback(
     async ({ nodes: porBorrar }) => {
       // El nodo de inicio no se borra mientras haya más nodos: sin él el flujo no tendría por dónde empezar.
@@ -334,9 +415,10 @@ export function FlowEditorPage(): React.ReactElement {
         avisarEntrada();
         return false;
       }
-      return true;
+      if (porBorrar.length === 0) return true; // solo enlaces: borrar un enlace no pide confirmación
+      return confirmarBorrado(new Set(porBorrar.map((n) => n.id)));
     },
-    [entrada, hayOtrosNodos, nodes.length, avisarEntrada],
+    [entrada, hayOtrosNodos, nodes.length, avisarEntrada, confirmarBorrado],
   );
 
   const onNodesDelete: OnNodesDelete = useCallback(
@@ -358,6 +440,7 @@ export function FlowEditorPage(): React.ReactElement {
       const nodo: INodo = { id, tipo, posicion, config: configPorDefecto(tipo) };
       setNodes((nds) => [...nds, { id, type: 'flowNode', position: posicion, data: { nodo, esEntrada: false } }]);
       setEntrada((actual) => actual || id);
+      setSinEvaluar((actual) => new Set(actual).add(id));
       select(id);
     },
     [nodes.length, setNodes, select],
@@ -396,19 +479,20 @@ export function FlowEditorPage(): React.ReactElement {
     [actualizarNodo],
   );
 
-  const eliminarNodoSeleccionado = useCallback(() => {
+  const eliminarNodoSeleccionado = useCallback(async () => {
     if (!selectedNodeId) return;
     if (selectedNodeId === entrada && hayOtrosNodos) {
       avisarEntrada();
       return;
     }
     const ids = new Set([selectedNodeId]);
+    if (!(await confirmarBorrado(ids))) return;
     limpiarReferencias(ids);
     setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
     setEdges((eds) => eds.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
     setEntrada((actual) => (actual === selectedNodeId ? '' : actual));
     select(null);
-  }, [selectedNodeId, entrada, hayOtrosNodos, avisarEntrada, limpiarReferencias, setNodes, setEdges, select]);
+  }, [selectedNodeId, entrada, hayOtrosNodos, avisarEntrada, confirmarBorrado, limpiarReferencias, setNodes, setEdges, select]);
 
   const flujoActivoActual = useMemo(() => {
     if (esNuevo) return flows?.find((f) => f.activo) ?? null;
@@ -672,25 +756,64 @@ export function FlowEditorPage(): React.ReactElement {
                 onInit={(rf) => {
                   instancia.current = rf;
                 }}
-                onNodeClick={select}
+                vistaInicial={vistaGuardada}
+                onVistaCambiada={claveDeVista ? (v) => guardarVista(claveDeVista, v) : undefined}
+                onNodeClick={(nodeId) => {
+                  setPanelOculto(false);
+                  select(nodeId);
+                }}
                 onPaneClick={() => select(null)}
               />
+              {selectedNodo && panelOculto ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-3 top-3 z-10 h-8 gap-1.5 bg-card"
+                  onClick={() => setPanelOculto(false)}
+                >
+                  <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
+                  Mostrar panel
+                </Button>
+              ) : null}
             </>
           )}
         </div>
 
-        <NodeInspector
-          nodo={selectedNodo}
-          esEntrada={selectedNodeId === entrada}
-          error={selectedNodeId ? nodeErrors[selectedNodeId] : undefined}
-          problemas={selectedNodeId ? (grafo.porNodo.get(selectedNodeId) ?? []).map((e) => e.mensaje) : []}
-          onNombreChange={actualizarNombreNodo}
-          opcionesDestino={opcionesDestino}
-          onChange={actualizarConfig}
-          onDelete={eliminarNodoSeleccionado}
-          onMarcarEntrada={() => selectedNodeId && setEntrada(selectedNodeId)}
-        />
+        {/* Sin nodo seleccionado, o con el panel oculto, el lienzo ocupa todo el ancho. */}
+        {selectedNodo && !panelOculto ? (
+          <NodeInspector
+            nodo={selectedNodo}
+            esEntrada={selectedNodeId === entrada}
+            error={selectedNodeId ? nodeErrors[selectedNodeId] : undefined}
+            problemas={
+              selectedNodeId && !sinEvaluar.has(selectedNodeId)
+                ? (grafo.porNodo.get(selectedNodeId) ?? []).map((e) => e.mensaje)
+                : []
+            }
+            gravedad={selectedNodeId ? gravedadDe(selectedNodeId) : 'error'}
+            onNombreChange={actualizarNombreNodo}
+            opcionesDestino={opcionesDestino}
+            onChange={actualizarConfig}
+            onDelete={() => void eliminarNodoSeleccionado()}
+            onMarcarEntrada={() => selectedNodeId && setEntrada(selectedNodeId)}
+            onCerrar={() => setPanelOculto(true)}
+          />
+        ) : null}
       </div>
+
+      <ConfirmarBorradoNodoDialog
+        open={borradoPendiente !== null}
+        nodos={borradoPendiente?.nodos ?? []}
+        conexiones={borradoPendiente?.conexiones ?? []}
+        onConfirmar={() => {
+          borradoPendiente?.resolver(true);
+          setBorradoPendiente(null);
+        }}
+        onCancelar={() => {
+          borradoPendiente?.resolver(false);
+          setBorradoPendiente(null);
+        }}
+      />
 
       <ActivateFlowDialog
         open={activarAbierto}

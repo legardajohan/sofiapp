@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { createScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { User } from '../users/user.model.js';
 
 const { sendOutboundMock, chatMock, extractMock, flowRuntimeQueueAddMock } = vi.hoisted(() => ({
   sendOutboundMock: vi.fn().mockResolvedValue({}),
@@ -72,6 +73,7 @@ beforeEach(async () => {
   await Flow.deleteMany({});
   await FlowState.deleteMany({});
   await Cliente.deleteMany({});
+  await User.deleteMany({});
   await Flow.syncIndexes();
   await FlowState.syncIndexes();
   sendOutboundMock.mockClear();
@@ -107,6 +109,61 @@ describe('ejecutarFlujo — nodo handoff', () => {
 
     const cliente = await Cliente.findById(clienteId).lean();
     expect(cliente?.iaHabilitada).toBe(false);
+  });
+});
+
+describe('ejecutarFlujo — nodo handoff con asesor elegido', () => {
+  async function crearAsesor(activo = true): Promise<string> {
+    const doc = await createScoped(User, tenantId, {
+      nombre: 'Ana',
+      email: `ana${Math.random()}@empresa.test`,
+      passwordHash: 'x',
+      rol: 'admin',
+      activo,
+    });
+    return String(doc._id);
+  }
+
+  it('asigna la conversación al asesor del nodo (manda sobre el reparto automático)', async () => {
+    const asesorId = await crearAsesor();
+    await crearFlowActivo(
+      [{ ...nodoHandoff, config: { tipo: 'handoff', notificarAsesorId: asesorId } }],
+      [],
+      'h1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.iaHabilitada).toBe(false);
+    expect(String(cliente?.asesorId)).toBe(asesorId);
+  });
+
+  it('sin asesor en el nodo, la conversación queda sin dueño (la reparte la configuración general)', async () => {
+    await crearFlowActivo([nodoHandoff], [], 'h1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.asesorId ?? null).toBeNull();
+  });
+
+  it('con un asesor ya no válido, el traspaso igual ocurre y no se rompe', async () => {
+    const asesorId = await crearAsesor(false);
+    await crearFlowActivo(
+      [{ ...nodoHandoff, config: { tipo: 'handoff', notificarAsesorId: asesorId } }],
+      [],
+      'h1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.iaHabilitada).toBe(false);
+    expect(cliente?.asesorId ?? null).toBeNull();
   });
 });
 

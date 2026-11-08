@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import { FlowCanvas } from '../FlowCanvas.js';
 import type { FlowNodeData } from './FlowNode.js';
@@ -40,10 +40,30 @@ function pintar(data: Partial<FlowNodeData>, nodoPropio: INodo = nodo) {
 }
 
 describe('FlowNode — estado en vivo, rojo o verde (HU-FLOW-05, criterio 26)', () => {
-  it('con problemas se ve en rojo: icono, texto accesible y la primera causa a la vista', () => {
+  it('con problemas se marca con un icono (no con un recuadro) y el «por qué» NO ocupa lugar en el nodo', () => {
     pintar({ problemas: ['«Mensaje» no tiene conexión de entrada.', 'otra cosa'] });
     expect(screen.getByLabelText('Con errores')).toBeInTheDocument();
+    expect(screen.queryByText('«Mensaje» no tiene conexión de entrada.')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Listo')).not.toBeInTheDocument();
+  });
+
+  it('al hacer clic en el icono se ve el «por qué», con todos los problemas', () => {
+    pintar({ problemas: ['«Mensaje» no tiene conexión de entrada.', 'otra cosa'] });
+    fireEvent.click(screen.getByLabelText('Con errores'));
     expect(screen.getByText('«Mensaje» no tiene conexión de entrada.')).toBeInTheDocument();
+    expect(screen.getByText('otra cosa')).toBeInTheDocument();
+  });
+
+  it('un nodo a medias (gravedad «pendiente») se marca como «Falta configurar», no como error', () => {
+    pintar({ problemas: ['Falta el texto.'], gravedad: 'pendiente' });
+    expect(screen.getByLabelText('Falta configurar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Con errores')).not.toBeInTheDocument();
+  });
+
+  it('un nodo recién creado (sin evaluar) no muestra ni error ni «listo»', () => {
+    pintar({ problemas: undefined });
+    expect(screen.queryByLabelText('Con errores')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Falta configurar')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Listo')).not.toBeInTheDocument();
   });
 
@@ -67,6 +87,7 @@ describe('FlowNode — estado en vivo, rojo o verde (HU-FLOW-05, criterio 26)', 
   it('un error de forma del servidor también lo marca en rojo', () => {
     pintar({ error: 'La pregunta no puede ir vacía', problemas: [] });
     expect(screen.getByLabelText('Con errores')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Con errores'));
     expect(screen.getByText('La pregunta no puede ir vacía')).toBeInTheDocument();
   });
 

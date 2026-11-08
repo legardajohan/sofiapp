@@ -174,7 +174,12 @@ describe('FlowEditorPage — estado de errores en vivo (HU-FLOW-05, criterios 26
     await cargado();
     await userEvent.click(screen.getByRole('button', { name: '2 nodos con errores' }));
     expect(await screen.findByText('Nombre del nodo')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/no tiene destino/);
+    // En el panel, el problema va en UNA línea y el detalle se abre como acordeón.
+    const aviso = screen.getByRole('alert');
+    expect(aviso).toHaveTextContent(/1 error en este nodo/);
+    expect(screen.queryByText(/no tiene destino/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /1 error en este nodo/ }));
+    expect(await screen.findByText(/no tiene destino/)).toBeInTheDocument();
   });
 });
 
@@ -426,10 +431,79 @@ describe('FlowEditorPage — borrar nodos y enlaces (criterios 30-32)', () => {
 
     seleccionarNodo(screen.getAllByText('Mensaje')[1]!); // m2
     await userEvent.click(await screen.findByRole('button', { name: 'Eliminar nodo' }));
+    // m2 tiene una conexión (la rama «si» de c1): antes de borrar avisa y la nombra.
+    expect(await screen.findByText('¿Borrar «Mensaje»?')).toBeInTheDocument();
+    expect(screen.getByText(/Condición → Mensaje/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Borrar' }));
 
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node')).toHaveLength(2)); // c1 y m1
     // La condición queda con una rama sin destino → en rojo, en vez de apuntar a un nodo que ya no existe.
-    expect(await screen.findByLabelText('Con errores')).toBeInTheDocument();
-    expect(screen.getByText(/no tiene destino/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByLabelText('Con errores'));
+    expect(await screen.findByText(/no tiene destino/)).toBeInTheDocument();
+  });
+
+  it('cancelar el aviso conserva el nodo y sus conexiones', async () => {
+    montar(flujo({ nodos: [condicion('m2'), msg('m1', 'Hola', 300), msg('m2', 'Destino', 600)] }));
+    await cargado();
+
+    seleccionarNodo(screen.getAllByText('Mensaje')[1]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Eliminar nodo' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+
+    expect(document.querySelectorAll('.react-flow__node')).toHaveLength(3);
+    expect(screen.queryByLabelText('Con errores')).not.toBeInTheDocument();
+  });
+
+  it('un nodo SIN conexiones se borra directo, sin aviso', async () => {
+    montar(flujo()); // m2 está suelto
+    await cargado();
+
+    seleccionarNodo(screen.getAllByText('Mensaje')[1]!); // m2
+    await userEvent.click(await screen.findByRole('button', { name: 'Eliminar nodo' }));
+
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node')).toHaveLength(2));
+    expect(screen.queryByText(/¿Borrar/)).not.toBeInTheDocument();
+  });
+});
+
+describe('FlowEditorPage — panel derecho', () => {
+  it('sin ningún nodo seleccionado el panel no existe', async () => {
+    montar(flujoSano());
+    await cargado();
+    expect(screen.queryByText('Nombre del nodo')).not.toBeInTheDocument();
+  });
+
+  it('se puede ocultar con un nodo seleccionado y se vuelve a abrir desde el lienzo', async () => {
+    montar(flujoSano());
+    await cargado();
+    seleccionarNodo(screen.getAllByText('Mensaje')[0]!);
+    expect(await screen.findByText('Nombre del nodo')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ocultar panel' }));
+    expect(screen.queryByText('Nombre del nodo')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar panel' }));
+    expect(await screen.findByText('Nombre del nodo')).toBeInTheDocument();
+  });
+});
+
+describe('FlowEditorPage — nodo recién creado', () => {
+  it('no marca error mientras se configura; lo marca al salir de él', async () => {
+    montar(flujoSano());
+    await cargado();
+
+    await userEvent.click(screen.getByRole('button', { name: /Agregar nodo/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Mensaje/ }));
+    // El nuevo mensaje está vacío (incompleto) pero el usuario apenas empieza: ni lienzo ni panel avisan.
+    expect(await screen.findByText('Nombre del nodo')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Falta configurar')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Con errores')).not.toBeInTheDocument();
+
+    // Al salir (clic en otro nodo) se evalúa: aparece la marca.
+    seleccionarNodo(screen.getAllByText('Mensaje')[0]!);
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Falta configurar') ?? screen.queryByLabelText('Con errores')).toBeInTheDocument(),
+    );
   });
 });

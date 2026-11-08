@@ -1,9 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NODE_VISUALS, filasDeRama, resumenConfig, tieneSalidaLineal } from '../nodeVisuals.js';
 import { nombreDeNodo } from '../../lib/graph.js';
 import type { INodo } from '../../types.js';
+import { ProblemaNodo, type GravedadNodo } from './ProblemaNodo.js';
 
 export interface FlowNodeData extends Record<string, unknown> {
   nodo: INodo;
@@ -15,6 +16,8 @@ export interface FlowNodeData extends Record<string, unknown> {
    * `undefined` solo en tests o fuera del editor: el nodo no pinta ningún estado.
    */
   problemas?: string[];
+  /** `error` = algo roto (rojo); `pendiente` = nodo a medias (ámbar). Sin dato, un error del servidor es `error`. */
+  gravedad?: GravedadNodo;
 }
 
 /** Nodo custom único para los 9 tipos del flujo: la distinción visual viene del icono, el label y
@@ -27,7 +30,7 @@ export interface FlowNodeData extends Record<string, unknown> {
  *  entra con un «pop» corto, porque es el único momento en que el usuario necesita notar que su
  *  arreglo funcionó. */
 export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
-  const { nodo, esEntrada, error, problemas } = data as FlowNodeData;
+  const { nodo, esEntrada, error, problemas, gravedad } = data as FlowNodeData;
   const visual = NODE_VISUALS[nodo.tipo];
   const Icon = visual.icon;
   const esHandoff = nodo.tipo === 'handoff';
@@ -36,9 +39,10 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
   const titulo = nombreDeNodo(nodo);
   const tieneNombre = titulo !== visual.label;
 
-  const detalle = error ?? problemas?.[0];
-  const conError = detalle !== undefined;
+  const detalles = [...(error ? [error] : []), ...(problemas ?? [])];
+  const conError = detalles.length > 0;
   const listo = !conError && problemas !== undefined;
+  const nivel: GravedadNodo = error ? 'error' : (gravedad ?? 'error');
 
   return (
     <div
@@ -47,7 +51,8 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
         selected ? 'ring-2 ring-ring' : '',
         esEntrada && 'ring-2 ring-primary',
         esHandoff ? 'border-destructive/50' : 'border-border',
-        conError && 'border-destructive ring-2 ring-destructive/60',
+        // Borde fino y del color del estado: el detalle vive en el popover del icono, no en el nodo.
+        conError && (nivel === 'error' ? 'border-destructive/70' : 'border-amber-500/60'),
       )}
     >
       {!esEntrada ? (
@@ -80,7 +85,7 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
             </span>
           ) : null}
           {conError ? (
-            <AlertCircle className="h-3.5 w-3.5 text-destructive" role="img" aria-label="Con errores" />
+            <ProblemaNodo gravedad={nivel} problemas={detalles} />
           ) : listo ? (
             <CheckCircle2
               className="h-3.5 w-3.5 text-success motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-200"
@@ -90,12 +95,6 @@ export function FlowNode({ data, selected }: NodeProps): React.ReactElement {
           ) : null}
         </div>
       </div>
-
-      {conError ? (
-        <p className="border-b border-border/60 bg-destructive-subtle px-3 py-1.5 text-[11px] leading-snug text-destructive">
-          {detalle}
-        </p>
-      ) : null}
 
       {filas.length > 0 ? (
         // Una fila por rama, cada una con su propio handle de salida (a la derecha, alineado a esa

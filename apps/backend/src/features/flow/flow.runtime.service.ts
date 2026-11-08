@@ -273,10 +273,32 @@ async function ejecutarEfecto(tenantId: TenantId, clienteId: string, efecto: Efe
       case 'asignar_asesor':
         await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
         return;
-      case 'handoff':
+      case 'handoff': {
         await setIaHabilitada(tenantId.toString(), clienteId, false);
-        await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'handoff', motivo: 'flujo', asesor: null });
+        // Un asesor elegido en el nodo MANDA sobre la asignación automática (balanceo). Sin él, la
+        // conversación queda sin dueño y la reparte la configuración general. Si el asesor ya no es
+        // válido (desactivado, borrado) no se rompe el traspaso: queda para el reparto automático.
+        let asesor: { id: string; nombre: string } | null = null;
+        if (efecto.notificarAsesorId) {
+          try {
+            const r = await assignConversation(
+              tenantId.toString(),
+              ACTOR_SISTEMA_FLUJO,
+              clienteId,
+              efecto.notificarAsesorId,
+            );
+            if (r.asignadoA) asesor = { id: r.asignadoA, nombre: r.asignadoANombre ?? '' };
+          } catch (err) {
+            logger.warn('El asesor del nodo handoff no se pudo asignar; queda al reparto automático', {
+              tenantId: tenantId.toString(),
+              clienteId,
+              error: String(err),
+            });
+          }
+        }
+        await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'handoff', motivo: 'flujo', asesor });
         return;
+      }
       case 'programar_espera':
         // Se intercepta en `correrMotor` ANTES de llegar aquí: necesita devolver el token que
         // genera para que `persistirFlowState` lo escriba en el mismo `$set`, algo que este

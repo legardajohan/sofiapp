@@ -145,7 +145,7 @@ Con destino de ficha, el **nombre de la variable y el tipo de dato los fija el d
 | Campo | Tipo | Reglas |
 |---|---|---|
 | `motivo` | string (opcional) | Queda como contexto para el asesor. |
-| `notificarAsesorId` | id (opcional) | **Hoy no se usa** en ejecución (el destino lo deciden las *Reglas de transferencia*). |
+| `notificarAsesorId` | id (opcional) | Asesor al que se transfiere (en el editor se elige por **nombre**). Si se fija, la conversación se **asigna a esa persona** y manda sobre el reparto automático de chats; vacío = lo reparte la configuración general. Si el asesor ya no está activo, el traspaso ocurre igual y queda al reparto automático. |
 
 - **Apaga la IA** en esa conversación y termina el flujo. Antes del handoff suele ir un `mensaje` o `kb` ("Enseguida te comunico con un asesor 🙌") y un `accion` `crear_lead`.
 
@@ -259,7 +259,7 @@ los desplegables de destino y en los mensajes de error.
 
 - No hay **botones interactivos** de WhatsApp: los menús son numerados y se resuelven con `condicion` + `opcion_elegida`.
 - No hay interpolación de variables en `mensaje`.
-- Campos guardados pero **sin efecto** en ejecución: `captura.reintentos`, `kb.kSobrescrito`, `handoff.notificarAsesorId`.
+- Campos guardados pero **sin efecto** en ejecución: `captura.reintentos`, `kb.kSobrescrito`.
 - Las salidas del nodo `ia` se asignan desde el inspector (arrastrar no las conecta).
 - Un solo flujo activo por empresa (los demás quedan para el chat de prueba).
 - **Corregido en HU-FLOW-05:** antes, lo que un nodo hacía **antes** de llegar a un nodo que consulta a la IA
