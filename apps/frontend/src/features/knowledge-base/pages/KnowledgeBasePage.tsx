@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { HelpCircle } from 'lucide-react';
 import { getKbDocuments } from '../../../api/knowledge-base.js';
+import { SandboxSheet } from '../../assistant-sandbox/index.js';
 import { KnowledgeGrid } from '../components/KnowledgeGrid.js';
 import {
   KnowledgeDocumentDialog,
@@ -90,6 +91,7 @@ export function KnowledgeBasePage(): React.ReactElement {
               Carga la información pertinente que la IA usará como contexto al responder.
             </p>
           </div>
+          <SandboxSheet descripcion="Pregúntale a Sofi algo que debería saber de tu empresa y mira qué responde con lo que cargaste." />
           <button
             type="button"
             onClick={() => setOnboardingOpen(true)}

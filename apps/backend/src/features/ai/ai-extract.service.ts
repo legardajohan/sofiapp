@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.js';
 import { findByIdScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
 import { ejecutarExtraccion } from '../cliente/cliente.service.js';
+import { emitirEfectoPrueba } from '../sandbox/sandbox.effects.js';
 import type { CampoExtraido } from '../cliente/cliente.types.js';
 import type { ChatTurn } from '../../integrations/llm/llm-provider.types.js';
 import { publishConversationUpdated } from '../conversation/conversation.service.js';
@@ -52,7 +53,19 @@ export async function extraerDatosSiHaceFalta(
     if (!faltaAlgo || !hayNovedad) return;
 
     // `actorId: null` = el sistema, el mismo convenio de la semaforización y el handoff automático.
-    await ejecutarExtraccion(tenantId, clienteId, null);
+    const extraidos = await ejecutarExtraccion(tenantId, clienteId, null);
+    // HU-IA-08: lo que Sofi sacó de la conversación, visible en el chat de prueba.
+    await emitirEfectoPrueba(tenantId, clienteId, {
+      tipo: 'datos_extraidos',
+      campos: Object.fromEntries(
+        Object.entries({
+          nombre: extraidos.nombreCompleto,
+          correo: extraidos.correo,
+          telefono: extraidos.telefono,
+          interes: extraidos.interes ?? null,
+        }).filter((par): par is [string, string] => typeof par[1] === 'string' && par[1] !== ''),
+      ),
+    });
     // La ficha abierta se refresca sola: `conversation:updated` ya invalida `['contact-history']`
     // en `useInboxRealtime`, así que no hace falta un evento nuevo.
     await publishConversationUpdated(tenantId, clienteId);

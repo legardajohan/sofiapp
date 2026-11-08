@@ -10,7 +10,12 @@ import {
   type Node,
   type NodeChange,
   type NodeTypes,
+  type OnBeforeDelete,
   type OnConnect,
+  type OnEdgesDelete,
+  type OnNodesDelete,
+  type ReactFlowInstance,
+  type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -26,12 +31,28 @@ const edgeTypes: EdgeTypes = { flowEdge: FlowEdge };
 // alrededor cuando hay varios.
 const FIT_VIEW_OPTIONS = { maxZoom: 1, padding: 0.4 };
 
+/** Borrar lo seleccionado (enlace o nodo) con `Supr` y con `Retroceso` (HU-FLOW-05, criterio 31).
+ *  React Flow solo trae `Backspace` por defecto, así que en teclados donde «Supr» es la tecla
+ *  natural de borrar no pasaba nada. Se ignora solo si el foco está en un campo de texto. */
+const TECLAS_BORRAR = ['Delete', 'Backspace'];
+
 interface FlowCanvasProps {
   nodes: Node[];
   edges: Edge[];
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: OnConnect;
+  /** Se llama con los enlaces que el usuario borró (enlaces de ramas incluidos). */
+  onEdgesDelete: OnEdgesDelete;
+  onNodesDelete: OnNodesDelete;
+  /** Permite vetar un borrado (p. ej. el nodo de inicio). */
+  onBeforeDelete: OnBeforeDelete;
+  /** Entrega la instancia de React Flow (para centrar la cámara en un nodo con error). */
+  onInit?: (instancia: ReactFlowInstance) => void;
+  /** Encuadre que dejó el usuario; si existe, se restaura en vez de recalcularlo con `fitView`. */
+  vistaInicial?: Viewport | null;
+  /** Se llama al terminar de mover o hacer zoom, con el encuadre actual. */
+  onVistaCambiada?: (vista: Viewport) => void;
   onNodeClick: (nodeId: string) => void;
   onPaneClick: () => void;
 }
@@ -42,6 +63,12 @@ export function FlowCanvas({
   onNodesChange,
   onEdgesChange,
   onConnect,
+  onEdgesDelete,
+  onNodesDelete,
+  onBeforeDelete,
+  onInit,
+  vistaInicial,
+  onVistaCambiada,
   onNodeClick,
   onPaneClick,
 }: FlowCanvasProps): React.ReactElement {
@@ -62,10 +89,17 @@ export function FlowCanvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        deleteKeyCode={TECLAS_BORRAR}
+        onEdgesDelete={onEdgesDelete}
+        onNodesDelete={onNodesDelete}
+        onBeforeDelete={onBeforeDelete}
+        onInit={onInit}
         onNodeClick={(_e, node) => onNodeClick(node.id)}
         onPaneClick={onPaneClick}
         defaultEdgeOptions={defaultEdgeOptions}
-        fitView
+        fitView={!vistaInicial}
+        defaultViewport={vistaInicial ?? undefined}
+        onMoveEnd={onVistaCambiada ? (_e, vista) => onVistaCambiada(vista) : undefined}
         fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.4}
         maxZoom={1.5}

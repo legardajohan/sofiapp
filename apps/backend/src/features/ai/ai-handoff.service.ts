@@ -369,11 +369,13 @@ async function disparaIntencionDeCompra(
   regla: IHandoffReglas['intentPurchase'],
   tenantId: string,
   historial: ChatTurn[],
+  esPrueba: boolean,
 ): Promise<boolean> {
   try {
     const { data } = await getAIService().classify({
       tenantId: new Types.ObjectId(tenantId),
       historial,
+      esPrueba,
     });
     return ORDEN_INTERES.indexOf(data.nivelInteres) >= ORDEN_INTERES.indexOf(regla.nivelMinimo);
   } catch (err: unknown) {
@@ -400,6 +402,8 @@ export async function evaluarDespuesDeGenerar(
   tenantId: string,
   historial: ChatTurn[],
   resultado: AiResult<string>,
+  /** HU-IA-08: la evaluación nace de la conversación de prueba; etiqueta el consumo de IA. */
+  esPrueba = false,
 ): Promise<HandoffDecision> {
   if (!settings.activo) return NO_DISPARA;
   const { lowConfidence, intentPurchase } = settings.reglas;
@@ -409,7 +413,7 @@ export async function evaluarDespuesDeGenerar(
   }
   if (
     intentPurchase.activa &&
-    (await disparaIntencionDeCompra(intentPurchase, tenantId, historial))
+    (await disparaIntencionDeCompra(intentPurchase, tenantId, historial, esPrueba))
   ) {
     return { dispara: true, motivo: 'intent_purchase' };
   }

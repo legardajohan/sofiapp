@@ -6,11 +6,12 @@ import { ContactEditDialog } from './ContactEditDialog.js';
 import {
   createContactOption,
   deleteContactOption,
+  fetchContactFields,
   fetchContactOptions,
   updateContact,
   updateContactOption,
 } from '../api.js';
-import type { OpcionDTO, OpcionesPorTipo } from '../types.js';
+import type { CampoContactoDTO, OpcionDTO, OpcionesPorTipo } from '../types.js';
 import type { ContactCardDTO, DatosExtraidosDTO } from '@/features/inbox/types';
 
 vi.mock('../api.js', () => ({
@@ -21,9 +22,15 @@ vi.mock('../api.js', () => ({
   createContactOption: vi.fn(),
   updateContactOption: vi.fn(),
   deleteContactOption: vi.fn(),
+  // HU-FLOW-05: los atributos se eligen del catálogo de campos de la empresa.
+  fetchContactFields: vi.fn(),
+  createContactField: vi.fn(),
+  updateContactField: vi.fn(),
+  archiveContactField: vi.fn(),
 }));
 
 const mockUpdate = vi.mocked(updateContact);
+const mockCampos = vi.mocked(fetchContactFields);
 const mockOpciones = vi.mocked(fetchContactOptions);
 const mockCrearOpcion = vi.mocked(createContactOption);
 const mockBorrarOpcion = vi.mocked(deleteContactOption);
@@ -39,6 +46,17 @@ function opcion(over: Partial<OpcionDTO> & Pick<OpcionDTO, 'tipo' | 'key' | 'lab
     ...over,
   };
 }
+
+function campo(over: Partial<CampoContactoDTO> & Pick<CampoContactoDTO, 'key' | 'label'>): CampoContactoDTO {
+  return { id: `f-${over.key}`, tipoDato: 'texto', sensible: false, orden: 0, activo: true, ...over };
+}
+
+/** Catálogo de campos personalizados del tenant, tal como lo devuelve `GET /api/campos-contacto`. */
+const CAMPOS: CampoContactoDTO[] = [
+  campo({ key: 'colegio', label: 'Colegio' }),
+  campo({ key: 'ciudad', label: 'Ciudad', orden: 1 }),
+  campo({ key: 'eps', label: 'EPS', sensible: true, orden: 2 }),
+];
 
 const OPCIONES: OpcionesPorTipo = {
   interes: [
@@ -115,6 +133,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockUpdate.mockResolvedValue(contacto());
   mockOpciones.mockResolvedValue(OPCIONES);
+  mockCampos.mockResolvedValue(CAMPOS);
 });
 
 describe('ContactEditDialog (HU-CRM-02)', () => {
@@ -256,54 +275,92 @@ describe('ContactEditDialog (HU-CRM-02)', () => {
       }),
     );
 
-    expect(screen.getByLabelText('Nombre del atributo 1')).toBeDisabled();
+    expect(screen.getByLabelText('Campo del atributo 1')).toBeDisabled();
     expect(screen.getByLabelText(/Quitar el atributo/)).toBeDisabled();
   });
 
-  it('agrega un atributo y deriva su clave del nombre', async () => {
+  /** Elige un campo del catálogo en la fila `n` (el desplegable de Radix se abre y se pulsa la opción). */
+  async function elegirCampo(user: ReturnType<typeof userEvent.setup>, fila: number, nombre: string): Promise<void> {
+    await user.click(screen.getByLabelText(`Campo del atributo ${fila}`));
+    await user.click(await screen.findByRole('option', { name: new RegExp(nombre) }));
+  }
+
+  it('agrega un atributo ELIGIENDO un campo del catálogo: viaja solo la clave y el valor', async () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(screen.getByRole('button', { name: 'Agregar atributo' }));
-    await user.type(screen.getByLabelText('Nombre del atributo 1'), 'Colegio');
-    await user.type(screen.getByLabelText(/Valor del atributo/), 'San José');
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    await elegirCampo(user, 1, 'Colegio');
+    await user.type(screen.getByLabelText('Valor del atributo Colegio'), 'San José');
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() =>
       expect(mockUpdate).toHaveBeenCalledWith('c-1', {
-        atributos: [{ key: 'colegio', label: 'Colegio', valor: 'San José', sensible: false }],
+        // Sin `label` ni `sensible`: los fija el catálogo, no la fila.
+        atributos: [{ key: 'colegio', valor: 'San José' }],
       }),
     );
   });
 
-  it('rechaza dos atributos con el mismo nombre, aunque cambie la caja', async () => {
+  it('ya no se teclea el nombre del atributo', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    expect(screen.queryByLabelText('Nombre del atributo 1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Campo del atributo 1')).toBeInTheDocument();
+  });
+
+  it('un campo ya usado en el contacto no se ofrece otra vez', async () => {
     const user = userEvent.setup();
     renderDialog(
       contacto({
-        atributos: [
-          { key: 'colegio', label: 'Colegio', valor: 'San José', sensible: false, oculto: false },
-        ],
+        atributos: [{ key: 'colegio', label: 'Colegio', valor: 'San José', sensible: false, oculto: false }],
       }),
     );
 
-    await user.click(screen.getByRole('button', { name: 'Agregar atributo' }));
-    await user.type(screen.getByLabelText('Nombre del atributo 2'), 'colegio');
-    await user.type(screen.getByLabelText('Valor del atributo colegio'), 'La Salle');
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    await user.click(screen.getByLabelText('Campo del atributo 2'));
 
-    expect(screen.getByText(/Ya hay un atributo llamado "Colegio"/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(await screen.findByRole('option', { name: /Ciudad/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Colegio/ })).not.toBeInTheDocument();
+  });
+
+  it('sin permiso de sensibles, un campo sensible aparece pero no se puede elegir', async () => {
+    const user = userEvent.setup();
+    renderDialog(contacto({ puedeVerSensibles: false }));
+
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    await user.click(screen.getByLabelText('Campo del atributo 1'));
+
+    expect(await screen.findByRole('option', { name: /EPS/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('una fila a medio llenar se avisa en vez de descartarse en silencio', async () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(screen.getByRole('button', { name: 'Agregar atributo' }));
-    await user.type(screen.getByLabelText('Nombre del atributo 1'), 'Colegio');
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    await elegirCampo(user, 1, 'Colegio');
 
-    expect(screen.getByText('Ponle un valor o quita el atributo.')).toBeInTheDocument();
+    expect(screen.getByText('Ponle un valor o quita el campo.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
+  });
+
+  it('un valor sin campo elegido también se avisa', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    // El valor está deshabilitado hasta elegir el campo: no hay forma de escribir uno huérfano.
+    expect(screen.getByPlaceholderText('Primero elige el campo')).toBeDisabled();
+  });
+
+  it('«Crear campo…» abre el gestor del catálogo', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole('button', { name: 'Agregar campo' }));
+    await user.click(screen.getByLabelText('Campo del atributo 1'));
+    await user.click(await screen.findByRole('option', { name: 'Crear campo…' }));
+    expect(await screen.findByRole('heading', { name: 'Campos personalizados' })).toBeInTheDocument();
   });
 
   it('mientras guarda avisa, se bloquea y no admite un segundo clic', async () => {

@@ -1,3 +1,5 @@
+import type { ErrorGrafo } from '@sofiapp/shared';
+
 export const TIPOS_NODO = [
   'mensaje',
   'captura',
@@ -52,6 +54,15 @@ export interface ISalidaIa {
   nodoDestino: string;
 }
 
+/** Dónde deja su dato un nodo `captura` (HU-FLOW-05). */
+export const CAMPOS_FIJOS_CONTACTO = ['nombre', 'correo', 'documento', 'rolContacto'] as const;
+export type CampoFijoContacto = (typeof CAMPOS_FIJOS_CONTACTO)[number];
+
+export type DestinoCaptura =
+  | { tipo: 'variable' }
+  | { tipo: 'contacto'; campo: CampoFijoContacto }
+  | { tipo: 'atributo'; key: string };
+
 export type EfectoAccion =
   | { tipo: 'cambiar_estado'; estado: EstadoComercial }
   | { tipo: 'aplicar_etiquetas'; tagIds: string[] }
@@ -67,6 +78,12 @@ export type ConfigNodo =
       tipoDato: 'texto' | 'numero' | 'fecha' | 'booleano';
       pregunta: string;
       reintentos: number;
+      /** Ausente en flujos anteriores a HU-FLOW-05: se trata como «solo en el flujo». */
+      destino?: DestinoCaptura;
+      /** Solo con destino de ficha. Por defecto `true`. */
+      saltarSiExiste?: boolean;
+      /** Solo con destino de ficha. Por defecto `false`. */
+      sobrescribir?: boolean;
     }
   | { tipo: 'condicion'; variable: string; ramas: IRamaCondicion[]; ramaPorDefecto: string }
   | { tipo: 'intencion'; etiquetas: IEtiquetaIntencion[]; ramaPorDefecto: string }
@@ -85,6 +102,8 @@ export type ConfigNodo =
 
 export interface INodo {
   id: string;
+  /** Nombre propio que le da el usuario (HU-FLOW-05). Sin él se muestra el título del tipo. */
+  nombre?: string;
   tipo: TipoNodo;
   posicion: IPosicion;
   config: ConfigNodo;
@@ -144,6 +163,15 @@ export interface SaveFlowPayload {
   entrada: string;
   trigger: ITriggerFlow;
   activo?: boolean;
+  /** Confirma guardar DESACTIVADO un flujo activo que quedó con errores (HU-FLOW-05, criterio 23). */
+  confirmarDesactivar?: boolean;
+}
+
+/** Respuesta de crear/actualizar: el flujo más lo que quedó pendiente de corregir (HU-FLOW-05). */
+export interface FlowSaveDTO extends FlowDTO {
+  advertencias: ErrorGrafo[];
+  /** `true` si estaba activo y se guardó inactivo por `confirmarDesactivar`. */
+  desactivado: boolean;
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   updateManyScoped,
 } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { emitirEfectoPrueba, esConversacionDePrueba } from '../sandbox/sandbox.effects.js';
 import type { ISemaforoIA } from '../cliente/cliente.types.js';
 import { findSemaforoTags } from '../tag/tag.service.js';
 import type { ITagResponse, SemaforoSlug } from '../tag/tag.types.js';
@@ -75,6 +76,7 @@ export async function clasificarYAplicarSemaforo(
   try {
     const { data } = await getAIService().classify({
       tenantId: new Types.ObjectId(tenantId),
+      esPrueba: await esConversacionDePrueba(tenantId, clienteId),
       historial,
     });
 
@@ -129,6 +131,9 @@ export async function clasificarYAplicarSemaforo(
         { $set: { semaforoIA } },
       );
     }
+
+    // HU-IA-08: en la conversación de prueba, el admin ve qué semáforo habría puesto Sofi.
+    if (aplica) await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'semaforo', clave: slug });
 
     // Solo cuando el slug sugerido difiere del vigente. Auditar cada mensaje dejaría un evento
     // idéntico por cada respuesta de Sofi e inundaría `audit_events`, volviendo inútil la bitácora.

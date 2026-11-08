@@ -20,6 +20,7 @@ marca al anterior como *Reemplazado*.
 | [0012](0012-tema-por-conversacion.md) | El tema de cada conversación lo clasifica la IA contra los productos de la KB | Aceptada |
 | [0013](0013-pdf-pendientes-sincrono-pdfkit.md) | El PDF de pendientes se genera en el proceso web, síncrono, con pdfkit | Aceptada |
 | [0014](0014-ventanas-horarias-de-envio.md) | Ventanas horarias de envío: control único en `sendOutbound` y comportamiento fijo por categoría | Aceptada |
+| [0015](0015-catalogo-campos-contacto.md) | Catálogo de campos del contacto y validación de flujos en tres niveles | Aceptada |
 
 ## Convención
 

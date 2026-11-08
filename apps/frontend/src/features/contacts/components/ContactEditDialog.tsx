@@ -26,7 +26,6 @@ import type { ContactCardDTO, DatosExtraidosDTO } from '@/features/inbox/types';
 import { useUpdateContact } from '../hooks/useUpdateContact.js';
 import { useContactOptions } from '../hooks/useContactOptions.js';
 import { errorMessage } from '../lib/errors.js';
-import { slugificar } from '../lib/slug.js';
 import { estaVacio, hayErrores, validarFicha } from '../lib/validate.js';
 import { AtributosEditor } from './AtributosEditor.js';
 import { PuntoColor } from './OpcionChip.js';
@@ -198,24 +197,11 @@ export function ContactEditDialog({
     // Los atributos viajan completos (el backend reemplaza la lista), pero solo si cambiaron. Solo
     // se descartan las filas **en blanco** —las que se agregaron y no se llegaron a usar—; una fila
     // a medio escribir es un error que se muestra, no algo que se tire por la borda en silencio.
-    const usados: string[] = [];
     const limpios = campos.atributos
       .filter((a) => !estaVacio(a))
-      .map((a) => {
-        // La clave se fija aquí, con la etiqueta ya completa, y solo si la fila es nueva.
-        const key = a.key || slugificar(a.label, usados);
-        usados.push(key);
-        return { key, label: a.label.trim(), valor: a.valor.trim(), sensible: a.sensible };
-      });
+      .map((a) => ({ key: a.key, valor: a.valor.trim() }));
 
-    const original = JSON.stringify(
-      contacto.atributos.map((a) => ({
-        key: a.key,
-        label: a.label,
-        valor: a.valor,
-        sensible: a.sensible,
-      })),
-    );
+    const original = JSON.stringify(contacto.atributos.map((a) => ({ key: a.key, valor: a.valor })));
     if (JSON.stringify(limpios) !== original) patch.atributos = limpios;
 
     if (campos.marketingOptOut !== (contacto.marketingOptOut === true)) {

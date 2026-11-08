@@ -27,6 +27,7 @@ import { listAuditEvents, recordAuditEvent } from '../audit/audit.service.js';
 import type { AuditAccion } from '../audit/audit.types.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { Lead } from './lead.model.js';
+import { filtroLeadsReales } from './lead.filters.js';
 import { registrarConversionCampana } from '../campaign/campaign.metrics.service.js';
 import { clavesDeConversion, existeEstado, existeEstadoActivo } from '../estado/estado.service.js';
 import { KEY_ESTADO_ENTRADA } from '../estado/estado.types.js';
@@ -54,7 +55,7 @@ type TenantId = string | Types.ObjectId;
 const TELEFONO_DUPLICADO = 'Ya existe un lead con ese teléfono.';
 
 /** Forma lean mínima del contacto que la respuesta del lead necesita. */
-interface IContactoLean extends Pick<ICliente, 'nombre' | 'telefono'> {
+interface IContactoLean extends Pick<ICliente, 'nombre' | 'telefono' | 'esPrueba'> {
   _id: Types.ObjectId;
   tagIds?: Types.ObjectId[];
 }
@@ -178,6 +179,8 @@ export async function createLeadFromConversation(
       // "frío" sería afirmar algo que nadie ha mirado todavía.
       semaforo: null,
       responsableId: actorOid,
+      // HU-IA-08: el lead de la conversación de prueba hereda la marca; queda fuera de tabla y tablero.
+      ...(contacto.esPrueba ? { esPrueba: true } : {}),
       origen: {
         tipo: 'conversacion',
         conversacionId: conversacionOid,
@@ -487,7 +490,8 @@ function finDelDia(fecha: Date): Date {
  * que la tabla y no puede permitirse una copia que se desincronice.
  */
 export function buildLeadFilter(query: ListLeadsQuery): FilterQuery<ILeadDocument> {
-  const filter: FilterQuery<ILeadDocument> = {};
+  // HU-IA-08: los leads de la conversación de prueba nunca salen en tabla ni tablero.
+  const filter: FilterQuery<ILeadDocument> = { ...filtroLeadsReales() };
 
   if (query.estado) filter.estado = query.estado;
   // `asesor` es un userId contra `responsableId`: no existe el rol "Asesor" (AUTH-02).

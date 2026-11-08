@@ -7,6 +7,7 @@ import {
 } from '../../repositories/base.repository.js';
 import { UserModel } from '../users/user.model.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { filtroClientesReales } from '../cliente/cliente.filters.js';
 import { Tenant } from '../tenant/tenant.model.js';
 import { Plan } from '../plan/plan.model.js';
 import { getPlanLimits } from '../plan/plan.service.js';
@@ -69,7 +70,8 @@ export async function getMetricUsed(tenantId: TenantId, metric: QuotaMetric): Pr
         rol: { $in: ROLES_CON_PUESTO },
       });
     case 'leads':
-      return countScoped(Cliente, tenantId, {});
+      // HU-IA-08: la conversación de prueba de un admin no consume la cuota de leads del plan.
+      return countScoped(Cliente, tenantId, filtroClientesReales());
     case 'mensajesMes':
     case 'campanasMes':
       return readMonthlyCounter(tenantId, metric);

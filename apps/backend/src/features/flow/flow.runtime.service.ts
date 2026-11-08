@@ -13,14 +13,21 @@ import { logger } from '../../utils/logger.js';
 import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import { FLOW_RESUME_JOB, flowRuntimeQueue } from '../../config/queues.js';
 import type { ChatTurn, SlotSpec } from '../../integrations/llm/llm-provider.types.js';
+import { ACTOR_SISTEMA_FLUJO } from '../../utils/actor-sistema.util.js';
+import { fromStoredOptional, fromStoredValue } from '../../utils/field-crypto.util.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { guardarDatoDesdeFlujo } from '../cliente/cliente.service.js';
+import { listContactOptionsByTipo } from '../contact-option/contact-option.service.js';
 import { createLeadFromConversation } from '../lead/lead.service.js';
 import {
   assignConversation,
   marcarParaAsesor,
+  notificarSaliente,
   setConversationTags,
   setIaHabilitada,
 } from '../conversation/conversation.service.js';
+import type { IMessageSource } from '../conversation/conversation.mapper.js';
+import { emitirEfectoPrueba, esConversacionDePrueba } from '../sandbox/sandbox.effects.js';
 import { sendOutbound } from '../message/message.service.js';
 import {
   aperturaDeError,
@@ -33,7 +40,7 @@ import { Message } from '../message/message.model.js';
 import type { IMessage } from '../message/message.types.js';
 import { searchKnowledge } from '../kb/kb.retrieval.service.js';
 import { avanzar } from './flow.engine.js';
-import { getActiveFlow } from './flow.service.js';
+import { getActiveFlow, resolverFlujoPara } from './flow.service.js';
 import { FlowState } from './flow.model.js';
 import { evaluarTrigger } from './flow.trigger.js';
 import type {
@@ -72,14 +79,6 @@ async function construirHistorial(
     .map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', content: m.texto! }) as ChatTurn);
 }
 
-/**
- * Actor sintético para las auditorías que disparan los efectos `crear_lead`/`asignar_asesor` del
- * motor de flujos: no hay un usuario humano detrás. `recordAuditEvent` no valida que `actorId`
- * resuelva a un `User` real (`findUsersByIds` simplemente no lo encuentra), así que el evento queda
- * igual de trazable — solo sin nombre de asesor.
- */
-const ACTOR_SISTEMA_FLUJO = '000000000000000000000000';
-
 /** Tope de rondas `requiere` → resolver → reentrar dentro de una sola llamada. Cubre la cadena
  *  real (intención, o kb, o una captura ya respondida) sin arriesgarse a un bucle infinito si el
  *  motor pidiera lo mismo una y otra vez por un flujo mal configurado. */
@@ -94,6 +93,8 @@ async function resolverRequiere(
   const ai = getAIService();
   const tenantOid = tenantId instanceof Types.ObjectId ? tenantId : new Types.ObjectId(tenantId);
   const historial: ChatTurn[] = [{ role: 'user', content: mensajeCliente }];
+  // HU-IA-08: etiqueta el consumo de IA de la conversación de prueba.
+  const esPrueba = await esConversacionDePrueba(tenantId, clienteId);
 
   if (requiere.tipo === 'intencion') {
     const etiquetas = requiere.etiquetas as [string, ...string[]];
@@ -108,6 +109,7 @@ async function resolverRequiere(
     ];
     const { data } = await ai.extract<{ intencion: string }>({
       tenantId: tenantOid,
+      esPrueba,
       historial,
       schema,
       camposObjetivo: slots,
@@ -118,6 +120,7 @@ async function resolverRequiere(
   if (requiere.tipo === 'kb') {
     const { data } = await ai.chat({
       tenantId: tenantOid,
+      esPrueba,
       historial: [{ role: 'user', content: requiere.pregunta }],
     });
     return { respuestaKb: data };
@@ -141,6 +144,7 @@ async function resolverRequiere(
 
     const { data } = await ai.extract<{ respuesta: string; salida: string | null }>({
       tenantId: tenantOid,
+      esPrueba,
       historial: contexto
         ? [...historialReal, { role: 'user', content: `Contexto:\n${contexto}` }]
         : historialReal,
@@ -166,14 +170,28 @@ async function resolverRequiere(
   }
 
   // 'captura'
+  let spec = requiere.spec;
+  if (requiere.destino?.tipo === 'contacto' && requiere.destino.campo === 'rolContacto') {
+    // HU-FLOW-05: el rol es un catálogo por empresa; la IA solo puede devolver una de sus claves
+    // ACTIVAS, que es lo único que `guardarDatoDesdeFlujo` va a aceptar.
+    const claves = (await listContactOptionsByTipo(tenantId, 'rol')).filter((o) => o.activo).map((o) => o.key);
+    spec = {
+      ...spec,
+      descripcion: `${spec.descripcion} Devuelve exactamente una de estas claves: ${claves.join(', ')}. Si ninguna corresponde, déjalo vacío.`,
+    };
+  }
   const schema = z.record(z.string(), z.unknown());
   const { data } = await ai.extract<Record<string, unknown>>({
     tenantId: tenantOid,
+    esPrueba,
     historial,
     schema,
-    camposObjetivo: [requiere.spec],
+    camposObjetivo: [spec],
   });
-  return { capturado: data[requiere.spec.campo] };
+  const capturado = data[requiere.spec.campo];
+  return capturado === undefined || capturado === null || capturado === ''
+    ? { capturaFallida: true }
+    : { capturado };
 }
 
 /**
@@ -193,16 +211,22 @@ async function ejecutarEfecto(
   try {
     switch (efecto.tipo) {
       case 'enviar_mensaje': {
+        // `notificarSaliente` es lo que hace aparecer el mensaje en vivo (bandeja del tenant, o chat
+        // de prueba): sin él, lo que dice el flujo solo se veía al recargar (HU-IA-08).
         if (efecto.templateId) {
-          await sendOutbound(
+          const enviado = await sendOutbound(
             tenantId,
             clienteId,
             { modo: 'plantilla', templateId: efecto.templateId, parametros: efecto.parametros ?? [] },
             'bot',
             { categoria },
           );
+          await notificarSaliente(tenantId.toString(), clienteId, enviado as unknown as IMessageSource);
         } else if (efecto.texto) {
-          await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: efecto.texto }, 'bot', { categoria });
+          const enviado = await sendOutbound(tenantId, clienteId, { modo: 'auto', texto: efecto.texto }, 'bot', {
+            categoria,
+          });
+          await notificarSaliente(tenantId.toString(), clienteId, enviado as unknown as IMessageSource);
         }
         return;
       }
@@ -213,6 +237,7 @@ async function ejecutarEfecto(
           { _id: new Types.ObjectId(clienteId) },
           { estadoComercial: efecto.estado },
         );
+        await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'estado_comercial', estado: efecto.estado });
         return;
       case 'aplicar_etiquetas': {
         const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
@@ -225,10 +250,20 @@ async function ejecutarEfecto(
         const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
         if (!cliente) return;
         try {
-          await createLeadFromConversation(tenantId, ACTOR_SISTEMA_FLUJO, {
-            nombre: cliente.nombre ?? cliente.telefono,
-            telefono: cliente.telefono,
-            clienteId,
+          const lead = await createLeadFromConversation(
+            tenantId,
+            // En la prueba el responsable es el admin que prueba; un lead real nace a nombre del sistema.
+            cliente.esPrueba && cliente.pruebaOwnerId ? String(cliente.pruebaOwnerId) : ACTOR_SISTEMA_FLUJO,
+            {
+              nombre: cliente.nombre ?? cliente.telefono,
+              telefono: cliente.telefono,
+              clienteId,
+            },
+          );
+          await emitirEfectoPrueba(tenantId, clienteId, {
+            tipo: 'lead_creado',
+            leadId: lead.id,
+            estado: lead.estado,
           });
         } catch (err) {
           // Ya convertido (409 por teléfono duplicado): no es un fallo del flujo, es idempotencia.
@@ -236,12 +271,56 @@ async function ejecutarEfecto(
         }
         return;
       }
+      case 'guardar_dato': {
+        const r = await guardarDatoDesdeFlujo(tenantId, clienteId, efecto.destino, efecto.valor, {
+          sobrescribir: efecto.sobrescribir,
+        });
+        if (r.escrito) {
+          await emitirEfectoPrueba(tenantId, clienteId, {
+            tipo: 'dato_guardado',
+            campo: r.etiqueta ?? '',
+            valor: r.valorVisible ?? '',
+            sensible: r.sensible ?? false,
+          });
+        } else {
+          // No es un fallo del flujo: el valor ya quedó en `var:<campo>`. Se deja rastro para depurar.
+          logger.warn('guardar_dato no escribió en la ficha', {
+            tenantId: tenantId.toString(),
+            clienteId,
+            motivo: r.motivo,
+          });
+        }
+        return;
+      }
       case 'asignar_asesor':
         await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
         return;
-      case 'handoff':
+      case 'handoff': {
         await setIaHabilitada(tenantId.toString(), clienteId, false);
+        // Un asesor elegido en el nodo MANDA sobre la asignación automática (balanceo). Sin él, la
+        // conversación queda sin dueño y la reparte la configuración general. Si el asesor ya no es
+        // válido (desactivado, borrado) no se rompe el traspaso: queda para el reparto automático.
+        let asesor: { id: string; nombre: string } | null = null;
+        if (efecto.notificarAsesorId) {
+          try {
+            const r = await assignConversation(
+              tenantId.toString(),
+              ACTOR_SISTEMA_FLUJO,
+              clienteId,
+              efecto.notificarAsesorId,
+            );
+            if (r.asignadoA) asesor = { id: r.asignadoA, nombre: r.asignadoANombre ?? '' };
+          } catch (err) {
+            logger.warn('El asesor del nodo handoff no se pudo asignar; queda al reparto automático', {
+              tenantId: tenantId.toString(),
+              clienteId,
+              error: String(err),
+            });
+          }
+        }
+        await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'handoff', motivo: 'flujo', asesor });
         return;
+      }
       case 'programar_espera':
         // Se intercepta en `correrMotor` ANTES de llegar aquí: necesita devolver el token que
         // genera para que `persistirFlowState` lo escriba en el mismo `$set`, algo que este
@@ -283,6 +362,38 @@ async function ejecutarEfecto(
   }
 }
 
+/**
+ * Foto de la ficha que necesita el motor (HU-FLOW-05), leída UNA vez por mensaje: campos fijos y
+ * atributos por `key`. Solo se carga si el flujo tiene alguna `captura` que guarda en la ficha, para
+ * no pagar la lectura en los demás. Los atributos sensibles se descifran: viven solo en memoria, el
+ * motor únicamente los copia a `var:<campo>`.
+ */
+async function cargarContacto(
+  tenantId: TenantId,
+  clienteId: string,
+  flow: IFlowLean,
+): Promise<Record<string, string> | undefined> {
+  const usaFicha = flow.nodos.some(
+    (n) => n.config.tipo === 'captura' && n.config.destino !== undefined && n.config.destino.tipo !== 'variable',
+  );
+  if (!usaFicha) return undefined;
+
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) return undefined;
+
+  const foto: Record<string, string> = {};
+  if (cliente.nombre) foto['nombre'] = cliente.nombre;
+  const correo = fromStoredOptional(cliente.correoEnc);
+  if (correo) foto['correo'] = correo;
+  const documento = fromStoredOptional(cliente.documentoEnc);
+  if (documento) foto['documento'] = documento;
+  if (cliente.rolContacto) foto['rolContacto'] = cliente.rolContacto;
+  for (const a of cliente.atributos ?? []) {
+    foto[a.key] = a.sensible ? fromStoredValue(a.valor) : a.valor;
+  }
+  return foto;
+}
+
 /** Delay entre reintentos de un job diferido de `flow-runtime`. El envío pega contra la Graph API,
  *  así que un backoff exponencial modesto es preferible a martillar en caso de fallo transitorio. */
 /** Sin apertura en el horizonte de la política: se reevalúa en una hora por si el admin la cambia. */
@@ -301,6 +412,7 @@ async function persistirFlowState(
   salida: SalidaMotor,
   metaMessageId?: string,
   esperaToken?: string,
+  esperaHasta?: Date,
 ): Promise<void> {
   await findOneAndUpdateScoped(
     FlowState,
@@ -316,6 +428,7 @@ async function persistirFlowState(
         // paso cualquier job diferido que hubiera quedado pendiente de un nodo `espera` anterior
         // (criterio 3 de HU-FLOW-02).
         esperaToken: esperaToken ?? null,
+        esperaHasta: esperaHasta ?? null,
         actualizadoAt: new Date(),
         ...(metaMessageId ? { ultimoMetaMessageId: metaMessageId } : {}),
       },
@@ -344,9 +457,15 @@ async function correrMotor(
   let estadoActual = stateDoc;
   let resueltos = resueltosIniciales;
   let salida: SalidaMotor | undefined;
+  // Los efectos de TODAS las rondas se acumulan: `avanzar` retoma desde el nodo pendiente y reinicia
+  // su lista en cada llamada, así que acumular no duplica nada. Antes solo se ejecutaban los de la
+  // última ronda y todo lo emitido antes de un nodo con `requiere` (kb → ia, accion → ia) se perdía.
+  const efectos: Efecto[] = [];
+  const contacto = await cargarContacto(tenantId, clienteId, flow);
 
   for (let ronda = 0; ronda < TOPE_RESOLUCIONES; ronda += 1) {
-    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos });
+    salida = avanzar({ flow, state: estadoActual, mensaje, resueltos, contacto });
+    efectos.push(...salida.efectos);
     if (!salida.requiere) break;
 
     resueltos = await resolverRequiere(tenantId, clienteId, salida.requiere, mensaje);
@@ -364,7 +483,8 @@ async function correrMotor(
   if (!salida) return;
 
   let esperaToken: string | undefined;
-  for (const efecto of salida.efectos) {
+  let esperaHasta: Date | undefined;
+  for (const efecto of efectos) {
     if (efecto.tipo === 'programar_espera') {
       try {
         const token = randomUUID();
@@ -374,6 +494,8 @@ async function correrMotor(
           { delay: efecto.minutos * 60_000, ...RESUME_JOB_OPTS },
         );
         esperaToken = token;
+        esperaHasta = new Date(Date.now() + efecto.minutos * 60_000);
+        await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'espera', hasta: esperaHasta.toISOString() });
       } catch (err) {
         // Igual que el resto de efectos: un fallo aquí no puede tumbar la persistencia del resto
         // de la pasada. Sin token, `persistirFlowState` deja `esperaToken: null` — no hay job
@@ -389,7 +511,10 @@ async function correrMotor(
     await ejecutarEfecto(tenantId, clienteId, efecto, categoria);
   }
 
-  await persistirFlowState(tenantId, clienteId, flow, salida, metaMessageId, esperaToken);
+  await persistirFlowState(tenantId, clienteId, flow, salida, metaMessageId, esperaToken, esperaHasta);
+  if (!salida.nodoSiguiente && !salida.esperandoRespuesta && !esperaToken) {
+    await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'flujo_fin' });
+  }
 }
 
 /**
@@ -404,13 +529,14 @@ export async function ejecutarFlujo(
   mensaje: string,
   metaMessageId?: string,
 ): Promise<ResultadoFlujo> {
-  const flow = await getActiveFlow(tenantId);
+  // El cliente se lee primero porque la conversación de prueba puede apuntar a otro flujo (HU-IA-08).
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  const flow = cliente ? await resolverFlujoPara(tenantId, cliente) : await getActiveFlow(tenantId);
   if (!flow) return 'atendido';
 
   // Defensa propia además de la guarda del worker (`cliente.iaHabilitada` antes de llamar): si
   // algo más alguna vez invoca `ejecutarFlujo` directamente, el motor sigue sin pisar a un asesor
   // humano que ya tomó la conversación.
-  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
   if (!cliente || !cliente.iaHabilitada) return 'atendido';
 
   const stateDoc = await findOneScoped(FlowState, tenantId, {
@@ -476,11 +602,12 @@ export async function reanudarFlujo(tenantId: string, clienteId: string, token: 
 
   if (!stateDoc || stateDoc.esperaToken !== token) return;
 
-  const flow = await getActiveFlow(tenantId);
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
+  if (!cliente) return;
+  const flow = await resolverFlujoPara(tenantId, cliente);
   if (!flow) return;
 
-  const cliente = await findByIdScoped(Cliente, tenantId, clienteId).lean();
-  if (!cliente || !cliente.iaHabilitada) return;
+  if (!cliente.iaHabilitada) return;
 
   // Ventana horaria (HU-CONF-01): fuera de franja el mismo job se re-encola hasta la apertura,
   // ANTES de avanzar el motor, con el MISMO token. El `FlowState` no cambia, así que si el cliente

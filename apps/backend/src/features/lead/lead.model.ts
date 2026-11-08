@@ -29,6 +29,8 @@ const LeadSchema = new Schema<ILeadDocument>(
     // Sin `enum` por el mismo motivo que `estado`: los semáforos son un catálogo por tenant
     // (`semaforos`, HU-CRM-04), no estructura. Lo valida el service contra el catálogo.
     semaforo: { type: String, default: null, trim: true },
+    // HU-IA-08: lead creado desde la conversación de prueba. Se excluye con `filtroLeadsReales`.
+    esPrueba: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

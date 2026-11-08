@@ -12,8 +12,9 @@ import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
  */
 export const ACCIONES_ETAPA_LEAD = ['lead.estado', 'lead.update'] as const;
 
-/** Prefijo de `metaUserId` de los clientes sembrados por el seed de demo (HU-OMNI-05). */
-export const PREFIJO_CLIENTE_DEMO = /^demo-/;
+// El prefijo vive ahora junto al filtro de clientes reales (HU-IA-08); se reexporta para no romper a
+// quienes ya lo importan de aquí.
+export { PREFIJO_CLIENTE_DEMO } from '../cliente/cliente.filters.js';
 
 export const RANGO_DEFAULT_DIAS = 30;
 export const RANGO_MAX_DIAS = 366;

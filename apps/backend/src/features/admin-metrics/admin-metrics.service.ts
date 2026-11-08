@@ -110,7 +110,7 @@ async function contarConversaciones(
   actividadHasta: Date,
 ): Promise<Map<string, CountsConversaciones>> {
   const rows = await Cliente.aggregate<{ _id: Types.ObjectId } & CountsConversaciones>([
-    { $match: match },
+    { $match: { ...match, esPrueba: { $ne: true } } },
     {
       $group: {
         _id: '$tenantId',
@@ -137,7 +137,7 @@ async function contarConversaciones(
 
 async function contarMensajes(match: CreatedAtMatch): Promise<Map<string, CountsMensajes>> {
   const rows = await Message.aggregate<{ _id: Types.ObjectId } & CountsMensajes>([
-    { $match: match },
+    { $match: { ...match, metaMessageId: { $not: /^prueba-/ } } },
     {
       $group: {
         _id: '$tenantId',
@@ -151,7 +151,7 @@ async function contarMensajes(match: CreatedAtMatch): Promise<Map<string, Counts
 
 async function contarLeads(match: CreatedAtMatch): Promise<Map<string, CountsLeads>> {
   const rows = await Lead.aggregate<{ _id: Types.ObjectId } & CountsLeads>([
-    { $match: match },
+    { $match: { ...match, esPrueba: { $ne: true } } },
     {
       $group: {
         _id: '$tenantId',
@@ -197,7 +197,7 @@ async function serieMensual(
 
   const [leads, conversaciones] = await Promise.all([
     Lead.aggregate<{ _id: string; leads: number; ventas: number }>([
-      { $match: match },
+      { $match: { ...match, esPrueba: { $ne: true } } },
       {
         $group: {
           _id: porMes,
@@ -207,7 +207,7 @@ async function serieMensual(
       },
     ]),
     Cliente.aggregate<{ _id: string; conversaciones: number }>([
-      { $match: match },
+      { $match: { ...match, esPrueba: { $ne: true } } },
       { $group: { _id: porMes, conversaciones: { $sum: 1 } } },
     ]),
   ]);

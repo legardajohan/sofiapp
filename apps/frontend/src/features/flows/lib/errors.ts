@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { ErrorGrafo } from '@sofiapp/shared';
 import type { INodo, ValidationErrorResponse } from '../types.js';
 
 /** Mensaje del backend si lo hay: dice más que un genérico. */
@@ -27,4 +28,27 @@ export function nodeErroresDesde(error: unknown, nodos: INodo[]): Record<string,
     if (nodo && !mapa[nodo.id]) mapa[nodo.id] = message;
   }
   return mapa;
+}
+
+/** Lo que el backend adjunta a un rechazo de guardado por errores del grafo (HU-FLOW-05). */
+export interface DetalleGuardado {
+  status: number | undefined;
+  /** `FLOW_CON_ERRORES` (activar con errores) o `FLOW_ACTIVO_CON_ERRORES` (editar un flujo en producción). */
+  codigo: string | undefined;
+  errores: ErrorGrafo[];
+  /** No hubo respuesta del servidor: se cayó la red, o el servidor no contestó. */
+  sinRespuesta: boolean;
+}
+
+export function detalleDeGuardado(error: unknown): DetalleGuardado {
+  if (!axios.isAxiosError(error)) {
+    return { status: undefined, codigo: undefined, errores: [], sinRespuesta: false };
+  }
+  const data = error.response?.data as { codigo?: unknown; errores?: unknown } | undefined;
+  return {
+    status: error.response?.status,
+    codigo: typeof data?.codigo === 'string' ? data.codigo : undefined,
+    errores: Array.isArray(data?.errores) ? (data.errores as ErrorGrafo[]) : [],
+    sinRespuesta: error.response === undefined,
+  };
 }

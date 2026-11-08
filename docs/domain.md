@@ -26,7 +26,11 @@
 | **Variable de contacto** | Hueco `{{n}}` de una campaña que se rellena por destinatario con su `nombre` o `telefono` (`HU-MARK-05`). Lleva un texto de respaldo para el contacto que no tiene el dato: Meta rechaza un parámetro vacío. |
 | **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los subroles autorizados. |
 | **Dato sensible** | Dato personal del contacto que se cifra en reposo y solo se muestra en claro a los subroles autorizados: correo, documento, notas y los atributos personalizados marcados `sensible` (HU-CRM-02, ADR 0006). Al resto le llega enmascarado. |
-| **Atributo personalizado** | Par etiqueta/valor libre sobre un contacto (`Cliente.atributos`), con una marca `sensible` por campo. Sustituye a `customFields`. |
+| **Atributo personalizado** | Valor de un **campo personalizado** sobre un contacto (`Cliente.atributos`). Su clave, etiqueta y marca `sensible` salen del catálogo de la empresa (HU-FLOW-05). Sustituye a `customFields`. |
+| **Campo personalizado** | Dato propio de una empresa (colegio, ciudad, presupuesto…) definido **una vez** en el catálogo `contact_fields` (clave, etiqueta, tipo, sensible). Lo comparten la ficha del contacto y el nodo `captura`; así cada dato tiene una sola clave. Borrarlo lo **archiva**. |
+| **Campo del contacto (fijo)** | Dato con columna propia en la ficha: `nombre`, `correo`, `documento`, `rolContacto`. Un nodo `captura` puede escribir en ellos; el teléfono no (el webhook lo reescribe). |
+| **Destino de captura** | Dónde deja su dato un nodo `captura`: solo en una variable del flujo, en un campo fijo del contacto o en un campo personalizado. |
+| **Advertencia de flujo** | Problema de conexión o de contenido de un flujo guardado a medias (nodo suelto, rama sin destino, nodo incompleto). No impide guardar, pero impide **activar**. |
 
 ## 2. Entidades del dominio
 
@@ -373,6 +377,30 @@ Definiciones únicas que usa `GET /api/reports/peak-hours`:
   calendario del periodo. Ambos traen los vacíos en 0.
 
 Mismo acceso que los demás reportes (ADR 0011).
+
+## 5sexies. Conversación de prueba (HU-IA-08)
+
+Cada `admin` tiene **una** conversación de prueba: un `Cliente` con `esPrueba: true`,
+`pruebaOwnerId` = su `userId` y `metaUserId = "prueba-<userId>"`. Es el chat de «Probar asistente»:
+el admin escribe como si fuera un cliente y recibe lo que recibiría por WhatsApp.
+
+- **Mismo pipeline, otro canal.** Entra por la misma decisión flujo-vs-Sofi
+  (`responderAutomaticamente`) y sale por el mismo `sendOutbound`; lo único distinto es que el
+  proveedor es el sandbox (sin Meta, sin cuota `mensajesMes`, sin ventana de 24 h) y que el tiempo
+  real va solo al admin dueño (`sandbox:message` / `sandbox:effect`, room `asesor:<userId>`).
+- **Efectos reales.** Crear lead, asignar, etiquetar, cambiar estado, semáforo, extracción y
+  transferencia se ejecutan de verdad sobre ese cliente; el lead nace con `esPrueba: true`.
+- **Fuera de todo dato de negocio.** `filtroClientesReales()` / `filtroLeadsReales()` los excluyen
+  de bandeja, reportes (incluido `contarVentas`), pipeline, conteos por etapa/semáforo, cuota de
+  leads, segmentos y campañas, recordatorios y métricas de plataforma. Quien consulte `Cliente` o
+  `Lead` para una cifra de negocio y no combine el filtro tiene un bug.
+- **Sin avisos reales.** Asignar o transferir la conversación de prueba no notifica al asesor
+  destino: la notificación va al admin que prueba, con el prefijo «(prueba)».
+- **Ciclo de vida.** «Reiniciar» borra el cliente y todo lo que colgó de él (mensajes, estado del
+  flujo, leads de prueba, notas, notificaciones, auditoría). Un barrido diario borra las sesiones
+  con más de 7 días sin actividad.
+- **Flujo elegible.** `pruebaFlowId` permite probar un flujo inactivo antes de activarlo; `null` usa
+  el activo, como un cliente real. Un cliente real nunca resuelve otro flujo que el activo.
 
 ## 6. Invariantes de dominio
 

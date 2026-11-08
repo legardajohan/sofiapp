@@ -127,6 +127,22 @@ propio código:
    excepción**: `CampaignJobData` lleva el `tenantId` dentro, así que el worker nunca barre nada
    cross-tenant. Test de aislamiento: `campaign.isolation.test.ts`.
 
+6. **Barrido de conversaciones de prueba inactivas (HU-IA-08)** — `sandbox.service.ts:barrerSesionesInactivas`
+   consulta `Cliente.find({ esPrueba: true, pruebaUltimaActividad: { $lt: corte } })` sin `tenantId`:
+   job diario (`sandbox-sweep`, cola `flow-runtime`), cross-tenant por naturaleza. Igual que los
+   anteriores, **solo proyecta `(tenantId, _id)`**; el borrado de cada sesión usa `*Scoped` con el
+   `tenantId` de su propia fila. Test: `sandbox.service.test.ts` + `sandbox.isolation.test.ts`.
+
+### Datos de prueba fuera de las cifras de negocio (HU-IA-08)
+
+Un `Cliente` con `esPrueba` y un `Lead` con `esPrueba` no cuentan en nada que un tenant mire. Toda
+consulta de **negocio** (bandeja, reportes, pipeline, conteos por etapa/semáforo, cuota de leads,
+segmentos, recordatorios, métricas de plataforma) combina `filtroClientesReales()` o
+`filtroLeadsReales()`; en agregaciones con `$lookup`, `matchClientesReales(alias)` tras proyectar
+`esPrueba` y `metaUserId`. Esto no es aislamiento entre tenants —la sesión de prueba es del tenant y
+del admin que la abrió, y se lee siempre con `*Scoped`— sino higiene de datos: el filtro ya cubre
+también los clientes sembrados `demo-`. Test: `sandbox.exclusion.test.ts`.
+
 ## 6. El Superadmin (User global)
 
 - El Superadmin es un `User` con `tenantId = null` (global).

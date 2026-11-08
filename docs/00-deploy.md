@@ -47,11 +47,31 @@ que avancen mientras haces el resto.
 
 | # | Paso | Por qué va primero |
 |---|---|---|
-| 0.1 | **Comprar el dominio** (p. ej. `sofiapp.co`). | Meta pide URLs públicas (política de privacidad, términos, dominio de la app). El webhook necesita HTTPS con dominio fijo. La cookie de sesión necesita que app y API compartan dominio padre (ver Fase 2). |
-| 0.2 | Crear el **Business Portfolio de SofiApp** en business.facebook.com e iniciar la **verificación del negocio** (RUT/Cámara de Comercio, dominio verificado, teléfono). | La verificación es requisito para obtener Tech Provider y Advanced Access, y suele ser lo más lento. |
-| 0.3 | Publicar en el dominio la **política de privacidad**, los **términos de servicio** y la **URL o instrucciones de eliminación de datos**. | Meta no deja pasar la app a modo *Live* ni aprobar App Review sin ellas. |
+| 0.1 | **Dominio `sofiapp.co`** — ✅ ya comprado, DNS en Cloudflare. | Meta pide URLs públicas (política de privacidad, términos, dominio de la app). El webhook necesita HTTPS con dominio fijo. La cookie de sesión necesita que app y API compartan dominio padre (ver Fase 2). **Titularidad:** lo ideal es que el registrante/cuenta de Cloudflare sea PREICFES ESTUDIANDO; si no, dejar por escrito en el contrato quién es el dueño y cómo se transfiere. |
+| 0.2 | Crear el **Business Portfolio** y la **verificación del negocio** a nombre de la **entidad legal: PREICFES ESTUDIANDO** (SofiApp es su producto; el nombre legal debe coincidir exactamente con RUT/Cámara de Comercio). | La verificación es requisito para Tech Provider y Advanced Access, y suele ser lo más lento. Ver el detalle justo debajo de esta tabla. |
+| 0.3 | Publicar en `sofiapp.co` (la **landing**, proyecto estático separado de la SPA) la **política de privacidad / tratamiento de datos** (Ley 1581 de 2012), los **términos de servicio** y la **URL o instrucciones de eliminación de datos**. La landing debe mostrar razón social, NIT, dirección, teléfono y la frase «SofiApp es un producto de PREICFES ESTUDIANDO». | Meta no deja pasar la app a modo *Live* ni aprobar App Review sin ellas, y cruza el sitio con los documentos de la verificación. Conviene que un abogado revise la política. |
 | 0.4 | Crear la **app de Meta** (tipo *Business*) en developers.facebook.com, vinculada al Portfolio, y agregarle el producto **WhatsApp**. | Te da `META_APP_ID` y `META_APP_SECRET`, que el backend necesita para arrancar (Fase 5). |
 | 0.5 | Iniciar el proceso de **Tech Provider** (ver `docs/adr/0010-modelo-tech-provider.md`). | Es la condición para que cada tenant conecte su WABA por Embedded Signup. |
+
+### Detalle del paso 0.2 (Business Portfolio a nombre de PREICFES ESTUDIANDO)
+
+1. **Quién lo crea:** el representante legal (o una persona autorizada) de PREICFES ESTUDIANDO, con
+   el nombre legal tal cual figura en el RUT. El desarrollador entra por invitación como
+   **administrador**. Así el portfolio no depende de un perfil personal ajeno a la empresa. Todos los
+   administradores activan 2FA.
+2. **Correo del dominio:** `admin@sofiapp.co`.
+   - **Recibir:** Cloudflare Email Routing (gratis), reenviando a un Gmail. Meta puede enviar el
+     código de verificación a una dirección del dominio.
+   - **Enviar:** Resend (solo envía, no tiene buzón). Para responder desde Gmail se configura
+     «Enviar como» con el SMTP de Resend. Es compatible con Email Routing porque Resend usa su propio
+     subdominio para SPF/DKIM.
+   - Alternativa más formal a futuro: Google Workspace.
+3. **Orden:** publicar antes la landing con los datos legales (0.3) y verificar el dominio con el
+   TXT en Cloudflare (Fase 2); después enviar la verificación.
+4. **Documentos que pide Meta** (confirmar en su interfaz, pueden variar): certificado de existencia
+   y representación legal vigente, RUT, cédula del representante legal y un teléfono de la empresa
+   que reciba llamada o SMS.
+5. Crear la app de Meta (0.4) **dentro de ese portfolio** e iniciar Tech Provider (0.5).
 
 > El **App Review** (Advanced Access a `whatsapp_business_management` y
 > `whatsapp_business_messaging`) **no** se puede enviar todavía: Meta pide un screencast del flujo
@@ -63,13 +83,18 @@ que avancen mientras haces el resto.
 
 | # | Servicio | Qué contratar | Notas |
 |---|---|---|---|
-| 1.1 | **VPS** (Hostinger KVM o Droplet de DigitalOcean) | Ubuntu 24.04 LTS, **2 vCPU / 4–8 GB RAM** mínimo, en una región de América (Atlas en la misma región o en la más cercana). | **No** sirve hosting compartido ni "Node.js administrado": no permiten worker permanente, Redis/Docker ni WebSockets. |
+| 1.1 | **Droplet de DigitalOcean** (decisión tomada; no App Platform) | Ubuntu 24.04 LTS, **2 vCPU / 4 GB RAM** (subir a 8 GB si hace falta), región **NYC** con Atlas en AWS us-east-1. Activar **backups** del Droplet. | Corre Nginx, `sofiapp-web`, `sofiapp-worker` (PM2) y Redis (Docker). **No** corre Mongo (Atlas), frontend (Vercel) ni media (Spaces). Se prefiere a App Platform por costo (un solo servidor vs. web + worker + Redis administrado), IP fija para el allowlist de Atlas y Socket.IO de una sola instancia (ADR-0004). Es un único punto de falla: mitigar con backups y snapshots. **No** sirve hosting compartido ni "Node.js administrado". |
 | 1.2 | **MongoDB Atlas** | Cluster **M10 o superior**. | `create-kb-vector-index.ts` y `create-kb-faq-vector-index.ts` documentan que el índice vectorial (RAG + FAQ semántica) necesita M10+. Sin él la base de conocimiento no recupera nada. Con M10 tienes además backups continuos. |
 | 1.3 | **Google AI Studio / Google Cloud** | Proyecto con **facturación activa** (tier de pago) y una **API key de Gemini**. | El tier gratuito tiene límites de RPM muy bajos y puede usar tus datos para entrenar modelos. En producción, siempre el de pago. |
 | 1.4 | **Almacenamiento S3-compatible** para la media del chat | **DigitalOcean Spaces** (lo previsto en ADR-0008) o **Cloudflare R2** (no cobra salida de datos). | Basta con que sea S3-compatible: se configura con `SPACES_*` (Fase 5). Bucket **privado**: el backend sirve URLs prefirmadas. |
-| 1.5 | **Vercel** | Plan Hobby para empezar. Pasa a Pro si hay uso comercial o equipo. | El plan Hobby de Vercel es para uso no comercial; un SaaS cobrado debería ir en Pro. |
+| 1.5 | **Vercel** | Plan **Pro** (uso comercial). Dos proyectos: la SPA (`app`) y la landing (`sofiapp.co`), o la landing en Cloudflare Pages. | El plan Hobby de Vercel es para uso no comercial; un SaaS cobrado debe ir en Pro. |
 | 1.6 | **GitHub** | Repo existente. | Para CI/CD (Fase 10). Secretos en *GitHub Actions secrets*, nunca en el repo. |
 | 1.7 | (Opcional) Monitoreo | UptimeRobot / Better Stack (uptime), Sentry (errores). | Ver Fase 10. |
+
+> **Titularidad de las cuentas:** DigitalOcean, Atlas, Vercel, Google Cloud, GitHub y Cloudflare
+> deben quedar a nombre de PREICFES ESTUDIANDO (o con un acuerdo escrito), registradas con
+> `admin@sofiapp.co` y con el desarrollador como miembro/administrador invitado. Evita que la
+> infraestructura del producto quede atada a cuentas personales.
 
 > **Quién paga los mensajes de WhatsApp:** con el modelo Tech Provider, **cada tenant le paga a Meta
 > directamente** con el método de pago de su WABA. SofiApp no compra crédito de mensajería
@@ -81,10 +106,19 @@ que avancen mientras haces el resto.
 
 | Registro | Apunta a | Uso |
 |---|---|---|
+| `<dominio>` (raíz, `sofiapp.co`) | Hosting de la landing (Vercel o Cloudflare Pages) | Landing, términos, privacidad y eliminación de datos. |
+| `CNAME www.<dominio>` | El raíz | Redirige con 301 a `sofiapp.co`. `www` es un subdominio más: lo creas tú en Cloudflare. |
 | `A api.<dominio>` | IP pública del VPS | API REST, Socket.IO y webhook de Meta. |
 | `CNAME app.<dominio>` | `cname.vercel-dns.com` (lo indica Vercel) | SPA. |
 | `TXT` de verificación | lo que pida Meta Business | Verificación del dominio en el Portfolio (Fase 0.2). |
+| `MX` del raíz | Los de Cloudflare Email Routing | Buzón de entrada de `admin@<dominio>`. |
+| `TXT`/`CNAME` SPF y DKIM | Los que indique Resend | Envío de correo desde el dominio. |
 | (Opcional) `CNAME media.<dominio>` | bucket | Solo si quieres un dominio propio para la media. |
+
+**Cloudflare:**
+- `app`: **DNS only** (nube gris), como recomienda Vercel.
+- `api`: nube gris al inicio para emitir el certificado con certbot. Luego puede pasar a proxied
+  (nube naranja) con SSL en *Full (strict)*; los WebSockets funcionan a través del proxy.
 
 **Por qué subdominios del mismo dominio y no `*.vercel.app`:** el JWT viaja en una cookie
 `httpOnly` (`apps/backend/src/utils/cookies.util.ts`, ADR-0002). Con `app.<dominio>` y

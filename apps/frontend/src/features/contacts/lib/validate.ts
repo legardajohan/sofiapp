@@ -29,18 +29,9 @@ const TELEFONO = /^\d{7,15}$/;
  */
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Misma normalización que `normalizarLabel` en el backend: "Colegio" y "colegio" son el mismo. */
-function normalizarLabel(label: string): string {
-  return label
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
 /** Una fila en blanco es una que se agregó y no se llegó a usar: se descarta, no es un error. */
 export function estaVacio(atributo: AtributoInput): boolean {
-  return atributo.label.trim() === '' && atributo.valor.trim() === '';
+  return atributo.key === '' && atributo.valor.trim() === '';
 }
 
 function validarAtributos(atributos: AtributoInput[]): ErroresAtributos {
@@ -50,27 +41,24 @@ function validarAtributos(atributos: AtributoInput[]): ErroresAtributos {
   atributos.forEach((atributo, i) => {
     if (estaVacio(atributo)) return;
 
-    const label = atributo.label.trim();
-    const valor = atributo.valor.trim();
-
     // Media fila escrita no se descarta en silencio: quien tecleó algo y ve la fila desaparecer al
     // guardar no sabe si se guardó mal o si nunca existió.
-    if (label === '') {
-      errores[i] = 'Ponle un nombre al atributo.';
+    if (atributo.key === '') {
+      errores[i] = 'Elige a qué campo pertenece este valor.';
       return;
     }
-    if (valor === '') {
-      errores[i] = 'Ponle un valor o quita el atributo.';
+    if (atributo.valor.trim() === '') {
+      errores[i] = 'Ponle un valor o quita el campo.';
       return;
     }
 
-    const normalizado = normalizarLabel(label);
-    const previo = vistos.get(normalizado);
+    // Un campo, un valor por contacto (HU-FLOW-05): lo identifica la clave del catálogo, no el texto.
+    const previo = vistos.get(atributo.key);
     if (previo !== undefined) {
-      errores[i] = `Ya hay un atributo llamado "${atributos[previo]?.label.trim()}".`;
+      errores[i] = `Ya hay un valor para "${atributos[previo]?.label.trim() || atributo.key}".`;
       return;
     }
-    vistos.set(normalizado, i);
+    vistos.set(atributo.key, i);
   });
 
   return errores;

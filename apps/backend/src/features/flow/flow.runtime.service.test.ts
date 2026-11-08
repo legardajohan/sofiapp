@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { createScoped } from '../../repositories/base.repository.js';
 import { Cliente } from '../cliente/cliente.model.js';
+import { User } from '../users/user.model.js';
 
 const { sendOutboundMock, chatMock, extractMock, flowRuntimeQueueAddMock } = vi.hoisted(() => ({
   sendOutboundMock: vi.fn().mockResolvedValue({}),
@@ -78,6 +79,7 @@ beforeEach(async () => {
   await Flow.deleteMany({});
   await FlowState.deleteMany({});
   await Cliente.deleteMany({});
+  await User.deleteMany({});
   await Flow.syncIndexes();
   await FlowState.syncIndexes();
   sendOutboundMock.mockClear();
@@ -113,6 +115,61 @@ describe('ejecutarFlujo — nodo handoff', () => {
 
     const cliente = await Cliente.findById(clienteId).lean();
     expect(cliente?.iaHabilitada).toBe(false);
+  });
+});
+
+describe('ejecutarFlujo — nodo handoff con asesor elegido', () => {
+  async function crearAsesor(activo = true): Promise<string> {
+    const doc = await createScoped(User, tenantId, {
+      nombre: 'Ana',
+      email: `ana${Math.random()}@empresa.test`,
+      passwordHash: 'x',
+      rol: 'admin',
+      activo,
+    });
+    return String(doc._id);
+  }
+
+  it('asigna la conversación al asesor del nodo (manda sobre el reparto automático)', async () => {
+    const asesorId = await crearAsesor();
+    await crearFlowActivo(
+      [{ ...nodoHandoff, config: { tipo: 'handoff', notificarAsesorId: asesorId } }],
+      [],
+      'h1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.iaHabilitada).toBe(false);
+    expect(String(cliente?.asesorId)).toBe(asesorId);
+  });
+
+  it('sin asesor en el nodo, la conversación queda sin dueño (la reparte la configuración general)', async () => {
+    await crearFlowActivo([nodoHandoff], [], 'h1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.asesorId ?? null).toBeNull();
+  });
+
+  it('con un asesor ya no válido, el traspaso igual ocurre y no se rompe', async () => {
+    const asesorId = await crearAsesor(false);
+    await crearFlowActivo(
+      [{ ...nodoHandoff, config: { tipo: 'handoff', notificarAsesorId: asesorId } }],
+      [],
+      'h1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.iaHabilitada).toBe(false);
+    expect(cliente?.asesorId ?? null).toBeNull();
   });
 });
 
@@ -269,6 +326,144 @@ describe('reanudarFlujo — HU-FLOW-02', () => {
     await reanudarFlujo(tenantId.toString(), clienteId, token);
 
     expect(sendOutboundMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── HU-FLOW-05 · A. Corrección del motor ────────────────────────────────────────
+
+function nodoMsg(id: string, texto: string): INodo {
+  return { id, posicion: { x: 0, y: 0 }, tipo: 'mensaje', config: { tipo: 'mensaje', texto } };
+}
+function nodoKbFijo(id: string): INodo {
+  return {
+    id,
+    posicion: { x: 0, y: 0 },
+    tipo: 'kb',
+    config: { tipo: 'kb', pregunta: 'ultimo_mensaje', siNoHayRespuesta: 'No sé.' },
+  };
+}
+function nodoIaSimple(id: string): INodo {
+  return {
+    id,
+    posicion: { x: 0, y: 0 },
+    tipo: 'ia',
+    config: {
+      tipo: 'ia',
+      objetivo: 'Asesora al cliente con amabilidad.',
+      salidas: [{ etiqueta: 'listo', descripcion: 'El cliente terminó.', nodoDestino: 'fin' }],
+      ramaPorDefecto: 'fin',
+      maxTurnos: 4,
+      usarKb: false,
+    },
+  };
+}
+
+describe('correrMotor — ningún efecto de un turno se pierde (HU-FLOW-05, criterios 1-2)', () => {
+  it('kb → ia en el mismo turno: el cliente recibe la respuesta del KB Y LUEGO la del nodo IA', async () => {
+    chatMock.mockResolvedValue({ data: 'Respuesta del KB' });
+    extractMock.mockResolvedValue({ data: { respuesta: 'Respuesta de la IA', salida: null } });
+    await crearFlowActivo(
+      [nodoKbFijo('kb1'), nodoIaSimple('ia1'), nodoMsg('fin', 'Adiós')],
+      [{ id: 'a1', from: 'kb1', to: 'ia1' }],
+      'kb1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, '¿Cuánto cuesta?');
+
+    const textos = sendOutboundMock.mock.calls.map((c) => (c[2] as { texto: string }).texto);
+    expect(textos).toEqual(['Respuesta del KB', 'Respuesta de la IA']);
+  });
+
+  it('accion → ia en el mismo turno: el efecto de la acción se aplica', async () => {
+    extractMock.mockResolvedValue({ data: { respuesta: 'Hola', salida: null } });
+    const accion: INodo = {
+      id: 'ac1',
+      posicion: { x: 0, y: 0 },
+      tipo: 'accion',
+      config: { tipo: 'accion', efecto: { tipo: 'cambiar_estado', estado: 'en_gestion' } },
+    };
+    await crearFlowActivo(
+      [accion, nodoIaSimple('ia1'), nodoMsg('fin', 'Adiós')],
+      [{ id: 'a1', from: 'ac1', to: 'ia1' }],
+      'ac1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'hola');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.estadoComercial).toBe('en_gestion');
+  });
+
+  it('al alcanzar el tope de resoluciones con una petición pendiente, los efectos acumulados igual se ejecutan y el estado queda en el nodo pendiente', async () => {
+    chatMock.mockResolvedValue({ data: 'kb' });
+    extractMock.mockResolvedValue({ data: { intencion: 'x' } });
+    // m0 → kb1 → int1 → kb2 → int2 → kb3 → int3: una sola petición pendiente por ronda.
+    const ids = ['m0', 'kb1', 'int1', 'kb2', 'int2', 'kb3', 'int3'];
+    const intencion = (id: string, destino: string): INodo => ({
+      id,
+      posicion: { x: 0, y: 0 },
+      tipo: 'intencion',
+      config: {
+        tipo: 'intencion',
+        etiquetas: [{ etiqueta: 'x', descripcion: 'cualquiera', nodoDestino: destino }],
+        ramaPorDefecto: destino,
+      },
+    });
+    const nodos: INodo[] = [
+      nodoMsg('m0', 'Inicio'),
+      nodoKbFijo('kb1'),
+      intencion('int1', 'kb2'),
+      nodoKbFijo('kb2'),
+      intencion('int2', 'kb3'),
+      nodoKbFijo('kb3'),
+      intencion('int3', 'm0'),
+    ];
+    const aristas: IArista[] = [
+      { id: 'a0', from: 'm0', to: 'kb1' },
+      { id: 'a1', from: 'kb1', to: 'int1' },
+      { id: 'a2', from: 'kb2', to: 'int2' },
+      { id: 'a3', from: 'kb3', to: 'int3' },
+    ];
+    expect(ids).toHaveLength(nodos.length);
+    await crearFlowActivo(nodos, aristas, 'm0');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'hola');
+
+    // Tras 5 rondas queda pendiente kb3; los envíos de las rondas previas (m0, kb1, kb2) se ejecutan.
+    const textos = sendOutboundMock.mock.calls.map((c) => (c[2] as { texto: string }).texto);
+    expect(textos).toEqual(['Inicio', 'kb', 'kb']);
+    const state = await FlowState.findOne({ clienteId }).lean();
+    expect(state?.nodoActualId).toBe('kb3');
+  });
+
+  it('una captura fallida cuesta UNA sola llamada de extracción y sigue esperando', async () => {
+    extractMock.mockResolvedValue({ data: {} });
+    const captura: INodo = {
+      id: 'c1',
+      posicion: { x: 0, y: 0 },
+      tipo: 'captura',
+      config: {
+        tipo: 'captura',
+        campo: 'grado',
+        descripcion: 'Grado escolar',
+        tipoDato: 'texto',
+        pregunta: '¿En qué grado va?',
+        reintentos: 0,
+      },
+    };
+    await crearFlowActivo([captura, nodoMsg('fin', 'Gracias')], [{ id: 'a1', from: 'c1', to: 'fin' }], 'c1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'hola'); // hace la pregunta
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'no sé'); // la IA no extrae nada
+
+    expect(extractMock).toHaveBeenCalledTimes(1);
+    const state = await FlowState.findOne({ clienteId }).lean();
+    expect(state?.nodoActualId).toBe('c1');
+    expect(state?.esperandoRespuesta).toBe(true);
   });
 });
 

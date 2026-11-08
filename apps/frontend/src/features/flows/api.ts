@@ -1,5 +1,12 @@
 import { apiClient } from '../../api/apiClient.js';
-import type { FlowDTO, FlowListItemDTO, ReminderDTO, SaveFlowPayload, UpdateReminderPayload } from './types.js';
+import type {
+  FlowDTO,
+  FlowListItemDTO,
+  FlowSaveDTO,
+  ReminderDTO,
+  SaveFlowPayload,
+  UpdateReminderPayload,
+} from './types.js';
 
 // Rutas SIN el prefijo `/api`: lo aporta el `baseURL` del apiClient (regla del CLAUDE.md frontend).
 
@@ -13,13 +20,14 @@ export async function fetchFlow(id: string): Promise<FlowDTO> {
   return data;
 }
 
-export async function createFlow(payload: SaveFlowPayload): Promise<FlowDTO> {
-  const { data } = await apiClient.post<FlowDTO>('/flows', payload);
+/** Crear y actualizar devuelven, además del flujo, lo que quedó pendiente de corregir (HU-FLOW-05). */
+export async function createFlow(payload: SaveFlowPayload): Promise<FlowSaveDTO> {
+  const { data } = await apiClient.post<FlowSaveDTO>('/flows', payload);
   return data;
 }
 
-export async function updateFlow(id: string, payload: SaveFlowPayload): Promise<FlowDTO> {
-  const { data } = await apiClient.put<FlowDTO>(`/flows/${id}`, payload);
+export async function updateFlow(id: string, payload: SaveFlowPayload): Promise<FlowSaveDTO> {
+  const { data } = await apiClient.put<FlowSaveDTO>(`/flows/${id}`, payload);
   return data;
 }
 

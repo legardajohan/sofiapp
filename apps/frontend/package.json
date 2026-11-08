@@ -35,6 +35,7 @@
     "@radix-ui/react-toggle": "^1.2.1",
     "@radix-ui/react-toggle-group": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.2.12",
+    "@sofiapp/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "@xyflow/react": "^12.11.6",
     "axios": "^1.7.0",

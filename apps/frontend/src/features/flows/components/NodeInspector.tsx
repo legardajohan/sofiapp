@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, PanelRightClose, Plus, Trash2 } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,10 +15,13 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { CapturaForm } from './CapturaForm.js';
 import { ConditionEditor, type OpcionDestino } from './ConditionEditor.js';
 import { DestinoSelect } from './DestinoSelect.js';
 import { IaOutputsEditor } from './IaOutputsEditor.js';
 import { NODE_VISUALS } from './nodeVisuals.js';
+import { nombreDeNodo } from '../lib/graph.js';
+import type { GravedadNodo } from './nodes/ProblemaNodo.js';
 import type { ConfigNodo, EstadoComercial, IEtiquetaIntencion, INodo } from '../types.js';
 
 /** Mismo umbral que `ConditionEditor` (criterio 7 de HU-FLOW-01-V3): a partir de este largo, la
@@ -56,51 +61,6 @@ function MensajeForm({ config, onChange }: FormProps<'mensaje'>): React.ReactEle
         rows={4}
       />
     </Field>
-  );
-}
-
-function CapturaForm({ config, onChange }: FormProps<'captura'>): React.ReactElement {
-  return (
-    <div className="space-y-4">
-      <Field label="Pregunta que se le hace al cliente">
-        <Textarea
-          value={config.pregunta}
-          onChange={(e) => onChange({ ...config, pregunta: e.target.value })}
-          placeholder="¿Cuál es tu correo?"
-          rows={2}
-        />
-      </Field>
-      <Field label="Nombre del dato (variable)">
-        <Input
-          value={config.campo}
-          onChange={(e) => onChange({ ...config, campo: e.target.value })}
-          placeholder="correo"
-        />
-      </Field>
-      <Field label="Qué se espera (para la IA que extrae la respuesta)">
-        <Input
-          value={config.descripcion}
-          onChange={(e) => onChange({ ...config, descripcion: e.target.value })}
-          placeholder="Correo electrónico del cliente"
-        />
-      </Field>
-      <Field label="Tipo de dato">
-        <Select
-          value={config.tipoDato}
-          onValueChange={(v) => onChange({ ...config, tipoDato: v as typeof config.tipoDato })}
-        >
-          <SelectTrigger className="h-9 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="texto">Texto</SelectItem>
-            <SelectItem value="numero">Número</SelectItem>
-            <SelectItem value="fecha">Fecha</SelectItem>
-            <SelectItem value="booleano">Sí / No</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
-    </div>
   );
 }
 
@@ -341,7 +301,16 @@ function AccionForm({ config, onChange }: FormProps<'accion'>): React.ReactEleme
   );
 }
 
+/** Valor del `Select` para «sin asesor»: Radix no admite `value=""` en un ítem. */
+const ASESOR_AUTOMATICO = '__automatico__';
+
 function HandoffForm({ config, onChange }: FormProps<'handoff'>): React.ReactElement {
+  const { data: usuarios, isLoading } = useTenantUsers();
+  const asesores = (usuarios ?? []).filter((u) => u.activo);
+  const elegido = config.notificarAsesorId ?? '';
+  // Un asesor que ya no está activo se sigue mostrando, para no borrar la elección en silencio.
+  const huerfano = elegido !== '' && !isLoading && !asesores.some((a) => a.id === elegido);
+
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-destructive/30 bg-destructive-subtle px-3 py-2 text-xs text-destructive">
@@ -356,12 +325,37 @@ function HandoffForm({ config, onChange }: FormProps<'handoff'>): React.ReactEle
           rows={2}
         />
       </Field>
-      <Field label="ID del asesor a notificar (opcional)">
-        <Input
-          value={config.notificarAsesorId ?? ''}
-          onChange={(e) => onChange({ ...config, notificarAsesorId: e.target.value })}
-          placeholder="507f1f77bcf86cd799439011"
-        />
+      <Field label="Asesor al que transferir (opcional)">
+        <Select
+          value={elegido === '' ? ASESOR_AUTOMATICO : elegido}
+          onValueChange={(v) => {
+            const { notificarAsesorId: _quitado, ...resto } = config;
+            void _quitado;
+            onChange(v === ASESOR_AUTOMATICO ? resto : { ...resto, notificarAsesorId: v });
+          }}
+        >
+          <SelectTrigger className="h-9 text-sm" aria-label="Asesor al que transferir">
+            <SelectValue placeholder={isLoading ? 'Cargando asesores…' : 'Automático'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ASESOR_AUTOMATICO}>Automático (según el reparto de chats)</SelectItem>
+            {asesores.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.nombre}
+              </SelectItem>
+            ))}
+            {huerfano ? (
+              <SelectItem value={elegido} disabled>
+                Asesor ya no disponible
+              </SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          {huerfano
+            ? 'El asesor elegido ya no está activo: se usará el reparto automático. Elige otro si quieres fijarlo.'
+            : 'Si eliges uno, la conversación va a esa persona y manda sobre el reparto automático de chats. Si no, se asigna a quien tenga menos.'}
+        </p>
       </Field>
     </div>
   );
@@ -456,14 +450,69 @@ function IaForm({ config, opcionesDestino, onChange }: FormProps<'ia'>): React.R
   );
 }
 
+/** Una sola línea con lo que falta; el detalle se abre como acordeón (nunca ocupa el panel por defecto). */
+function ResumenProblemas({
+  lineas,
+  gravedad,
+}: {
+  lineas: string[];
+  gravedad: GravedadNodo;
+}): React.ReactElement {
+  const esError = gravedad === 'error';
+  const Icono = esError ? AlertCircle : AlertTriangle;
+  const n = lineas.length;
+  const titulo = esError
+    ? n === 1
+      ? '1 error en este nodo'
+      : `${n} errores en este nodo`
+    : n === 1
+      ? 'Falta 1 cosa por configurar'
+      : `Faltan ${n} cosas por configurar`;
+  return (
+    <Accordion
+      type="single"
+      collapsible
+      role="alert"
+      className={cn(
+        'mx-4 mt-3 rounded-md border px-3',
+        esError ? 'border-destructive/40 bg-destructive-subtle' : 'border-amber-500/40 bg-muted/40',
+      )}
+    >
+      <AccordionItem value="problemas" className="border-b-0">
+        <AccordionTrigger className="py-2 text-xs font-medium hover:no-underline">
+          <span className={cn('flex items-center gap-2', esError ? 'text-destructive' : 'text-amber-700 dark:text-amber-400')}>
+            <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {titulo}
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="pb-2 text-xs text-muted-foreground">
+          <ul className="list-disc space-y-1 pl-5">
+            {lineas.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
 interface NodeInspectorProps {
   nodo: INodo | null;
   esEntrada: boolean;
+  /** Error de forma que devolvió el servidor al guardar. */
   error?: string;
+  /** Lo que le falta al nodo, en vivo (HU-FLOW-05). Vacío = listo. */
+  problemas?: string[];
+  onNombreChange: (nombre: string) => void;
   opcionesDestino: OpcionDestino[];
   onChange: (config: ConfigNodo) => void;
   onDelete: () => void;
   onMarcarEntrada: () => void;
+  /** Gravedad del estado del nodo: define el color del aviso (ámbar = incompleto, rojo = roto). */
+  gravedad?: GravedadNodo;
+  /** Oculta el panel (el nodo sigue seleccionado). */
+  onCerrar?: () => void;
 }
 
 /**
@@ -475,20 +524,17 @@ export function NodeInspector({
   nodo,
   esEntrada,
   error,
+  problemas = [],
+  onNombreChange,
   opcionesDestino,
   onChange,
   onDelete,
   onMarcarEntrada,
+  gravedad = 'error',
+  onCerrar,
 }: NodeInspectorProps): React.ReactElement {
-  if (!nodo) {
-    return (
-      <div className="flex h-full w-80 shrink-0 flex-col items-center justify-center border-l border-border bg-card px-6 text-center lg:w-96">
-        <p className="text-sm text-muted-foreground">
-          Selecciona un nodo del canvas para configurarlo.
-        </p>
-      </div>
-    );
-  }
+  // Sin nodo seleccionado no hay nada que configurar: la página ni siquiera monta el panel.
+  if (!nodo) return <></>;
 
   const visual = NODE_VISUALS[nodo.tipo];
   const Icon = visual.icon;
@@ -500,7 +546,8 @@ export function NodeInspector({
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{visual.label}</p>
+          <p className="truncate text-sm font-medium text-foreground">{nombreDeNodo(nodo)}</p>
+          {nodo.nombre?.trim() ? <p className="truncate text-xs text-muted-foreground">{visual.label}</p> : null}
           {esEntrada ? <p className="text-xs text-primary">Nodo de inicio</p> : null}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -525,14 +572,38 @@ export function NodeInspector({
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          {onCerrar ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground"
+              onClick={onCerrar}
+              aria-label="Ocultar panel"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {error ? (
-        <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive-subtle px-3 py-2 text-xs text-destructive">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{error}</span>
-        </div>
+      {/* Nombre propio del nodo (HU-FLOW-05): hace legible un flujo con varios nodos del mismo tipo. */}
+      <div className="space-y-1.5 border-b border-border px-4 py-3">
+        <Label htmlFor="nodo-nombre" className="text-xs text-muted-foreground">
+          Nombre del nodo
+        </Label>
+        <Input
+          id="nodo-nombre"
+          value={nodo.nombre ?? ''}
+          maxLength={60}
+          onChange={(e) => onNombreChange(e.target.value)}
+          placeholder={visual.label}
+          className="h-8 text-sm"
+        />
+      </div>
+
+      {error || problemas.length > 0 ? (
+        <ResumenProblemas lineas={[...(error ? [error] : []), ...problemas]} gravedad={error ? 'error' : gravedad} />
       ) : null}
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -540,7 +611,7 @@ export function NodeInspector({
           <MensajeForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
         ) : null}
         {nodo.config.tipo === 'captura' ? (
-          <CapturaForm config={nodo.config} opcionesDestino={opcionesDestino} onChange={onChange} />
+          <CapturaForm config={nodo.config} onChange={onChange} />
         ) : null}
         {nodo.config.tipo === 'condicion' ? (
           <ConditionEditor

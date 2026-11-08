@@ -22,6 +22,7 @@ const NodoSchema = new Schema(
     id: { type: String, required: true },
     tipo: { type: String, required: true, enum: ['mensaje', 'captura', 'condicion', 'intencion', 'kb', 'accion', 'handoff', 'espera', 'ia'] },
     posicion: { type: PosicionSchema, required: true },
+    nombre: { type: String, trim: true, maxlength: 60 },
     config: { type: Schema.Types.Mixed, required: true },
   },
   { _id: false },
@@ -89,6 +90,7 @@ const FlowStateSchema = new Schema<IFlowStateDocument>(
     // HU-FLOW-02: token del job diferido pendiente de un nodo `espera`. Se regenera al programar
     // una espera y se limpia en cualquier avance normal; ver flow.types.ts para el porqué.
     esperaToken: { type: String },
+    esperaHasta: { type: Date },
     actualizadoAt: { type: Date, required: true, default: () => new Date() },
   },
   { timestamps: false },

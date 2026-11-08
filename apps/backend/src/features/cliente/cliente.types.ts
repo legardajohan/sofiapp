@@ -221,6 +221,18 @@ export interface ICliente {
    */
   marketingOptOut: boolean;
   /**
+   * HU-IA-08: este hilo es la conversación de prueba de un admin ("Probar asistente"). Se comporta
+   * como un cliente real —flujos, Sofi, efectos— pero su salida no va a Meta y queda fuera de
+   * bandeja, reportes, pipeline, cuotas, campañas y recordatorios (`filtroClientesReales`).
+   */
+  esPrueba?: boolean;
+  /** Admin dueño de la sesión de prueba. Una sesión por `(tenantId, pruebaOwnerId)`. */
+  pruebaOwnerId?: Types.ObjectId;
+  /** Flujo a probar. `null` = el flujo activo del tenant, como vería un cliente real. */
+  pruebaFlowId?: Types.ObjectId | null;
+  /** Último mensaje del admin en la sesión; el barrido de 7 días se guía por él. */
+  pruebaUltimaActividad?: Date;
+  /**
    * Contacto bloqueado o inactivo (HU-MARK-07): no se le escribe por campaña. Se excluye **siempre**
    * de toda audiencia, igual que `marketingOptOut`, y con el mismo `$ne: true` (ausente = activo).
    */
@@ -282,6 +294,35 @@ export interface IAtributoResponse {
 }
 
 /**
+ * Atributo tal como llega en el parche de la ficha (HU-FLOW-05). La `key` debe existir en el catálogo
+ * de campos de la empresa; `label` y `sensible` se **ignoran** si vienen (clientes antiguos aún los
+ * envían) y se toman del catálogo, para que un mismo campo se llame y proteja igual en todos los contactos.
+ */
+export interface IAtributoEntrada {
+  key: string;
+  valor: string;
+  label?: string;
+  sensible?: boolean;
+}
+
+/** A dónde puede escribir un flujo en la ficha (HU-FLOW-05). */
+export type DestinoContacto =
+  | { tipo: 'contacto'; campo: 'nombre' | 'correo' | 'documento' | 'rolContacto' }
+  | { tipo: 'atributo'; key: string };
+
+export type MotivoDatoNoGuardado = 'ya_existia' | 'invalido' | 'campo_archivado' | 'contacto_inexistente';
+
+export interface GuardarDatoResultado {
+  escrito: boolean;
+  /** Presente cuando `escrito` es `false`. */
+  motivo?: MotivoDatoNoGuardado;
+  /** Etiqueta legible del campo escrito y su valor (enmascarado si es sensible), para el chat de prueba. */
+  etiqueta?: string;
+  valorVisible?: string;
+  sensible?: boolean;
+}
+
+/**
  * Parche de la ficha (HU-CRM-02). Semántica explícita: un campo **ausente** no se toca; un campo
  * enviado como **`null`** se borra. Sin esa distinción no habría forma de vaciar un dato mal
  * escrito. `atributos` viaja completo (reemplazo, no merge): es una lista corta que la UI edita de
@@ -301,7 +342,7 @@ export interface UpdateClienteDTO {
   nivelInteres?: OpcionContactoKey | null;
   objecionPrincipal?: OpcionContactoKey | null;
   rolContacto?: OpcionContactoKey | null;
-  atributos?: IAtributoPersonalizado[];
+  atributos?: IAtributoEntrada[];
   /** Baja de campañas (HU-MARK-01). Sin `null`: es un interruptor, no un campo que se vacíe. */
   marketingOptOut?: boolean;
   /** HU-MARK-07. Interruptor, como `marketingOptOut`. */
