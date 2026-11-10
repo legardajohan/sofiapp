@@ -2,7 +2,9 @@ import type { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { env } from '../config/env.js';
+import { isTokenRevoked } from '../features/auth/session.service.js';
 import { logger } from '../utils/logger.js';
+import { suscribirSesionRevocada } from './internal-bus.js';
 
 /** Datos de autenticación que colgamos del socket tras validar el JWT del handshake. */
 interface SocketAuth {
@@ -54,8 +56,22 @@ export function createSocketGateway(server: HttpServer): Server {
         tenantId: String(tenantRaw),
         rol: String(payload['rol']),
       };
-      socket.data.auth = auth;
-      next();
+      const iat = typeof payload['iat'] === 'number' ? payload['iat'] : undefined;
+      // AUTH-03: un JWT revocado tampoco abre socket. La consulta es asíncrona y va fuera del
+      // `try` de la verificación para no confundir un fallo de BD con un token inválido.
+      isTokenRevoked(auth.tenantId, auth.sub, iat)
+        .then((revocado) => {
+          if (revocado) {
+            next(new Error('Sesión revocada.'));
+            return;
+          }
+          socket.data.auth = auth;
+          next();
+        })
+        .catch((err: unknown) => {
+          logger.error('No se pudo comprobar la revocación del socket', { error: String(err) });
+          next(new Error('No autenticado.'));
+        });
     } catch {
       next(new Error('Token inválido o expirado.'));
     }
@@ -69,4 +85,26 @@ export function createSocketGateway(server: HttpServer): Server {
   });
 
   return io;
+}
+
+/**
+ * Corta los sockets vivos de un usuario cuando se revocan sus sesiones (AUTH-03). El room
+ * `asesor:<id>` es por usuario, y el `tenantId` del aviso se comprueba contra el de cada socket:
+ * un aviso nunca desconecta a nadie de otro tenant.
+ */
+export function subscribeSessionRevocations(io: Server): void {
+  suscribirSesionRevocada(({ tenantId, userId }) => {
+    void io
+      .in(`asesor:${userId}`)
+      .fetchSockets()
+      .then((sockets) => {
+        for (const s of sockets) {
+          const auth = s.data.auth as SocketAuth | undefined;
+          if (auth?.tenantId === tenantId) s.disconnect(true);
+        }
+      })
+      .catch((err: unknown) => {
+        logger.error('No se pudieron desconectar los sockets revocados', { error: String(err) });
+      });
+  });
 }

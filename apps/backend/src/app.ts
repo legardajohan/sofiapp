@@ -8,7 +8,7 @@ import { logger } from './utils/logger.js';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
 import { csrfGuard } from './middlewares/csrf.middleware.js';
 import { seedSuperadmin } from './seed/seed-superadmin.js';
-import { createSocketGateway } from './realtime/socket.gateway.js';
+import { createSocketGateway, subscribeSessionRevocations } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
 import { seedPlans } from './seed/seed-plans.js';
 import { backfillSemaforoTags } from './seed/seed-semaforo-tags.js';
@@ -154,6 +154,8 @@ if (env.NODE_ENV !== 'test') {
 
   // El puente Redis solo se conecta fuera de los tests (evita handles abiertos sin Redis).
   subscribeRealtime(io);
+  // AUTH-03: cierra los sockets de un usuario al revocar sus sesiones (desactivación, subrol, contraseña).
+  subscribeSessionRevocations(io);
   // Invalidación de la caché de ventanas de envío publicada por otros procesos (HU-CONF-01).
   suscribirInvalidacionVentana();
   mongoose

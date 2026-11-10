@@ -41,6 +41,18 @@ export type RealtimeEvent =
       conversation: IConversationResponse;
     }
   | {
+      /**
+       * Al desactivar a un usuario (AUTH-03) sus conversaciones se reasignaron a otro admin o
+       * volvieron a la bandeja sin asignar. Un solo evento por operación —pueden ser cientos— y la
+       * UI invalida la bandeja en vez de parchear fila a fila.
+       */
+      type: 'conversations:reassigned';
+      tenantId: string;
+      conversationIds: string[];
+      /** `null` = quedaron sin asignar. */
+      asesorId: string | null;
+    }
+  | {
       type: 'conversation:assigned';
       tenantId: string;
       conversationId: string;
