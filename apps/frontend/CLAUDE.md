@@ -149,8 +149,10 @@ apiClient.interceptors.response.use(r => r, (e) => {
 - Rol → vistas:
   - `superadmin`: panel `/admin` (empresas, planes, métricas globales).
   - `admin`: usuarios, conexión WhatsApp, catálogo, bandeja omnicanal, clientes, campañas — todo
-    dentro del tenant. El `subrol` interno opcional (Director/Gerente/Coordinador/Secretaria) es
-    solo metadata visible en `NavUser`; no cambia qué ve el `admin` (`AUTH-02`).
+    dentro del tenant. El `subrol` (Director/Gerente/Coordinador/Secretaria) restringe áreas
+    concretas con los helpers de `lib/roles.ts` (gemelos de `authorize-subrol` del backend):
+    datos sensibles (ADR 0006), reportes (ADR 0011) y **gestión de usuarios** (`/settings/users`,
+    solo Director y propietario sin subrol — `AUTH-03`, ADR 0016). Un `admin` sin subrol ve todo.
 
 ## Tiempo real
 

@@ -5,7 +5,7 @@
 | Término | Definición |
 |---|---|
 | **Tenant / Empresa** | Entidad comercial que alquila SofiApp. Raíz del aislamiento multi-tenant. |
-| **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): Director, Gerente, Coordinador, Secretaria (`AUTH-02`). |
+| **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` lleva un **subrol** (Director, Gerente, Coordinador, Secretaria; `AUTH-02`) que restringe áreas concretas (ADR 0006/0011/0016). El admin **sin** subrol es el **propietario** de la empresa: acceso total. Solo el Director y el propietario gestionan usuarios (`AUTH-03`); un usuario **inactivo** no puede iniciar sesión, sus sesiones abiertas se revocan al desactivarlo y no puede tener conversaciones asignadas. |
 | **Cliente / Prospecto** | Contacto. Entidad de datos (`Cliente`), nunca inicia sesión. Es a la vez el contacto y la conversación. |
 | **Lead / Oportunidad** | Intento de venta concreto (`Lead`, HU-CRM-01), creado al convertir una conversación. Único **por teléfono** dentro del tenant, mientras el `Cliente` es único por `metaUserId`: un mismo contacto puede generar varios leads en el tiempo (recompra, segundo producto, ciclo reabierto). |
 | **Canal** | Origen de la comunicación: `whatsapp | instagram | messenger | formulario | web`. |

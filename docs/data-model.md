@@ -94,7 +94,7 @@
   email: String,
   passwordHash: String,           // select:false
   rol: "superadmin" | "admin",
-  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // opcional, solo admin; metadata, no afecta permisos (AUTH-02)
+  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // solo admin; obligatorio al crear desde la gestión (AUTH-03); null = propietario. Restringe áreas: ADR 0006/0011/0016
   activo: Boolean,                // default true
   createdAt, updatedAt
 }
@@ -102,6 +102,22 @@
 //          { tenantId: 1, email: 1 }  (NO único; lookups scoped por tenant)
 //          { rol: 1 }  (para localizar al/los superadmin)
 ```
+
+### `session_revocations` (AUTH-03, ADR 0016)
+
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required — tenant-scoped como el resto
+  userId: ObjectId,               // ref User
+  revokedAt: Date,                // todo JWT del usuario con iat <= revokedAt deja de valer
+  expiraEn: Date                  // revokedAt + 7d (≥ JWT_EXPIRES_IN); lo borra el TTL
+}
+// Índices: { tenantId: 1, userId: 1 } unique · { expiraEn: 1 } TTL (expireAfterSeconds: 0)
+```
+> Se escribe al **desactivar**, **cambiar el subrol** o **restablecer la contraseña** de un usuario.
+> La ausencia de documento significa sesión válida: la colección vive casi vacía y desplegar no
+> cierra la sesión de nadie. `authenticateJWT` y el handshake de Socket.IO la consultan.
 
 ## meta_integrations  (conexión Tech Provider por tenant; resuelve el webhook)
 ```js

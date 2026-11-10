@@ -76,7 +76,13 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
 | PATCH | `/api/admin/tenants/:id/plan` | superadmin | Asignar un plan (activo) a una empresa. |
 | GET | `/api/admin/tenants/:id/usage` | superadmin | Consumo vs límite por métrica (periodo actual). |
 | GET | `/api/admin/metrics/global` | superadmin | Tablero global (HU-SAAS-03): `consolidado`, `serieMensual` (6 meses) y `porEmpresa` paginado. Query: `desde`, `hasta`, `page`, `limit` (≤100), `sort`, `order`, `search`, `estado`. Solo conteos, sin PII. Ver `docs/specs/HU-SAAS-03-metricas-globales/spec.md`. |
-| GET | `/api/users` | admin | Admins activos del tenant (`?activo&rol`); alimenta el selector de asignación (HU-OMNI-02). |
+| GET | `/api/users` | admin | Admins activos del tenant (`?activo=true\|false&rol`); alimenta el selector de asignación (HU-OMNI-02). Abierto a todo admin. |
+| GET | `/api/users/manage` | admin (Director o sin subrol) | Gestión (AUTH-03): todos los usuarios del tenant. Query: `activo` (`true\|false\|todos`, default `todos`), `subrol`, `q` (nombre/email). Nunca `passwordHash` ni el superadmin. Otros subroles → `403` (ADR 0016). |
+| GET | `/api/users/:id` | admin (Director o sin subrol) | Detalle de un usuario del tenant; de otro tenant → `404`. |
+| POST | `/api/users` | admin (Director o sin subrol) | Alta `{ nombre, email, password (8–128), subrol }` (`.strict()`, `subrol` obligatorio) → `201`. `rol` lo fija el servidor (`admin`); `tenantId`/`rol`/`activo` en el body → `400`. Email ya usado en cualquier tenant → `409` genérico. Cuotas `usuarios`/`administradores` → `429`. |
+| PATCH | `/api/users/:id` | admin (Director o sin subrol) | Edita `{ nombre?, email?, subrol? }` (al menos uno). Cambiar `subrol` **revoca sus sesiones**. Un director no toca al propietario (`403`); cambiarse el propio subrol o dejar al tenant sin gestor activo → `409`. |
+| PATCH | `/api/users/:id/estado` | admin (Director o sin subrol) | `{ activo, conversaciones? }`. Desactivar revoca sus sesiones y corta sus sockets. Con conversaciones asignadas y sin `conversaciones` → `409 { code: 'USER_HAS_ASSIGNED_CONVERSATIONS', asignadas, flujos }`, sin cambios. `conversaciones: { accion: 'reasignar', destinoId }` (admin activo del tenant, ≠ el usuario; si no, `404`/`400`) o `{ accion: 'desasignar' }` (bandeja sin asignar): mover + desactivar en una transacción. Reactivar valida cuotas (`429`). Desactivarse a uno mismo o al último gestor → `409`. |
+| POST | `/api/users/:id/password` | admin (Director o sin subrol) | `{ password }` (8–128) → `204`; revoca sus sesiones. La propia contraseña no se cambia por aquí (`409`). |
 | GET | `/api/conversations` | admin | Bandeja (paginada); `?filtro`, `?asignadoA=<userId>\|sin_asignar`, `?estado=<key del catálogo>` (ya no es un enum cerrado: las etapas son un catálogo por tenant, ver `GET /api/estados`; una clave que no exista en el tenant → **página vacía**, no `400`), `?etiqueta=<tagId>` combinables (HU-OMNI-01/02/04). Cada conversación incluye `tags` y `leadId` ya resueltos en lote. |
 | PATCH | `/api/conversations/:id/assign` | admin | Asigna/reasigna/desasigna (`{ asignadoA: <userId>\|null }`); sin restricción de propiedad (HU-OMNI-02). |
 | GET | `/api/conversations/:id/assignments` | admin | Historial paginado de reasignaciones de la conversación (HU-OMNI-02). |
@@ -202,6 +208,13 @@ el `leadId` que ya existe, y así la UI ofrece "Ver lead existente"). Se difunde
   **solo** al room `asesor:<ownerId>` del admin que prueba — nunca al `tenant:<id>`, donde escucha la
   bandeja —: son la conversación de prueba y las tarjetas de lo que el sistema hizo en ella.
 
+
+- `conversations:reassigned` (room `tenant:<id>`, AUTH-03): al desactivar a un usuario sus
+  conversaciones se reasignaron o volvieron a la bandeja sin asignar. `{ conversationIds, asesorId }`
+  (`asesorId: null` = sin asignar). **Un solo evento por operación**; la bandeja invalida su lista.
+- **Revocación de sesión (AUTH-03, ADR 0016):** el handshake rechaza un JWT revocado (`Sesión
+  revocada.`) y, al revocar, cada proceso web desconecta los sockets vivos del room
+  `asesor:<userId>` del mismo tenant.
 
 ## 8. Acceso a los archivos de la conversación (HU-OMNI-06)
 
