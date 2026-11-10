@@ -76,3 +76,4 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
     expect(result.some((u) => u.nombre === 'Root')).toBe(false);
   });
 });
+

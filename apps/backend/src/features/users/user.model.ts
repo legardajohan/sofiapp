@@ -1,5 +1,5 @@
 import { Schema, model } from 'mongoose';
-import type { IUserDocument } from './user.types.js';
+import { ADMIN_SUBROLES, type IUserDocument } from './user.types.js';
 
 const UserSchema = new Schema<IUserDocument>(
   {
@@ -14,7 +14,7 @@ const UserSchema = new Schema<IUserDocument>(
     },
     subrol: {
       type: String,
-      enum: ['director', 'manager', 'coordinator', 'secretary'],
+      enum: [...ADMIN_SUBROLES],
     },
     activo: { type: Boolean, default: true },
   },

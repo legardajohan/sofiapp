@@ -10,6 +10,7 @@ export interface IUserSource {
   rol: UserRol;
   subrol?: AdminSubrol;
   activo: boolean;
+  createdAt?: Date;
 }
 
 export function toUserResponse(user: IUserSource): IUserResponse {
@@ -21,5 +22,6 @@ export function toUserResponse(user: IUserSource): IUserResponse {
     rol: user.rol,
     ...(user.subrol ? { subrol: user.subrol } : {}),
     activo: user.activo,
+    ...(user.createdAt ? { createdAt: user.createdAt.toISOString() } : {}),
   };
 }

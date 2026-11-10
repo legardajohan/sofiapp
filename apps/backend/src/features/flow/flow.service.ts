@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import {
+  countScoped,
   createScoped,
   findByIdScoped,
   findOneAndUpdateScoped,
@@ -282,4 +283,15 @@ export async function updateFlow(
     }
     throw err;
   }
+}
+
+/**
+ * Cuántos flujos del tenant nombran a un usuario en un nodo: efecto `asignar_asesor` o asesor a
+ * notificar en un `handoff` (AUTH-03). Solo informa al gestor que lo va a desactivar; los flujos
+ * no se editan solos — el runtime tolera un asesor inactivo.
+ */
+export async function countFlowsReferencingUser(tenantId: TenantId, userId: string): Promise<number> {
+  return countScoped(Flow, tenantId, {
+    $or: [{ 'nodos.config.efecto.asesorId': userId }, { 'nodos.config.notificarAsesorId': userId }],
+  });
 }

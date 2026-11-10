@@ -513,3 +513,29 @@ describe('HU-CONF-01 — ventana horaria en el motor de flujos', () => {
     expect(audit?.despues).toMatchObject({ categoria: 'ia', accion: 'descartado' });
   });
 });
+
+describe('ejecutarFlujo — asignar_asesor con asesor inactivo (AUTH-03)', () => {
+  it('no lanza y la conversación queda sin asignar', async () => {
+    const inactivo = await User.create({
+      tenantId,
+      nombre: 'Dado de baja',
+      email: `baja-${Math.random()}@t.com`,
+      passwordHash: 'h',
+      rol: 'admin',
+      subrol: 'secretary',
+      activo: false,
+    });
+    const nodoAsignar: INodo = {
+      id: 'a1',
+      posicion: { x: 0, y: 0 },
+      tipo: 'accion',
+      config: { tipo: 'accion', efecto: { tipo: 'asignar_asesor', asesorId: String(inactivo._id) } },
+    };
+    await crearFlowActivo([nodoAsignar], [], 'a1');
+    const clienteId = await crearCliente();
+
+    await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBeDefined();
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.asesorId ?? null).toBeNull();
+  });
+});

@@ -47,3 +47,16 @@ export function authorizeSubrol(subroles: readonly AdminSubrol[]): RequestHandle
     next();
   };
 }
+
+/**
+ * Quién gestiona los usuarios del tenant (AUTH-03, ADR 0016): el `director` y, por la misma
+ * convención de arriba, el admin **sin** subrol — el propietario, primer usuario de la empresa.
+ * `manager` queda fuera a propósito: gestionar usuarios es otorgar permisos.
+ */
+export const SUBROLES_GESTION_USUARIOS: readonly AdminSubrol[] = ['director'];
+
+export function puedeGestionarUsuarios(user: Pick<SafeUser, 'rol' | 'subrol'>): boolean {
+  if (user.rol !== 'admin') return false;
+  if (!user.subrol) return true;
+  return SUBROLES_GESTION_USUARIOS.includes(user.subrol);
+}

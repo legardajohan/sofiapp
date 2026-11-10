@@ -293,7 +293,18 @@ async function ejecutarEfecto(
         return;
       }
       case 'asignar_asesor':
-        await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
+        // AUTH-03: el asesor del nodo puede haberse desactivado después de guardar el flujo. No es
+        // un fallo del flujo: la conversación sigue sin dueño y la reparte la configuración
+        // general, igual que en el `handoff` de abajo.
+        try {
+          await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
+        } catch (err) {
+          logger.warn('El asesor del nodo asignar_asesor no se pudo asignar; queda sin asignar', {
+            tenantId: tenantId.toString(),
+            clienteId,
+            error: String(err),
+          });
+        }
         return;
       case 'handoff': {
         await setIaHabilitada(tenantId.toString(), clienteId, false);
