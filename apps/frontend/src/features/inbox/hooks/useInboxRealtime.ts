@@ -45,6 +45,13 @@ export function useInboxRealtime(): void {
     const onAssigned = (): void => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     };
+    // AUTH-03: al desactivar a un usuario, sus conversaciones se reasignaron o volvieron a la
+    // bandeja sin asignar. Llega un solo evento por operación (pueden ser cientos): se invalida la
+    // lista entera en vez de parchear fila a fila.
+    const onReassigned = (): void => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-overview'] });
+    };
 
     /**
      * La media de un mensaje que YA está en el hilo terminó de descargarse, o falló (HU-OMNI-06).
@@ -64,12 +71,14 @@ export function useInboxRealtime(): void {
     socket.on('message:updated', onMessageUpdated);
     socket.on('conversation:updated', onConversation);
     socket.on('conversation:assigned', onAssigned);
+    socket.on('conversations:reassigned', onReassigned);
 
     return () => {
       socket.off('message:new', onMessage);
       socket.off('message:updated', onMessageUpdated);
       socket.off('conversation:updated', onConversation);
       socket.off('conversation:assigned', onAssigned);
+      socket.off('conversations:reassigned', onReassigned);
     };
   }, [qc]);
 }

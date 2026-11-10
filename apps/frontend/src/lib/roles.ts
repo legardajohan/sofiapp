@@ -45,3 +45,22 @@ export function puedeVerReportes(user: { rol: UserRol; subrol?: AdminSubrol } | 
   if (!user.subrol) return true;
   return SUBROLES_REPORTES.includes(user.subrol);
 }
+
+/**
+ * Quién gestiona los usuarios del tenant (AUTH-03, ADR 0016). Gemelo de
+ * `puedeGestionarUsuarios` del backend: el `director` y el admin sin subrol (propietario).
+ */
+export const SUBROLES_GESTION_USUARIOS: AdminSubrol[] = ['director'];
+
+export function puedeGestionarUsuarios(
+  user: { rol: UserRol; subrol?: AdminSubrol } | null,
+): boolean {
+  if (!user || user.rol !== 'admin') return false;
+  if (!user.subrol) return true;
+  return SUBROLES_GESTION_USUARIOS.includes(user.subrol);
+}
+
+/** El propietario es el admin sin subrol: está por encima del director en la jerarquía. */
+export function esPropietario(user: { rol: UserRol; subrol?: AdminSubrol }): boolean {
+  return user.rol === 'admin' && !user.subrol;
+}

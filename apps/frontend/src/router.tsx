@@ -4,6 +4,7 @@ import { LoginPage } from './features/auth/LoginPage.js';
 import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
 import { RequireReportes } from './components/RequireReportes.js';
+import { RequireGestionUsuarios } from './components/RequireGestionUsuarios.js';
 import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
@@ -73,6 +74,10 @@ const LeadsPage = lazy(() =>
 
 const TagsPage = lazy(() =>
   import('./features/tags/index.js').then((m) => ({ default: m.TagsPage })),
+);
+
+const UsersPage = lazy(() =>
+  import('./features/users/index.js').then((m) => ({ default: m.UsersPage })),
 );
 
 const EstadosPage = lazy(() =>
@@ -288,6 +293,18 @@ export const router = createBrowserRouter([
                 <Suspense fallback={<Loading />}>
                   <EstadosPage />
                 </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/settings/users',
+            element: (
+              <RequireRole roles={['admin']}>
+                <RequireGestionUsuarios>
+                  <Suspense fallback={<Loading />}>
+                    <UsersPage />
+                  </Suspense>
+                </RequireGestionUsuarios>
               </RequireRole>
             ),
           },

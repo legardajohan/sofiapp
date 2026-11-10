@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AdminSubrol, UserRol } from '@/stores/authStore';
-import { SUBROLES_REPORTES } from '@/lib/roles';
+import { SUBROLES_GESTION_USUARIOS, SUBROLES_REPORTES } from '@/lib/roles';
 
 export interface NavSubItem {
   label: string;
@@ -190,7 +190,14 @@ export const navGroups: NavGroup[] = [
         icon: CalendarClock,
         roles: ['admin'],
       },
-      { label: 'Usuarios', to: '/usuarios', icon: Users, roles: ['admin'], disabled: true },
+      // AUTH-03: solo quien gestiona usuarios (director o propietario sin subrol) lo ve.
+      {
+        label: 'Usuarios',
+        to: '/settings/users',
+        icon: Users,
+        roles: ['admin'],
+        subroles: SUBROLES_GESTION_USUARIOS,
+      },
       { label: 'Catálogo', to: '/catalogo', icon: Package, roles: ['admin'], disabled: true },
     ],
   },

@@ -1,0 +1,100 @@
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+import { toast } from 'sonner';
+import { createUser, fetchManageUsers, resetUserPassword, setUserEstado, updateUser } from '../api.js';
+import type {
+  ConversacionesAsignadas,
+  CreateUserPayload,
+  ManageUsersFilters,
+  SetUserEstadoPayload,
+  UpdateUserPayload,
+  UserDTO,
+} from '../types.js';
+
+/** Mensaje del backend si lo hay: "Ya existe un usuario con ese email" dice más que un genérico. */
+export function motivoError(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error) && typeof error.response?.data?.message === 'string') {
+    return error.response.data.message;
+  }
+  return fallback;
+}
+
+/** El 409 de desactivación no es un error para el usuario: es la pregunta de qué hacer después. */
+export function conversacionesAsignadas(error: unknown): ConversacionesAsignadas | null {
+  if (!axios.isAxiosError(error) || error.response?.status !== 409) return null;
+  const data = error.response.data as Partial<ConversacionesAsignadas> | undefined;
+  return data?.code === 'USER_HAS_ASSIGNED_CONVERSATIONS' ? (data as ConversacionesAsignadas) : null;
+}
+
+export function useManageUsers(filters: ManageUsersFilters) {
+  return useQuery<UserDTO[]>({
+    queryKey: ['users', 'manage', filters],
+    queryFn: () => fetchManageUsers(filters),
+    // Escribir en el buscador no debe vaciar la tabla entre una tecla y otra.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** `['users']` cubre la tabla de gestión y el selector de asignación de la bandeja. */
+function useInvalidarUsuarios(): () => void {
+  const qc = useQueryClient();
+  return () => void qc.invalidateQueries({ queryKey: ['users'] });
+}
+
+export function useCreateUser() {
+  const invalidar = useInvalidarUsuarios();
+  return useMutation({
+    mutationFn: (payload: CreateUserPayload) => createUser(payload),
+    onSuccess: (user) => {
+      invalidar();
+      toast.success(`${user.nombre} ya puede iniciar sesión`);
+    },
+    onError: (error) => toast.error(motivoError(error, 'No se pudo crear el usuario.')),
+  });
+}
+
+export function useUpdateUser() {
+  const invalidar = useInvalidarUsuarios();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) =>
+      updateUser(id, payload),
+    onSuccess: () => {
+      invalidar();
+      toast.success('Cambios guardados');
+    },
+    onError: (error) => toast.error(motivoError(error, 'No se pudieron guardar los cambios.')),
+  });
+}
+
+/**
+ * Activa o desactiva. El 409 de conversaciones asignadas **no** muestra toast: lo resuelve el
+ * diálogo, que pasa a preguntar si reasignarlas o moverlas a la bandeja sin asignar.
+ */
+export function useSetUserEstado() {
+  const qc = useQueryClient();
+  const invalidar = useInvalidarUsuarios();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: SetUserEstadoPayload }) =>
+      setUserEstado(id, payload),
+    onSuccess: (user, { payload }) => {
+      invalidar();
+      if (payload.conversaciones) void qc.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success(
+        user.activo ? `${user.nombre} está activo de nuevo` : `${user.nombre} quedó desactivado`,
+      );
+    },
+    onError: (error) => {
+      if (conversacionesAsignadas(error)) return;
+      toast.error(motivoError(error, 'No se pudo cambiar el estado del usuario.'));
+    },
+  });
+}
+
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      resetUserPassword(id, password),
+    onSuccess: () => toast.success('Contraseña restablecida'),
+    onError: (error) => toast.error(motivoError(error, 'No se pudo restablecer la contraseña.')),
+  });
+}
