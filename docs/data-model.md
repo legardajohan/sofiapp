@@ -94,13 +94,17 @@
   email: String,
   passwordHash: String,           // select:false
   rol: "superadmin" | "admin",
-  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // solo admin; obligatorio al crear desde la gestión (AUTH-03); null = propietario. Restringe áreas: ADR 0006/0011/0016
+  rolEmpresa: "administrador" | "coordinador" | "asesor",  // required si rol=admin (AUTH-04, ADR 0017); ausente en el superadmin
+  coordinadorId: ObjectId | null, // ref User — solo asesores: su coordinador (equipo). null en el resto o sin coordinador
+  // subrol (AUTH-02): retirado. `migrate:roles-empresa` lo traduce a rolEmpresa y `--unset-legacy` lo borra.
   activo: Boolean,                // default true
   createdAt, updatedAt
 }
 // Índices: { email: 1 } unique  (email único GLOBAL para usuarios de panel; login resuelve el tenant — ADR 0003)
 //          { tenantId: 1, email: 1 }  (NO único; lookups scoped por tenant)
 //          { rol: 1 }  (para localizar al/los superadmin)
+//          { tenantId: 1, coordinadorId: 1 }  (equipo de un coordinador, AUTH-04)
+//          { tenantId: 1, rolEmpresa: 1, activo: 1 }  (cuota `administradores`, último Administrador)
 ```
 
 ### `session_revocations` (AUTH-03, ADR 0016)
@@ -115,7 +119,7 @@
 }
 // Índices: { tenantId: 1, userId: 1 } unique · { expiraEn: 1 } TTL (expireAfterSeconds: 0)
 ```
-> Se escribe al **desactivar**, **cambiar el subrol** o **restablecer la contraseña** de un usuario.
+> Se escribe al **desactivar**, **cambiar el rol** o **restablecer la contraseña** de un usuario.
 > La ausencia de documento significa sesión válida: la colección vive casi vacía y desplegar no
 > cierra la sesión de nadie. `authenticateJWT` y el handshake de Socket.IO la consultan.
 
@@ -227,7 +231,7 @@
   // persona la confirma. Sin índice: se proyectan al abrir la ficha, nadie filtra por esto.
   datosExtraidos: {               // subdoc con _id: false; ausente si nunca se extrajo
     nombreCompleto: String?,
-    correo: String?,              // mismo gate por subrol que `correoEnc` al leerlo
+    correo: String?,              // mismo gate por rol que `correoEnc` al leerlo
     telefono: String,             // NUNCA null: cae al número de WhatsApp del contacto
     telefonoOrigen: "conversacion" | "whatsapp",
     interes: String?,             // <= 120 chars, texto libre: QUÉ pide, no cuánto le interesa
@@ -277,7 +281,7 @@
 > **El cifrado en reposo de estos campos está DESACTIVADO (HU-CRM-02).** `correoEnc`,
 > `documentoEnc`, `textoEnc` de las notas y el `valor` de los atributos sensibles se guardan **en
 > claro**. Dependían de `DATA_ENC_KEY`, una variable opcional, y sin ella cualquier guardado moría
-> con un 500. Lo que protege el dato es el **control de acceso por subrol** (`authorizeSubrol` +
+> con un 500. Lo que protege el dato es el **control de acceso por rol de empresa** (`authorizeRolEmpresa` +
 > enmascarado), que nunca dependió del cifrado; lo que se pierde es la protección ante un volcado de
 > la base o un backup extraviado. Los valores escritos mientras estuvo activo llevan el prefijo
 > `enc:v1:` y se siguen leyendo (`utils/field-crypto.util`), así que no hizo falta migrar.
@@ -892,7 +896,7 @@ activo**. Una rama sin destino en un flujo en borrador (chat de prueba) termina 
 > duro, es la única copia que queda — y el `despues` lleva solo `{ motivo }`.
 >
 > **La bitácora nunca guarda un valor sensible.** Esta colección no tiene control de acceso por
-> subrol, así que volcar aquí el antes/después de un campo sensible lo dejaría al alcance de quien
+> rol, así que volcar aquí el antes/después de un campo sensible lo dejaría al alcance de quien
 > no puede verlo en la ficha. En `cliente.update`, `correo`, `documento` y los
 > atributos sensibles se guardan como la cadena `"[oculto]"` — queda constancia de **qué** cambió,
 > nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
@@ -1070,7 +1074,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   label: String,                  // 1..60
   labelNormalizado: String,       // sin mayúsculas, tildes ni espacios repetidos: hace única la etiqueta
   tipoDato: "texto" | "numero" | "fecha" | "booleano",   // default "texto"
-  sensible: Boolean,              // default false; oculta el valor a quien no tenga el subrol (ADR 0006)
+  sensible: Boolean,              // default false; oculta el valor a quien no tenga el rol autorizado (ADR 0006/0017)
   orden: Number,
   activo: Boolean,                // false = archivado
   createdAt, updatedAt

@@ -1,6 +1,6 @@
 # ADR 0006 — El `subrol` gobierna el acceso a los datos sensibles del contacto
 
-**Estado:** aceptado · **Fecha:** 2026-07-31 · **Contexto:** HU-CRM-02 (registrar información
+**Estado:** reemplazado por [ADR 0017](0017-roles-de-empresa.md) · **Fecha:** 2026-07-31 · **Contexto:** HU-CRM-02 (registrar información
 relevante del cliente)
 
 ## Contexto

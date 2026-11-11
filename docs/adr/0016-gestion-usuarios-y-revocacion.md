@@ -1,6 +1,6 @@
 # ADR 0016 — Gestión de usuarios por subrol y revocación de sesiones
 
-**Estado:** aceptado · **Fecha:** 2026-11-10 · **Contexto:** AUTH-03 (gestión de usuarios por tenant)
+**Estado:** aceptado (la §1 y la jerarquía de la §2 quedan reemplazadas por [ADR 0017](0017-roles-de-empresa.md); la revocación de sesión sigue vigente) · **Fecha:** 2026-11-10 · **Contexto:** AUTH-03 (gestión de usuarios por tenant)
 
 ## Contexto
 

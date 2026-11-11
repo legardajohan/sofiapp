@@ -11,17 +11,18 @@ marca al anterior como *Reemplazado*.
 | [0003](0003-login-tenant-resolution.md) | Resolución del tenant en el login | Aceptada |
 | [0004](0004-realtime-socketio-redis.md) | Transporte de tiempo real (Socket.IO + puente Redis pub/sub) | Aceptada |
 | [0005](0005-decimal-money.md) | Dinero con precisión decimal (Decimal128 + decimal.js) | Aceptada |
-| [0006](0006-subrol-datos-sensibles.md) | El `subrol` gobierna el acceso a los datos sensibles del contacto | Aceptada |
+| [0006](0006-subrol-datos-sensibles.md) | El `subrol` gobierna el acceso a los datos sensibles del contacto | Reemplazado por 0017 |
 | [0007](0007-tablero-kanban-pipeline.md) | El embudo vuelve a tener tablero Kanban con drag & drop | Aceptada |
 | [0008](0008-almacenamiento-de-media.md) | Almacenamiento de media de conversación tras un puerto con dos adaptadores | Aceptada |
 | [0009](0009-transcodificacion-de-audio.md) | Transcodificación de notas de voz con ffmpeg en el backend | Aceptada |
 | [0010](0010-modelo-tech-provider.md) | SofiApp opera como Tech Provider frente a Meta, por ahora | Aceptada |
-| [0011](0011-reportes-por-subrol.md) | Los reportes de productividad del equipo se restringen por `subrol` | Aceptada |
+| [0011](0011-reportes-por-subrol.md) | Los reportes de productividad del equipo se restringen por `subrol` | Reemplazado por 0017 |
 | [0012](0012-tema-por-conversacion.md) | El tema de cada conversación lo clasifica la IA contra los productos de la KB | Aceptada |
 | [0013](0013-pdf-pendientes-sincrono-pdfkit.md) | El PDF de pendientes se genera en el proceso web, síncrono, con pdfkit | Aceptada |
 | [0014](0014-ventanas-horarias-de-envio.md) | Ventanas horarias de envío: control único en `sendOutbound` y comportamiento fijo por categoría | Aceptada |
 | [0015](0015-catalogo-campos-contacto.md) | Catálogo de campos del contacto y validación de flujos en tres niveles | Aceptada |
-| [0016](0016-gestion-usuarios-y-revocacion.md) | Gestión de usuarios por subrol y revocación de sesiones | Aceptada |
+| [0016](0016-gestion-usuarios-y-revocacion.md) | Gestión de usuarios por subrol y revocación de sesiones | Aceptada (§1 reemplazada por 0017) |
+| [0017](0017-roles-de-empresa.md) | Roles de empresa: Administrador, Coordinador y Asesor | Aceptada |
 
 ## Convención
 
