@@ -13,6 +13,9 @@ interface AuthUser {
   /** Siempre presente para `rol: 'admin'`; el superadmin no lo tiene. */
   rolEmpresa?: RolEmpresa;
   nombre?: string;
+  /** AUTH-05. Solo para mostrar u ocultar acciones: el backend decide. */
+  esPrincipal?: boolean;
+  puedeGestionarAdministradores?: boolean;
 }
 
 interface AuthState {

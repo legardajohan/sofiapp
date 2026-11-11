@@ -41,6 +41,11 @@ interface Props {
   /** Coordinadores activos que pueden recibir su equipo (ya excluye al usuario). */
   coordinadores: UserDTO[];
   pending: boolean;
+  /**
+   * AUTH-05: el mismo flujo sirve para eliminar (borrado lógico). Cambia el copy y el botón; la
+   * resolución de conversaciones y equipo es idéntica.
+   */
+  modo?: 'desactivar' | 'eliminar';
   onOpenChange: (abierto: boolean) => void;
   onConfirm: (resolucion: Omit<SetUserEstadoPayload, 'activo'>) => void;
 }
@@ -49,12 +54,32 @@ function plural(n: number, uno: string, varios: string): string {
   return `${n} ${n === 1 ? uno : varios}`;
 }
 
-function resumen(c: DependenciasUsuario): string {
+function resumen(c: DependenciasUsuario, verbo: string): string {
   const partes: string[] = [];
   if (c.asignadas > 0) partes.push(plural(c.asignadas, 'conversación asignada', 'conversaciones asignadas'));
   if (c.asesores > 0) partes.push(plural(c.asesores, 'asesor a su cargo', 'asesores a su cargo'));
-  return `Tiene ${partes.join(' y ')}. Decide qué pasa antes de desactivarlo.`;
+  return `Tiene ${partes.join(' y ')}. Decide qué pasa antes de ${verbo}lo.`;
 }
+
+const COPY = {
+  desactivar: {
+    verbo: 'desactivar',
+    titulo: (n: string) => `¿Desactivar a ${n}?`,
+    aviso: 'Su sesión se cerrará en el acto y no podrá volver a entrar. Puedes reactivarlo cuando quieras.',
+    boton: 'Desactivar',
+    resolver: 'Aplicar y desactivar',
+    pending: 'Desactivando…',
+  },
+  eliminar: {
+    verbo: 'eliminar',
+    titulo: (n: string) => `¿Eliminar a ${n}?`,
+    aviso:
+      'Desaparece de la lista y no podrá volver a entrar; su email queda libre para otra persona. El historial conserva su nombre. No se puede deshacer.',
+    boton: 'Eliminar',
+    resolver: 'Aplicar y eliminar',
+    pending: 'Eliminando…',
+  },
+} as const;
 
 /**
  * Desactivar a alguien tiene dos momentos. Primero, la confirmación de siempre. Si el backend
@@ -68,10 +93,12 @@ export function DeactivateUserDialog({
   destinos,
   coordinadores,
   pending,
+  modo = 'desactivar',
   onOpenChange,
   onConfirm,
 }: Props): React.ReactElement {
   const id = useId();
+  const copy = COPY[modo];
   const [accion, setAccion] = useState<Accion>('reasignar');
   const [destinoId, setDestinoId] = useState('');
   const [equipo, setEquipo] = useState<MoverEquipo | null>(null);
@@ -106,21 +133,15 @@ export function DeactivateUserDialog({
     });
   }
 
-  const etiquetaBoton = pending
-    ? 'Desactivando…'
-    : !conflicto
-      ? 'Desactivar'
-      : 'Aplicar y desactivar';
+  const etiquetaBoton = pending ? copy.pending : !conflicto ? copy.boton : copy.resolver;
 
   return (
     <AlertDialog open={user !== null} onOpenChange={onOpenChange}>
       <AlertDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <AlertDialogHeader>
-          <AlertDialogTitle>¿Desactivar a {user?.nombre}?</AlertDialogTitle>
+          <AlertDialogTitle>{copy.titulo(user?.nombre ?? '')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {conflicto
-              ? resumen(conflicto)
-              : 'Su sesión se cerrará en el acto y no podrá volver a entrar. Puedes reactivarlo cuando quieras.'}
+            {conflicto ? resumen(conflicto, copy.verbo) : copy.aviso}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

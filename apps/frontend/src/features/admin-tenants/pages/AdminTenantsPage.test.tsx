@@ -3,7 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminTenantsPage } from './AdminTenantsPage.js';
-import { getAdminTenants } from '../../../api/admin-tenants.js';
+import {
+  getAdminTenants,
+  getTenantPrincipal,
+  resetTenantPrincipalPassword,
+} from '../../../api/admin-tenants.js';
 import { useAdminTenantsStore } from '../useAdminTenantsStore.js';
 import type { ITenant, TenantsListResponse } from '../types/index.js';
 
@@ -16,6 +20,8 @@ vi.mock('../../../api/admin-tenants.js', () => ({
   deleteAdminTenant: vi.fn(),
   assignTenantPlan: vi.fn(),
   getTenantUsage: vi.fn(),
+  getTenantPrincipal: vi.fn(),
+  resetTenantPrincipalPassword: vi.fn(),
 }));
 
 vi.mock('../../../api/admin-plans.js', () => ({
@@ -155,5 +161,20 @@ describe('AdminTenantsPage — buscador de empresas', () => {
     await waitFor(() => {
       expect(mockGetAdminTenants).toHaveBeenLastCalledWith({ search: undefined, page: 1 });
     });
+  });
+
+  it('AUTH-05: restablece la contraseña del usuario principal de una empresa', async () => {
+    mockGetAdminTenants.mockResolvedValue(listResponse([makeTenant('Acme Corp', 'acme')]));
+    vi.mocked(getTenantPrincipal).mockResolvedValue({ id: 'u1', nombre: 'Pía Principal', email: 'pia@acme.com' });
+    vi.mocked(resetTenantPrincipalPassword).mockResolvedValue();
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Restablecer la contraseña del usuario principal de Acme Corp' }),
+    );
+    expect(await screen.findByText('Pía Principal')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Contraseña nueva'), 'nueva-1234');
+    await userEvent.type(screen.getByLabelText('Repite la contraseña nueva'), 'nueva-1234');
+    await userEvent.click(screen.getByRole('button', { name: 'Restablecer contraseña' }));
+    await waitFor(() => expect(resetTenantPrincipalPassword).toHaveBeenCalledWith('id-acme', 'nueva-1234'));
   });
 });

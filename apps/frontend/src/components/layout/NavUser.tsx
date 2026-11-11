@@ -1,4 +1,6 @@
-import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { ChangeOwnPasswordDialog } from '@/features/users/components/ChangeOwnPasswordDialog';
 import { logout as logoutRequest } from '@/features/auth/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme, type Theme } from '@/components/theme/ThemeProvider';
@@ -41,6 +43,7 @@ export function NavUser(): React.ReactElement | null {
   const storeLogout = useAuthStore((s) => s.logout);
   const { theme, setTheme } = useTheme();
   const { isMobile } = useSidebar();
+  const [cambiandoPassword, setCambiandoPassword] = useState(false);
   if (!user) return null;
 
   const displayName = user.nombre ?? user.sub;
@@ -113,12 +116,22 @@ export function NavUser(): React.ReactElement | null {
               </div>
             </div>
             <DropdownMenuSeparator />
+            {/* AUTH-05: la propia contraseña, con la actual. Solo usuarios de empresa (el superadmin no). */}
+            {user.rol === 'admin' && (
+              <DropdownMenuItem onSelect={() => setCambiandoPassword(true)}>
+                <KeyRound />
+                Cambiar mi contraseña
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => void handleLogout()}>
               <LogOut />
               Cerrar sesión
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {user.rol === 'admin' && (
+          <ChangeOwnPasswordDialog open={cambiandoPassword} onOpenChange={setCambiandoPassword} />
+        )}
       </SidebarMenuItem>
     </SidebarMenu>
   );

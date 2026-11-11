@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { KeyRound, MoreHorizontal, Pencil, Plus, Search, UserCheck, UserX, Users } from 'lucide-react';
+import { Crown, KeyRound, MoreHorizontal, Pencil, Plus, Search, Trash2, UserCheck, UserX, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,17 +26,28 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
-import { esCoordinador, ROL_EMPRESA_LABEL, ROLES_EMPRESA } from '@/lib/roles';
+import {
+  esCoordinador,
+  puedeConcederPermisoAdmin,
+  ROL_EMPRESA_LABEL,
+  ROLES_EMPRESA,
+  rolesQuePuedeCrear,
+} from '@/lib/roles';
 import { cn } from '@/lib/utils';
 import { useAuthStore, type RolEmpresa } from '@/stores/authStore';
+import { ChangeOwnPasswordDialog } from '../components/ChangeOwnPasswordDialog.js';
 import { ChangeRoleDialog, type CambioRolPendiente } from '../components/ChangeRoleDialog.js';
+import { CupoUsuarios } from '../components/CupoUsuarios.js';
 import { DeactivateUserDialog } from '../components/DeactivateUserDialog.js';
 import { ResetPasswordDialog } from '../components/ResetPasswordDialog.js';
 import { UserFormSheet } from '../components/UserFormSheet.js';
 import {
   dependenciasDe,
   useCreateUser,
+  useCupoUsuarios,
+  useDeleteUser,
   useManageUsers,
   useResetUserPassword,
   useSetUserEstado,
@@ -69,19 +80,38 @@ function EstadoBadge({ activo }: { activo: boolean }): React.ReactElement {
   );
 }
 
+/** El usuario que creó el superadmin con la empresa: nadie del tenant lo gestiona. */
+function PrincipalBadge(): React.ReactElement {
+  return (
+    <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="secondary" className="shrink-0 gap-1 font-normal">
+          <Crown aria-hidden className="h-3 w-3" />
+          Principal
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>Solo el superadministrador puede restablecer su contraseña.</TooltipContent>
+    </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function rolDe(u: UserDTO): string {
   return u.rolEmpresa ? ROL_EMPRESA_LABEL[u.rolEmpresa] : '—';
 }
 
 /**
- * Usuarios de la empresa (AUTH-03, roles de AUTH-04). El Administrador ve y gestiona a todos y
- * reparte asesores entre coordinadores; el Coordinador ve solo a los asesores de su equipo —lo
- * recorta el backend— y la pantalla se simplifica: sin filtros de rol ni columna de coordinador.
+ * Usuarios de la empresa (AUTH-03, roles de AUTH-04, jerarquía de AUTH-05). El Administrador ve a
+ * todos; el Coordinador, a los asesores de su equipo y a los que no tienen coordinador (lo recorta
+ * el backend). Qué se puede hacer en cada fila lo dice `acciones`, que calcula el backend con la
+ * misma matriz que aplica: el principal y, para un Administrador sin permiso, los demás
+ * Administradores aparecen sin acciones. En la propia fila solo se ofrece cambiar la contraseña.
  */
 export function UsersPage(): React.ReactElement {
   const yo = useAuthStore((s) => s.user);
   const soyCoordinador = esCoordinador(yo);
-  const actor = soyCoordinador ? 'coordinador' : 'administrador';
+  const rolesPermitidos = rolesQuePuedeCrear(yo);
 
   const [busqueda, setBusqueda] = useState('');
   const [estado, setEstado] = useState<FiltroEstado>('todos');
@@ -106,9 +136,12 @@ export function UsersPage(): React.ReactElement {
     !soyCoordinador,
   );
 
+  const { data: cupo } = useCupoUsuarios();
+
   const crear = useCreateUser();
   const actualizar = useUpdateUser();
   const cambiarEstado = useSetUserEstado();
+  const eliminar = useDeleteUser();
   const restablecer = useResetUserPassword();
 
   const [formAbierto, setFormAbierto] = useState(false);
@@ -119,12 +152,22 @@ export function UsersPage(): React.ReactElement {
     null,
   );
   const [porRestablecer, setPorRestablecer] = useState<UserDTO | null>(null);
+  const [porEliminar, setPorEliminar] = useState<UserDTO | null>(null);
+  const [conflictoEliminar, setConflictoEliminar] = useState<DependenciasUsuario | null>(null);
+  const [cambiandoMiPassword, setCambiandoMiPassword] = useState(false);
 
   const hayFiltros = estado !== 'todos' || rol !== TODOS || coordinador !== TODOS || q !== '';
 
+  // Nombre de cada coordinador para la columna. El administrador los trae todos (también
+  // inactivos) por la gestión; el coordinador, de la lista de usuarios activos del tenant.
   const nombreCoordinador = useMemo(
-    () => new Map((todosLosCoordinadores ?? []).map((c) => [c.id, c.nombre])),
-    [todosLosCoordinadores],
+    () =>
+      new Map(
+        [...(activos ?? []), ...(todosLosCoordinadores ?? [])]
+          .filter((c) => c.rolEmpresa === 'coordinador')
+          .map((c) => [c.id, c.nombre]),
+      ),
+    [activos, todosLosCoordinadores],
   );
   const coordinadoresActivos = (activos ?? []).filter((u) => u.rolEmpresa === 'coordinador');
 
@@ -209,15 +252,35 @@ export function UsersPage(): React.ReactElement {
     );
   }
 
-  // A quién pueden ir las conversaciones de quien se desactiva: el administrador elige a cualquier
-  // usuario activo; el coordinador, a sí mismo o a un asesor de su equipo (el backend lo exige igual).
-  const destinos = (activos ?? []).filter(
-    (u) =>
-      u.id !== porDesactivar?.id &&
-      (!soyCoordinador || u.id === yo?.sub || (u.rolEmpresa === 'asesor' && u.coordinadorId === yo?.sub)),
-  );
+  function pedirEliminar(u: UserDTO): void {
+    setConflictoEliminar(null);
+    setPorEliminar(u);
+  }
+
+  function cerrarEliminar(): void {
+    setPorEliminar(null);
+    setConflictoEliminar(null);
+  }
+
+  function confirmarEliminar(resolucion: Omit<SetUserEstadoPayload, 'activo'>): void {
+    if (!porEliminar) return;
+    eliminar.mutate(
+      { id: porEliminar.id, payload: resolucion },
+      {
+        onSuccess: cerrarEliminar,
+        onError: (error) => {
+          const c = dependenciasDe(error);
+          if (c) setConflictoEliminar(c);
+        },
+      },
+    );
+  }
+
+  // A quién pueden ir las conversaciones de quien se retira: cualquier usuario activo (AUTH-05).
+  const destinosPara = (objetivo: UserDTO | null): UserDTO[] =>
+    (activos ?? []).filter((u) => u.id !== objetivo?.id);
   const lista = usuarios ?? [];
-  const etiquetaCrear = soyCoordinador ? 'Crear asesor' : 'Crear usuario';
+  const etiquetaCrear = rolesPermitidos.length > 1 ? 'Crear usuario' : 'Crear asesor';
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
@@ -226,7 +289,7 @@ export function UsersPage(): React.ReactElement {
           <h1 className="text-xl font-semibold text-foreground">{soyCoordinador ? 'Mi equipo' : 'Usuarios'}</h1>
           <p className="mt-1 max-w-prose text-sm text-muted-foreground">
             {soyCoordinador
-              ? 'Los asesores que coordinas. Desactivar a alguien cierra su sesión en el acto.'
+              ? 'Los asesores de tu equipo y los que aún no tienen coordinador. Desactivar a alguien cierra su sesión en el acto.'
               : 'Quién entra al panel de tu empresa y qué puede hacer. Desactivar a alguien cierra su sesión en el acto.'}
           </p>
         </div>
@@ -238,6 +301,8 @@ export function UsersPage(): React.ReactElement {
           {etiquetaCrear}
         </Button>
       </header>
+
+      <CupoUsuarios cupo={cupo} />
 
       <div className="flex flex-col gap-2 lg:flex-row">
         <div className="relative flex-1">
@@ -261,6 +326,18 @@ export function UsersPage(): React.ReactElement {
               <SelectItem value="false">Inactivos</SelectItem>
             </SelectContent>
           </Select>
+          {soyCoordinador && (
+            <Select value={coordinador} onValueChange={setCoordinador}>
+              <SelectTrigger aria-label="Filtrar por equipo" className="w-full lg:w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Mi equipo y sin coordinador</SelectItem>
+                {yo && <SelectItem value={yo.sub}>Solo mi equipo</SelectItem>}
+                <SelectItem value={SIN_COORDINADOR}>Solo sin coordinador</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           {!soyCoordinador && (
             <>
               <Select value={rol} onValueChange={(v) => setRol(v as RolEmpresa | typeof TODOS)}>
@@ -319,11 +396,12 @@ export function UsersPage(): React.ReactElement {
               <>
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    {soyCoordinador ? 'Todavía no tienes asesores en tu equipo' : 'Todavía no hay usuarios'}
+                    {soyCoordinador ? 'Todavía no hay asesores a tu cargo' : 'Todavía no hay usuarios'}
                   </p>
                   {soyCoordinador && (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Crea uno o pide a un Administrador que te asigne asesores.
+                      Crea uno o pide a un Administrador que te asigne asesores. Aquí también verás a los
+                      asesores sin coordinador.
                     </p>
                   )}
                 </div>
@@ -341,7 +419,7 @@ export function UsersPage(): React.ReactElement {
                 <TableRow>
                   <TableHead>Persona</TableHead>
                   {!soyCoordinador && <TableHead className="hidden sm:table-cell">Rol</TableHead>}
-                  {!soyCoordinador && <TableHead className="hidden md:table-cell">Coordinador</TableHead>}
+                  <TableHead className="hidden md:table-cell">Coordinador</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="w-12">
                     <span className="sr-only">Acciones</span>
@@ -352,13 +430,21 @@ export function UsersPage(): React.ReactElement {
                 {lista.map((u) => {
                   const esYo = u.id === yo?.sub;
                   const coord = u.coordinadorId ? nombreCoordinador.get(u.coordinadorId) : undefined;
+                  const acciones = u.acciones ?? { editar: false, contrasena: false, estado: false, eliminar: false };
+                  const hayAcciones = esYo || Object.values(acciones).some(Boolean);
                   return (
                     <TableRow key={u.id} className={cn(!u.activo && 'text-muted-foreground')}>
                       <TableCell className="max-w-0 sm:max-w-none">
                         <div className="min-w-0">
-                          <p className={cn('truncate font-medium', u.activo ? 'text-foreground' : 'text-muted-foreground')}>
-                            {u.nombre}
-                            {esYo && <span className="ml-2 text-xs font-normal text-muted-foreground">(tú)</span>}
+                          <p
+                            className={cn(
+                              'flex min-w-0 items-center gap-2 font-medium',
+                              u.activo ? 'text-foreground' : 'text-muted-foreground',
+                            )}
+                          >
+                            <span className="truncate">{u.nombre}</span>
+                            {esYo && <span className="shrink-0 text-xs font-normal text-muted-foreground">(tú)</span>}
+                            {u.esPrincipal && <PrincipalBadge />}
                           </p>
                           <p className="truncate text-sm text-muted-foreground">{u.email}</p>
                           {!soyCoordinador && (
@@ -369,56 +455,76 @@ export function UsersPage(): React.ReactElement {
                       {!soyCoordinador && (
                         <TableCell className="hidden text-sm text-foreground sm:table-cell">{rolDe(u)}</TableCell>
                       )}
-                      {!soyCoordinador && (
-                        <TableCell className="hidden text-sm md:table-cell">
-                          {u.rolEmpresa !== 'asesor' ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : coord ? (
-                            <span className="text-foreground">{coord}</span>
-                          ) : (
-                            <span className="text-muted-foreground">Sin coordinador</span>
-                          )}
-                        </TableCell>
-                      )}
+                      <TableCell className="hidden text-sm md:table-cell">
+                        {u.rolEmpresa !== 'asesor' ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : coord ? (
+                          <span className="text-foreground">{u.coordinadorId === yo?.sub ? 'Tú' : coord}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Sin coordinador</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <EstadoBadge activo={u.activo} />
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label={`Acciones para ${u.nombre}`}>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onSelect={() => abrirEditar(u)}>
-                              <Pencil className="h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                            {!esYo && (
-                              <DropdownMenuItem onSelect={() => setPorRestablecer(u)}>
-                                <KeyRound className="h-4 w-4" />
-                                Restablecer contraseña
-                              </DropdownMenuItem>
-                            )}
-                            {!esYo && <DropdownMenuSeparator />}
-                            {!esYo &&
-                              (u.activo ? (
-                                <DropdownMenuItem
-                                  onSelect={() => pedirDesactivar(u)}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <UserX className="h-4 w-4" />
-                                  Desactivar
+                        {hayAcciones && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" aria-label={`Acciones para ${u.nombre}`}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              {esYo ? (
+                                <DropdownMenuItem onSelect={() => setCambiandoMiPassword(true)}>
+                                  <KeyRound className="h-4 w-4" />
+                                  Cambiar mi contraseña
                                 </DropdownMenuItem>
                               ) : (
-                                <DropdownMenuItem onSelect={() => reactivar(u)}>
-                                  <UserCheck className="h-4 w-4" />
-                                  Reactivar
-                                </DropdownMenuItem>
-                              ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                                <>
+                                  {acciones.editar && (
+                                    <DropdownMenuItem onSelect={() => abrirEditar(u)}>
+                                      <Pencil className="h-4 w-4" />
+                                      Editar
+                                    </DropdownMenuItem>
+                                  )}
+                                  {acciones.contrasena && (
+                                    <DropdownMenuItem onSelect={() => setPorRestablecer(u)}>
+                                      <KeyRound className="h-4 w-4" />
+                                      Restablecer contraseña
+                                    </DropdownMenuItem>
+                                  )}
+                                  {acciones.estado && !u.activo && (
+                                    <DropdownMenuItem onSelect={() => reactivar(u)}>
+                                      <UserCheck className="h-4 w-4" />
+                                      Reactivar
+                                    </DropdownMenuItem>
+                                  )}
+                                  {(acciones.estado || acciones.eliminar) && <DropdownMenuSeparator />}
+                                  {acciones.estado && u.activo && (
+                                    <DropdownMenuItem
+                                      onSelect={() => pedirDesactivar(u)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <UserX className="h-4 w-4" />
+                                      Desactivar
+                                    </DropdownMenuItem>
+                                  )}
+                                  {acciones.eliminar && (
+                                    <DropdownMenuItem
+                                      onSelect={() => pedirEliminar(u)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Eliminar
+                                    </DropdownMenuItem>
+                                  )}
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -434,7 +540,9 @@ export function UsersPage(): React.ReactElement {
         open={formAbierto}
         pending={crear.isPending || actualizar.isPending}
         esUnoMismo={editando !== null && editando.id === yo?.sub}
-        actor={actor}
+        rolesPermitidos={rolesPermitidos}
+        puedeConcederPermiso={puedeConcederPermisoAdmin(yo)}
+        coordinadorPorDefecto={soyCoordinador ? (yo?.sub ?? null) : null}
         coordinadores={coordinadoresActivos}
         onOpenChange={setFormAbierto}
         onCreate={guardarNuevo}
@@ -454,7 +562,7 @@ export function UsersPage(): React.ReactElement {
       <DeactivateUserDialog
         user={porDesactivar}
         conflicto={conflicto}
-        destinos={destinos}
+        destinos={destinosPara(porDesactivar)}
         coordinadores={coordinadoresActivos.filter((c) => c.id !== porDesactivar?.id)}
         pending={cambiarEstado.isPending}
         onOpenChange={(abierto) => {
@@ -462,6 +570,21 @@ export function UsersPage(): React.ReactElement {
         }}
         onConfirm={desactivar}
       />
+
+      <DeactivateUserDialog
+        modo="eliminar"
+        user={porEliminar}
+        conflicto={conflictoEliminar}
+        destinos={destinosPara(porEliminar)}
+        coordinadores={coordinadoresActivos.filter((c) => c.id !== porEliminar?.id)}
+        pending={eliminar.isPending}
+        onOpenChange={(abierto) => {
+          if (!abierto) cerrarEliminar();
+        }}
+        onConfirm={confirmarEliminar}
+      />
+
+      <ChangeOwnPasswordDialog open={cambiandoMiPassword} onOpenChange={setCambiandoMiPassword} />
 
       <ResetPasswordDialog
         user={porRestablecer}

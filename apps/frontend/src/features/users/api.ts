@@ -1,5 +1,7 @@
 import { apiClient } from '@/api/apiClient';
 import type {
+  CupoUsuarios,
+  DeleteUserPayload,
   CreateUserPayload,
   ManageUsersFilters,
   SetUserEstadoPayload,
@@ -41,4 +43,21 @@ export async function setUserEstado(id: string, payload: SetUserEstadoPayload): 
 
 export async function resetUserPassword(id: string, password: string): Promise<void> {
   await apiClient.post(`/users/${id}/password`, { password });
+}
+
+// ── AUTH-05 ─────────────────────────────────────────────────────────────────────────────────
+
+export async function deleteUser(id: string, payload: DeleteUserPayload): Promise<UserDTO> {
+  const { data } = await apiClient.delete<UserDTO>(`/users/${id}`, { data: payload });
+  return data;
+}
+
+export async function fetchCupoUsuarios(): Promise<CupoUsuarios> {
+  const { data } = await apiClient.get<CupoUsuarios>('/users/cupo');
+  return data;
+}
+
+/** La propia contraseña, siempre con la actual. El backend reemite la cookie de la sesión. */
+export async function changeOwnPassword(actual: string, nueva: string): Promise<void> {
+  await apiClient.patch('/auth/me/password', { actual, nueva });
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ContactEditDialog } from './ContactEditDialog.js';
@@ -250,14 +250,18 @@ describe('ContactEditDialog (HU-CRM-02)', () => {
 
     expect(screen.getByLabelText(/Correo/)).toBeDisabled();
     expect(screen.getByLabelText(/Documento/)).toBeDisabled();
-    expect(screen.getByText(/Solo un Administrador/)).toBeInTheDocument();
+    expect(screen.getByText(/Tu usuario no tiene acceso a este dato/)).toBeInTheDocument();
   });
 
-  it('quien no es Administrador no ve cómo gestionar los catálogos (AUTH-04)', () => {
+  it('el asesor ve las mismas acciones de catálogo que el administrador (AUTH-05: accesos iguales)', () => {
+    const acciones = (): number =>
+      screen.queryAllByRole('button', { name: /Gestionar las opciones de|^Administrar$/ }).length;
+    renderDialog(contacto());
+    const delAdministrador = acciones();
+    cleanup();
     useAuthStore.setState({ user: { sub: 'u2', rol: 'admin', rolEmpresa: 'asesor' }, status: 'authenticated' });
     renderDialog(contacto());
-    expect(screen.queryByRole('button', { name: /Gestionar las opciones de/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Administrar' })).not.toBeInTheDocument();
+    expect(acciones()).toBe(delAdministrador);
   });
 
   it('sin permiso, el valor enmascarado NO se siembra en el input', () => {

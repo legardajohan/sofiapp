@@ -19,16 +19,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { ROL_EMPRESA_LABEL, ROLES_EMPRESA } from '@/lib/roles';
+import { Switch } from '@/components/ui/switch';
+import { ROL_EMPRESA_LABEL } from '@/lib/roles';
 import type { RolEmpresa } from '@/stores/authStore';
 import type { CreateUserPayload, UpdateUserPayload, UserDTO } from '../types.js';
 import { OpcionCard } from './OpcionCard.js';
 
-/** Qué puede hacer cada rol, en una frase. Es lo que el gestor necesita para elegir bien. */
+/**
+ * Qué cambia entre roles, en una frase. Desde AUTH-05 los tres usan el producto igual: la única
+ * diferencia es a quién pueden gestionar en Usuarios.
+ */
 const ROL_AYUDA: Record<RolEmpresa, string> = {
-  administrador: 'Acceso total: usuarios, configuración, reportes y datos sensibles.',
-  coordinador: 'Gestiona a los asesores de su equipo y atiende la bandeja.',
-  asesor: 'Atiende la bandeja y sus clientes. No gestiona ni configura nada.',
+  administrador: 'Crea y gestiona coordinadores y asesores.',
+  coordinador: 'Crea asesores y gestiona los de su equipo y los que no tienen coordinador.',
+  asesor: 'Usa todo el panel, pero no entra a Usuarios.',
 };
 
 const ROL_ICONO: Record<RolEmpresa, React.ReactNode> = {
@@ -47,12 +51,13 @@ interface Props {
   pending: boolean;
   /** El usuario en edición es el propio gestor: no puede cambiarse el rol. */
   esUnoMismo: boolean;
-  /**
-   * Quién opera. El coordinador solo da de alta asesores de su equipo y solo edita nombre y email:
-   * no ve ni el rol ni el coordinador.
-   */
-  actor: 'administrador' | 'coordinador';
-  /** Coordinadores activos, para asignar el equipo de un asesor (solo administrador). */
+  /** Roles que quien opera puede crear o asignar (`rolesQuePuedeCrear`, gemelo del backend). */
+  rolesPermitidos: readonly RolEmpresa[];
+  /** Solo el usuario principal concede el permiso de gestionar administradores. */
+  puedeConcederPermiso: boolean;
+  /** Coordinador preseleccionado al crear un asesor (el propio coordinador, si es quien crea). */
+  coordinadorPorDefecto: string | null;
+  /** Coordinadores activos, para asignar el equipo de un asesor. */
   coordinadores: UserDTO[];
   onOpenChange: (abierto: boolean) => void;
   onCreate: (payload: CreateUserPayload) => void;
@@ -64,7 +69,9 @@ export function UserFormSheet({
   open,
   pending,
   esUnoMismo,
-  actor,
+  rolesPermitidos,
+  puedeConcederPermiso,
+  coordinadorPorDefecto,
   coordinadores,
   onOpenChange,
   onCreate,
@@ -72,7 +79,9 @@ export function UserFormSheet({
 }: Props): React.ReactElement {
   const id = useId();
   const editando = user !== null;
-  const esAdmin = actor === 'administrador';
+  // Con un solo rol posible (el coordinador solo crea asesores) no hay nada que elegir.
+  const eligeRol = rolesPermitidos.length > 1;
+  const rolUnico = rolesPermitidos.length === 1 ? rolesPermitidos[0] : undefined;
 
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
@@ -80,6 +89,7 @@ export function UserFormSheet({
   const [verPassword, setVerPassword] = useState(false);
   const [rol, setRol] = useState<RolEmpresa | ''>('');
   const [coordinadorId, setCoordinadorId] = useState<string>(SIN_COORDINADOR);
+  const [permisoAdmin, setPermisoAdmin] = useState(false);
   const [intentado, setIntentado] = useState(false);
 
   // Cada apertura parte de los datos del usuario (o vacío): no arrastra lo escrito la vez anterior.
@@ -89,10 +99,13 @@ export function UserFormSheet({
     setEmail(user?.email ?? '');
     setPassword('');
     setVerPassword(false);
-    setRol(user?.rolEmpresa ?? (esAdmin ? '' : 'asesor'));
-    setCoordinadorId(user?.coordinadorId ?? SIN_COORDINADOR);
+    setRol(user?.rolEmpresa ?? rolUnico ?? '');
+    setCoordinadorId(
+      user ? (user.coordinadorId ?? SIN_COORDINADOR) : (coordinadorPorDefecto ?? SIN_COORDINADOR),
+    );
+    setPermisoAdmin(user?.puedeGestionarAdministradores ?? false);
     setIntentado(false);
-  }, [open, user, esAdmin]);
+  }, [open, user, rolUnico, coordinadorPorDefecto]);
 
   const errores = {
     nombre: nombre.trim().length < 2 ? 'Escribe el nombre completo.' : null,
@@ -105,10 +118,11 @@ export function UserFormSheet({
   };
   const valido = Object.values(errores).every((e) => e === null);
 
-  // El coordinador de un asesor solo lo elige el administrador. Si el coordinador guardado ya no
-  // está en la lista (inactivo), se muestra como "sin coordinador" y se respeta al no tocarlo.
+  // Si el coordinador guardado ya no está en la lista (inactivo), se muestra como "sin coordinador"
+  // y se respeta al no tocarlo.
   const coordinadorElegido = coordinadorId === SIN_COORDINADOR ? null : coordinadorId;
-  const pideCoordinador = esAdmin && rol === 'asesor';
+  const pideCoordinador = rol === 'asesor';
+  const pidePermiso = puedeConcederPermiso && rol === 'administrador';
 
   function enviar(e: React.FormEvent): void {
     e.preventDefault();
@@ -120,10 +134,9 @@ export function UserFormSheet({
         nombre: nombre.trim(),
         email: email.trim(),
         password,
-        // El backend fija el rol y el equipo del alta de un coordinador; no se envía nada de eso.
-        ...(esAdmin
-          ? { rolEmpresa: rol, ...(pideCoordinador && coordinadorElegido ? { coordinadorId: coordinadorElegido } : {}) }
-          : { rolEmpresa: 'asesor' as const }),
+        rolEmpresa: rol,
+        ...(pideCoordinador ? { coordinadorId: coordinadorElegido } : {}),
+        ...(pidePermiso && permisoAdmin ? { puedeGestionarAdministradores: true } : {}),
       });
       return;
     }
@@ -131,11 +144,12 @@ export function UserFormSheet({
     const cambios: UpdateUserPayload = {};
     if (nombre.trim() !== user.nombre) cambios.nombre = nombre.trim();
     if (email.trim().toLowerCase() !== user.email) cambios.email = email.trim();
-    if (esAdmin) {
-      if (rol !== user.rolEmpresa) cambios.rolEmpresa = rol;
-      if (pideCoordinador && coordinadorElegido !== user.coordinadorId) {
-        cambios.coordinadorId = coordinadorElegido;
-      }
+    if (eligeRol && rol !== user.rolEmpresa) cambios.rolEmpresa = rol;
+    if (pideCoordinador && coordinadorElegido !== user.coordinadorId) {
+      cambios.coordinadorId = coordinadorElegido;
+    }
+    if (pidePermiso && permisoAdmin !== user.puedeGestionarAdministradores) {
+      cambios.puedeGestionarAdministradores = permisoAdmin;
     }
     if (Object.keys(cambios).length === 0) {
       onOpenChange(false);
@@ -146,21 +160,45 @@ export function UserFormSheet({
 
   const error = (campo: keyof typeof errores): string | null => (intentado ? errores[campo] : null);
 
+  const titulo = editando ? `Editar a ${user.nombre}` : eligeRol ? 'Crear usuario' : 'Crear asesor';
   const descripcion = editando
-    ? esAdmin
+    ? eligeRol
       ? 'Si cambias el rol, su sesión se cerrará para que entre con los permisos nuevos.'
-      : 'Puedes corregir el nombre y el email. El rol y el equipo los cambia un Administrador.'
-    : esAdmin
-      ? 'La persona entrará con este email y la contraseña que definas aquí. Compártesela por un canal seguro.'
-      : 'Será un asesor de tu equipo. Entrará con este email y la contraseña que definas aquí.';
+      : 'Puedes corregir el nombre y el email, y moverlo a otro coordinador.'
+    : 'La persona entrará con este email y la contraseña que definas aquí. Compártesela por un canal seguro.';
+
+  const selectorCoordinador = (
+    <div className="space-y-1.5">
+      <Label htmlFor={`${id}-coordinador`} className={eligeRol ? 'text-xs text-muted-foreground' : undefined}>
+        Coordinador
+      </Label>
+      <Select value={coordinadorId} onValueChange={setCoordinadorId}>
+        <SelectTrigger id={`${id}-coordinador`} className="bg-background">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SIN_COORDINADOR}>Sin coordinador</SelectItem>
+          {coordinadores.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.nombre}
+              {c.id === coordinadorPorDefecto && <span className="text-muted-foreground"> (tú)</span>}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!eligeRol && (
+        <p className="text-sm text-muted-foreground">
+          Si lo asignas a otro coordinador, dejarás de verlo en tu lista.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b border-border px-6 py-5 text-left">
-          <SheetTitle>
-            {editando ? `Editar a ${user.nombre}` : esAdmin ? 'Crear usuario' : 'Crear asesor'}
-          </SheetTitle>
+          <SheetTitle>{titulo}</SheetTitle>
           <SheetDescription>{descripcion}</SheetDescription>
         </SheetHeader>
 
@@ -219,7 +257,7 @@ export function UserFormSheet({
               </Campo>
             )}
 
-            {esAdmin && (
+            {eligeRol ? (
               <fieldset className="space-y-2" disabled={esUnoMismo}>
                 <legend className="mb-1.5 text-sm font-medium leading-none text-foreground">Rol</legend>
                 <RadioGroup
@@ -229,7 +267,7 @@ export function UserFormSheet({
                   aria-invalid={error('rol') !== null}
                   className="gap-2"
                 >
-                  {ROLES_EMPRESA.map((r) => (
+                  {rolesPermitidos.map((r) => (
                     <OpcionCard
                       key={r}
                       id={`${id}-rol-${r}`}
@@ -240,24 +278,22 @@ export function UserFormSheet({
                       titulo={ROL_EMPRESA_LABEL[r]}
                       detalle={ROL_AYUDA[r]}
                     >
-                      {r === 'asesor' && rol === 'asesor' && (
-                        <div className="mt-3 space-y-1.5">
-                          <Label htmlFor={`${id}-coordinador`} className="text-xs text-muted-foreground">
-                            Coordinador
-                          </Label>
-                          <Select value={coordinadorId} onValueChange={setCoordinadorId}>
-                            <SelectTrigger id={`${id}-coordinador`} className="bg-background">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={SIN_COORDINADOR}>Sin coordinador</SelectItem>
-                              {coordinadores.map((c) => (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                      {r === 'asesor' && rol === 'asesor' && <div className="mt-3">{selectorCoordinador}</div>}
+                      {r === 'administrador' && pidePermiso && (
+                        <div className="mt-3 flex items-start justify-between gap-3 rounded-md border border-border bg-background px-3 py-2.5">
+                          <div className="space-y-0.5">
+                            <Label htmlFor={`${id}-permiso`} className="text-sm font-medium">
+                              Puede gestionar a otros administradores
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Crear, editar, desactivar y eliminar administradores. Nunca a ti.
+                            </p>
+                          </div>
+                          <Switch
+                            id={`${id}-permiso`}
+                            checked={permisoAdmin}
+                            onCheckedChange={setPermisoAdmin}
+                          />
                         </div>
                       )}
                     </OpcionCard>
@@ -271,6 +307,8 @@ export function UserFormSheet({
                   </p>
                 ) : null}
               </fieldset>
+            ) : (
+              pideCoordinador && selectorCoordinador
             )}
           </div>
 
@@ -283,13 +321,7 @@ export function UserFormSheet({
               disabled={pending}
               className="transition-transform duration-150 ease-out motion-safe:active:scale-[0.98]"
             >
-              {pending
-                ? 'Guardando…'
-                : editando
-                  ? 'Guardar cambios'
-                  : esAdmin
-                    ? 'Crear usuario'
-                    : 'Crear asesor'}
+              {pending ? 'Guardando…' : editando ? 'Guardar cambios' : titulo}
             </Button>
           </SheetFooter>
         </form>

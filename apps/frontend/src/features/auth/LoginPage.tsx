@@ -40,7 +40,7 @@ export function LoginPage(): React.ReactElement {
     mutationFn: loginRequest,
     onSuccess: (session) => {
       setErrorMsg(null);
-      setUser({ sub: session.sub, rol: session.rol, rolEmpresa: session.rolEmpresa, nombre: session.nombre });
+      setUser({ sub: session.sub, rol: session.rol, rolEmpresa: session.rolEmpresa, nombre: session.nombre, esPrincipal: session.esPrincipal, puedeGestionarAdministradores: session.puedeGestionarAdministradores });
       navigate(session.rol === 'superadmin' ? '/admin' : '/', { replace: true });
     },
     onError: (err: unknown) => {

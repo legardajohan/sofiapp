@@ -13,6 +13,8 @@ export interface ISessionUser {
   rol: UserRol;
   rolEmpresa?: RolEmpresa;
   tenantId: string | null;
+  esPrincipal: boolean;
+  puedeGestionarAdministradores: boolean;
 }
 
 export async function login(dto: LoginDTO): Promise<ISessionUser> {

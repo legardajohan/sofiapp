@@ -50,3 +50,21 @@ export const getTenantUsage = async (id: string): Promise<IUsageResponse> => {
   const res = await apiClient.get<IUsageResponse>(`/admin/tenants/${id}/usage`);
   return res.data;
 };
+
+// ── AUTH-05: usuario principal de la empresa (solo superadmin) ──────────────────────────────
+
+export interface IPrincipalTenant {
+  id: string;
+  nombre: string;
+  email: string;
+}
+
+export const getTenantPrincipal = async (id: string): Promise<IPrincipalTenant> => {
+  const res = await apiClient.get<IPrincipalTenant>(`/admin/tenants/${id}/principal`);
+  return res.data;
+};
+
+/** Restablece la contraseña del usuario principal de la empresa y cierra sus sesiones. */
+export const resetTenantPrincipalPassword = async (id: string, password: string): Promise<void> => {
+  await apiClient.post(`/admin/tenants/${id}/principal/password`, { password });
+};

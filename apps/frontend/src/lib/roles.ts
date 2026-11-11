@@ -37,14 +37,17 @@ export function tieneRolEmpresa(user: UsuarioConRol, roles: readonly RolEmpresa[
   return !!user && user.rol === 'admin' && !!user.rolEmpresa && roles.includes(user.rolEmpresa);
 }
 
-/** Datos sensibles del contacto (ADR 0006). AUTH-05 suma al coordinador, acotado a su equipo. */
-export const ROLES_DATOS_SENSIBLES: readonly RolEmpresa[] = ['administrador'];
-/** Reportes de productividad (ADR 0011). AUTH-05 suma al coordinador, acotado a su equipo. */
-export const ROLES_REPORTES: readonly RolEmpresa[] = ['administrador'];
-/** Gestión de usuarios: el coordinador solo sobre su equipo. */
+// AUTH-05 (ADR 0018): los tres roles tienen los mismos accesos; solo la gestión de usuarios difiere.
+// Se conservan las constantes para poder volver a restringir sin tocar cada pantalla.
+
+/** Datos sensibles del contacto: todos los roles. */
+export const ROLES_DATOS_SENSIBLES: readonly RolEmpresa[] = ROLES_EMPRESA;
+/** Reportes de productividad: todos los roles. */
+export const ROLES_REPORTES: readonly RolEmpresa[] = ROLES_EMPRESA;
+/** Gestión de usuarios: el coordinador solo sobre su equipo y los asesores sin coordinador. */
 export const ROLES_GESTION_USUARIOS: readonly RolEmpresa[] = ['administrador', 'coordinador'];
-/** Configuración de la empresa y campañas. */
-export const ROLES_CONFIGURACION: readonly RolEmpresa[] = ['administrador'];
+/** Configuración de la empresa y campañas: todos los roles. */
+export const ROLES_CONFIGURACION: readonly RolEmpresa[] = ROLES_EMPRESA;
 
 export function puedeVerDatosSensibles(user: UsuarioConRol): boolean {
   return tieneRolEmpresa(user, ROLES_DATOS_SENSIBLES);
@@ -71,4 +74,32 @@ export function esCoordinador(user: UsuarioConRol): boolean {
 }
 
 /** Copy único para explicar por qué un dato está oculto. Se repite en tooltip y en el diálogo. */
-export const MOTIVO_DATOS_SENSIBLES = 'Solo un Administrador puede ver este dato.';
+export const MOTIVO_DATOS_SENSIBLES = 'Tu usuario no tiene acceso a este dato.';
+
+// ── Jerarquía de gestión (AUTH-05, ADR 0018). Gemelo de `user.permisos.ts` del backend ─────────
+
+type ActorGestion =
+  | ({ rol: UserRol; rolEmpresa?: RolEmpresa } & {
+      esPrincipal?: boolean;
+      puedeGestionarAdministradores?: boolean;
+    })
+  | null;
+
+/** El principal o un Administrador con el permiso: los únicos que gestionan a otros administradores. */
+export function gestionaAdministradores(user: ActorGestion): boolean {
+  return (
+    esAdministrador(user) && (user?.esPrincipal === true || user?.puedeGestionarAdministradores === true)
+  );
+}
+
+/** Solo el principal concede o retira el permiso de gestionar administradores. */
+export function puedeConcederPermisoAdmin(user: ActorGestion): boolean {
+  return esAdministrador(user) && user?.esPrincipal === true;
+}
+
+/** Roles que el actor puede crear o asignar, en el orden de la jerarquía. */
+export function rolesQuePuedeCrear(user: ActorGestion): readonly RolEmpresa[] {
+  if (esCoordinador(user)) return ['asesor'];
+  if (!esAdministrador(user)) return [];
+  return gestionaAdministradores(user) ? ROLES_EMPRESA : ['coordinador', 'asesor'];
+}

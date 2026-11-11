@@ -1,8 +1,19 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { createUser, fetchManageUsers, resetUserPassword, setUserEstado, updateUser } from '../api.js';
+import {
+  changeOwnPassword,
+  createUser,
+  deleteUser,
+  fetchCupoUsuarios,
+  fetchManageUsers,
+  resetUserPassword,
+  setUserEstado,
+  updateUser,
+} from '../api.js';
 import type {
+  CupoUsuarios,
+  DeleteUserPayload,
   DependenciasUsuario,
   CreateUserPayload,
   ManageUsersFilters,
@@ -95,6 +106,40 @@ export function useSetUserEstado() {
       if (dependenciasDe(error)) return;
       toast.error(motivoError(error, 'No se pudo cambiar el estado del usuario.'));
     },
+  });
+}
+
+/** Elimina (borrado lógico). El 409 de dependencias lo resuelve el diálogo, como al desactivar. */
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  const invalidar = useInvalidarUsuarios();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: DeleteUserPayload }) => deleteUser(id, payload),
+    onSuccess: (user, { payload }) => {
+      invalidar();
+      if (payload.conversaciones) void qc.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success(`${user.nombre} fue eliminado`);
+    },
+    onError: (error) => {
+      if (dependenciasDe(error)) return;
+      toast.error(motivoError(error, 'No se pudo eliminar el usuario.'));
+    },
+  });
+}
+
+export function useCupoUsuarios(enabled = true) {
+  return useQuery<CupoUsuarios>({
+    queryKey: ['users', 'cupo'],
+    queryFn: fetchCupoUsuarios,
+    enabled,
+  });
+}
+
+export function useChangeOwnPassword() {
+  return useMutation({
+    mutationFn: ({ actual, nueva }: { actual: string; nueva: string }) => changeOwnPassword(actual, nueva),
+    onSuccess: () => toast.success('Contraseña cambiada. Se cerraron tus otras sesiones.'),
+    // El error de "contraseña actual incorrecta" lo muestra el diálogo junto al campo.
   });
 }
 
