@@ -118,6 +118,25 @@ function buildMetric(usado: number, limite: number): IMetricUsage {
   return { usado, limite, restante, porcentaje };
 }
 
+/**
+ * Uso de los puestos del plan (usuarios y administradores) para la pantalla Usuarios del propio
+ * tenant (AUTH-05). `limite: null` = el tenant no tiene plan (o está inactivo): sin límite.
+ */
+export async function getSeatUsage(tenantId: TenantId): Promise<{
+  usuarios: { usado: number; limite: number | null };
+  administradores: { usado: number; limite: number | null };
+}> {
+  const { limites } = await resolveTenantWithLimits(tenantId);
+  const [usuarios, administradores] = await Promise.all([
+    getMetricUsed(tenantId, 'usuarios'),
+    getMetricUsed(tenantId, 'administradores'),
+  ]);
+  return {
+    usuarios: { usado: usuarios, limite: limites ? limites.usuarios : null },
+    administradores: { usado: administradores, limite: limites ? (limites.administradores ?? null) : null },
+  };
+}
+
 /** Consumo vs límite por métrica para el panel del superadmin. */
 export async function getTenantUsage(tenantId: TenantId): Promise<IUsageResponse> {
   const { tenant, limites } = await resolveTenantWithLimits(tenantId);

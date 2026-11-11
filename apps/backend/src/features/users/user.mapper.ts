@@ -14,6 +14,9 @@ export interface IUserSource {
   /** Campo de AUTH-02. Solo existe en documentos aún no migrados (`lean` lo devuelve igual). */
   subrol?: unknown;
   activo: boolean;
+  esPrincipal?: boolean;
+  puedeGestionarAdministradores?: boolean;
+  eliminado?: boolean;
   createdAt?: Date;
 }
 
@@ -33,6 +36,8 @@ export function toUserResponse(user: IUserSource): IUserResponse {
     ...(rolEmpresa ? { rolEmpresa } : {}),
     coordinadorId: user.coordinadorId ? String(user.coordinadorId) : null,
     activo: user.activo,
+    esPrincipal: user.esPrincipal === true,
+    puedeGestionarAdministradores: user.puedeGestionarAdministradores === true,
     ...(user.createdAt ? { createdAt: user.createdAt.toISOString() } : {}),
   };
 }

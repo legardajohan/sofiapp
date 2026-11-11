@@ -16,8 +16,8 @@ const { default: app } = await import('../../app.js');
 type Metodo = 'get' | 'post' | 'patch' | 'put' | 'delete';
 const id = (): string => new Types.ObjectId().toString();
 
-/** Endpoints cerrados a todo el que no sea Administrador. */
-const SOLO_ADMINISTRADOR: Array<[Metodo, string]> = [
+/** Endpoints que en AUTH-04 eran solo del Administrador; desde AUTH-05 (ADR 0018), de los tres roles. */
+const ANTES_SOLO_ADMINISTRADOR: Array<[Metodo, string]> = [
   // Datos sensibles y reportes (criterio 4).
   ['get', `/api/clientes/${id()}/notas`],
   ['get', '/api/pendientes'],
@@ -55,24 +55,38 @@ const LECTURAS_OPERATIVAS: string[] = [
   '/api/conversations/config/audio',
 ];
 
-describe('matriz de permisos por rol de empresa (AUTH-04)', () => {
+describe('matriz de permisos por rol de empresa (AUTH-04, accesos iguales AUTH-05)', () => {
   const tenantId = new Types.ObjectId().toString();
   const tokenPara = async (rolEmpresa: RolEmpresa): Promise<string> =>
     tokenDe(await crearUsuario(tenantId, { rolEmpresa }));
 
-  it.each(['coordinador', 'asesor'] as const)('%s → 403 en datos sensibles, reportes y configuración', async (rol) => {
-    const t = await tokenPara(rol);
-    for (const [metodo, url] of SOLO_ADMINISTRADOR) {
-      const res = await llamar(app, metodo, url, t, metodo === 'get' ? undefined : {});
-      expect({ url, status: res.status }).toEqual({ url, status: 403 });
-    }
-  });
+  it.each(['administrador', 'coordinador', 'asesor'] as const)(
+    '%s pasa los gates de datos sensibles, reportes y configuración (CA-13)',
+    async (rol) => {
+      const t = await tokenPara(rol);
+      for (const [metodo, url] of ANTES_SOLO_ADMINISTRADOR) {
+        const res = await llamar(app, metodo, url, t, metodo === 'get' ? undefined : {});
+        expect({ url, prohibido: res.status === 403 }).toEqual({ url, prohibido: false });
+      }
+    },
+  );
 
-  it('el administrador pasa todos esos gates', async () => {
-    const t = await tokenPara('administrador');
-    for (const [metodo, url] of SOLO_ADMINISTRADOR) {
-      const res = await llamar(app, metodo, url, t, metodo === 'get' ? undefined : {});
-      expect({ url, prohibido: res.status === 403 }).toEqual({ url, prohibido: false });
+  it('el asesor sigue sin gestión de usuarios: 403 en todos sus endpoints (CA-9)', async () => {
+    const t = await tokenPara('asesor');
+    const otro = id();
+    const gestion: Array<[Metodo, string, object | undefined]> = [
+      ['get', '/api/users/manage', undefined],
+      ['get', '/api/users/cupo', undefined],
+      ['get', `/api/users/${otro}`, undefined],
+      ['post', '/api/users', { nombre: 'Nuevo', email: 'n@t.com', password: '12345678', rolEmpresa: 'asesor' }],
+      ['patch', `/api/users/${otro}`, { nombre: 'X Y' }],
+      ['patch', `/api/users/${otro}/estado`, { activo: false }],
+      ['post', `/api/users/${otro}/password`, { password: '12345678' }],
+      ['delete', `/api/users/${otro}`, undefined],
+    ];
+    for (const [metodo, url, body] of gestion) {
+      const res = await llamar(app, metodo, url, t, body);
+      expect({ metodo, url, status: res.status }).toEqual({ metodo, url, status: 403 });
     }
   });
 

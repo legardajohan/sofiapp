@@ -10,6 +10,8 @@ import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
   createUserSchema,
+  cupoUsuariosSchema,
+  deleteUserSchema,
   getUserSchema,
   listUsersSchema,
   manageUsersSchema,
@@ -19,6 +21,8 @@ import {
 } from './user.validation.js';
 import {
   createUserController,
+  cupoUsuariosController,
+  deleteUserController,
   getUserController,
   listUsersController,
   manageUsersController,
@@ -51,6 +55,16 @@ router.get(
   ...gestion,
   validate(manageUsersSchema),
   asyncHandler(manageUsersController),
+);
+
+// AUTH-05: uso de los puestos del plan. Va antes de `/:id`, como `/manage`.
+router.get(
+  '/cupo',
+  authenticateJWT,
+  requireTenant,
+  ...gestion,
+  validate(cupoUsuariosSchema),
+  asyncHandler(cupoUsuariosController),
 );
 
 router.get(
@@ -96,6 +110,16 @@ router.post(
   ...gestion,
   validate(resetUserPasswordSchema),
   asyncHandler(resetUserPasswordController),
+);
+
+// AUTH-05: borrado lógico.
+router.delete(
+  '/:id',
+  authenticateJWT,
+  requireTenant,
+  ...gestion,
+  validate(deleteUserSchema),
+  asyncHandler(deleteUserController),
 );
 
 export default router;

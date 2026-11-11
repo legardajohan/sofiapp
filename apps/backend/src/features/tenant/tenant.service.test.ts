@@ -59,6 +59,9 @@ describe('tenant.service — HU-SAAS-01', () => {
       // AUTH-04: el usuario inicial que crea el superadmin nace Administrador, sin coordinador.
       expect(user!.rolEmpresa).toBe('administrador');
       expect(user!.coordinadorId).toBeNull();
+      // AUTH-05 (CA-2): y es el usuario principal de la empresa.
+      expect(user!.esPrincipal).toBe(true);
+      expect(user!.puedeGestionarAdministradores).toBe(false);
       expect(user!.tenantId?.toString()).toBe(result._id);
       expect(user!.activo).toBe(true);
     });

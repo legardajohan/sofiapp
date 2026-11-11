@@ -38,7 +38,8 @@ interface Escenario {
 
 /** Administrador + coordinador con un asesor en su equipo. */
 async function escenario(): Promise<Escenario> {
-  const admin = await crearUsuario(tenantId, { nombre: 'Ana Admin' });
+  // AUTH-05: el administrador del escenario es el principal (gestiona a todos, incluidos admins).
+  const admin = await crearUsuario(tenantId, { nombre: 'Ana Admin', esPrincipal: true });
   const coord = await crearUsuario(tenantId, { nombre: 'Carla Coord', rolEmpresa: 'coordinador' });
   const asesor = await crearUsuario(tenantId, {
     nombre: 'Andrés Asesor',
@@ -177,15 +178,23 @@ describe('Gestión de usuarios — AUTH-03 / AUTH-04', () => {
       }
     });
 
-    it('el coordinador crea asesores que nacen en su equipo; otro rol u otro equipo → 403', async () => {
-      const { coord } = await escenario();
+    it('el coordinador crea asesores en su equipo (por defecto), en otro o sin coordinador; otro rol → 403 (AUTH-05)', async () => {
+      const { coord, asesor } = await escenario();
       const otro = await crearUsuario(tenantId, { rolEmpresa: 'coordinador' });
       const t = tokenDe(coord);
       const ok = await llamar(app, 'post', '/api/users', t, alta());
       expect(ok.status).toBe(201);
       expect(ok.body).toMatchObject({ rolEmpresa: 'asesor', coordinadorId: coord.id });
-      expect((await llamar(app, 'post', '/api/users', t, alta({ rolEmpresa: 'coordinador' }))).status).toBe(403);
-      expect((await llamar(app, 'post', '/api/users', t, alta({ coordinadorId: otro.id }))).status).toBe(403);
+      const enOtro = await llamar(app, 'post', '/api/users', t, alta({ coordinadorId: otro.id }));
+      expect(enOtro.status).toBe(201);
+      expect(enOtro.body.coordinadorId).toBe(otro.id);
+      const libre = await llamar(app, 'post', '/api/users', t, alta({ coordinadorId: null }));
+      expect(libre.status).toBe(201);
+      expect(libre.body.coordinadorId).toBeNull();
+      expect((await llamar(app, 'post', '/api/users', t, alta({ coordinadorId: asesor.id }))).status).toBe(404);
+      for (const rolEmpresa of ['coordinador', 'administrador']) {
+        expect((await llamar(app, 'post', '/api/users', t, alta({ rolEmpresa }))).status).toBe(403);
+      }
     });
 
     it('email ya usado en OTRO tenant → 409 genérico', async () => {
@@ -200,13 +209,13 @@ describe('Gestión de usuarios — AUTH-03 / AUTH-04', () => {
   describe('cuotas (criterio 11)', () => {
     it('cupo de usuarios agotado → 429 para cualquier rol', async () => {
       const t = await planMini({ usuarios: 1, administradores: 5 }, 'cuota-usuarios');
-      const admin = await crearUsuario(t);
+      const admin = await crearUsuario(t, { esPrincipal: true });
       expect((await llamar(app, 'post', '/api/users', tokenDe(admin), alta())).status).toBe(429);
     });
 
     it('cupo de administradores agotado: crear asesor OK, crear o promover administrador → 429', async () => {
       const t = await planMini({ usuarios: 10, administradores: 1 }, 'cuota-admins');
-      const admin = await crearUsuario(t);
+      const admin = await crearUsuario(t, { esPrincipal: true });
       const tk = tokenDe(admin);
       const asesor = await llamar(app, 'post', '/api/users', tk, alta());
       expect(asesor.status).toBe(201);
@@ -261,17 +270,24 @@ describe('Gestión de usuarios — AUTH-03 / AUTH-04', () => {
       expect((await llamar(app, 'patch', `/api/users/${coord.id}`, t, { coordinadorId: coord.id })).status).toBe(400);
     });
 
-    it('el coordinador edita nombre/email de su equipo; rol o coordinador → 403; fuera del equipo → 404', async () => {
+    it('el coordinador edita su equipo y lo mueve de coordinador; rol → 403; fuera de su alcance → 404 (AUTH-05)', async () => {
       const { coord, asesor, admin } = await escenario();
+      const otro = await crearUsuario(tenantId, { rolEmpresa: 'coordinador' });
       const t = tokenDe(coord);
       expect((await llamar(app, 'patch', `/api/users/${asesor.id}`, t, { nombre: 'Nuevo Nombre' })).status).toBe(200);
       expect((await llamar(app, 'patch', `/api/users/${asesor.id}`, t, { rolEmpresa: 'coordinador' })).status).toBe(403);
-      expect((await llamar(app, 'patch', `/api/users/${asesor.id}`, t, { coordinadorId: null })).status).toBe(403);
       expect((await llamar(app, 'patch', `/api/users/${admin.id}`, t, { nombre: 'Hack' })).status).toBe(404);
+      // Lo libera: sigue en su alcance (sin coordinador). Lo mueve a otro equipo: sale de su alcance.
+      expect((await llamar(app, 'patch', `/api/users/${asesor.id}`, t, { coordinadorId: null })).status).toBe(200);
+      const mov = await llamar(app, 'patch', `/api/users/${asesor.id}`, t, { coordinadorId: otro.id });
+      expect(mov.status).toBe(200);
+      expect(mov.body.coordinadorId).toBe(otro.id);
+      expect((await llamar(app, 'get', `/api/users/${asesor.id}`, t)).status).toBe(404);
     });
 
     it('nadie se cambia su propio rol ni se desactiva a sí mismo (409)', async () => {
-      const { admin } = await escenario();
+      await escenario();
+      const admin = await crearUsuario(tenantId, { puedeGestionarAdministradores: true });
       const t = tokenDe(admin);
       expect((await llamar(app, 'patch', `/api/users/${admin.id}`, t, { rolEmpresa: 'asesor' })).status).toBe(409);
       expect((await llamar(app, 'patch', `/api/users/${admin.id}/estado`, t, { activo: false })).status).toBe(409);
@@ -284,14 +300,16 @@ describe('Gestión de usuarios — AUTH-03 / AUTH-04', () => {
       expect(res.status).toBe(200);
     });
 
-    it('no se puede degradar ni desactivar al último Administrador activo (409)', async () => {
+    it('un actor inactivo en BD con sesión aún válida no gestiona nada (401) y el último Administrador queda', async () => {
+      // AUTH-05: `cargarActor` lee al actor de BD. Antes este era el único camino al guard del último
+      // Administrador, que sigue en el service como defensa (hoy ningún actor válido puede alcanzarlo:
+      // el principal es siempre Administrador y nadie del tenant lo toca).
       const tB = new Types.ObjectId().toString();
       const admin = await crearUsuario(tB);
-      // El actor es un administrador INACTIVO en BD con sesión aún válida: único camino al guard.
-      const fantasma = await crearUsuario(tB, { activo: false });
+      const fantasma = await crearUsuario(tB, { activo: false, esPrincipal: true });
       const t = tokenDe(fantasma);
-      expect((await llamar(app, 'patch', `/api/users/${admin.id}`, t, { rolEmpresa: 'asesor' })).status).toBe(409);
-      expect((await llamar(app, 'patch', `/api/users/${admin.id}/estado`, t, { activo: false })).status).toBe(409);
+      expect((await llamar(app, 'patch', `/api/users/${admin.id}`, t, { rolEmpresa: 'asesor' })).status).toBe(401);
+      expect((await llamar(app, 'patch', `/api/users/${admin.id}/estado`, t, { activo: false })).status).toBe(401);
       expect((await UserModel.findById(admin.id).lean())?.rolEmpresa).toBe('administrador');
     });
   });
@@ -387,14 +405,14 @@ describe('Gestión de usuarios — AUTH-03 / AUTH-04', () => {
       expect((await UserModel.findById(asesor.id).lean())?.coordinadorId).toBeNull();
     });
 
-    it('el coordinador desactiva a su asesor reasignando a sí mismo o a su equipo; a un ajeno → 404', async () => {
-      const { coord, asesor, admin } = await escenario();
+    it('el coordinador desactiva a su asesor reasignando a cualquier usuario activo; inexistente → 404 (AUTH-05)', async () => {
+      const { coord, asesor } = await escenario();
       const companero = await crearUsuario(tenantId, { rolEmpresa: 'asesor', coordinadorId: coord.id });
       await crearClienteAsignado(tenantId, asesor.id);
       const t = tokenDe(coord);
       const url = `/api/users/${asesor.id}/estado`;
       expect((await llamar(app, 'patch', url, t, {
-        activo: false, conversaciones: { accion: 'reasignar', destinoId: admin.id },
+        activo: false, conversaciones: { accion: 'reasignar', destinoId: new Types.ObjectId().toString() },
       })).status).toBe(404);
       expect((await llamar(app, 'patch', url, t, {
         activo: false, conversaciones: { accion: 'reasignar', destinoId: companero.id },

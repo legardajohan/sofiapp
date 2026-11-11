@@ -57,11 +57,22 @@ const moverEquipo = z.discriminatedUnion('accion', [
 // `.strict()`: `tenantId`, `rol` o `activo` en el body son un 400, no un campo ignorado en silencio.
 export const createUserSchema = z.object({
   body: z
-    .object({ nombre, email, password, rolEmpresa, coordinadorId: coordinadorId.optional() })
+    .object({
+      nombre,
+      email,
+      password,
+      rolEmpresa,
+      coordinadorId: coordinadorId.optional(),
+      puedeGestionarAdministradores: z.boolean().optional(),
+    })
     .strict()
     .refine((b) => !b.coordinadorId || b.rolEmpresa === 'asesor', {
       message: 'Solo un asesor puede tener coordinador.',
       path: ['coordinadorId'],
+    })
+    .refine((b) => !b.puedeGestionarAdministradores || b.rolEmpresa === 'administrador', {
+      message: 'Solo un Administrador puede gestionar a otros administradores.',
+      path: ['puedeGestionarAdministradores'],
     }),
   params: z.object({}),
   query: z.object({}),
@@ -74,6 +85,7 @@ export const updateUserSchema = z.object({
       email: email.optional(),
       rolEmpresa: rolEmpresa.optional(),
       coordinadorId: coordinadorId.optional(),
+      puedeGestionarAdministradores: z.boolean().optional(),
       equipo: moverEquipo.optional(),
     })
     .strict()
@@ -108,9 +120,25 @@ export const resetUserPasswordSchema = z.object({
   query: z.object({}),
 });
 
-export type ListUsersQuery = z.infer<typeof listUsersSchema>['query'];
+// AUTH-05: eliminar (borrado lógico) resuelve lo pendiente igual que la desactivación.
+export const deleteUserSchema = z.object({
+  body: z
+    .object({ conversaciones: moverConversaciones.optional(), equipo: moverEquipo.optional() })
+    .strict(),
+  params: idParams,
+  query: z.object({}),
+});
+
+export const cupoUsuariosSchema = z.object({
+  body: z.object({}),
+  params: z.object({}),
+  query: z.object({}),
+});
+
+export type ListUsersQuery =z.infer<typeof listUsersSchema>['query'];
 export type ManageUsersQuery = z.infer<typeof manageUsersSchema>['query'];
 export type CreateUserBody = z.infer<typeof createUserSchema>['body'];
 export type UpdateUserBody = z.infer<typeof updateUserSchema>['body'];
 export type SetUserEstadoBody = z.infer<typeof setUserEstadoSchema>['body'];
 export type ResetUserPasswordBody = z.infer<typeof resetUserPasswordSchema>['body'];
+export type DeleteUserBody = z.infer<typeof deleteUserSchema>['body'];

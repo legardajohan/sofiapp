@@ -55,7 +55,11 @@ export type AuditAccion =
   | 'user.reactivated'
   | 'user.password_reset'
   /** Al desactivar: sus conversaciones se reasignaron o volvieron a la bandeja sin asignar. */
-  | 'user.conversations_moved';
+  | 'user.conversations_moved'
+  // AUTH-05 — usuario principal y jerarquía de gestión.
+  | 'user.deleted'
+  | 'user.password_changed'
+  | 'user.admin_permission_changed';
 export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign' | 'send-window' | 'user';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.

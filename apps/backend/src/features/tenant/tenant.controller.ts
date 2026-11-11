@@ -7,6 +7,7 @@ import {
   assignPlanToTenant,
   deleteTenant,
 } from './tenant.service.js';
+import { getPrincipal, resetPrincipalPassword } from '../users/user.service.js';
 import type {
   ListTenantsQuery,
   CreateTenantInput,
@@ -41,6 +42,19 @@ export async function assignPlanToTenantController(req: Request, res: Response):
   const { planId } = req.body as { planId: string };
   const tenant = await assignPlanToTenant(id, planId);
   res.json(tenant);
+}
+
+// AUTH-05 — usuario principal (solo superadmin). El `:id` es el tenant: ruta cross-tenant.
+export async function getPrincipalController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  res.json(await getPrincipal(id));
+}
+
+export async function resetPrincipalPasswordController(req: Request, res: Response): Promise<void> {
+  const { id } = req.params as { id: string };
+  const { password } = req.body as { password: string };
+  await resetPrincipalPassword(id, req.user!.sub, password);
+  res.status(204).send();
 }
 
 export async function deleteTenantController(req: Request, res: Response): Promise<void> {

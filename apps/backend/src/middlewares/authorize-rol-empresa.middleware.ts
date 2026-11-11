@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import type { SafeUser } from '../types/express.js';
-import type { RolEmpresa } from '../features/users/user.types.js';
+import { ROLES_EMPRESA, type RolEmpresa } from '../features/users/user.types.js';
 
 /**
  * Autorización por **rol de empresa** (AUTH-04, ADR 0017). Sustituye a `authorize-subrol`: los
@@ -11,17 +11,21 @@ import type { RolEmpresa } from '../features/users/user.types.js';
  * emitidos antes de AUTH-04 se traducen en `authenticateJWT` con la misma tabla que la migración.
  */
 
-/** Datos sensibles del contacto (ADR 0006). AUTH-05 suma al coordinador, acotado a su equipo. */
-export const ROLES_DATOS_SENSIBLES: readonly RolEmpresa[] = ['administrador'];
+// AUTH-05 (ADR 0018): los tres roles tienen los mismos accesos; la única diferencia es la gestión de
+// usuarios. Se conservan las constantes (y los gates que las usan) para poder volver a restringir
+// sin tocar cada ruta.
 
-/** Reportes de productividad (ADR 0011). AUTH-05 suma al coordinador, acotado a su equipo. */
-export const ROLES_REPORTES: readonly RolEmpresa[] = ['administrador'];
+/** Datos sensibles del contacto (ADR 0006 → 0018): todos los roles. */
+export const ROLES_DATOS_SENSIBLES: readonly RolEmpresa[] = ROLES_EMPRESA;
 
-/** Gestión de usuarios: el coordinador solo sobre su equipo (lo acota el service, no la ruta). */
+/** Reportes de productividad (ADR 0011 → 0018): todos los roles. */
+export const ROLES_REPORTES: readonly RolEmpresa[] = ROLES_EMPRESA;
+
+/** Gestión de usuarios: el coordinador solo sobre su alcance (lo acota el service, no la ruta). */
 export const ROLES_GESTION_USUARIOS: readonly RolEmpresa[] = ['administrador', 'coordinador'];
 
-/** Configuración de la empresa y campañas. */
-export const ROLES_CONFIGURACION: readonly RolEmpresa[] = ['administrador'];
+/** Configuración de la empresa y campañas (ADR 0018): todos los roles. */
+export const ROLES_CONFIGURACION: readonly RolEmpresa[] = ROLES_EMPRESA;
 
 export function tieneRolEmpresa(
   user: Pick<SafeUser, 'rol' | 'rolEmpresa'> | undefined,

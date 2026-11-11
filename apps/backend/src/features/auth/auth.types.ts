@@ -7,6 +7,11 @@ export interface LoginDTO {
   password: string;
 }
 
+export interface ChangeOwnPasswordDTO {
+  actual: string;
+  nueva: string;
+}
+
 export interface ISessionUser {
   sub: string;
   nombre: string;
@@ -14,6 +19,12 @@ export interface ISessionUser {
   rol: UserRol;
   rolEmpresa?: RolEmpresa;
   tenantId: string | null;
+  /**
+   * AUTH-05. Salen de BD en `login` y `/me`, **no** del JWT: el frontend los usa solo para mostrar u
+   * ocultar acciones; el backend decide con lo que lee en cada petición.
+   */
+  esPrincipal: boolean;
+  puedeGestionarAdministradores: boolean;
 }
 
 export interface ISessionUserSource {
@@ -25,6 +36,8 @@ export interface ISessionUserSource {
   /** Solo en documentos aún no migrados (AUTH-02). */
   subrol?: unknown;
   tenantId: Types.ObjectId | null;
+  esPrincipal?: boolean;
+  puedeGestionarAdministradores?: boolean;
 }
 
 export function mapUserToSession(user: ISessionUserSource): ISessionUser {
@@ -35,5 +48,7 @@ export function mapUserToSession(user: ISessionUserSource): ISessionUser {
     rol: user.rol,
     ...(user.rol === 'admin' ? { rolEmpresa: resolverRolEmpresa(user) } : {}),
     tenantId: user.tenantId ? user.tenantId.toString() : null,
+    esPrincipal: user.esPrincipal === true,
+    puedeGestionarAdministradores: user.puedeGestionarAdministradores === true,
   };
 }

@@ -26,6 +26,9 @@ export interface OpcionesUsuario {
   nombre?: string;
   email?: string;
   password?: string;
+  /** AUTH-05. Por defecto `false`. */
+  esPrincipal?: boolean;
+  puedeGestionarAdministradores?: boolean;
 }
 
 export async function crearUsuario(tenantId: string, opts: OpcionesUsuario = {}): Promise<IUsuarioPrueba> {
@@ -39,6 +42,8 @@ export async function crearUsuario(tenantId: string, opts: OpcionesUsuario = {})
     rolEmpresa,
     coordinadorId: opts.coordinadorId ? new Types.ObjectId(opts.coordinadorId) : null,
     activo: opts.activo ?? true,
+    esPrincipal: opts.esPrincipal ?? false,
+    puedeGestionarAdministradores: opts.puedeGestionarAdministradores ?? false,
   });
   return { id: doc._id.toString(), tenantId, rolEmpresa };
 }

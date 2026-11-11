@@ -93,6 +93,17 @@ export const tenantIdParamSchema = z.object({
   params: z.object({ id: objectIdSchema }),
 });
 
+// AUTH-05: el superadmin restablece la contraseña del usuario principal de la empresa.
+export const resetPrincipalPasswordSchema = z.object({
+  body: z
+    .object({
+      password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(128),
+    })
+    .strict(),
+  params: z.object({ id: objectIdSchema }),
+  query: z.object({}),
+});
+
 // HU-FLOW-02 — recordatorio de inactividad. Expuesto en `GET/PUT /api/flows/reminder`: el
 // `admin` configura el de SU PROPIO tenant, sin `params.id` — el `tenantId` nace del token.
 const empty = z.object({});

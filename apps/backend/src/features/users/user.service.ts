@@ -17,18 +17,30 @@ import {
   moveAssignedConversations,
 } from '../conversation/conversation-reassign.service.js';
 import { countFlowsReferencingUser } from '../flow/flow.service.js';
-import { assertWithinQuota } from '../usage/usage.service.js';
+import { assertWithinQuota, getSeatUsage } from '../usage/usage.service.js';
 import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import type { SafeUser } from '../../types/express.js';
 import { User } from './user.model.js';
 import { rolEmpresaDe, toUserResponse, type IUserSource } from './user.mapper.js';
 import {
+  accionesSobre,
+  puedeConcederPermisoAdmin,
+  puedeGestionar,
+  rolesCreables,
+  type IObjetivoGestion,
+} from './user.permisos.js';
+import {
   USER_HAS_DEPENDENCIES,
   type CreateUserDTO,
+  type DeleteUserDTO,
+  type IActorGestion,
+  type ICupoUsuarios,
   type IDependenciasUsuario,
   type IManageUsersQuery,
+  type IPrincipalResponse,
   type IUserDocument,
   type IUserResponse,
+  type MoverConversaciones,
   type MoverEquipo,
   type RolEmpresa,
   type SetUserEstadoDTO,
@@ -44,12 +56,15 @@ export type UserActor = Pick<SafeUser, 'sub' | 'rol' | 'rolEmpresa'>;
 const BCRYPT_ROUNDS = 10;
 const MAX_LISTADO = 500;
 
+/** Un eliminado (AUTH-05) no existe para listados, selectores ni gestión. */
+const NO_ELIMINADO = { eliminado: { $ne: true } } as const;
+
 export async function listTenantUsers(
   tenantId: TenantId,
   query: ListUsersQuery,
 ): Promise<IUserResponse[]> {
   const { activo, rol } = query;
-  const docs = await findScoped(User, tenantId, { rol, activo })
+  const docs = await findScoped(User, tenantId, { rol, activo, ...NO_ELIMINADO })
     .sort({ nombre: 1 })
     .lean<IUserSource[]>();
   return docs.map(toUserResponse);
@@ -64,13 +79,16 @@ export async function assertAssignableAdmin(
   userId: string,
 ): Promise<IUserResponse> {
   const doc = await findByIdScoped(User, tenantId, userId).lean<IUserSource>();
-  if (!doc || doc.rol !== 'admin' || !doc.activo) {
+  if (!doc || doc.rol !== 'admin' || !doc.activo || doc.eliminado) {
     throw new AppError('Usuario no asignable.', 404);
   }
   return toUserResponse(doc);
 }
 
-/** Resuelve varios usuarios de una sola consulta (evita N+1 al proyectar listas). */
+/**
+ * Resuelve varios usuarios de una sola consulta (evita N+1 al proyectar listas). No filtra a los
+ * eliminados: el historial sigue mostrando su nombre.
+ */
 export async function findUsersByIds(
   tenantId: TenantId,
   ids: string[],
@@ -86,14 +104,11 @@ export async function findUsersByIds(
   return map;
 }
 
-// ── Gestión de usuarios (AUTH-03, roles de empresa AUTH-04) ──────────────────────────────────
+// ── Gestión de usuarios (AUTH-03, roles AUTH-04, jerarquía AUTH-05) ──────────────────────────
 //
-// Jerarquía (ADR 0017): el administrador gestiona a todos; el coordinador solo a los asesores de su
-// equipo (`coordinadorId` = él); el asesor no gestiona a nadie (lo corta la ruta).
-
-function esCoordinador(actor: UserActor): boolean {
-  return actor.rolEmpresa === 'coordinador';
-}
+// Matriz en `user.permisos.ts` (ADR 0018): el principal es intocable dentro del tenant; un
+// Administrador gestiona Coordinadores y Asesores, y a otros Administradores solo si es el principal
+// o tiene el permiso; el Coordinador gestiona a los asesores de su equipo y a los sin coordinador.
 
 function oid(id: string): Types.ObjectId {
   return new Types.ObjectId(id);
@@ -113,30 +128,104 @@ function esEmailDuplicado(err: unknown): boolean {
 
 /** El 409 no dice en qué empresa existe el email: el índice es global (ADR 0003). */
 const EMAIL_DUPLICADO = 'Ya existe un usuario con ese email.';
+const PRINCIPAL_INTOCABLE = 'El usuario principal solo lo gestiona el superadministrador.';
+const SIN_PERMISO_ADMIN = 'No tienes permiso para gestionar a otros administradores.';
+
+/** Email con el que queda un usuario eliminado: libera el original (índice único global). */
+function emailEliminado(id: string): string {
+  return `${id}.eliminado@invalid.sofiapp`;
+}
 
 /**
- * Carga el usuario sobre el que se actúa **dentro del alcance del actor**. Para un coordinador, un
- * usuario que no es asesor de su equipo da 404 igual que uno inexistente: no se revela que existe.
+ * Completa el actor del token con lo que vive en BD (principal, permiso y rol vigente). Se lee en
+ * cada petición: retirar el permiso tiene efecto inmediato, sin esperar a que expire el JWT.
  */
-async function cargarObjetivoPara(
-  tenantId: TenantId,
-  actor: UserActor,
-  id: string,
-): Promise<IUserSource> {
-  const doc = esCoordinador(actor)
-    ? await findOneScoped(User, tenantId, {
-        _id: oid(id),
-        rol: 'admin',
-        rolEmpresa: 'asesor',
-        coordinadorId: oid(actor.sub),
-      }).lean<IUserSource>()
-    : await findByIdScoped(User, tenantId, id).lean<IUserSource>();
-  if (!doc || doc.rol !== 'admin') throw new AppError('Usuario no encontrado.', 404);
+async function cargarActor(tenantId: TenantId, actor: UserActor): Promise<IActorGestion> {
+  const doc = await findByIdScoped(User, tenantId, actor.sub)
+    .select('rol rolEmpresa subrol activo eliminado esPrincipal puedeGestionarAdministradores')
+    .lean<IUserSource>();
+  const rolEmpresa = doc ? rolEmpresaDe(doc) : undefined;
+  if (!doc || !doc.activo || doc.eliminado || !rolEmpresa) {
+    throw new AppError('Sesión no válida.', 401);
+  }
+  return {
+    sub: actor.sub,
+    rolEmpresa,
+    esPrincipal: doc.esPrincipal === true,
+    puedeGestionarAdministradores: doc.puedeGestionarAdministradores === true,
+  };
+}
+
+function objetivoDe(doc: IUserSource): IObjetivoGestion {
+  return {
+    id: String(doc._id),
+    rolEmpresa: rolEmpresaDe(doc) ?? 'asesor',
+    esPrincipal: doc.esPrincipal === true,
+    coordinadorId: idDe(doc.coordinadorId),
+  };
+}
+
+async function cargarDoc(tenantId: TenantId, id: string): Promise<IUserSource> {
+  const doc = await findByIdScoped(User, tenantId, id).lean<IUserSource>();
+  if (!doc || doc.rol !== 'admin' || doc.eliminado) throw new AppError('Usuario no encontrado.', 404);
   return doc;
 }
 
-function assertNoEsUnoMismo(actor: UserActor, objetivoId: string, mensaje: string): void {
+/**
+ * Carga el usuario sobre el que se actúa y exige poder **gestionarlo**. Lo que el actor no ve (para
+ * el coordinador, todo lo que no es asesor de su equipo o sin coordinador) es 404, igual que un id
+ * inexistente; lo que ve pero no gestiona (el principal, otro administrador sin permiso) es 403.
+ */
+async function cargarObjetivoPara(
+  tenantId: TenantId,
+  actor: IActorGestion,
+  id: string,
+): Promise<IUserSource> {
+  const doc = await cargarDoc(tenantId, id);
+  const objetivo = objetivoDe(doc);
+  const resultado = puedeGestionar(actor, objetivo);
+  if (resultado === 'invisible') throw new AppError('Usuario no encontrado.', 404);
+  if (resultado === 'prohibido') {
+    throw new AppError(objetivo.esPrincipal ? PRINCIPAL_INTOCABLE : SIN_PERMISO_ADMIN, 403);
+  }
+  return doc;
+}
+
+/** Variante de lectura: el administrador ve a todos (aunque no los gestione); el coordinador, su alcance. */
+async function cargarVisiblePara(
+  tenantId: TenantId,
+  actor: IActorGestion,
+  id: string,
+): Promise<IUserSource> {
+  const doc = await cargarDoc(tenantId, id);
+  if (actor.sub !== id && puedeGestionar(actor, objetivoDe(doc)) === 'invisible') {
+    throw new AppError('Usuario no encontrado.', 404);
+  }
+  return doc;
+}
+
+function conAcciones(actor: IActorGestion, doc: IUserSource): IUserResponse {
+  return { ...toUserResponse(doc), acciones: accionesSobre(actor, objetivoDe(doc)) };
+}
+
+function assertNoEsUnoMismo(actor: IActorGestion, objetivoId: string, mensaje: string): void {
   if (actor.sub === objetivoId) throw new AppError(mensaje, 409);
+}
+
+function assertPuedeAsignarRol(actor: IActorGestion, rol: RolEmpresa): void {
+  if (rolesCreables(actor).includes(rol)) return;
+  throw new AppError(
+    actor.rolEmpresa === 'coordinador'
+      ? 'Un coordinador solo puede crear asesores.'
+      : SIN_PERMISO_ADMIN,
+    403,
+  );
+}
+
+function assertPuedeConcederPermiso(actor: IActorGestion, valor: boolean | undefined): void {
+  if (valor !== undefined && !puedeConcederPermisoAdmin(actor)) {
+    throw new AppError('Solo el usuario principal concede el permiso de gestionar administradores.', 403);
+  }
 }
 
 /** El coordinador de un asesor tiene que ser un coordinador **activo** del mismo tenant. */
@@ -219,7 +308,7 @@ function errorDependencias(dep: IDependenciasUsuario): AppError {
 
 async function auditarEquipoMovido(
   tenantId: string,
-  actor: UserActor,
+  actor: IActorGestion,
   id: string,
   equipo: MoverEquipo,
   cantidad: number,
@@ -238,21 +327,36 @@ async function auditarEquipoMovido(
   });
 }
 
+/** Filtro de coordinador pedido por query, intersecado con el alcance del coordinador. */
+function filtroCoordinador(
+  actor: IActorGestion,
+  pedido: string | undefined,
+): Types.ObjectId | null | { $in: (Types.ObjectId | null)[] } | 'vacio' | undefined {
+  const propio = oid(actor.sub);
+  if (actor.rolEmpresa !== 'coordinador') {
+    if (!pedido) return undefined;
+    return pedido === 'ninguno' ? null : oid(pedido);
+  }
+  if (!pedido) return { $in: [propio, null] };
+  if (pedido === 'ninguno') return null;
+  return pedido === actor.sub ? propio : 'vacio';
+}
+
 export async function listManageableUsers(
   tenantId: TenantId,
-  actor: UserActor,
+  tokenActor: UserActor,
   query: IManageUsersQuery,
 ): Promise<IUserResponse[]> {
-  const filtro: FilterQuery<IUserDocument> = { rol: 'admin' };
-  if (esCoordinador(actor)) {
-    // El coordinador solo ve su equipo: sus filtros de rol/coordinador se ignoran.
+  const actor = await cargarActor(tenantId, tokenActor);
+  const filtro: FilterQuery<IUserDocument> = { rol: 'admin', ...NO_ELIMINADO };
+  const coord = filtroCoordinador(actor, query.coordinadorId);
+  if (coord === 'vacio') return [];
+  if (coord !== undefined) filtro.coordinadorId = coord;
+  if (actor.rolEmpresa === 'coordinador') {
+    // El coordinador solo ve asesores (su equipo y los sin coordinador): su filtro de rol se ignora.
     filtro.rolEmpresa = 'asesor';
-    filtro.coordinadorId = oid(actor.sub);
-  } else {
-    if (query.rolEmpresa) filtro.rolEmpresa = query.rolEmpresa;
-    if (query.coordinadorId) {
-      filtro.coordinadorId = query.coordinadorId === 'ninguno' ? null : oid(query.coordinadorId);
-    }
+  } else if (query.rolEmpresa) {
+    filtro.rolEmpresa = query.rolEmpresa;
   }
   if (query.activo !== undefined) filtro.activo = query.activo;
   if (query.q) {
@@ -260,38 +364,41 @@ export async function listManageableUsers(
     filtro.$or = [{ nombre: re }, { email: re }];
   }
   const docs = await findScoped(User, tenantId, filtro)
-    .sort({ activo: -1, nombre: 1 })
+    .sort({ esPrincipal: -1, activo: -1, nombre: 1 })
     .limit(MAX_LISTADO)
     .lean<IUserSource[]>();
-  return docs.map(toUserResponse);
+  return docs.map((doc) => conAcciones(actor, doc));
 }
 
 export async function getTenantUser(
   tenantId: TenantId,
-  actor: UserActor,
+  tokenActor: UserActor,
   id: string,
 ): Promise<IUserResponse> {
-  return toUserResponse(await cargarObjetivoPara(tenantId, actor, id));
+  const actor = await cargarActor(tenantId, tokenActor);
+  return conAcciones(actor, await cargarVisiblePara(tenantId, actor, id));
 }
 
 export async function createTenantUser(
   tenantId: string,
-  actor: UserActor,
+  tokenActor: UserActor,
   dto: CreateUserDTO,
 ): Promise<IUserResponse> {
-  let coordinadorId: string | null;
-  if (esCoordinador(actor)) {
-    // El coordinador solo da de alta asesores, y nacen en su equipo.
-    if (dto.rolEmpresa !== 'asesor') {
-      throw new AppError('Un coordinador solo puede crear asesores.', 403);
-    }
-    if (dto.coordinadorId && dto.coordinadorId !== actor.sub) {
-      throw new AppError('Solo puedes crear asesores para tu propio equipo.', 403);
-    }
-    coordinadorId = actor.sub;
-  } else {
-    coordinadorId = dto.rolEmpresa === 'asesor' ? (dto.coordinadorId ?? null) : null;
-  }
+  const actor = await cargarActor(tenantId, tokenActor);
+  assertPuedeAsignarRol(actor, dto.rolEmpresa);
+  assertPuedeConcederPermiso(actor, dto.puedeGestionarAdministradores);
+
+  // El coordinador elige el coordinador del asesor (cualquiera, él o ninguno); si no lo dice, va a
+  // su equipo. El administrador, el que indique o ninguno.
+  const coordinadorId =
+    dto.rolEmpresa !== 'asesor'
+      ? null
+      : dto.coordinadorId !== undefined
+        ? dto.coordinadorId
+        : actor.rolEmpresa === 'coordinador'
+          ? actor.sub
+          : null;
+  const permiso = dto.rolEmpresa === 'administrador' && dto.puedeGestionarAdministradores === true;
 
   const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
@@ -299,10 +406,9 @@ export async function createTenantUser(
   try {
     creado = await mongoose.connection.transaction(async (session) => {
       await assertCupo(tenantId, dto.rolEmpresa, session);
-      if (coordinadorId && !esCoordinador(actor)) {
-        await assertCoordinadorValido(tenantId, coordinadorId, session);
-      }
-      // `rol` lo fija el service: desde un tenant solo se crean `admin` (nunca `superadmin`).
+      if (coordinadorId) await assertCoordinadorValido(tenantId, coordinadorId, session);
+      // `rol` lo fija el service: desde un tenant solo se crean `admin` (nunca `superadmin`), y
+      // nunca un principal (lo crea el superadmin con la empresa).
       const doc = await createScoped(
         User,
         tenantId,
@@ -314,6 +420,8 @@ export async function createTenantUser(
           rolEmpresa: dto.rolEmpresa,
           coordinadorId: coordinadorId ? oid(coordinadorId) : null,
           activo: true,
+          esPrincipal: false,
+          puedeGestionarAdministradores: permiso,
         },
         { session },
       );
@@ -336,31 +444,49 @@ export async function createTenantUser(
       email: creado.email,
       rolEmpresa: dto.rolEmpresa,
       coordinadorId,
+      ...(permiso ? { puedeGestionarAdministradores: true } : {}),
     },
   });
-  return toUserResponse(creado);
+  return conAcciones(actor, creado);
 }
 
 export async function updateTenantUser(
   tenantId: string,
-  actor: UserActor,
+  tokenActor: UserActor,
   id: string,
   dto: UpdateUserDTO,
 ): Promise<IUserResponse> {
-  const objetivo = await cargarObjetivoPara(tenantId, actor, id);
+  const actor = await cargarActor(tenantId, tokenActor);
+  // Uno mismo (salvo el principal) puede corregir su nombre y email; el resto de reglas siguen.
+  const objetivo =
+    actor.sub === id && !actor.esPrincipal
+      ? await cargarDoc(tenantId, id)
+      : await cargarObjetivoPara(tenantId, actor, id);
 
-  if (esCoordinador(actor) && (dto.rolEmpresa !== undefined || dto.coordinadorId !== undefined)) {
-    throw new AppError('Solo un Administrador puede cambiar el rol o el coordinador.', 403);
+  if (actor.rolEmpresa === 'coordinador' && dto.rolEmpresa !== undefined) {
+    throw new AppError('Solo un Administrador puede cambiar el rol.', 403);
   }
+  assertPuedeConcederPermiso(actor, dto.puedeGestionarAdministradores);
 
   const rolActual = rolEmpresaDe(objetivo) ?? 'asesor';
   const rolFinal = dto.rolEmpresa ?? rolActual;
   const cambiaRol = rolFinal !== rolActual;
-  if (cambiaRol) assertNoEsUnoMismo(actor, id, 'No puedes cambiar tu propio rol.');
+  if (cambiaRol) {
+    assertNoEsUnoMismo(actor, id, 'No puedes cambiar tu propio rol.');
+    assertPuedeAsignarRol(actor, rolFinal);
+  }
 
   if (rolFinal !== 'asesor' && dto.coordinadorId) {
     throw new AppError('Solo un asesor puede tener coordinador.', 400);
   }
+  if (rolFinal !== 'administrador' && dto.puedeGestionarAdministradores === true) {
+    throw new AppError('Solo un Administrador puede gestionar a otros administradores.', 400);
+  }
+  const permisoActual = objetivo.puedeGestionarAdministradores === true;
+  const permisoFinal =
+    rolFinal === 'administrador' ? (dto.puedeGestionarAdministradores ?? permisoActual) : false;
+  const cambiaPermiso = permisoFinal !== permisoActual;
+
   const coordActual = idDe(objetivo.coordinadorId);
   // Al dejar de ser asesor se pierde el equipo; al pasar a asesor se parte sin coordinador salvo que
   // el body diga cuál.
@@ -405,6 +531,7 @@ export async function updateTenantUser(
       if (dto.email !== undefined) set['email'] = dto.email;
       if (cambiaRol) set['rolEmpresa'] = rolFinal;
       if (cambiaCoord) set['coordinadorId'] = coordFinal ? oid(coordFinal) : null;
+      if (cambiaPermiso) set['puedeGestionarAdministradores'] = permisoFinal;
 
       const doc = await findOneAndUpdateScoped(
         User,
@@ -462,28 +589,40 @@ export async function updateTenantUser(
       despues: { coordinadorId: coordFinal },
     });
   }
+  if (cambiaPermiso) {
+    await recordAuditEvent(tenantId, {
+      actorId: actor.sub,
+      accion: 'user.admin_permission_changed',
+      entidad: 'user',
+      entidadId: id,
+      antes: { puedeGestionarAdministradores: permisoActual },
+      despues: { puedeGestionarAdministradores: permisoFinal },
+    });
+  }
   if (dto.equipo) await auditarEquipoMovido(tenantId, actor, id, dto.equipo, equipoMovido);
   if (cambiaRol) await notifySessionsRevoked(tenantId, id);
-  return toUserResponse(actualizado);
+  return conAcciones(actor, actualizado);
 }
 
 export async function setTenantUserEstado(
   tenantId: string,
-  actor: UserActor,
+  tokenActor: UserActor,
   id: string,
   dto: SetUserEstadoDTO,
 ): Promise<IUserResponse> {
+  const actor = await cargarActor(tenantId, tokenActor);
+  if (!dto.activo) assertNoEsUnoMismo(actor, id, 'No puedes desactivar tu propio usuario.');
   const objetivo = await cargarObjetivoPara(tenantId, actor, id);
-  if (objetivo.activo === dto.activo) return toUserResponse(objetivo); // idempotente
+  if (objetivo.activo === dto.activo) return conAcciones(actor, objetivo); // idempotente
 
   return dto.activo
     ? reactivarUsuario(tenantId, actor, objetivo)
-    : desactivarUsuario(tenantId, actor, objetivo, dto);
+    : retirarUsuario(tenantId, actor, objetivo, dto, 'desactivar');
 }
 
 async function reactivarUsuario(
   tenantId: string,
-  actor: UserActor,
+  actor: IActorGestion,
   objetivo: IUserSource,
 ): Promise<IUserResponse> {
   const id = String(objetivo._id);
@@ -508,7 +647,7 @@ async function reactivarUsuario(
     const actualizado = await findOneAndUpdateScoped(
       User,
       tenantId,
-      { _id: oid(id) },
+      { _id: oid(id), ...NO_ELIMINADO },
       { $set: set },
       { new: true, session },
     ).lean<IUserSource>();
@@ -524,61 +663,47 @@ async function reactivarUsuario(
     antes: { activo: false },
     despues: { activo: true },
   });
-  return toUserResponse(doc);
+  return conAcciones(actor, doc);
 }
 
-/**
- * Destino de las conversaciones al desactivar. El administrador puede elegir a cualquier usuario
- * activo; el coordinador, solo a sí mismo o a un asesor activo de su equipo.
- */
+/** Destino de las conversaciones al desactivar o eliminar: cualquier usuario activo (AUTH-05). */
 async function assertDestinoConversaciones(
   tenantId: string,
-  actor: UserActor,
-  destinoId: string,
-): Promise<void> {
-  if (!esCoordinador(actor) || destinoId === actor.sub) {
-    await assertAssignableAdmin(tenantId, destinoId);
-    return;
+  objetivoId: string,
+  mover: MoverConversaciones | undefined,
+): Promise<string | null> {
+  if (mover?.accion !== 'reasignar') return null;
+  if (mover.destinoId === objetivoId) {
+    throw new AppError('Elige a otro usuario para recibir las conversaciones.', 400);
   }
-  const doc = await findOneScoped(User, tenantId, {
-    _id: oid(destinoId),
-    rol: 'admin',
-    rolEmpresa: 'asesor',
-    coordinadorId: oid(actor.sub),
-    activo: true,
-  })
-    .select('_id')
-    .lean();
-  if (!doc) throw new AppError('Usuario no asignable.', 404);
+  await assertAssignableAdmin(tenantId, mover.destinoId);
+  return mover.destinoId;
 }
 
+type ModoRetiro = 'desactivar' | 'eliminar';
+
 /**
- * Desactiva al usuario. Si tiene conversaciones asignadas o (siendo coordinador) asesores a su cargo
- * y el body no dice qué hacer con ellos, responde 409 con los conteos. Mover conversaciones, mover el
- * equipo, desactivar y revocar van en **una** transacción.
+ * Desactiva o elimina (borrado lógico) al usuario. Si tiene conversaciones asignadas o (siendo
+ * coordinador) asesores a su cargo y el body no dice qué hacer con ellos, responde 409 con los
+ * conteos. Mover conversaciones, mover el equipo, retirar y revocar van en **una** transacción.
  */
-async function desactivarUsuario(
+async function retirarUsuario(
   tenantId: string,
-  actor: UserActor,
+  actor: IActorGestion,
   objetivo: IUserSource,
-  dto: SetUserEstadoDTO,
+  dto: DeleteUserDTO,
+  modo: ModoRetiro,
 ): Promise<IUserResponse> {
   const id = String(objetivo._id);
   const rol = rolEmpresaDe(objetivo) ?? 'asesor';
-  assertNoEsUnoMismo(actor, id, 'No puedes desactivar tu propio usuario.');
-
   const mover = dto.conversaciones;
-  if (mover?.accion === 'reasignar') {
-    if (mover.destinoId === id) {
-      throw new AppError('Elige a otro usuario para recibir las conversaciones.', 400);
-    }
-    await assertDestinoConversaciones(tenantId, actor, mover.destinoId);
-  }
-  const destinoId = mover?.accion === 'reasignar' ? mover.destinoId : null;
+  const destinoId = await assertDestinoConversaciones(tenantId, id, mover);
   assertEquipoDestinoDistinto(dto.equipo, id);
 
   const { doc, movidas, equipoMovido } = await mongoose.connection.transaction(async (session) => {
-    if (rol === 'administrador') await assertNoUltimoAdministrador(tenantId, id, session);
+    if (rol === 'administrador' && objetivo.activo) {
+      await assertNoUltimoAdministrador(tenantId, id, session);
+    }
 
     const asignadas = await countAssignedConversations(tenantId, id, session);
     const asesores = rol === 'coordinador' ? await contarEquipo(tenantId, id, session) : 0;
@@ -599,11 +724,23 @@ async function desactivarUsuario(
     }
 
     const ids = mover ? await moveAssignedConversations(tenantId, id, destinoId, session) : [];
+    const set: Record<string, unknown> =
+      modo === 'desactivar'
+        ? { activo: false }
+        : {
+            activo: false,
+            eliminado: true,
+            eliminadoEn: new Date(),
+            eliminadoPor: oid(actor.sub),
+            emailOriginal: objetivo.email,
+            email: emailEliminado(id),
+            puedeGestionarAdministradores: false,
+          };
     const actualizado = await findOneAndUpdateScoped(
       User,
       tenantId,
       { _id: oid(id) },
-      { $set: { activo: false } },
+      { $set: set },
       { new: true, session },
     ).lean<IUserSource>();
     if (!actualizado) throw new AppError('Usuario no encontrado.', 404);
@@ -611,14 +748,25 @@ async function desactivarUsuario(
     return { doc: actualizado, movidas: ids, equipoMovido: movidos };
   });
 
-  await recordAuditEvent(tenantId, {
-    actorId: actor.sub,
-    accion: 'user.deactivated',
-    entidad: 'user',
-    entidadId: id,
-    antes: { activo: true },
-    despues: { activo: false },
-  });
+  if (modo === 'desactivar') {
+    await recordAuditEvent(tenantId, {
+      actorId: actor.sub,
+      accion: 'user.deactivated',
+      entidad: 'user',
+      entidadId: id,
+      antes: { activo: true },
+      despues: { activo: false },
+    });
+  } else {
+    await recordAuditEvent(tenantId, {
+      actorId: actor.sub,
+      accion: 'user.deleted',
+      entidad: 'user',
+      entidadId: id,
+      antes: { nombre: objetivo.nombre, email: objetivo.email, rolEmpresa: rol, activo: objetivo.activo },
+      despues: { eliminado: true },
+    });
+  }
   if (dto.equipo) await auditarEquipoMovido(tenantId, actor, id, dto.equipo, equipoMovido);
   if (movidas.length > 0) {
     await recordAuditEvent(tenantId, {
@@ -640,16 +788,44 @@ async function desactivarUsuario(
   return toUserResponse(doc);
 }
 
+/** Borrado lógico (AUTH-05): mismas reglas de alcance y dependencias que la desactivación. */
+export async function deleteTenantUser(
+  tenantId: string,
+  tokenActor: UserActor,
+  id: string,
+  dto: DeleteUserDTO,
+): Promise<IUserResponse> {
+  const actor = await cargarActor(tenantId, tokenActor);
+  assertNoEsUnoMismo(actor, id, 'No puedes eliminar tu propio usuario.');
+  const objetivo = await cargarObjetivoPara(tenantId, actor, id);
+  return retirarUsuario(tenantId, actor, objetivo, dto, 'eliminar');
+}
+
 export async function resetTenantUserPassword(
   tenantId: string,
-  actor: UserActor,
+  tokenActor: UserActor,
   id: string,
   password: string,
 ): Promise<void> {
-  await cargarObjetivoPara(tenantId, actor, id);
-  // Cambiar la propia contraseña es otro feature (perfil): aquí cerraría la sesión del propio gestor.
+  const actor = await cargarActor(tenantId, tokenActor);
+  // La propia contraseña se cambia con la actual (`PATCH /api/auth/me/password`): aquí cerraría la
+  // sesión del propio gestor.
   assertNoEsUnoMismo(actor, id, 'Para cambiar tu propia contraseña usa tu perfil.');
+  await cargarObjetivoPara(tenantId, actor, id);
+  await guardarPasswordYRevocar(tenantId, id, password);
 
+  await recordAuditEvent(tenantId, {
+    actorId: actor.sub,
+    accion: 'user.password_reset',
+    entidad: 'user',
+    entidadId: id,
+    antes: {},
+    despues: {},
+  });
+  await notifySessionsRevoked(tenantId, id);
+}
+
+async function guardarPasswordYRevocar(tenantId: TenantId, id: string, password: string): Promise<void> {
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   await mongoose.connection.transaction(async (session) => {
     await findOneAndUpdateScoped(
@@ -661,14 +837,48 @@ export async function resetTenantUserPassword(
     );
     await revokeUserSessions(tenantId, id, session);
   });
+}
 
+/** Uso del plan en la pantalla Usuarios (AUTH-05). */
+export async function getCupoUsuarios(tenantId: TenantId): Promise<ICupoUsuarios> {
+  return getSeatUsage(tenantId);
+}
+
+// ── Superadmin (AUTH-05): el único que recupera la contraseña del principal ──────────────────
+//
+// `tenantId` llega del `:id` de `/api/admin/tenants/:id/principal*` (ruta de superadmin, mismo
+// precedente que `/:id/plan` y `/:id/usage`); la consulta sigue pasando por el repositorio scoped.
+
+async function cargarPrincipal(tenantId: string): Promise<IUserSource> {
+  const doc = await findOneScoped(User, tenantId, {
+    esPrincipal: true,
+    rol: 'admin',
+    ...NO_ELIMINADO,
+  }).lean<IUserSource>();
+  if (!doc) throw new AppError('La empresa no tiene usuario principal.', 404);
+  return doc;
+}
+
+export async function getPrincipal(tenantId: string): Promise<IPrincipalResponse> {
+  const doc = await cargarPrincipal(tenantId);
+  return { id: String(doc._id), nombre: doc.nombre, email: doc.email };
+}
+
+export async function resetPrincipalPassword(
+  tenantId: string,
+  superadminId: string,
+  password: string,
+): Promise<void> {
+  const principal = await cargarPrincipal(tenantId);
+  const id = String(principal._id);
+  await guardarPasswordYRevocar(tenantId, id, password);
   await recordAuditEvent(tenantId, {
-    actorId: actor.sub,
+    actorId: superadminId,
     accion: 'user.password_reset',
     entidad: 'user',
     entidadId: id,
     antes: {},
-    despues: {},
+    despues: { porSuperadmin: true },
   });
   await notifySessionsRevoked(tenantId, id);
 }

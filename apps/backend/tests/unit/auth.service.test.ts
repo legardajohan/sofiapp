@@ -117,6 +117,8 @@ describe('auth.service — getProfile', () => {
       rol: 'admin',
       rolEmpresa: 'administrador',
       tenantId: tenantId.toString(),
+      esPrincipal: false,
+      puedeGestionarAdministradores: false,
     });
   });
 

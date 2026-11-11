@@ -5,7 +5,10 @@ import { PERIODICIDADES_PLAN } from './plan.constants.js';
 
 // Cada perfil permitido debe pertenecer al catálogo BASE global. Las etiquetas propias del tenant
 // no se validan aquí (viven en admin_profiles, tenant-scoped).
-const perfilesPermitidosSchema = z.array(z.enum(PERFILES_BASE));
+export const ADMINISTRADORES_SUPERAN_USUARIOS =
+  'Los administradores no pueden superar a los usuarios del plan.';
+
+const perfilesPermitidosSchema =z.array(z.enum(PERFILES_BASE));
 
 const limitesSchema = z.object({
   usuarios: z.coerce.number().int().min(0),
@@ -40,7 +43,12 @@ export const createPlanSchema = z.object({
     precio: z.coerce.number().min(0),
     costoEstimado: z.coerce.number().min(0).optional(),
     activo: z.boolean().optional(),
-  }),
+  })
+    // AUTH-05: los administradores son un subconjunto de los usuarios del plan.
+    .refine((b) => b.limites.administradores <= b.limites.usuarios, {
+      message: ADMINISTRADORES_SUPERAN_USUARIOS,
+      path: ['limites', 'administradores'],
+    }),
 });
 
 export const planIdParamSchema = z.object({

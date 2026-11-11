@@ -40,10 +40,11 @@ function ejecutar(roles: readonly RolEmpresa[], user?: SafeUser): { status: numb
 
 describe('authorizeRolEmpresa (AUTH-04)', () => {
   it.each([
-    ['datos sensibles', ROLES_DATOS_SENSIBLES, ['administrador']],
-    ['reportes', ROLES_REPORTES, ['administrador']],
+    // AUTH-05 (ADR 0018): accesos iguales salvo la gestión de usuarios.
+    ['datos sensibles', ROLES_DATOS_SENSIBLES, ['administrador', 'coordinador', 'asesor']],
+    ['reportes', ROLES_REPORTES, ['administrador', 'coordinador', 'asesor']],
     ['gestión de usuarios', ROLES_GESTION_USUARIOS, ['administrador', 'coordinador']],
-    ['configuración', ROLES_CONFIGURACION, ['administrador']],
+    ['configuración', ROLES_CONFIGURACION, ['administrador', 'coordinador', 'asesor']],
   ] as const)('%s: solo pasan %j', (_n, roles, permitidos) => {
     for (const rol of ['administrador', 'coordinador', 'asesor'] as const) {
       const { siguio, status } = ejecutar(roles, usuario('admin', rol));
@@ -62,9 +63,10 @@ describe('authorizeRolEmpresa (AUTH-04)', () => {
     expect(ejecutar(ROLES_CONFIGURACION).status).toBe(403);
   });
 
-  it('puedeVerDatosSensibles: solo el administrador en AUTH-04', () => {
+  it('puedeVerDatosSensibles: los tres roles (AUTH-05)', () => {
     expect(puedeVerDatosSensibles(usuario('admin', 'administrador'))).toBe(true);
-    expect(puedeVerDatosSensibles(usuario('admin', 'coordinador'))).toBe(false);
-    expect(puedeVerDatosSensibles(usuario('admin', 'asesor'))).toBe(false);
+    expect(puedeVerDatosSensibles(usuario('admin', 'coordinador'))).toBe(true);
+    expect(puedeVerDatosSensibles(usuario('admin', 'asesor'))).toBe(true);
+    expect(puedeVerDatosSensibles(usuario('superadmin'))).toBe(false);
   });
 });

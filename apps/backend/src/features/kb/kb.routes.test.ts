@@ -60,13 +60,13 @@ describe('GET /api/kb/documents', () => {
     expect(resA.body.data[0].titulo).toBe('Solo A');
   });
 
-  it('coordinador o asesor → 403: la base de conocimiento es configuración (AUTH-04)', async () => {
+  it('coordinador o asesor → 200: la configuración es de los tres roles (AUTH-05)', async () => {
     const tenantId = new Types.ObjectId();
     for (const subrol of ['coordinator', 'secretary']) {
       // Token emitido antes de AUTH-04: el subrol viejo se traduce a coordinador/asesor.
       const token = makeToken(tenantId.toString(), 'admin', subrol);
       const res = await request(app).get('/api/kb/documents').set('Cookie', `token=${token}`);
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
     }
   });
 });

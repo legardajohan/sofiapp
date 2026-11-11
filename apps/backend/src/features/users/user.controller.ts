@@ -1,6 +1,8 @@
 import type { RequestHandler } from 'express';
 import {
   createTenantUser,
+  deleteTenantUser,
+  getCupoUsuarios,
   getTenantUser,
   listManageableUsers,
   listTenantUsers,
@@ -11,6 +13,7 @@ import {
 } from './user.service.js';
 import type {
   CreateUserBody,
+  DeleteUserBody,
   ListUsersQuery,
   ManageUsersQuery,
   ResetUserPasswordBody,
@@ -77,4 +80,20 @@ export const resetUserPasswordController: RequestHandler = async (req, res) => {
   const { password } = req.body as ResetUserPasswordBody;
   await resetTenantUserPassword(tenantId, actorDe(req), String(req.params['id']), password);
   res.status(204).end();
+};
+
+export const deleteUserController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  const user = await deleteTenantUser(
+    tenantId,
+    actorDe(req),
+    String(req.params['id']),
+    req.body as DeleteUserBody,
+  );
+  res.status(200).json(user);
+};
+
+export const cupoUsuariosController: RequestHandler = async (req, res) => {
+  const tenantId = req.user!.tenantId!.toString();
+  res.status(200).json(await getCupoUsuarios(tenantId));
 };

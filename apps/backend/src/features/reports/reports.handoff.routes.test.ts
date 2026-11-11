@@ -34,8 +34,8 @@ describe('GET /api/reports/handoff-rate — HU-REP-02', () => {
     expect((await get(token('superadmin'))).status).toBe(500);
   });
 
-  it.each(['coordinator', 'secretary'])('admin con subrol %s → 403', async (subrol) => {
-    expect((await get(token('admin', subrol))).status).toBe(403);
+  it.each(['coordinator', 'secretary'])('admin con subrol %s → 200: los tres roles ven reportes (AUTH-05)', async (subrol) => {
+    expect((await get(token('admin', subrol))).status).toBe(200);
   });
 
   it.each([undefined, 'director', 'manager'])('admin con subrol %s → 200 con la forma del contrato', async (subrol) => {

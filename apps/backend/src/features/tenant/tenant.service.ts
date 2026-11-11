@@ -130,6 +130,8 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
             rolEmpresa: 'administrador',
             coordinadorId: null,
             activo: true,
+            // AUTH-05: el usuario que crea el superadmin es el principal de la empresa.
+            esPrincipal: true,
           },
           { session },
         );

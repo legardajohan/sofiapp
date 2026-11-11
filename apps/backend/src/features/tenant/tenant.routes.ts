@@ -10,6 +10,7 @@ import {
   updateTenantStatusSchema,
   assignPlanSchema,
   tenantIdParamSchema,
+  resetPrincipalPasswordSchema,
 } from './tenant.validation.js';
 import {
   listTenantsController,
@@ -18,6 +19,8 @@ import {
   updateTenantStatusController,
   assignPlanToTenantController,
   deleteTenantController,
+  getPrincipalController,
+  resetPrincipalPasswordController,
 } from './tenant.controller.js';
 import { getTenantUsageController } from '../usage/usage.controller.js';
 
@@ -81,6 +84,23 @@ router.get(
   authorize(['superadmin']),
   validate(tenantIdParamSchema),
   asyncHandler(getTenantUsageController)
+);
+
+// AUTH-05 — usuario principal: solo el superadmin lo ve y le restablece la contraseña.
+router.get(
+  '/:id/principal',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(tenantIdParamSchema),
+  asyncHandler(getPrincipalController)
+);
+
+router.post(
+  '/:id/principal/password',
+  authenticateJWT,
+  authorize(['superadmin']),
+  validate(resetPrincipalPasswordSchema),
+  asyncHandler(resetPrincipalPasswordController)
 );
 
 export default router;

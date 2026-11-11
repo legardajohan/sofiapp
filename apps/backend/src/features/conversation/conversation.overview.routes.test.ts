@@ -128,13 +128,13 @@ describe('GET /api/conversations/:id/overview (HU-IA-04)', () => {
     expect(res.body.permisos.verResumen).toBe(true);
   });
 
-  it.each([['coordinator'], ['secretary']])('%s NO ve el resumen', async (subrol) => {
+  it.each([['coordinator'], ['secretary']])('%s también ve el resumen (AUTH-05: accesos iguales)', async (subrol) => {
     const res = await request(app)
       .get(`/api/conversations/${clienteId}/overview`)
       .set('Cookie', [`token=${token(subrol)}`]);
 
-    expect(res.body.resumen).toBeNull();
-    expect(res.body.permisos.verResumen).toBe(false);
+    expect(res.body.resumen?.texto).toBe('Resumen previo.');
+    expect(res.body.permisos.verResumen).toBe(true);
   });
 
   it('un admin SIN subrol conserva acceso total', async () => {
@@ -178,12 +178,9 @@ describe('POST /api/conversations/:id/summary — gate por rol (HU-IA-04)', () =
       .set('X-CSRF-Token', CSRF);
   }
 
-  it.each([['coordinator'], ['secretary']])('%s → 403: no puede pagar lo que no puede leer', async (subrol) => {
+  it.each([['coordinator'], ['secretary']])('%s también puede generar (AUTH-05: accesos iguales)', async (subrol) => {
     const res = await generar(subrol);
-
-    expect(res.status).toBe(403);
-    // Y no llegó a gastar una llamada al modelo.
-    expect(mockSummarize).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
   });
 
   it.each([['director'], ['manager']])('%s sí puede generar', async (subrol) => {

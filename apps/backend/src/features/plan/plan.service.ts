@@ -5,6 +5,7 @@ import { AppError } from '../../utils/AppError.js';
 import { getSettings } from '../platform-settings/platform-settings.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
 import { Tenant } from '../tenant/tenant.model.js';
+import { ADMINISTRADORES_SUPERAN_USUARIOS } from './plan.validation.js';
 import type {
   CreatePlanDTO,
   UpdatePlanDTO,
@@ -106,8 +107,22 @@ export async function nuevaVersionPlan(id: string): Promise<IPlanResponse> {
   return mapPlanToResponse(updated);
 }
 
+/** AUTH-05: en un update parcial, compara contra los límites ya guardados. */
+async function assertAdministradoresNoSuperanUsuarios(
+  id: string,
+  limites: UpdatePlanDTO['limites'],
+): Promise<void> {
+  if (limites?.usuarios === undefined && limites?.administradores === undefined) return;
+  const actual = await Plan.findById(id).select('limites').lean<Pick<IPlanDocument, 'limites'>>();
+  if (!actual) return; // el 404 lo da el update
+  const usuarios = limites.usuarios ?? actual.limites.usuarios;
+  const administradores = limites.administradores ?? actual.limites.administradores;
+  if (administradores > usuarios) throw new AppError(ADMINISTRADORES_SUPERAN_USUARIOS, 400);
+}
+
 export async function updatePlan(id: string, dto: UpdatePlanDTO): Promise<IPlanResponse> {
   await assertAdministradoresWithinPlatformMax(dto.limites?.administradores);
+  await assertAdministradoresNoSuperanUsuarios(id, dto.limites);
 
   if (dto.nombre !== undefined) {
     const dup = await Plan.findOne({ nombre: dto.nombre, _id: { $ne: id } }).lean();

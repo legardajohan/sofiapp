@@ -15,12 +15,14 @@ export const SESSION_REVOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * Invalida todos los JWT del usuario emitidos hasta ahora. Idempotente (upsert por usuario).
  * Acepta `session` para formar parte de la transacción que desactiva o degrada al usuario.
+ * Devuelve el instante de la revocación (AUTH-05: para fechar el token nuevo tras cambiar la
+ * propia contraseña después de él).
  */
 export async function revokeUserSessions(
   tenantId: TenantId,
   userId: string,
   session?: ClientSession,
-): Promise<void> {
+): Promise<Date> {
   const ahora = new Date();
   await findOneAndUpdateScoped(
     SessionRevocation,
@@ -29,6 +31,7 @@ export async function revokeUserSessions(
     { revokedAt: ahora, expiraEn: new Date(ahora.getTime() + SESSION_REVOCATION_TTL_MS) },
     { upsert: true, new: true, ...(session ? { session } : {}) },
   );
+  return ahora;
 }
 
 /**
