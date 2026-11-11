@@ -34,9 +34,9 @@ de datos y nunca accede a la plataforma.
 | Rol | Función | Accede al panel | Notas |
 |---|---|---|---|
 | **Superadministrador** | Dueño de la plataforma. Crea y suspende empresas (tenants), **activa planes manualmente**, ve métricas globales cross-tenant. | Sí | `User` **global sin `tenantId`**; sus rutas saltan `requireTenant`. |
-| **Administrador** | Máximo rol dentro de una empresa. El primer usuario, que crea el superadmin al dar de alta el tenant, nace Administrador. Gestiona a todos los usuarios y reparte asesores entre coordinadores, configura la empresa (WhatsApp, KB, asistente, flujos, catálogos, campañas) y ve datos sensibles y reportes. | Sí | `rol: 'admin'` + `rolEmpresa: 'administrador'` (`AUTH-04`, ADR 0017). |
-| **Coordinador** | Opcional: una empresa puede no tener ninguno. Atiende la bandeja y gestiona **solo a los asesores de su equipo** (los que crea o le asigna el Administrador): alta, edición de nombre/email, activar/desactivar, contraseña. | Sí | `rolEmpresa: 'coordinador'`. Datos sensibles y reportes de su equipo llegan con `AUTH-05`. |
-| **Asesor** | Operativo: atiende la bandeja y sus clientes. No gestiona usuarios, no configura y no ve datos sensibles ni reportes. | Sí | `rolEmpresa: 'asesor'`, con `coordinadorId` opcional (su equipo). |
+| **Administrador** | Crea y gestiona Coordinadores y Asesores (alta, edición, contraseña, activar/desactivar, eliminar) y reparte asesores entre coordinadores. A otros Administradores solo si el usuario principal le concede el permiso **gestionar administradores**. El **usuario principal** es el Administrador que crea el superadmin al dar de alta la empresa: nadie de la empresa lo toca, él solo cambia su contraseña con la actual y, si la olvida, solo el superadmin la restablece. | Sí | `rolEmpresa: 'administrador'` (+ `esPrincipal`, `puedeGestionarAdministradores`; `AUTH-05`, ADR 0018). |
+| **Coordinador** | Opcional: una empresa puede no tener ninguno. Crea asesores (para su equipo, otro o ninguno) y gestiona a los de **su equipo y a los que no tienen coordinador**; puede moverlos a otro coordinador. | Sí | `rolEmpresa: 'coordinador'`. |
+| **Asesor** | Usa todo el panel igual que los demás roles, pero **no entra a Usuarios**. Puede tener coordinador o no. | Sí | `rolEmpresa: 'asesor'`, con `coordinadorId` opcional (su equipo). |
 | **Cliente final / Prospecto** | Lead. Interactúa por WhatsApp/IG/Messenger/web. | **No** | Se modela como documento `Cliente`; nunca inicia sesión. |
 
 > **Cambio respecto al backlog original:** el rol *Verificador de Pagos* se **elimina**. No hay
@@ -48,6 +48,11 @@ de datos y nunca accede a la plataforma.
 > que reemplaza a los subroles de `AUTH-02` (Director y Gerente → Administrador, Coordinador →
 > Coordinador, Secretaria → Asesor). El campo `asesorId` en `Cliente`/conversaciones conserva su
 > nombre y referencia al usuario asignado a la conversación.
+>
+> **Accesos iguales (`AUTH-05`, ADR 0018):** los tres roles ven y hacen lo mismo en bandeja, leads,
+> contactos, datos sensibles, reportes, configuración y campañas. La única diferencia es la gestión de
+> usuarios. Eliminar un usuario es un borrado lógico: desaparece, libera su puesto del plan y su email,
+> y el historial conserva su nombre.
 
 ## 4. Captura de datos por IA (alto valor)
 

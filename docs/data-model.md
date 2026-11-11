@@ -98,6 +98,11 @@
   coordinadorId: ObjectId | null, // ref User — solo asesores: su coordinador (equipo). null en el resto o sin coordinador
   // subrol (AUTH-02): retirado. `migrate:roles-empresa` lo traduce a rolEmpresa y `--unset-legacy` lo borra.
   activo: Boolean,                // default true
+  esPrincipal: Boolean,           // default false — el que creó el superadmin con la empresa; uno por tenant (AUTH-05, ADR 0018)
+  puedeGestionarAdministradores: Boolean, // default false — Administrador no principal que gestiona a otros admins; lo concede el principal
+  eliminado: Boolean,             // default false — borrado lógico; un eliminado siempre está además inactivo
+  eliminadoEn: Date, eliminadoPor: ObjectId,  // ref User — solo si eliminado
+  emailOriginal: String,          // email antes de reescribirlo a `<id>.eliminado@invalid.sofiapp` (libera el original)
   createdAt, updatedAt
 }
 // Índices: { email: 1 } unique  (email único GLOBAL para usuarios de panel; login resuelve el tenant — ADR 0003)
@@ -105,6 +110,7 @@
 //          { rol: 1 }  (para localizar al/los superadmin)
 //          { tenantId: 1, coordinadorId: 1 }  (equipo de un coordinador, AUTH-04)
 //          { tenantId: 1, rolEmpresa: 1, activo: 1 }  (cuota `administradores`, último Administrador)
+//          { tenantId: 1 } unique, partialFilterExpression { esPrincipal: true }  (un principal por empresa, AUTH-05)
 ```
 
 ### `session_revocations` (AUTH-03, ADR 0016)

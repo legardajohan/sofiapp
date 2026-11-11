@@ -151,10 +151,14 @@ apiClient.interceptors.response.use(r => r, (e) => {
   - `admin`: bandeja omnicanal, leads, clientes — todo dentro del tenant. El **rol de empresa**
     (`rolEmpresa`: Administrador/Coordinador/Asesor, `AUTH-04`, ADR 0017) decide el resto con los
     helpers de `lib/roles.ts` (gemelos de `authorize-rol-empresa` del backend) y los guards
-    `RequireConfiguracion`, `RequireReportes` y `RequireGestionUsuarios`: configuración y campañas
-    solo Administrador; datos sensibles y reportes, Administrador; `/settings/users`, Administrador
-    (todos) y Coordinador (solo su equipo). La gestión de catálogos dentro de pantallas operativas
-    (opciones/campos de contacto, etapas, semáforos) se oculta a quien no es Administrador.
+    `RequireConfiguracion`, `RequireReportes` y `RequireGestionUsuarios`. Desde `AUTH-05` (ADR 0018)
+    configuración, campañas, datos sensibles y reportes son de los **tres roles** (las constantes
+    `ROLES_*` de `lib/roles.ts` los listan a todos; se conservan para poder volver a restringir).
+    `/settings/users` es de Administrador y Coordinador (este, sobre su equipo y los asesores sin
+    coordinador); el Asesor no entra. Qué se ofrece en cada fila lo decide `acciones`, que calcula el
+    backend con la matriz de `user.permisos.ts`: la UI no reconstruye esa regla. `rolesQuePuedeCrear`
+    y `puedeConcederPermisoAdmin` (gemelos del backend) solo deciden qué opciones mostrar en el
+    formulario. "Cambiar mi contraseña" vive en `NavUser` para todo usuario de empresa.
 
 ## Tiempo real
 

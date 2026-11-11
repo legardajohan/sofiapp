@@ -3,6 +3,11 @@
 **Estado:** aceptado · **Fecha:** 2026-11-10 · **Contexto:** AUTH-04 (reestructuración de roles,
 fase 1). Reemplaza a ADR 0006 y 0011 y a la §1 de ADR 0016.
 
+> **Reemplazado en parte por [ADR 0018](0018-usuario-principal-y-accesos-iguales.md) (AUTH-05):** los
+> gates de datos sensibles, reportes y configuración pasan a los tres roles, y el alcance del
+> Coordinador en la gestión de usuarios incluye a los asesores sin coordinador. El modelo de roles
+> de este ADR sigue vigente.
+
 ## Contexto
 
 AUTH-02 dejó a todos los usuarios de una empresa como `rol: 'admin'` con un `subrol` de cuatro

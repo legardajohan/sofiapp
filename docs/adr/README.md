@@ -22,7 +22,8 @@ marca al anterior como *Reemplazado*.
 | [0014](0014-ventanas-horarias-de-envio.md) | Ventanas horarias de envío: control único en `sendOutbound` y comportamiento fijo por categoría | Aceptada |
 | [0015](0015-catalogo-campos-contacto.md) | Catálogo de campos del contacto y validación de flujos en tres niveles | Aceptada |
 | [0016](0016-gestion-usuarios-y-revocacion.md) | Gestión de usuarios por subrol y revocación de sesiones | Aceptada (§1 reemplazada por 0017) |
-| [0017](0017-roles-de-empresa.md) | Roles de empresa: Administrador, Coordinador y Asesor | Aceptada |
+| [0017](0017-roles-de-empresa.md) | Roles de empresa: Administrador, Coordinador y Asesor | Aceptada (gates y alcance del coordinador reemplazados por 0018) |
+| [0018](0018-usuario-principal-y-accesos-iguales.md) | Usuario principal, jerarquía de gestión y accesos iguales | Aceptada |
 
 ## Convención
 
