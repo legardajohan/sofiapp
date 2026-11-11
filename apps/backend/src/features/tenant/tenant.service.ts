@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import { Tenant } from './tenant.model.js';
 import { UserModel } from '../users/user.model.js';
+import { createScoped } from '../../repositories/base.repository.js';
 import { Plan } from '../plan/plan.model.js';
 import { assertWithinQuota } from '../usage/usage.service.js';
 import { construirFotografiaFinanciera } from '../../services/pricing/plan-costing.service.js';
@@ -116,18 +117,21 @@ export async function createTenant(dto: CreateTenantDTO): Promise<ITenantRespons
         await assertWithinQuota(tenant._id.toString(), 'usuarios', session);
         await assertWithinQuota(tenant._id.toString(), 'administradores', session);
         const passwordHash = await bcrypt.hash(dto.adminUser.password, 10);
-        await UserModel.create(
-          [
-            {
-              tenantId: tenant._id,
-              nombre: dto.adminUser.nombre,
-              email: dto.adminUser.email,
-              passwordHash,
-              rol: 'admin',
-              activo: true,
-            },
-          ],
-          { session }
+        // AUTH-04: el usuario inicial nace Administrador, y por el repositorio scoped (con la
+        // `session` de la transacción del alta).
+        await createScoped(
+          UserModel,
+          tenant._id,
+          {
+            nombre: dto.adminUser.nombre,
+            email: dto.adminUser.email,
+            passwordHash,
+            rol: 'admin',
+            rolEmpresa: 'administrador',
+            coordinadorId: null,
+            activo: true,
+          },
+          { session },
         );
       }
 

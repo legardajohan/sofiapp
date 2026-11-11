@@ -3,9 +3,9 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import {
-  SUBROLES_DATOS_SENSIBLES,
-  authorizeSubrol,
-} from '../../middlewares/authorize-subrol.middleware.js';
+  ROLES_DATOS_SENSIBLES,
+  authorizeRolEmpresa,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -27,7 +27,7 @@ const router = Router({ mergeParams: true });
 
 // A diferencia del PATCH de la ficha, aquí el gate va a nivel de ruta: la nota es sensible entera,
 // no por campos, y no hay forma de enmascarar prosa libre selectivamente.
-const notasRoles = [authorize(['admin']), authorizeSubrol(SUBROLES_DATOS_SENSIBLES)];
+const notasRoles = [authorize(['admin']), authorizeRolEmpresa(ROLES_DATOS_SENSIBLES)];
 
 router.post(
   '/',

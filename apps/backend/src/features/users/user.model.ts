@@ -1,5 +1,5 @@
 import { Schema, model } from 'mongoose';
-import { ADMIN_SUBROLES, type IUserDocument } from './user.types.js';
+import { ROLES_EMPRESA, type IUserDocument } from './user.types.js';
 
 const UserSchema = new Schema<IUserDocument>(
   {
@@ -12,10 +12,16 @@ const UserSchema = new Schema<IUserDocument>(
       enum: ['superadmin', 'admin'],
       required: true,
     },
-    subrol: {
+    // AUTH-04: obligatorio para los usuarios de empresa; el superadmin no lo lleva.
+    rolEmpresa: {
       type: String,
-      enum: [...ADMIN_SUBROLES],
+      enum: [...ROLES_EMPRESA],
+      required: function (this: IUserDocument): boolean {
+        return this.rol === 'admin';
+      },
     },
+    // Equipo del asesor. Las reglas (solo asesores, coordinador activo del tenant) viven en el service.
+    coordinadorId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     activo: { type: Boolean, default: true },
   },
   { timestamps: true },
@@ -23,6 +29,8 @@ const UserSchema = new Schema<IUserDocument>(
 
 UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, email: 1 });
+UserSchema.index({ tenantId: 1, coordinadorId: 1 });
+UserSchema.index({ tenantId: 1, rolEmpresa: 1, activo: 1 });
 
 export const User = model<IUserDocument>('User', UserSchema);
 export const UserModel = User;

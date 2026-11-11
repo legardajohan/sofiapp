@@ -12,7 +12,7 @@ import { logger } from './logger.js';
  * una clave de despliegue. Las columnas conservan el sufijo `Enc` (`correoEnc`, `documentoEnc`,
  * `textoEnc`) para no arrastrar una migración de datos ni de índices.
  *
- * Lo que sigue protegiendo el dato es el **control de acceso por subrol** (`authorize-subrol` + el
+ * Lo que sigue protegiendo el dato es el **control de acceso por rol de empresa** (`authorize-rol-empresa` + el
  * enmascarado de `mask.util`), que nunca dependió del cifrado. Lo que se pierde es la protección
  * frente a un volcado de la base o un backup extraviado; queda anotado en `docs/adr/0006`.
  *

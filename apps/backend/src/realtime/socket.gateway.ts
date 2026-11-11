@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { env } from '../config/env.js';
 import { isTokenRevoked } from '../features/auth/session.service.js';
+import { resolverRolEmpresa } from '../features/users/user.rol-empresa.js';
+import type { RolEmpresa } from '../features/users/user.types.js';
 import { logger } from '../utils/logger.js';
 import { suscribirSesionRevocada } from './internal-bus.js';
 
@@ -11,6 +13,8 @@ interface SocketAuth {
   sub: string;
   tenantId: string;
   rol: string;
+  /** AUTH-04: traducido igual que en `authenticateJWT`. AUTH-05 lo usará para los rooms por equipo. */
+  rolEmpresa: RolEmpresa;
 }
 
 /** Parsea la cabecera `Cookie` cruda del handshake en un mapa nombre→valor. */
@@ -55,6 +59,7 @@ export function createSocketGateway(server: HttpServer): Server {
         sub: String(payload['sub']),
         tenantId: String(tenantRaw),
         rol: String(payload['rol']),
+        rolEmpresa: resolverRolEmpresa(payload),
       };
       const iat = typeof payload['iat'] === 'number' ? payload['iat'] : undefined;
       // AUTH-03: un JWT revocado tampoco abre socket. La consulta es asíncrona y va fuera del

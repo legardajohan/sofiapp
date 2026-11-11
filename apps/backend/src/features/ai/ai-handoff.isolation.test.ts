@@ -41,7 +41,7 @@ async function crearAdmin(tenantId: Types.ObjectId, nombre: string, activo = tru
     nombre,
     email: `${nombre.toLowerCase()}-${new Types.ObjectId().toString()}@x.com`,
     passwordHash: 'x',
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo,
   });
   return (u._id as Types.ObjectId).toString();

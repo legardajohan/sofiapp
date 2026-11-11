@@ -82,7 +82,7 @@ describe('usage.service — HU-SAAS-02', () => {
           nombre: `U${i}`,
           email: `u${i}@empresa-quota.com`,
           passwordHash: 'hash',
-          rol: 'admin',
+          rol: 'admin', rolEmpresa: 'administrador',
           activo: true,
         });
       }
@@ -125,7 +125,7 @@ describe('usage.service — HU-SAAS-02', () => {
         nombre: 'Ad',
         email: 'ad@empresa-quota.com',
         passwordHash: 'hash',
-        rol: 'admin',
+        rol: 'admin', rolEmpresa: 'administrador',
         activo: true,
       });
       await UserModel.create({
@@ -133,13 +133,24 @@ describe('usage.service — HU-SAAS-02', () => {
         nombre: 'Co',
         email: 'co@empresa-quota.com',
         passwordHash: 'hash',
-        rol: 'admin',
+        rol: 'admin', rolEmpresa: 'administrador',
         activo: true,
       });
       expect(await getMetricUsed(tenant._id.toString(), 'administradores')).toBe(2);
       await expect(
         assertWithinQuota(tenant._id.toString(), 'administradores')
       ).rejects.toMatchObject({ statusCode: 429 });
+    });
+
+    it('coordinadores, asesores e inactivos no consumen la cuota de administradores (AUTH-04)', async () => {
+      const { tenant } = await crearTenantConPlan();
+      const base = { tenantId: tenant._id, passwordHash: 'hash', rol: 'admin' as const };
+      await UserModel.create({ ...base, nombre: 'A', email: 'a@q.com', rolEmpresa: 'administrador', activo: true });
+      await UserModel.create({ ...base, nombre: 'B', email: 'b@q.com', rolEmpresa: 'administrador', activo: false });
+      await UserModel.create({ ...base, nombre: 'C', email: 'c@q.com', rolEmpresa: 'coordinador', activo: true });
+      await UserModel.create({ ...base, nombre: 'D', email: 'd@q.com', rolEmpresa: 'asesor', activo: true });
+      expect(await getMetricUsed(tenant._id.toString(), 'administradores')).toBe(1);
+      expect(await getMetricUsed(tenant._id.toString(), 'usuarios')).toBe(3);
     });
 
     it('es no-op cuando el tenant no tiene plan asignado', async () => {

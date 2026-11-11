@@ -23,7 +23,7 @@ describe('notification — aislamiento multi-tenant', () => {
       nombre,
       email: `admin-${new Types.ObjectId().toString()}@t.com`,
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
   }

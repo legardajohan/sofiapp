@@ -42,7 +42,7 @@ describe('contact-note.service (HU-CRM-02)', () => {
       nombre,
       email: `autor_${seq++}@empresa.test`,
       passwordHash: 'x'.repeat(20),
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     return (user._id as Types.ObjectId).toString();

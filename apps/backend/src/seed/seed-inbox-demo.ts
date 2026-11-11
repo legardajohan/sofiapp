@@ -21,6 +21,7 @@
  * derivar el `tenantId`; se recibe por CLI y se valida contra la colección antes de escribir.
  * Toda query lleva el `tenantId` explícito en el filtro, igual que haría el repositorio scoped.
  */
+import bcrypt from 'bcrypt';
 import mongoose, { Types } from 'mongoose';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
@@ -435,9 +436,47 @@ async function resolveTenantId(args: Args): Promise<Types.ObjectId> {
 
 /** Admin del tenant al que se le asignan las conversaciones del filtro "mios". */
 async function resolveAsesorId(tenantId: Types.ObjectId, email?: string): Promise<Types.ObjectId | null> {
-  const filtro = email ? { tenantId, email } : { tenantId, rol: 'admin' as const };
+  const filtro = email
+    ? { tenantId, email }
+    : { tenantId, rol: 'admin' as const, rolEmpresa: 'administrador' as const };
   const user = await User.findOne(filtro).lean();
   return user ? (user._id as Types.ObjectId) : null;
+}
+
+// ─── Equipo demo (AUTH-04) ──────────────────────────────────────────────────────
+
+/** Contraseña de los usuarios demo. Solo desarrollo: el seed se niega a correr en production. */
+const PASSWORD_EQUIPO_DEMO = 'demo-1234';
+
+/**
+ * Siembra (o reutiliza) un equipo con los roles de empresa: 1 coordinador y 2 asesores, uno en su
+ * equipo y otro sin coordinador. El Administrador es el admin que ya tenía el tenant. Idempotente:
+ * los emails llevan el id del tenant, así que una segunda ejecución encuentra los mismos usuarios.
+ */
+async function crearEquipoDemo(tenantId: Types.ObjectId): Promise<void> {
+  const sufijo = tenantId.toString().slice(-6);
+  const passwordHash = await bcrypt.hash(PASSWORD_EQUIPO_DEMO, 10);
+  const upsert = async (
+    email: string,
+    nombre: string,
+    rolEmpresa: 'coordinador' | 'asesor',
+    coordinadorId: Types.ObjectId | null,
+  ): Promise<Types.ObjectId> => {
+    const existente = await User.findOne({ tenantId, email }).lean();
+    if (existente) return existente._id as Types.ObjectId;
+    const doc = await User.create({
+      tenantId, nombre, email, passwordHash, rol: 'admin', rolEmpresa, coordinadorId, activo: true,
+    });
+    return doc._id as Types.ObjectId;
+  };
+
+  const coordinador = await upsert(`demo-coordinador-${sufijo}@sofiapp.demo`, 'Carla Coordinadora', 'coordinador', null);
+  await upsert(`demo-asesor1-${sufijo}@sofiapp.demo`, 'Andrés Asesor', 'asesor', coordinador);
+  await upsert(`demo-asesor2-${sufijo}@sofiapp.demo`, 'Beatriz Asesora', 'asesor', null);
+  logger.info('Equipo demo listo (contraseña demo-1234).', {
+    coordinador: `demo-coordinador-${sufijo}@sofiapp.demo`,
+    asesores: [`demo-asesor1-${sufijo}@sofiapp.demo`, `demo-asesor2-${sufijo}@sofiapp.demo`],
+  });
 }
 
 // ─── Siembra ────────────────────────────────────────────────────────────────────
@@ -594,6 +633,7 @@ async function main(): Promise<void> {
       return;
     }
 
+    await crearEquipoDemo(tenantId);
     const asesorId = await resolveAsesorId(tenantId, args.email);
     if (!asesorId) {
       logger.warn('No se encontró un admin del tenant: el filtro "mios" quedará vacío.');

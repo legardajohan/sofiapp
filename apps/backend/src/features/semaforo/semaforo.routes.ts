@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { createSemaforoSchema, updateSemaforoSchema } from './semaforo.validation.js';
@@ -23,6 +27,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   semaforoRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createSemaforoSchema),
   asyncHandler(createSemaforoController),
 );
@@ -34,6 +39,7 @@ router.patch(
   authenticateJWT,
   requireTenant,
   semaforoRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateSemaforoSchema),
   asyncHandler(updateSemaforoController),
 );

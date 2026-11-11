@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-rol-empresa.middleware.js';
 import {
   confirmarDatosExtraidos,
   extractContactData,

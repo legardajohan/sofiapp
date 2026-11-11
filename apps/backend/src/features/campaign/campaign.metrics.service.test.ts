@@ -246,7 +246,7 @@ describe('HU-MARK-04 — conversión (criterio 3)', () => {
       nombre: 'Asesor',
       email: `asesor-${cliente.toString()}@empresa.test`,
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     const lead = await createLeadFromConversation(tenantStr, String(actor._id), {

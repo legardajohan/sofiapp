@@ -2,6 +2,10 @@ import { Router, type Router as ExpressRouter } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { subirImagenCabecera } from '../../middlewares/upload.middleware.js';
@@ -37,6 +41,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(syncTemplatesSchema),
   asyncHandler(syncTemplatesController),
 );
@@ -48,6 +53,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   subirImagenCabecera,
   validate(uploadTemplateMediaSchema),
   asyncHandler(uploadTemplateMediaController),
@@ -58,6 +64,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createTemplateSchema),
   asyncHandler(createTemplateController),
 );
@@ -76,6 +83,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(templateIdSchema),
   asyncHandler(syncTemplateController),
 );

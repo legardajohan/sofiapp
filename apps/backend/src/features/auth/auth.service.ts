@@ -31,14 +31,16 @@ export async function login(email: string, password: string): Promise<ILoginResu
   }
 
   const tenantId = user.tenantId ? user.tenantId.toString() : null;
+  const session = mapUserToSession(user);
+  // AUTH-04: el claim es `rolEmpresa` (ya traducido si el documento aún no estaba migrado).
   const token = jwt.sign(
-    { sub: user._id.toString(), tenantId, rol: user.rol, subrol: user.subrol },
+    { sub: session.sub, tenantId, rol: user.rol, rolEmpresa: session.rolEmpresa },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
   );
   const csrfToken = randomBytes(32).toString('hex');
 
-  return { token, csrfToken, session: mapUserToSession(user) };
+  return { token, csrfToken, session };
 }
 
 export async function getProfile(sub: string): Promise<ISessionUser> {

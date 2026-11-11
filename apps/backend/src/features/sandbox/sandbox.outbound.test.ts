@@ -177,10 +177,10 @@ describe('notificaciones de la conversación de prueba (criterio 10)', () => {
   async function setup() {
     const tenantId = await tenantConCuotaAgotada();
     const owner = await UserModel.create({
-      tenantId, nombre: 'Dueña', email: `o-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', activo: true,
+      tenantId, nombre: 'Dueña', email: `o-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', rolEmpresa: 'administrador', activo: true,
     });
     const asesor = await UserModel.create({
-      tenantId, nombre: 'Asesor Real', email: `a-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', activo: true,
+      tenantId, nombre: 'Asesor Real', email: `a-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', rolEmpresa: 'administrador', activo: true,
     });
     const clienteId = await crearCliente(tenantId, { esPrueba: true, pruebaOwnerId: owner._id });
     return { tenantId: String(tenantId), owner, asesor, clienteId };

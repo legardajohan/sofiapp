@@ -14,7 +14,7 @@ async function sembrarDatos(tenantId: string): Promise<void> {
     nombre: 'U',
     email: `u-${tenantId}@t.com`,
     passwordHash: 'hash',
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo: true,
   });
   await TenantUsage.create({ tenantId, periodo: getCurrentPeriodo(), mensajesMes: 3, campanasMes: 1 });

@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { getPipeline } from './pipeline.service.js';
-import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-rol-empresa.middleware.js';
 import type { PipelineQuery } from './pipeline.types.js';
 
 export const getPipelineController: RequestHandler = async (req, res) => {

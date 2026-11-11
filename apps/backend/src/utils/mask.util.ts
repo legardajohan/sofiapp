@@ -1,5 +1,5 @@
 /**
- * Enmascarado de los datos sensibles del contacto para los subroles no autorizados (HU-CRM-02).
+ * Enmascarado de los datos sensibles del contacto para los roles no autorizados (HU-CRM-02).
  *
  * La regla de diseño es la misma en los tres casos: dejar visible lo justo para que el usuario
  * **sepa que el dato existe** y pueda cotejarlo, sin poder leerlo ni copiarlo. Un campo vaciado

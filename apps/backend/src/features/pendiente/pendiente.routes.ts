@@ -3,9 +3,9 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import {
-  SUBROLES_DATOS_SENSIBLES,
-  authorizeSubrol,
-} from '../../middlewares/authorize-subrol.middleware.js';
+  ROLES_DATOS_SENSIBLES,
+  authorizeRolEmpresa,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -24,7 +24,7 @@ const router = Router();
 
 // RN8: un pendiente ES una nota, así que se ve con el mismo gate que las notas (ADR 0006). Quien no
 // puede leer las notas de un contacto tampoco puede verlas reunidas en el embudo ni en un PDF.
-const pendientesRoles = [authorize(['admin']), authorizeSubrol(SUBROLES_DATOS_SENSIBLES)];
+const pendientesRoles = [authorize(['admin']), authorizeRolEmpresa(ROLES_DATOS_SENSIBLES)];
 
 router.get(
   '/',

@@ -1,11 +1,12 @@
 import { Types } from 'mongoose';
-import type { AdminSubrol } from '../features/users/user.types.js';
+import type { RolEmpresa } from '../features/users/user.types.js';
 
 export interface SafeUser {
   sub: string;
   tenantId: Types.ObjectId | null;
   rol: 'superadmin' | 'admin';
-  subrol?: AdminSubrol;
+  /** Siempre presente para `rol: 'admin'` (AUTH-04); el superadmin no lo tiene. */
+  rolEmpresa?: RolEmpresa;
 }
 
 declare global {

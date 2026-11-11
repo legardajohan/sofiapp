@@ -56,6 +56,9 @@ describe('tenant.service — HU-SAAS-01', () => {
       const user = await UserModel.findOne({ email: 'juan@empresa.com' }).lean();
       expect(user).not.toBeNull();
       expect(user!.rol).toBe('admin');
+      // AUTH-04: el usuario inicial que crea el superadmin nace Administrador, sin coordinador.
+      expect(user!.rolEmpresa).toBe('administrador');
+      expect(user!.coordinadorId).toBeNull();
       expect(user!.tenantId?.toString()).toBe(result._id);
       expect(user!.activo).toBe(true);
     });
@@ -67,7 +70,7 @@ describe('tenant.service — HU-SAAS-01', () => {
         nombre: 'Existente',
         email: 'duplicado@empresa.com',
         passwordHash: 'hash',
-        rol: 'admin',
+        rol: 'admin', rolEmpresa: 'administrador',
         activo: true,
       });
 

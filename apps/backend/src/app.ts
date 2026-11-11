@@ -154,7 +154,7 @@ if (env.NODE_ENV !== 'test') {
 
   // El puente Redis solo se conecta fuera de los tests (evita handles abiertos sin Redis).
   subscribeRealtime(io);
-  // AUTH-03: cierra los sockets de un usuario al revocar sus sesiones (desactivación, subrol, contraseña).
+  // AUTH-03: cierra los sockets de un usuario al revocar sus sesiones (desactivación, cambio de rol, contraseña).
   subscribeSessionRevocations(io);
   // Invalidación de la caché de ventanas de envío publicada por otros procesos (HU-CONF-01).
   suscribirInvalidacionVentana();

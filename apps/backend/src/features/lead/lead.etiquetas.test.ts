@@ -96,7 +96,7 @@ describe('HU-MARK-07 — etiquetas y campañas en el lead', () => {
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     asesorId = String(asesor._id);

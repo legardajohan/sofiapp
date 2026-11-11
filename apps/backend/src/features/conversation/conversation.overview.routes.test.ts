@@ -170,7 +170,7 @@ describe('GET /api/conversations/:id/overview (HU-IA-04)', () => {
   });
 });
 
-describe('POST /api/conversations/:id/summary — gate por subrol (HU-IA-04)', () => {
+describe('POST /api/conversations/:id/summary — gate por rol (HU-IA-04)', () => {
   function generar(subrol: string | null): request.Test {
     return request(app)
       .post(`/api/conversations/${clienteId}/summary`)

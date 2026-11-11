@@ -10,7 +10,7 @@ export type AuditAccion =
   | 'cliente.tema'
   // HU-IA-06. `cliente.extract`: la IA escribió `datosExtraidos` (actor `null` si fue el worker).
   // `cliente.extract-confirm`: una persona pasó esos datos a la ficha. En ambos el correo viaja
-  // como `[oculto]`: `audit_events` no tiene gate por subrol.
+  // como `[oculto]`: `audit_events` no tiene gate por rol.
   | 'cliente.extract'
   | 'cliente.extract-confirm'
   | 'contact-note.create'
@@ -48,7 +48,9 @@ export type AuditAccion =
   // AUTH-03 — gestión de usuarios del tenant. Nunca se audita el password, ni siquiera su hash.
   | 'user.created'
   | 'user.updated'
-  | 'user.subrol_changed'
+  | 'user.role_changed'
+  | 'user.coordinator_changed'
+  | 'user.team_moved'
   | 'user.deactivated'
   | 'user.reactivated'
   | 'user.password_reset'

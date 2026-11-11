@@ -3,11 +3,12 @@ import jwt from 'jsonwebtoken';
 import { Types } from 'mongoose';
 import { env } from '../config/env.js';
 import { isTokenRevoked } from '../features/auth/session.service.js';
+import { resolverRolEmpresa } from '../features/users/user.rol-empresa.js';
 import type { SafeUser } from '../types/express.js';
 
 /**
  * Autentica por la cookie `token`. Desde AUTH-03 además rechaza los JWT revocados (usuario
- * desactivado, subrol cambiado o contraseña restablecida). No consulta `User`: solo la lista de
+ * desactivado, rol cambiado o contraseña restablecida). No consulta `User`: solo la lista de
  * revocación, donde la ausencia de documento significa sesión válida (ADR 0016).
  */
 export const authenticateJWT: RequestHandler = async (req, res, next) => {
@@ -29,8 +30,10 @@ export const authenticateJWT: RequestHandler = async (req, res, next) => {
     sub: String(payload['sub']),
     tenantId: tenantRaw ? new Types.ObjectId(String(tenantRaw)) : null,
     rol: payload['rol'] as SafeUser['rol'],
-    subrol: payload['subrol'] as SafeUser['subrol'],
   };
+  // AUTH-04: un token emitido antes del despliegue trae `subrol` (o nada); se traduce con la misma
+  // tabla que la migración, así nadie pierde la sesión ni gana permisos (ADR 0017).
+  if (user.rol === 'admin') user.rolEmpresa = resolverRolEmpresa(payload);
 
   // El superadmin no pertenece a ningún tenant ni se gestiona desde uno: no tiene revocaciones.
   if (user.tenantId) {

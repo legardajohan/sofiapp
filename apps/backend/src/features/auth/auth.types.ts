@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
-import type { AdminSubrol, UserRol } from '../users/user.types.js';
+import { resolverRolEmpresa } from '../users/user.rol-empresa.js';
+import type { RolEmpresa, UserRol } from '../users/user.types.js';
 
 export interface LoginDTO {
   email: string;
@@ -11,7 +12,7 @@ export interface ISessionUser {
   nombre: string;
   email: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  rolEmpresa?: RolEmpresa;
   tenantId: string | null;
 }
 
@@ -20,7 +21,9 @@ export interface ISessionUserSource {
   nombre: string;
   email: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  rolEmpresa?: RolEmpresa;
+  /** Solo en documentos aún no migrados (AUTH-02). */
+  subrol?: unknown;
   tenantId: Types.ObjectId | null;
 }
 
@@ -30,7 +33,7 @@ export function mapUserToSession(user: ISessionUserSource): ISessionUser {
     nombre: user.nombre,
     email: user.email,
     rol: user.rol,
-    subrol: user.subrol,
+    ...(user.rol === 'admin' ? { rolEmpresa: resolverRolEmpresa(user) } : {}),
     tenantId: user.tenantId ? user.tenantId.toString() : null,
   };
 }

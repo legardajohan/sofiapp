@@ -530,7 +530,7 @@ export async function getConversationOverview(
   return {
     conversation,
     resumen: toResumenResponse(cliente, puedeVerSensibles),
-    // Sin gate por subrol, a diferencia del resumen (ADR-0006, enmienda de HU-IA-04): no es prosa
+    // Sin gate por rol, a diferencia del resumen (ADR-0006, enmienda de HU-IA-04): no es prosa
     // libre sobre el transcript sino una frase acotada que la plantilla obliga a escribir sin datos
     // de contacto. Si esa restricción se relajara, este campo tendría que entrar en el gate.
     semaforoIA: toSemaforoIAResponse(cliente.semaforoIA, cliente.tagIds ?? [], tagsPorSlug),
@@ -631,7 +631,7 @@ export async function setConversationTags(
 /**
  * Asigna, reasigna, auto-asigna o desasigna (`asignadoA: null`) el responsable de una
  * conversación. Cualquier `admin` del tenant puede reasignar una conversación ya asignada a
- * otro `admin` (con cualquier subrol): no hay comprobación de propiedad (HU-OMNI-02).
+ * otro `admin` (con cualquier rol de empresa): no hay comprobación de propiedad (HU-OMNI-02).
  */
 export async function assignConversation(
   tenantId: string,

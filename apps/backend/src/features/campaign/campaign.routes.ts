@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { subirImagenCabecera, subirImagenCampana } from '../../middlewares/upload.middleware.js';
@@ -55,6 +59,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(previewSegmentoSchema),
   asyncHandler(previewSegmentController),
 );
@@ -65,6 +70,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(previewAudienciaSchema),
   asyncHandler(previewAudienceController),
 );
@@ -76,6 +82,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   subirImagenCabecera,
   validate(uploadCampaignMediaSchema),
   asyncHandler(uploadCampaignMediaController),
@@ -88,6 +95,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(segmentoFacetasSchema),
   asyncHandler(getSegmentFacetasController),
 );
@@ -97,6 +105,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(audienciaSegmentoSchema),
   asyncHandler(listSegmentAudienceController),
 );
@@ -110,6 +119,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   subirImagenCampana,
   validate(scheduleCampaignSchema),
   asyncHandler(scheduleCampaignController),
@@ -120,6 +130,7 @@ router.patch(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   subirImagenCampana,
   validate(rescheduleCampaignSchema),
   asyncHandler(rescheduleCampaignController),
@@ -131,6 +142,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(campaignsOverviewSchema),
   asyncHandler(getCampaignsOverviewController),
 );
@@ -140,6 +152,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(listCampaignsSchema),
   asyncHandler(listCampaignsController),
 );
@@ -149,6 +162,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createCampaignSchema),
   asyncHandler(createCampaignController),
 );
@@ -158,6 +172,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(campaignIdSchema),
   asyncHandler(getCampaignController),
 );
@@ -167,6 +182,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(campaignMetricsSchema),
   asyncHandler(getCampaignMetricsController),
 );
@@ -176,6 +192,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(listRecipientsSchema),
   asyncHandler(listRecipientsController),
 );
@@ -185,6 +202,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(transicionSchema),
   asyncHandler(launchCampaignController),
 );
@@ -195,6 +213,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(sendCampaignSchema),
   asyncHandler(sendCampaignController),
 );
@@ -204,6 +223,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(transicionSchema),
   asyncHandler(pauseCampaignController),
 );
@@ -213,6 +233,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(transicionSchema),
   asyncHandler(resumeCampaignController),
 );
@@ -224,6 +245,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   campaignRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(transicionSchema),
   asyncHandler(cancelCampaignController),
 );

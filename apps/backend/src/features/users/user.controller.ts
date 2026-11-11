@@ -19,8 +19,8 @@ import type {
 } from './user.validation.js';
 
 function actorDe(req: Parameters<RequestHandler>[0]): UserActor {
-  const { sub, rol, subrol } = req.user!;
-  return { sub, rol, subrol };
+  const { sub, rol, rolEmpresa } = req.user!;
+  return { sub, rol, rolEmpresa };
 }
 
 export const listUsersController: RequestHandler = async (req, res) => {
@@ -31,13 +31,17 @@ export const listUsersController: RequestHandler = async (req, res) => {
 
 export const manageUsersController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
-  const users = await listManageableUsers(tenantId, req.validatedQuery as unknown as ManageUsersQuery);
+  const users = await listManageableUsers(
+    tenantId,
+    actorDe(req),
+    req.validatedQuery as unknown as ManageUsersQuery,
+  );
   res.status(200).json(users);
 };
 
 export const getUserController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();
-  res.status(200).json(await getTenantUser(tenantId, String(req.params['id'])));
+  res.status(200).json(await getTenantUser(tenantId, actorDe(req), String(req.params['id'])));
 };
 
 export const createUserController: RequestHandler = async (req, res) => {

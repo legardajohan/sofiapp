@@ -29,6 +29,7 @@ export async function crearUsuario(tenantId: Types.ObjectId, nombre: string): Pr
     email: `u${contador}_${tenantId.toHexString()}@t.com`,
     passwordHash: 'x',
     rol: 'admin',
+    rolEmpresa: 'administrador',
     activo: true,
   });
   return String(doc._id);

@@ -14,7 +14,7 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
       nombre: 'A1',
       email: 'a1@t.com',
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     await UserModel.create({
@@ -22,7 +22,7 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
       nombre: 'A2 inactivo',
       email: 'a2@t.com',
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: false,
     });
     await UserModel.create({
@@ -30,7 +30,7 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
       nombre: 'B1',
       email: 'b1@t.com',
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -45,7 +45,7 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
       nombre: 'A1',
       email: 'ax@t.com',
       passwordHash: 'super-secreto',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -67,7 +67,7 @@ describe('users — aislamiento multi-tenant (GET /api/users)', () => {
       nombre: 'A1',
       email: 'a1b@t.com',
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 

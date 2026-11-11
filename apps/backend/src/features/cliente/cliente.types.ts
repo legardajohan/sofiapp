@@ -200,7 +200,7 @@ export interface ICliente {
   datosExtraidos?: IDatosExtraidos;
   /** Tema de la conversación (HU-REP-03). */
   temaIA?: ITemaIA;
-  // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por subrol al leerlos ───
+  // ─── Datos sensibles (HU-CRM-02) — nunca indexados; gate por rol al leerlos ───
   /**
    * Correo registrado a mano por el asesor. El sufijo `Enc` es histórico: el cifrado en reposo está
    * desactivado (ver `utils/field-crypto.util`) y el valor se guarda en claro.
@@ -268,7 +268,7 @@ export interface IContactCardResponse {
   /** Lead al que ya se convirtió este contacto, o `null` (HU-CRM-01). */
   leadId: string | null;
   // ─── Datos sensibles (HU-CRM-02) ────────────────────────────────────────────
-  /** En claro para los subroles autorizados; enmascarado (`d••••@dominio.com`) para el resto. */
+  /** En claro para los roles autorizados; enmascarado (`d••••@dominio.com`) para el resto. */
   correo: string | null;
   /** En claro o enmascarado (`••••1234`) con la misma regla. */
   documento: string | null;

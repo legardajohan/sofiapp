@@ -124,7 +124,7 @@ describe('ejecutarFlujo — nodo handoff con asesor elegido', () => {
       nombre: 'Ana',
       email: `ana${Math.random()}@empresa.test`,
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo,
     });
     return String(doc._id);
@@ -521,7 +521,7 @@ describe('ejecutarFlujo — asignar_asesor con asesor inactivo (AUTH-03)', () =>
       nombre: 'Dado de baja',
       email: `baja-${Math.random()}@t.com`,
       passwordHash: 'h',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       subrol: 'secretary',
       activo: false,
     });

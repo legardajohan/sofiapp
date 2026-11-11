@@ -24,12 +24,9 @@ import type {
 
 type TenantId = string | Types.ObjectId;
 
-// Roles que ocupan un "puesto"/asiento comercial (consumen la cuota `administradores`).
-// El `superadmin` es global (no pertenece a un tenant) y NO ocupa asiento.
-// Tras AUTH-02 los roles se colapsaron a superadmin/admin (coordinador/asesor desaparecieron;
-// lo que antes eran esos puestos hoy es un `admin` con `subrol` de metadata). El único rol que
-// ocupa asiento cobrable dentro del tenant es 'admin'; el superadmin es global y no cuenta.
-const ROLES_CON_PUESTO = ['admin'] as const;
+// Cuota `administradores` (AUTH-04, ADR 0017): solo los usuarios con rol de empresa Administrador.
+// Coordinadores y asesores consumen `usuarios`, no `administradores`. El superadmin es global y no
+// pertenece a ningún tenant, así que nunca cuenta.
 
 /** Periodo actual en formato 'YYYY-MM' (UTC en el MVP). */
 export function getCurrentPeriodo(now: Date = new Date()): string {
@@ -67,7 +64,8 @@ export async function getMetricUsed(tenantId: TenantId, metric: QuotaMetric): Pr
     case 'administradores':
       return countScoped(UserModel, tenantId, {
         activo: true,
-        rol: { $in: ROLES_CON_PUESTO },
+        rol: 'admin',
+        rolEmpresa: 'administrador',
       });
     case 'leads':
       // HU-IA-08: la conversación de prueba de un admin no consume la cuota de leads del plan.

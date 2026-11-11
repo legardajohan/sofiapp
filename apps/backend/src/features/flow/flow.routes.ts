@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { createFlowSchema, getFlowSchema, listFlowsSchema, updateFlowSchema } from './flow.validation.js';
@@ -25,6 +29,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(listFlowsSchema),
   asyncHandler(listFlowsController),
 );
@@ -34,6 +39,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createFlowSchema),
   asyncHandler(createFlowController),
 );
@@ -45,6 +51,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(getReminderSchema),
   asyncHandler(getReminderController),
 );
@@ -54,6 +61,7 @@ router.put(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateReminderSchema),
   asyncHandler(updateReminderController),
 );
@@ -63,6 +71,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(getFlowSchema),
   asyncHandler(getFlowController),
 );
@@ -72,6 +81,7 @@ router.put(
   authenticateJWT,
   requireTenant,
   flowRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateFlowSchema),
   asyncHandler(updateFlowController),
 );

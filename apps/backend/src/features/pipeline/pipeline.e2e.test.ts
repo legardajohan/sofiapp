@@ -99,7 +99,7 @@ describe('HU-PIPE-01 — DoD: mover una oportunidad actualiza su estado y el tab
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -220,7 +220,7 @@ describe('HU-PIPE-01 — DoD: mover una oportunidad actualiza su estado y el tab
       nombre: 'Mateo',
       email: 'mateo@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 

@@ -12,7 +12,7 @@ async function createUser(overrides: {
   tenantId: Types.ObjectId | null;
   email: string;
   rol: 'superadmin' | 'admin';
-  subrol?: 'director' | 'manager' | 'coordinator' | 'secretary';
+  rolEmpresa?: 'administrador' | 'coordinador' | 'asesor';
   activo?: boolean;
   nombre?: string;
 }) {
@@ -23,7 +23,7 @@ async function createUser(overrides: {
     email: overrides.email,
     passwordHash,
     rol: overrides.rol,
-    subrol: overrides.subrol,
+    ...(overrides.rol === 'admin' ? { rolEmpresa: overrides.rolEmpresa ?? 'administrador' } : {}),
     activo: overrides.activo ?? true,
   });
 }
@@ -57,31 +57,42 @@ describe('auth.service — login', () => {
     await expect(login('y@tenant-a.com', PASSWORD)).rejects.toMatchObject({ statusCode: 401 });
   });
 
-  it('usuario admin con subrol → el JWT y la session incluyen el subrol', async () => {
+  it('usuario admin → el JWT y la session incluyen su rolEmpresa (AUTH-04)', async () => {
     const tenantId = new Types.ObjectId();
     await createUser({
       tenantId,
-      email: 'dir@tenant-a.com',
+      email: 'coord@tenant-a.com',
       rol: 'admin',
-      subrol: 'director',
-      nombre: 'Directora',
+      rolEmpresa: 'coordinador',
+      nombre: 'Coordinadora',
     });
 
-    const { token, session } = await login('dir@tenant-a.com', PASSWORD);
-    const payload = jwt.verify(token, env.JWT_SECRET) as { subrol?: string };
+    const { token, session } = await login('coord@tenant-a.com', PASSWORD);
+    const payload = jwt.verify(token, env.JWT_SECRET) as { rolEmpresa?: string; subrol?: string };
 
-    expect(payload.subrol).toBe('director');
-    expect(session.subrol).toBe('director');
+    expect(payload.rolEmpresa).toBe('coordinador');
+    expect(payload.subrol).toBeUndefined();
+    expect(session.rolEmpresa).toBe('coordinador');
   });
 
-  it('usuario admin sin subrol → el JWT y la session no lo incluyen', async () => {
-    await createUser({ tenantId: new Types.ObjectId(), email: 'sinsub@tenant-a.com', rol: 'admin' });
+  it('documento aún no migrado (solo `subrol`) → el login lo traduce con la tabla de AUTH-04', async () => {
+    const tenantId = new Types.ObjectId();
+    // Directo a la colección: el schema nuevo ya exige `rolEmpresa`, como un usuario de antes.
+    await User.collection.insertOne({
+      tenantId,
+      nombre: 'Secretaria',
+      email: 'sec@tenant-a.com',
+      passwordHash: await bcrypt.hash(PASSWORD, 4),
+      rol: 'admin',
+      subrol: 'secretary',
+      activo: true,
+    });
 
-    const { token, session } = await login('sinsub@tenant-a.com', PASSWORD);
-    const payload = jwt.verify(token, env.JWT_SECRET) as { subrol?: string };
+    const { token, session } = await login('sec@tenant-a.com', PASSWORD);
+    const payload = jwt.verify(token, env.JWT_SECRET) as { rolEmpresa?: string };
 
-    expect(payload.subrol).toBeUndefined();
-    expect(session.subrol).toBeUndefined();
+    expect(payload.rolEmpresa).toBe('asesor');
+    expect(session.rolEmpresa).toBe('asesor');
   });
 
   it('email inexistente → AppError 401 (mismo mensaje, sin enumeración)', async () => {
@@ -104,6 +115,7 @@ describe('auth.service — getProfile', () => {
       nombre: 'Zoe',
       email: 'zoe@tenant-a.com',
       rol: 'admin',
+      rolEmpresa: 'administrador',
       tenantId: tenantId.toString(),
     });
   });

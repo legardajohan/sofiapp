@@ -3,9 +3,9 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import {
-  authorizeSubrol,
-  SUBROLES_GESTION_USUARIOS,
-} from '../../middlewares/authorize-subrol.middleware.js';
+  authorizeRolEmpresa,
+  ROLES_GESTION_USUARIOS,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -41,7 +41,7 @@ router.get(
 );
 
 // ── Gestión de usuarios (AUTH-03): solo director y propietario (ADR 0016) ──────────────────────
-const gestion = [authorize(['admin']), authorizeSubrol(SUBROLES_GESTION_USUARIOS)];
+const gestion = [authorize(['admin']), authorizeRolEmpresa(ROLES_GESTION_USUARIOS)];
 
 // `/manage` va antes de `/:id` para que no lo capture como un id.
 router.get(
