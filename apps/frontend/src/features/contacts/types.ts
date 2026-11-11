@@ -112,9 +112,14 @@ export interface NotaDTO {
   programadoHora: string | null;
   estadoPendiente: EstadoPendiente | null;
   cerradoAt: string | null;
+  /** HU-PDF-02 A1 — minutos de anticipación del aviso (0, 5 o 10). */
+  avisoAntesMin?: AnticipacionAviso;
   createdAt: string;
   updatedAt: string;
 }
+
+/** «Recordarme N minutos antes» (HU-PDF-02 A1). `0` = a la hora del pendiente. */
+export type AnticipacionAviso = 0 | 5 | 10;
 
 /** Ciclo de vida de un pendiente: cerrado = cumplido y archivado en el historial. */
 export type EstadoPendiente = 'abierto' | 'cerrado';
@@ -125,6 +130,7 @@ export interface NuevaNota {
   pendiente: boolean;
   programadoDia?: string;
   programadoHora?: string;
+  avisoAntesMin?: AnticipacionAviso;
 }
 
 export type NotasPage = Paginated<NotaDTO>;
@@ -136,4 +142,5 @@ export interface CambiosNota {
   programadoDia?: string;
   /** `null` quita la hora: el pendiente pasa a ser de todo el día. */
   programadoHora?: string | null;
+  avisoAntesMin?: AnticipacionAviso;
 }

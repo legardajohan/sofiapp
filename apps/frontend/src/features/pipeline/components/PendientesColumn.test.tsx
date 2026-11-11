@@ -9,6 +9,7 @@ import { PendientesColumn } from './PendientesColumn.js';
 import { PipelineColumn } from './PipelineColumn.js';
 import { cerrarPendiente, fetchPendientes, reabrirPendiente } from '../api.js';
 import type { EstadoPendiente, PendienteDTO, PendientesPage, PipelineColumnDTO } from '../types.js';
+import { useGestionPendienteStore } from '@/features/organizador/useGestionPendienteStore';
 
 vi.mock('../api.js', () => ({
   fetchPendientes: vi.fn(),
@@ -152,14 +153,23 @@ describe('PendientesColumn (HU-PDF-01)', () => {
     );
   });
 
-  it('CA16: «Cerrar pendiente» lo cierra sin abrir la ficha', async () => {
+  // HU-PDF-02 (D3) sustituye el cierre rápido de CA16: cerrar exige motivo también desde el
+  // embudo, así que el botón abre el modal del Organizador en vez de cerrar directamente.
+  it('CA16 + HU-PDF-02 D3: «Cerrar pendiente» abre el modal con motivo, sin cerrar ni abrir la ficha', async () => {
     const user = userEvent.setup();
-    responder([pendiente('5', 'Cerrar este')]);
-    mockCerrar.mockResolvedValue(pendiente('5', 'Cerrar este', { estado: 'cerrado' }));
+    useGestionPendienteStore.getState().cerrarDialogo();
+    responder([pendiente('5', 'Cerrar este', { recordatorioAt: '2099-03-15T14:30:00.000Z' })]);
     pintar();
 
     await user.click(await screen.findByRole('button', { name: 'Cerrar pendiente de Lead 5' }));
-    await waitFor(() => expect(mockCerrar).toHaveBeenCalledWith('5'));
+    const estado = useGestionPendienteStore.getState();
+    expect(estado.accion).toBe('cerrar');
+    expect(estado.objetivo).toMatchObject({
+      id: '5',
+      clienteId: 'cli-5',
+      version: '2099-03-15T14:30:00.000Z',
+    });
+    expect(mockCerrar).not.toHaveBeenCalled();
     expect(screen.queryByTestId('destino')).not.toBeInTheDocument();
   });
 

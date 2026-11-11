@@ -49,6 +49,8 @@ export interface PendienteDTO {
   estado: EstadoPendiente;
   cerradoAt: string | null;
   cerradoPor: { id: string; nombre: string | null } | null;
+  /** HU-PDF-02: instante del recordatorio; es la `version` que pide cerrar con motivo. */
+  recordatorioAt?: string | null;
   lead: {
     leadId: string | null;
     nombre: string | null;

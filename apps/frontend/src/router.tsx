@@ -79,6 +79,10 @@ const EstadosPage = lazy(() =>
   import('./features/estados/index.js').then((m) => ({ default: m.EstadosPage })),
 );
 
+const OrganizadorPage = lazy(() =>
+  import('./features/organizador/index.js').then((m) => ({ default: m.OrganizadorPage })),
+);
+
 const CampaignsPage = lazy(() =>
   import('./features/campaigns/index.js').then((m) => ({ default: m.CampaignsPage })),
 );
@@ -287,6 +291,16 @@ export const router = createBrowserRouter([
               <RequireRole roles={['admin']}>
                 <Suspense fallback={<Loading />}>
                   <EstadosPage />
+                </Suspense>
+              </RequireRole>
+            ),
+          },
+          {
+            path: '/organizador',
+            element: (
+              <RequireRole roles={['admin']}>
+                <Suspense fallback={<Loading />}>
+                  <OrganizadorPage />
                 </Suspense>
               </RequireRole>
             ),

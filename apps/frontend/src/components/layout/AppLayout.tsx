@@ -4,6 +4,9 @@ import { useNotificationsRealtime } from '@/features/notifications/hooks/useNoti
 import { useActivityHeartbeat } from '@/features/activity/hooks/useActivityHeartbeat';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
+import { useOrganizadorRealtime } from '@/features/organizador/hooks/useOrganizadorRealtime';
+import { RecordatoriosStack } from '@/features/organizador/components/RecordatoriosStack';
+import { GestionPendienteDialogs } from '@/features/organizador/components/GestionPendienteDialogs';
 
 export function AppLayout(): React.ReactElement {
   // Dueño de la conexión Socket.IO a nivel de sesión (HU-NOTIF-01): se monta una vez aquí, no en
@@ -11,6 +14,9 @@ export function AppLayout(): React.ReactElement {
   useNotificationsRealtime();
   // Tiempo activo del asesor (HU-REP-06): una vez por sesión, por el mismo motivo.
   useActivityHeartbeat();
+  // Recordatorios del Organizador (HU-PDF-02): mismo socket de sesión, pila persistente y modales
+  // de cerrar/posponer disponibles desde cualquier pantalla.
+  useOrganizadorRealtime();
 
   return (
     <SidebarProvider>
@@ -28,6 +34,8 @@ export function AppLayout(): React.ReactElement {
           <Outlet />
         </main>
       </SidebarInset>
+      <RecordatoriosStack />
+      <GestionPendienteDialogs />
       <Toaster />
     </SidebarProvider>
   );

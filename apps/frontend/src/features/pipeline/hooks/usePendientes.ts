@@ -35,6 +35,8 @@ function useInvalidarPendientes(): () => void {
   return () => {
     void qc.invalidateQueries({ queryKey: PENDIENTES_KEY });
     void qc.invalidateQueries({ queryKey: ['contact-notas'] });
+    // HU-PDF-02: reabrir rearma el recordatorio.
+    void qc.invalidateQueries({ queryKey: ['organizador'] });
   };
 }
 
