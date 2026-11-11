@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "migrate:tags": "tsx --env-file .env src/scripts/migrate-cliente-tags.ts",
     "migrate:roles-empresa": "tsx --env-file .env src/seed/migrate-roles-empresa.ts",
+    "migrate:usuario-principal": "tsx --env-file .env src/seed/migrate-usuario-principal.ts",
     "migrate:tipo-mensaje": "tsx --env-file .env src/scripts/migrate-tipo-mensaje.ts",
     "backfill:mensajes-campana": "tsx --env-file .env src/scripts/backfill-mensajes-campana.ts",
     "migrate:chat-template": "tsx --env-file .env src/scripts/migrate-chat-template.ts",

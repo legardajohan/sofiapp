@@ -30,6 +30,7 @@ import { Message } from '../features/message/message.model.js';
 import { Tag } from '../features/tag/tag.model.js';
 import { Tenant } from '../features/tenant/tenant.model.js';
 import { User } from '../features/users/user.model.js';
+import { migrarPrincipalTenant } from './migrate-usuario-principal.js';
 import type { ICliente } from '../features/cliente/cliente.types.js';
 import type {
   IMessage,
@@ -455,6 +456,8 @@ const PASSWORD_EQUIPO_DEMO = 'demo-1234';
  */
 async function crearEquipoDemo(tenantId: Types.ObjectId): Promise<void> {
   const sufijo = tenantId.toString().slice(-6);
+  // AUTH-05: el Administrador que ya tenía el tenant queda como principal (no-op si ya hay uno).
+  await migrarPrincipalTenant(tenantId, { apply: true });
   const passwordHash = await bcrypt.hash(PASSWORD_EQUIPO_DEMO, 10);
   const upsert = async (
     email: string,
