@@ -65,6 +65,29 @@ function medianoche(y: number, m: number, d: number, tz: string): Date {
 }
 
 /**
+ * HU-PDF-02 — hora a la que avisa un pendiente «de todo el día» (decisión de producto D1): ni a
+ * medianoche, que despertaría a nadie, ni al final del día, cuando ya no da tiempo de atenderlo.
+ */
+export const HORA_AVISO_TODO_EL_DIA = '08:00';
+
+/**
+ * Instante (UTC) en que un reloj de la zona `tz` marca `hora` el día civil `dia`. Misma técnica
+ * de dos pasadas que `medianoche`, que cubre los días con cambio de horario.
+ */
+export function instanteEnZona(dia: string, hora: string, tz: string): Date {
+  const [y, m, d] = partesDia(dia);
+  const [hh, mm] = hora.split(':').map(Number) as [number, number];
+  const supuesto = Date.UTC(y, m - 1, d, hh, mm);
+  const primera = supuesto - desfase(tz, new Date(supuesto));
+  return new Date(supuesto - desfase(tz, new Date(primera)));
+}
+
+/** Instante del aviso de un pendiente (HU-PDF-02): sin hora, a las 08:00 de ese día (D1). */
+export function instanteRecordatorio(dia: string, hora: string | null, tz: string): Date {
+  return instanteEnZona(dia, hora ?? HORA_AVISO_TODO_EL_DIA, tz);
+}
+
+/**
  * `[inicio, fin)` en instantes: desde las 00:00 de `desde` hasta las 00:00 del día siguiente a
  * `hasta`, ambos en `tz`. El fin es exclusivo para no perder ni duplicar el último milisegundo.
  */

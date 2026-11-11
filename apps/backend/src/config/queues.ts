@@ -18,6 +18,10 @@ export const REMINDER_SWEEP_SCHEDULER_ID = 'reminder-sweep';
 // reacciona al paso del tiempo, igual que los recordatorios.
 export const SANDBOX_SWEEP_JOB = 'sandbox-sweep';
 export const SANDBOX_SWEEP_SCHEDULER_ID = 'sandbox-sweep';
+// HU-PDF-02 — barrido del Organizador: recordatorios de notas pendientes que acaban de vencer.
+// Comparte `flow-runtime` porque, como los anteriores, reacciona al paso del tiempo.
+export const ORGANIZADOR_SWEEP_JOB = 'organizador-sweep';
+export const ORGANIZADOR_SWEEP_SCHEDULER_ID = 'organizador-sweep';
 
 // HU-MARK-01 — difusión de campañas. El nombre de la cola es el que `apps/backend/CLAUDE.md` y
 // `docs/architecture.md` ya tenían reservado, y el que ocupaba el worker placeholder de `worker.ts`.

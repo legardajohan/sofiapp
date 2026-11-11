@@ -16,6 +16,8 @@ import {
   REMINDER_SWEEP_SCHEDULER_ID,
   SANDBOX_SWEEP_JOB,
   SANDBOX_SWEEP_SCHEDULER_ID,
+  ORGANIZADOR_SWEEP_JOB,
+  ORGANIZADOR_SWEEP_SCHEDULER_ID,
   CAMPAIGN_QUEUE_NAME,
   CAMPAIGN_START_JOB,
   CAMPAIGN_SCHEDULED_START_JOB,
@@ -232,6 +234,13 @@ mongoose
       SANDBOX_SWEEP_SCHEDULER_ID,
       { every: 24 * 60 * 60 * 1000 },
       { name: SANDBOX_SWEEP_JOB, opts: { removeOnComplete: 100 } },
+    );
+
+    // Barrido del Organizador (HU-PDF-02, ADR 0016): avisa los recordatorios que acaban de vencer.
+    await flowRuntimeQueue.upsertJobScheduler(
+      ORGANIZADOR_SWEEP_SCHEDULER_ID,
+      { every: env.ORGANIZADOR_SWEEP_INTERVAL_MS },
+      { name: ORGANIZADOR_SWEEP_JOB, opts: { removeOnComplete: 100, removeOnFail: 100 } },
     );
 
     // Barrido de campañas programadas (HU-MARK-01). Mismo patrón idempotente: reiniciar el proceso

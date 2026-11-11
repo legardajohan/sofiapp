@@ -24,6 +24,8 @@ import { getNombreEmpresa } from '../tenant/tenant.service.js';
 import { findUsersByIds } from '../users/user.service.js';
 import { diaEnZona, nombreArchivoPendientes } from './pendiente.fechas.js';
 import { renderReportePendientes } from './pendiente.pdf.js';
+import { registrarEvento, snapshotProgramacion } from '../organizador/organizador.eventos.js';
+import { publishRealtime } from '../../realtime/realtime.publisher.js';
 import { PENDIENTES_PDF_MAX } from './pendiente.types.js';
 import type { IEtapaPendienteResponse, IPendienteResponse } from './pendiente.types.js';
 import type { PdfPendientesQuery } from './pendiente.validation.js';
@@ -129,6 +131,7 @@ async function hidratarPendientes(
       estado: nota.estadoPendiente ?? 'abierto',
       cerradoAt: nota.cerradoAt ? nota.cerradoAt.toISOString() : null,
       cerradoPor: nota.cerradoPorId ? usuario(nota.cerradoPorId) : null,
+      recordatorioAt: nota.recordatorioAt ? nota.recordatorioAt.toISOString() : null,
       lead: {
         leadId: lead ? String(lead._id) : null,
         nombre: lead?.nombre ?? cliente?.nombre ?? null,
@@ -181,7 +184,9 @@ async function transicionar(
   const set =
     a === 'cerrado'
       ? { estadoPendiente: a, cerradoAt: new Date(), cerradoPorId: new Types.ObjectId(actorId) }
-      : { estadoPendiente: a, cerradoAt: null, cerradoPorId: null };
+      : // Reabrir rearma el aviso (HU-PDF-02): si ya venció, vuelve a notificar — es una acción
+        // explícita del usuario, no una re-notificación del mismo cierre.
+        { estadoPendiente: a, cerradoAt: null, cerradoPorId: null, notificadoPara: null };
 
   const nota = await findOneAndUpdateScoped(
     ContactNote,
@@ -210,6 +215,18 @@ async function transicionar(
     antes: { estadoPendiente: de },
     despues: { clienteId: String(nota.clienteId), estadoPendiente: a },
   });
+
+  // HU-PDF-02: el cierre rápido y la reapertura también quedan en el historial del Organizador.
+  await registrarEvento(tenantId, {
+    notaId: nota._id,
+    clienteId: nota.clienteId,
+    responsableId: nota.autorId,
+    tipo: a === 'cerrado' ? 'cerrado' : 'reabierto',
+    actorId,
+    origen: 'rapido',
+    antes: snapshotProgramacion(nota),
+  });
+  await publishRealtime({ type: 'pendiente:updated', tenantId: String(tenantId), notaId });
 
   const [pendiente] = await hidratarPendientes(tenantId, [nota]);
   return pendiente!;

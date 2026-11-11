@@ -18,6 +18,14 @@ const ContactNoteSchema = new Schema<IContactNoteDocument>(
     estadoPendiente: { type: String, enum: [...ESTADOS_PENDIENTE, null], default: null },
     cerradoAt: { type: Date, default: null },
     cerradoPorId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    // Recordatorio del Organizador (HU-PDF-02). Vive en la propia nota: no hay copia que sincronizar.
+    recordatorioAt: { type: Date, default: null },
+    programadoTz: { type: String, default: null },
+    notificadoPara: { type: Date, default: null },
+    vecesPospuesto: { type: Number, default: 0 },
+    // HU-PDF-02 A1 — «Recordarme N minutos antes».
+    avisoAntesMin: { type: Number, enum: [0, 5, 10], default: 0 },
+    avisoAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'contact_notes' },
 );
@@ -36,6 +44,24 @@ ContactNoteSchema.index(
 // Historial: cerrados, el más recién cerrado primero.
 ContactNoteSchema.index(
   { tenantId: 1, estadoPendiente: 1, cerradoAt: -1, _id: -1 },
+  { partialFilterExpression: { pendiente: true } },
+);
+
+// HU-PDF-02 — barrido de vencidos y listados del Organizador por instante del aviso.
+ContactNoteSchema.index(
+  { tenantId: 1, estadoPendiente: 1, recordatorioAt: 1, _id: 1 },
+  { partialFilterExpression: { pendiente: true } },
+);
+
+// HU-PDF-02 — «activos»: los avisos ya disparados de un usuario (pila y campana).
+ContactNoteSchema.index(
+  { tenantId: 1, autorId: 1, estadoPendiente: 1, avisoAt: 1 },
+  { partialFilterExpression: { pendiente: true } },
+);
+
+// HU-PDF-02 A1 — barrido por instante de aviso.
+ContactNoteSchema.index(
+  { tenantId: 1, estadoPendiente: 1, avisoAt: 1 },
   { partialFilterExpression: { pendiente: true } },
 );
 

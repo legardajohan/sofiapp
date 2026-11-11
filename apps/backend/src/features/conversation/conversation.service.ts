@@ -628,6 +628,42 @@ export async function setConversationTags(
   return conversation;
 }
 
+/** Tope de etiquetas por contacto: el mismo que valida `PATCH /conversations/:id/tags`. */
+const MAX_ETIQUETAS_CONTACTO = 20;
+
+/**
+ * **Añade** etiquetas a un contacto sin quitar las que ya tiene (HU-PDF-02: cerrar o posponer un
+ * pendiente). Calcula la unión y delega en `setConversationTags`, así la validación de que las
+ * etiquetas son del tenant y el evento `conversation:updated` de la bandeja son exactamente los de
+ * siempre. Sin etiquetas nuevas no escribe nada.
+ */
+export async function addTagsToCliente(
+  tenantId: string,
+  clienteId: string,
+  tagIds: string[],
+): Promise<void> {
+  if (tagIds.length === 0) return;
+  const cliente = await findByIdScoped(Cliente, tenantId, clienteId)
+    .select({ tagIds: 1 })
+    .lean<{ tagIds?: Types.ObjectId[] }>();
+  if (!cliente) throw new AppError('Contacto no encontrado.', 404);
+
+  const actuales = (cliente.tagIds ?? []).map(String);
+  const union = [...new Set([...actuales, ...tagIds])];
+  if (union.length === actuales.length) {
+    // Todas ya estaban: igual se comprueba que existen en el tenant, para no aceptar ids ajenos.
+    await assertTagsDelTenant(tenantId, [...new Set(tagIds)]);
+    return;
+  }
+  if (union.length > MAX_ETIQUETAS_CONTACTO) {
+    throw new AppError(
+      `El contacto no puede tener más de ${MAX_ETIQUETAS_CONTACTO} etiquetas.`,
+      422,
+    );
+  }
+  await setConversationTags(tenantId, clienteId, union);
+}
+
 /**
  * Asigna, reasigna, auto-asigna o desasigna (`asignadoA: null`) el responsable de una
  * conversación. Cualquier `admin` del tenant puede reasignar una conversación ya asignada a
