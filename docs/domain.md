@@ -402,6 +402,27 @@ el admin escribe como si fuera un cliente y recibe lo que recibiría por WhatsAp
 - **Flujo elegible.** `pruebaFlowId` permite probar un flujo inactivo antes de activarlo; `null` usa
   el activo, como un cliente real. Un cliente real nunca resuelve otro flujo que el activo.
 
+## 5septies. Organizador de pendientes (HU-PDF-02)
+
+- **Un recordatorio es una nota pendiente con fecha.** No es una entidad aparte: la nota guarda el
+  instante del aviso (`recordatorioAt`, UTC). Sin hora, avisa a las 08:00 de ese día. Una nota sin
+  pendiente no avisa nunca.
+- **Responsable = autor de la nota**: es quien recibe el aviso y por quien se filtra.
+- **Estados (derivados, no almacenados):**
+
+  | Estado | Regla |
+  |---|---|
+  | PENDIENTE | abierto, aviso en el futuro, nunca pospuesto |
+  | VENCIDO | abierto y el aviso ya llegó |
+  | POSPUESTO | abierto, pospuesto al menos una vez, aviso en el futuro |
+  | CERRADO | cerrado |
+
+- **Transiciones:** PENDIENTE/POSPUESTO → VENCIDO (paso del tiempo) · VENCIDO/PENDIENTE/POSPUESTO →
+  POSPUESTO (posponer: motivo + nueva fecha futura) · cualquiera abierto → CERRADO (cerrar: al
+  menos un motivo) · CERRADO → abierto (reabrir, HU-PDF-01). Cada una queda en `pendiente_eventos`.
+- **Persistencia del aviso:** un vencido sin gestionar se muestra hasta cerrarlo o posponerlo; no
+  caduca ni se descarta. El switch del Organizador (por usuario) solo silencia la presentación.
+
 ## 6. Invariantes de dominio
 
 1. Un `Cliente` pertenece a exactamente un `Tenant`.

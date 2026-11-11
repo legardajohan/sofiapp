@@ -981,6 +981,13 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   estadoPendiente: "abierto" | "cerrado" | null,
   cerradoAt: Date | null,
   cerradoPorId: ObjectId | null,  // ref User — quién lo cerró
+  // HU-PDF-02 — recordatorio del Organizador (todos opcionales; ausentes en notas antiguas):
+  recordatorioAt: Date | null,    // instante UTC del aviso = programadoDia + (programadoHora ?? "08:00") en programadoTz
+  programadoTz: String | null,    // zona IANA con que se agendó (legado: la del tenant, la rellena el barrido)
+  notificadoPara: Date | null,    // recordatorioAt para el que ya se avisó; ≠ recordatorioAt ⇒ falta avisar
+  vecesPospuesto: Number,         // default 0; > 0 con aviso futuro ⇒ estado POSPUESTO
+  avisoAntesMin: 0 | 5 | 10,      // HU-PDF-02 A1 — «Recordarme N minutos antes»; default 0
+  avisoAt: Date | null,           // instante en que se avisa = recordatorioAt − avisoAntesMin
   createdAt, updatedAt
 }
 // Índice: { tenantId: 1, clienteId: 1, createdAt: -1 }   (es exactamente la consulta de la tarjeta)
@@ -988,6 +995,10 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 //   { tenantId: 1, estadoPendiente: 1, programadoDia: 1, programadoHora: 1, createdAt: 1, _id: 1 }
 //     (abiertos en orden de agenda y rango del PDF por día programado)
 //   { tenantId: 1, estadoPendiente: 1, cerradoAt: -1, _id: -1 }   (historial de cerrados)
+// Índices parciales (HU-PDF-02), mismo partialFilterExpression:
+//   { tenantId: 1, estadoPendiente: 1, recordatorioAt: 1, _id: 1 }  (listados del Organizador por estado)
+//   { tenantId: 1, autorId: 1, estadoPendiente: 1, avisoAt: 1 }  («activos» de un usuario, A1)
+//   { tenantId: 1, estadoPendiente: 1, avisoAt: 1 }  (barrido por instante de aviso, A1)
 ```
 > **Colección propia, no un subdocumento de `clientes`.** Mismo motivo que `messages`: el documento
 > del contacto no debe crecer sin techo, y paginar o auditar notas sueltas desde un array embebido
@@ -1007,6 +1018,53 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > **El pendiente es un atributo de la nota, no una colección.** `pendiente: true` hace que la nota
 > aparezca en la columna «Pendientes» del embudo y en su PDF. Así texto, vida y borrado son los de
 > la nota y no hay copia que sincronizar (HU-PDF-01).
+
+> **El recordatorio del Organizador también es la nota (HU-PDF-02).** Crear, editar o reprogramar
+> un pendiente recalcula `recordatorioAt` en el mismo documento y rearma `notificadoPara`: nunca hay
+> dos recordatorios para una nota. Los estados PENDIENTE / VENCIDO / POSPUESTO / CERRADO **no se
+> guardan**: se derivan de `estadoPendiente`, `recordatorioAt`, `vecesPospuesto` y la hora actual
+> (`organizador.estado.ts`). Ver ADR 0016.
+
+## pendiente_eventos  (historial de los pendientes — HU-PDF-02)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  notaId: ObjectId,               // ref ContactNote — el pendiente
+  clienteId: ObjectId,            // ref Cliente
+  responsableId: ObjectId,        // ref User — autor de la nota al momento del evento
+  tipo: "programado" | "reprogramado" | "vencido" | "pospuesto" | "cerrado" | "reabierto",
+  actorId: ObjectId | null,       // null = el sistema (barrido del worker)
+  at: Date,
+  antes:   { dia, hora, recordatorioAt } | null,
+  despues: { dia, hora, recordatorioAt } | null,
+  motivo: String | null,          // justificación de un aplazamiento
+  motivos: [{ key: String | null, motivoId: ObjectId | null, nombre: String }],  // cierre: snapshot
+  otroMotivo: String | null,      // texto de «Otros motivos» (no entra al catálogo)
+  comentario: String | null,
+  tagIds: [ObjectId],             // etiquetas aplicadas al cliente en esa acción
+  origen: "organizador" | "rapido" | "nota" | "sistema"
+}
+// Índices: { tenantId, notaId, at, _id } (historial de un pendiente) · { tenantId, at: -1, _id: -1 } (feed)
+//          { tenantId, notaId, "despues.recordatorioAt" } UNIQUE parcial { tipo: "vencido" }
+//          (un único «venció» por instante aunque dos barridos coincidan)
+```
+> **Append-only y sin el texto de la nota**, igual que `audit_events`: el historial se lee con el
+> gate de notas, pero el texto ya vive en la nota y no se duplica.
+
+## motivos_cierre  (catálogo de motivos de cierre del tenant — HU-PDF-02)
+```js
+{ _id, tenantId /* required + index */, nombre: String /* 3..80 */, creadoPorId: ObjectId, createdAt, updatedAt }
+// Índice: { tenantId: 1, nombre: 1 } UNIQUE, collation { locale: "es", strength: 2 }
+```
+> Solo los **personalizados**: los nueve predefinidos viven en el código (`MOTIVOS_PREDEFINIDOS`)
+> con una `key` estable. Compartidos por toda la empresa (decisión de producto).
+
+## organizador_preferencias  (switch del Organizador por usuario — HU-PDF-02)
+```js
+{ _id, tenantId /* required */, userId: ObjectId, activo: Boolean, createdAt, updatedAt }
+// Índice: { tenantId: 1, userId: 1 } UNIQUE. Sin documento ⇒ activo.
+```
 
 ## contact_options  (catálogos de interés / objeción / rol — HU-CRM-02)
 ```js
