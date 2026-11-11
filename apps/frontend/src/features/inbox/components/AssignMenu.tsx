@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { SUBROL_LABEL } from '@/lib/roles';
+import { ROL_EMPRESA_LABEL } from '@/lib/roles';
 import { useAuthStore } from '@/stores/authStore';
 import { useTenantUsers } from '@/features/users/hooks/useTenantUsers';
 import { useAssign } from '../hooks/useAssign.js';
@@ -74,8 +74,8 @@ export function AssignMenu({ conversationId, asignadoA, asignadoANombre }: Props
               </Avatar>
               <span className="min-w-0 flex-1 truncate">
                 {admin.nombre}
-                {admin.subrol ? (
-                  <span className="text-muted-foreground"> · {SUBROL_LABEL[admin.subrol]}</span>
+                {admin.rolEmpresa ? (
+                  <span className="text-muted-foreground"> · {ROL_EMPRESA_LABEL[admin.rolEmpresa]}</span>
                 ) : null}
               </span>
               {selected ? <Check className="h-4 w-4 text-primary" /> : null}

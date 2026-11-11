@@ -3,7 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { createUser, fetchManageUsers, resetUserPassword, setUserEstado, updateUser } from '../api.js';
 import type {
-  ConversacionesAsignadas,
+  DependenciasUsuario,
   CreateUserPayload,
   ManageUsersFilters,
   SetUserEstadoPayload,
@@ -19,17 +19,21 @@ export function motivoError(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/** El 409 de desactivación no es un error para el usuario: es la pregunta de qué hacer después. */
-export function conversacionesAsignadas(error: unknown): ConversacionesAsignadas | null {
+/**
+ * El 409 de dependencias no es un error para el usuario: es la pregunta de qué hacer con sus
+ * conversaciones y su equipo antes de desactivarlo o de cambiarle el rol.
+ */
+export function dependenciasDe(error: unknown): DependenciasUsuario | null {
   if (!axios.isAxiosError(error) || error.response?.status !== 409) return null;
-  const data = error.response.data as Partial<ConversacionesAsignadas> | undefined;
-  return data?.code === 'USER_HAS_ASSIGNED_CONVERSATIONS' ? (data as ConversacionesAsignadas) : null;
+  const data = error.response.data as Partial<DependenciasUsuario> | undefined;
+  return data?.code === 'USER_HAS_DEPENDENCIES' ? (data as DependenciasUsuario) : null;
 }
 
-export function useManageUsers(filters: ManageUsersFilters) {
+export function useManageUsers(filters: ManageUsersFilters, enabled = true) {
   return useQuery<UserDTO[]>({
     queryKey: ['users', 'manage', filters],
     queryFn: () => fetchManageUsers(filters),
+    enabled,
     // Escribir en el buscador no debe vaciar la tabla entre una tecla y otra.
     placeholderData: keepPreviousData,
   });
@@ -53,6 +57,7 @@ export function useCreateUser() {
   });
 }
 
+/** Edita. El 409 de un coordinador con equipo **no** muestra toast: lo resuelve el diálogo de rol. */
 export function useUpdateUser() {
   const invalidar = useInvalidarUsuarios();
   return useMutation({
@@ -62,13 +67,16 @@ export function useUpdateUser() {
       invalidar();
       toast.success('Cambios guardados');
     },
-    onError: (error) => toast.error(motivoError(error, 'No se pudieron guardar los cambios.')),
+    onError: (error) => {
+      if (dependenciasDe(error)) return;
+      toast.error(motivoError(error, 'No se pudieron guardar los cambios.'));
+    },
   });
 }
 
 /**
- * Activa o desactiva. El 409 de conversaciones asignadas **no** muestra toast: lo resuelve el
- * diálogo, que pasa a preguntar si reasignarlas o moverlas a la bandeja sin asignar.
+ * Activa o desactiva. El 409 de dependencias **no** muestra toast: lo resuelve el diálogo, que pasa
+ * a preguntar qué hacer con las conversaciones y, si es coordinador, con su equipo.
  */
 export function useSetUserEstado() {
   const qc = useQueryClient();
@@ -84,7 +92,7 @@ export function useSetUserEstado() {
       );
     },
     onError: (error) => {
-      if (conversacionesAsignadas(error)) return;
+      if (dependenciasDe(error)) return;
       toast.error(motivoError(error, 'No se pudo cambiar el estado del usuario.'));
     },
   });

@@ -21,7 +21,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { MOTIVO_DATOS_SENSIBLES } from '@/lib/roles';
+import { MOTIVO_DATOS_SENSIBLES, puedeConfigurar } from '@/lib/roles';
+import { useAuthStore } from '@/stores/authStore';
 import type { ContactCardDTO, DatosExtraidosDTO } from '@/features/inbox/types';
 import { useUpdateContact } from '../hooks/useUpdateContact.js';
 import { useContactOptions } from '../hooks/useContactOptions.js';
@@ -150,6 +151,7 @@ export function ContactEditDialog({
   const [sugeridos, setSugeridos] = useState<Set<CampoSugerido>>(() => new Set());
   /** Catálogo cuyo CRUD está abierto, o `null`. Solo uno a la vez: son tres listas cortas. */
   const [gestionando, setGestionando] = useState<TipoOpcion | null>(null);
+  const gestionaCatalogo = puedeConfigurar(useAuthStore((s) => s.user));
   const sembrado = useRef<string | null>(null);
   const guardar = useUpdateContact(contacto.id);
   const opciones = useContactOptions();
@@ -351,8 +353,11 @@ export function ContactEditDialog({
                   cargando={opciones.isPending}
                   disabled={guardar.isPending}
                   gestionando={gestionando === catalogo.tipo}
-                  onGestionar={() =>
-                    setGestionando((g) => (g === catalogo.tipo ? null : catalogo.tipo))
+                  // Las opciones son configuración de la empresa (AUTH-04): solo el Administrador.
+                  onGestionar={
+                    gestionaCatalogo
+                      ? () => setGestionando((g) => (g === catalogo.tipo ? null : catalogo.tipo))
+                      : undefined
                   }
                   onChange={(valor) => setCampos((c) => ({ ...c, [catalogo.campo]: valor }))}
                 />
@@ -530,7 +535,8 @@ function CampoSelect({
   cargando: boolean;
   disabled: boolean;
   gestionando: boolean;
-  onGestionar: () => void;
+  /** Sin él no se ofrece gestionar el catálogo (quien no es Administrador). */
+  onGestionar?: (() => void) | undefined;
   onChange: (value: string) => void;
 }): React.ReactElement {
   // La opción archivada que el contacto todavía lleva puesta se incluye igual: sin ella el
@@ -542,22 +548,24 @@ function CampoSelect({
     <div>
       <div className="flex items-center justify-between gap-1">
         <Label htmlFor={id}>{label}</Label>
-        <button
-          type="button"
-          aria-label={`Gestionar las opciones de ${nombre}`}
-          aria-expanded={gestionando}
-          disabled={disabled || cargando}
-          onClick={onGestionar}
-          className={cn(
-            'shrink-0 rounded-sm p-0.5 text-muted-foreground',
-            'transition-colors duration-150 ease-out hover:text-foreground',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            'disabled:pointer-events-none disabled:opacity-50',
-            gestionando && 'text-foreground',
-          )}
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-        </button>
+        {onGestionar && (
+          <button
+            type="button"
+            aria-label={`Gestionar las opciones de ${nombre}`}
+            aria-expanded={gestionando}
+            disabled={disabled || cargando}
+            onClick={onGestionar}
+            className={cn(
+              'shrink-0 rounded-sm p-0.5 text-muted-foreground',
+              'transition-colors duration-150 ease-out hover:text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              'disabled:pointer-events-none disabled:opacity-50',
+              gestionando && 'text-foreground',
+            )}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {cargando ? (

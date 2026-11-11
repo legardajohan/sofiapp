@@ -25,8 +25,8 @@ function rangoLegible(desde: string, hasta: string): string {
 }
 
 /**
- * Productividad por asesor (HU-REP-01). Solo Director, Gerente o un admin sin subrol: las guardas
- * viven en el router (`RequireRole` + `RequireReportes`) y el backend decide (ADR 0011).
+ * Productividad por asesor (HU-REP-01). Solo el rol Administrador (ADR 0017): las guardas
+ * viven en el router (`RequireRole` + `RequireReportes`) y el backend decide.
  */
 export function AdvisorReportPage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });

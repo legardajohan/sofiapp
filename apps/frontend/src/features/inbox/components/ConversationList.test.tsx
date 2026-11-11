@@ -21,7 +21,7 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
     // Campos de asignación (HU-OMNI-02).
     asignadoA: null,
     asignadoANombre: null,
-    asignadoASubrol: null,
+    asignadoARol: null,
     iaHabilitada: false,
     ventana24hAbierta: true,
     estadoComercial: 'nuevo',

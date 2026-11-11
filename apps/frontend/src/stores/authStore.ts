@@ -2,14 +2,16 @@ import { create } from 'zustand';
 import { disconnectSocket } from '../lib/socket.js';
 
 export type UserRol = 'superadmin' | 'admin';
-export type AdminSubrol = 'director' | 'manager' | 'coordinator' | 'secretary';
+/** Rol dentro de la empresa (AUTH-04, ADR 0017). Jerarquía: administrador > coordinador > asesor. */
+export type RolEmpresa = 'administrador' | 'coordinador' | 'asesor';
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated';
 
 interface AuthUser {
   sub: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  /** Siempre presente para `rol: 'admin'`; el superadmin no lo tiene. */
+  rolEmpresa?: RolEmpresa;
   nombre?: string;
 }
 

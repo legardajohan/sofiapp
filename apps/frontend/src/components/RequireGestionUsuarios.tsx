@@ -3,8 +3,8 @@ import { useAuthStore } from '../stores/authStore.js';
 import { puedeGestionarUsuarios } from '@/lib/roles';
 
 /**
- * Guard de UI de la gestión de usuarios (AUTH-03, ADR 0016). Va DENTRO de `RequireRole`: este solo
- * afina por subrol. La UI oculta; quien decide es el backend (`authorizeSubrol`).
+ * Guard de UI de la gestión de usuarios (AUTH-03/AUTH-04). Va DENTRO de `RequireRole`: este solo
+ * afina por rol de empresa. La UI oculta; quien decide es el backend (`authorizeRolEmpresa`).
  */
 export function RequireGestionUsuarios({
   children,

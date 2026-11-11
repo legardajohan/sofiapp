@@ -148,11 +148,13 @@ apiClient.interceptors.response.use(r => r, (e) => {
 - La UI nunca es la única defensa: el backend siempre re-valida con `authorize([roles])`.
 - Rol → vistas:
   - `superadmin`: panel `/admin` (empresas, planes, métricas globales).
-  - `admin`: usuarios, conexión WhatsApp, catálogo, bandeja omnicanal, clientes, campañas — todo
-    dentro del tenant. El `subrol` (Director/Gerente/Coordinador/Secretaria) restringe áreas
-    concretas con los helpers de `lib/roles.ts` (gemelos de `authorize-subrol` del backend):
-    datos sensibles (ADR 0006), reportes (ADR 0011) y **gestión de usuarios** (`/settings/users`,
-    solo Director y propietario sin subrol — `AUTH-03`, ADR 0016). Un `admin` sin subrol ve todo.
+  - `admin`: bandeja omnicanal, leads, clientes — todo dentro del tenant. El **rol de empresa**
+    (`rolEmpresa`: Administrador/Coordinador/Asesor, `AUTH-04`, ADR 0017) decide el resto con los
+    helpers de `lib/roles.ts` (gemelos de `authorize-rol-empresa` del backend) y los guards
+    `RequireConfiguracion`, `RequireReportes` y `RequireGestionUsuarios`: configuración y campañas
+    solo Administrador; datos sensibles y reportes, Administrador; `/settings/users`, Administrador
+    (todos) y Coordinador (solo su equipo). La gestión de catálogos dentro de pantallas operativas
+    (opciones/campos de contacto, etapas, semáforos) se oculta a quien no es Administrador.
 
 ## Tiempo real
 

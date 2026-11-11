@@ -28,8 +28,8 @@ import {
   Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AdminSubrol, UserRol } from '@/stores/authStore';
-import { SUBROLES_GESTION_USUARIOS, SUBROLES_REPORTES } from '@/lib/roles';
+import type { RolEmpresa, UserRol } from '@/stores/authStore';
+import { ROLES_CONFIGURACION, ROLES_GESTION_USUARIOS, ROLES_REPORTES } from '@/lib/roles';
 
 export interface NavSubItem {
   label: string;
@@ -43,10 +43,10 @@ export interface NavItem {
   icon: LucideIcon;
   roles: UserRol[];
   /**
-   * Restringe el ítem a estos subroles (ADR 0006/0011). Un usuario **sin** subrol lo ve igual:
-   * mismo criterio que el backend. Es solo ocultar; la ruta y el API deciden.
+   * Restringe el ítem a estos roles de empresa (AUTH-04, ADR 0017). Es solo ocultar; la ruta y el
+   * API deciden.
    */
-  subroles?: readonly AdminSubrol[];
+  rolesEmpresa?: readonly RolEmpresa[];
   disabled?: boolean;
   children?: NavSubItem[];
 }
@@ -86,9 +86,9 @@ export const navGroups: NavGroup[] = [
         ],
       },
       { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
-      { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'] },
-      { label: 'Etapas del embudo', to: '/etapas', icon: Columns3, roles: ['admin'] },
-      { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'] },
+      { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
+      { label: 'Etapas del embudo', to: '/etapas', icon: Columns3, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
+      { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
       {
         label: 'Clientes',
         to: '/clientes',
@@ -96,7 +96,7 @@ export const navGroups: NavGroup[] = [
         roles: ['admin'],
         disabled: true,
       },
-      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['admin'] },
+      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
     ],
   },
   {
@@ -107,28 +107,28 @@ export const navGroups: NavGroup[] = [
         to: '/reports/advisors',
         icon: BarChart3,
         roles: ['admin'],
-        subroles: SUBROLES_REPORTES,
+        rolesEmpresa: ROLES_REPORTES,
       },
       {
         label: 'Tasa de escalamiento',
         to: '/reports/handoff-rate',
         icon: PieChart,
         roles: ['admin'],
-        subroles: SUBROLES_REPORTES,
+        rolesEmpresa: ROLES_REPORTES,
       },
       {
         label: 'Productos más consultados',
         to: '/reports/top-products',
         icon: PackageSearch,
         roles: ['admin'],
-        subroles: SUBROLES_REPORTES,
+        rolesEmpresa: ROLES_REPORTES,
       },
       {
         label: 'Horas pico',
         to: '/reports/peak-hours',
         icon: Clock,
         roles: ['admin'],
-        subroles: SUBROLES_REPORTES,
+        rolesEmpresa: ROLES_REPORTES,
       },
     ],
   },
@@ -140,18 +140,21 @@ export const navGroups: NavGroup[] = [
         to: '/settings/channels/whatsapp',
         icon: MessageSquareText,
         roles: ['admin'],
+        rolesEmpresa: ROLES_CONFIGURACION,
       },
       {
         label: 'Plantillas',
         to: '/settings/templates',
         icon: FileStack,
         roles: ['admin'],
+        rolesEmpresa: ROLES_CONFIGURACION,
       },
       {
         label: 'Base de Conocimiento',
         to: '/settings/knowledge',
         icon: BookText,
         roles: ['admin'],
+        rolesEmpresa: ROLES_CONFIGURACION,
         children: [
           { label: 'Documentos', to: '/settings/knowledge', icon: BookText },
           {
@@ -174,6 +177,7 @@ export const navGroups: NavGroup[] = [
         to: '/settings/assistant',
         icon: Bot,
         roles: ['admin'],
+        rolesEmpresa: ROLES_CONFIGURACION,
         children: [
           { label: 'Comportamiento', to: '/settings/assistant', icon: Bot },
           { label: 'Probar asistente', to: '/settings/assistant/test', icon: FlaskConical },
@@ -189,27 +193,31 @@ export const navGroups: NavGroup[] = [
         to: '/settings/send-hours',
         icon: CalendarClock,
         roles: ['admin'],
+        rolesEmpresa: ROLES_CONFIGURACION,
       },
-      // AUTH-03: solo quien gestiona usuarios (director o propietario sin subrol) lo ve.
+      // AUTH-04: el administrador gestiona a todos; el coordinador, solo a su equipo.
       {
         label: 'Usuarios',
         to: '/settings/users',
         icon: Users,
         roles: ['admin'],
-        subroles: SUBROLES_GESTION_USUARIOS,
+        rolesEmpresa: ROLES_GESTION_USUARIOS,
       },
       { label: 'Catálogo', to: '/catalogo', icon: Package, roles: ['admin'], disabled: true },
     ],
   },
 ];
 
-function visiblePara(item: NavItem, rol: UserRol, subrol?: AdminSubrol): boolean {
+function visiblePara(item: NavItem, rol: UserRol, rolEmpresa?: RolEmpresa): boolean {
   if (!item.roles.includes(rol)) return false;
-  return !item.subroles || !subrol || item.subroles.includes(subrol);
+  return !item.rolesEmpresa || (!!rolEmpresa && item.rolesEmpresa.includes(rolEmpresa));
 }
 
-export function navGroupsForRole(rol: UserRol, subrol?: AdminSubrol): NavGroup[] {
+export function navGroupsForRole(rol: UserRol, rolEmpresa?: RolEmpresa): NavGroup[] {
   return navGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => visiblePara(item, rol, subrol)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => visiblePara(item, rol, rolEmpresa)),
+    }))
     .filter((group) => group.items.length > 0);
 }

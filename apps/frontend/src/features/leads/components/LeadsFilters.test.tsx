@@ -74,6 +74,7 @@ beforeEach(() => {
       tenantId: 'te1',
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
+      coordinadorId: null,
       rol: 'admin',
       activo: true,
     },

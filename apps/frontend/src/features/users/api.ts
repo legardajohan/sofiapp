@@ -13,11 +13,12 @@ export async function fetchTenantUsers(): Promise<UserDTO[]> {
   return data;
 }
 
-// ── Gestión (AUTH-03). Solo director y propietario; el backend lo exige. ────────────────────
+// ── Gestión (AUTH-03/AUTH-04). Administrador, y coordinador sobre su equipo; el backend lo exige.
 
 export async function fetchManageUsers(filters: ManageUsersFilters): Promise<UserDTO[]> {
   const params: Record<string, string> = { activo: filters.activo };
-  if (filters.subrol) params['subrol'] = filters.subrol;
+  if (filters.rolEmpresa) params['rolEmpresa'] = filters.rolEmpresa;
+  if (filters.coordinadorId) params['coordinadorId'] = filters.coordinadorId;
   if (filters.q) params['q'] = filters.q;
   const { data } = await apiClient.get<UserDTO[]>('/users/manage', { params });
   return data;

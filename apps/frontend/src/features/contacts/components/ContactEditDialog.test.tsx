@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ContactEditDialog } from './ContactEditDialog.js';
+import { useAuthStore } from '@/stores/authStore';
 import {
   createContactOption,
   deleteContactOption,
@@ -131,6 +132,8 @@ function renderDialog(
 // diálogo necesita la respuesta del catálogo, no solo los que lo gestionan.
 beforeEach(() => {
   vi.clearAllMocks();
+  // Gestionar los catálogos es del Administrador (AUTH-04); el caso del asesor va en su propio test.
+  useAuthStore.setState({ user: { sub: 'u1', rol: 'admin', rolEmpresa: 'administrador' }, status: 'authenticated' });
   mockUpdate.mockResolvedValue(contacto());
   mockOpciones.mockResolvedValue(OPCIONES);
   mockCampos.mockResolvedValue(CAMPOS);
@@ -247,7 +250,14 @@ describe('ContactEditDialog (HU-CRM-02)', () => {
 
     expect(screen.getByLabelText(/Correo/)).toBeDisabled();
     expect(screen.getByLabelText(/Documento/)).toBeDisabled();
-    expect(screen.getByText(/Solo Dirección y Gerencia/)).toBeInTheDocument();
+    expect(screen.getByText(/Solo un Administrador/)).toBeInTheDocument();
+  });
+
+  it('quien no es Administrador no ve cómo gestionar los catálogos (AUTH-04)', () => {
+    useAuthStore.setState({ user: { sub: 'u2', rol: 'admin', rolEmpresa: 'asesor' }, status: 'authenticated' });
+    renderDialog(contacto());
+    expect(screen.queryByRole('button', { name: /Gestionar las opciones de/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Administrar' })).not.toBeInTheDocument();
   });
 
   it('sin permiso, el valor enmascarado NO se siembra en el input', () => {

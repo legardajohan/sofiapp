@@ -5,6 +5,7 @@ import { LoginView } from './features/auth/index.js';
 import { RequireRole } from './components/RequireRole.js';
 import { RequireReportes } from './components/RequireReportes.js';
 import { RequireGestionUsuarios } from './components/RequireGestionUsuarios.js';
+import { RequireConfiguracion } from './components/RequireConfiguracion.js';
 import { RequireAuth } from './components/RequireAuth.js';
 import { AuthBootstrap } from './components/AuthBootstrap.js';
 import { PublicOnly } from './components/PublicOnly.js';
@@ -132,9 +133,11 @@ export const router = createBrowserRouter([
             path: '/settings/channels/whatsapp',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <ChannelConfigPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <ChannelConfigPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -142,9 +145,11 @@ export const router = createBrowserRouter([
             path: '/settings/knowledge',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <KnowledgeBasePage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <KnowledgeBasePage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -152,9 +157,11 @@ export const router = createBrowserRouter([
             path: '/settings/knowledge/faqs',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <KnowledgeFaqsPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <KnowledgeFaqsPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -162,9 +169,11 @@ export const router = createBrowserRouter([
             path: '/settings/templates',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <TemplatesPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <TemplatesPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -172,9 +181,11 @@ export const router = createBrowserRouter([
             path: '/settings/knowledge/context',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <AiContextPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <AiContextPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -182,9 +193,11 @@ export const router = createBrowserRouter([
             path: '/settings/assistant',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <AssistantConfigPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <AssistantConfigPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -192,9 +205,11 @@ export const router = createBrowserRouter([
             path: '/settings/assistant/test',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <AssistantTestPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <AssistantTestPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -202,9 +217,11 @@ export const router = createBrowserRouter([
             path: '/settings/send-hours',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <SendWindowPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <SendWindowPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -212,9 +229,11 @@ export const router = createBrowserRouter([
             path: '/settings/assistant/handoff',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <HandoffSettingsPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <HandoffSettingsPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -290,9 +309,11 @@ export const router = createBrowserRouter([
             path: '/etapas',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <EstadosPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <EstadosPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -312,9 +333,11 @@ export const router = createBrowserRouter([
             path: '/etiquetas',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <TagsPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <TagsPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -322,9 +345,11 @@ export const router = createBrowserRouter([
             path: '/campanas',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <CampaignsPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <CampaignsPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -332,9 +357,11 @@ export const router = createBrowserRouter([
             path: '/campanas/:id',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <CampaignDetailPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <CampaignDetailPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -342,9 +369,11 @@ export const router = createBrowserRouter([
             path: '/flows',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <FlowsPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <FlowsPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },
@@ -352,9 +381,11 @@ export const router = createBrowserRouter([
             path: '/flows/:id',
             element: (
               <RequireRole roles={['admin']}>
-                <Suspense fallback={<Loading />}>
-                  <FlowEditorPage />
-                </Suspense>
+                <RequireConfiguracion>
+                  <Suspense fallback={<Loading />}>
+                    <FlowEditorPage />
+                  </Suspense>
+                </RequireConfiguracion>
               </RequireRole>
             ),
           },

@@ -10,7 +10,7 @@ export function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * Un 403 en las notas **no es un fallo a mostrar**: es que el usuario no tiene el subrol para
+ * Un 403 en las notas **no es un fallo a mostrar**: es que el usuario no tiene el rol para
  * verlas. La tarjeta se oculta en silencio en vez de acusar un error que no lo es.
  */
 export function esSinPermiso(error: unknown): boolean {

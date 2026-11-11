@@ -14,7 +14,7 @@ export function AuthBootstrap(): React.ReactElement {
     setStatus('loading');
     fetchMe()
       .then((session) =>
-        setUser({ sub: session.sub, rol: session.rol, subrol: session.subrol, nombre: session.nombre }),
+        setUser({ sub: session.sub, rol: session.rol, rolEmpresa: session.rolEmpresa, nombre: session.nombre }),
       )
       .catch(() => setStatus('unauthenticated'));
   }, [status, setStatus, setUser]);
