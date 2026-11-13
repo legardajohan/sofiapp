@@ -23,8 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DestinoSelector } from '@/components/users/DestinoSelector';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { destinoCompleto } from '@sofiapp/shared';
 import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
 import { useSaveHandoffSettings } from '../hooks/useHandoffSettings.js';
 import { TriggerCard } from './TriggerCard.js';
@@ -35,7 +37,6 @@ import {
   CONDICIONES_MAX,
   MENSAJE_TRANSICION_MAX,
   type CondicionExtra,
-  type EstrategiaDestino,
   type HandoffReglas,
   type HandoffSettings,
   type NivelMinimoInteres,
@@ -45,15 +46,11 @@ interface HandoffSettingsFormProps {
   settings: HandoffSettings;
 }
 
-// Valores del `Select` para las dos estrategias automáticas. Radix no admite `value=""`, y un
-// asesor concreto viaja con su propio id (HU-IA-07).
-const PRIMERO = '__primero_del_equipo__';
-const MENOR_CARGA = '__menor_carga__';
 
 export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): React.ReactElement {
   const [activo, setActivo] = useState(settings.activo);
-  const [asesorDestinoId, setAsesorDestinoId] = useState(settings.asesorDestinoId);
-  const [estrategiaDestino, setEstrategiaDestino] = useState(settings.estrategiaDestino);
+  // AUTH-06: un solo valor para «a quién va»: usuario o grupo, criterio, en línea y reserva.
+  const [destino, setDestino] = useState(settings.destino);
   const [mensajeTransicion, setMensajeTransicion] = useState(settings.mensajeTransicion);
   const [reglas, setReglas] = useState<HandoffReglas>(settings.reglas);
   const [condicionesExtras, setCondicionesExtras] = useState(settings.condicionesExtras);
@@ -62,14 +59,13 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
   const [viendoAsignacion, setViendoAsignacion] = useState(false);
 
   const guardar = useSaveHandoffSettings();
-  const { data: asesores } = useTenantUsers();
+  const { data: usuarios } = useTenantUsers({ alAbrir: true });
 
   // Tras guardar, el servidor devuelve la versión canónica: el formulario se resincroniza con ella
   // para que "descartar" vuelva a lo guardado y no a lo heredado de fábrica.
   useEffect(() => {
     setActivo(settings.activo);
-    setAsesorDestinoId(settings.asesorDestinoId);
-    setEstrategiaDestino(settings.estrategiaDestino);
+    setDestino(settings.destino);
     setMensajeTransicion(settings.mensajeTransicion);
     setReglas(settings.reglas);
     setCondicionesExtras(settings.condicionesExtras);
@@ -84,16 +80,14 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
 
   const actual = {
     activo,
-    asesorDestinoId,
-    estrategiaDestino,
+    destino,
     mensajeTransicion,
     reglas,
     condicionesExtras,
   };
   const guardado = {
     activo: settings.activo,
-    asesorDestinoId: settings.asesorDestinoId,
-    estrategiaDestino: settings.estrategiaDestino,
+    destino: settings.destino,
     mensajeTransicion: settings.mensajeTransicion,
     reglas: settings.reglas,
     condicionesExtras: settings.condicionesExtras,
@@ -108,13 +102,14 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
     (!reglas.explicitRequest.activa || reglas.explicitRequest.frases.length > 0) &&
     (!reglas.keyword.activa || reglas.keyword.palabras.length > 0);
   const esValido =
-    mensajeTransicion.trim().length > 0 && (!activo || (algunDisparador && listasNoVacias));
+    mensajeTransicion.trim().length > 0 &&
+    destinoCompleto(destino) &&
+    (!activo || (algunDisparador && listasNoVacias));
   const puedeGuardar = hayCambios && esValido && !guardar.isPending;
 
   function descartar(): void {
     setActivo(settings.activo);
-    setAsesorDestinoId(settings.asesorDestinoId);
-    setEstrategiaDestino(settings.estrategiaDestino);
+    setDestino(settings.destino);
     setMensajeTransicion(settings.mensajeTransicion);
     setReglas(settings.reglas);
     setCondicionesExtras(settings.condicionesExtras);
@@ -129,24 +124,12 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
     });
   }
 
-  /** El `Select` fija estrategia y asesor a la vez: son un solo destino, no dos campos sueltos. */
-  function elegirDestino(valor: string): void {
-    if (valor === PRIMERO || valor === MENOR_CARGA) {
-      setEstrategiaDestino(valor === PRIMERO ? 'primero' : ('menor_carga' as EstrategiaDestino));
-      setAsesorDestinoId(null);
-      return;
-    }
-    setEstrategiaDestino('fijo');
-    setAsesorDestinoId(valor);
-  }
-
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
     if (!puedeGuardar) return;
     guardar.mutate({
       activo,
-      asesorDestinoId,
-      estrategiaDestino,
+      destino,
       mensajeTransicion: mensajeTransicion.trim(),
       reglas,
       condicionesExtras,
@@ -364,58 +347,38 @@ export function HandoffSettingsForm({ settings }: HandoffSettingsFormProps): Rea
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
             <MessageSquareText className="size-4 text-secondary-foreground" aria-hidden="true" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-foreground">Asignación y aviso</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
               A quién le llega la conversación y qué se le dice al cliente mientras tanto.
             </p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setViendoAsignacion(true)}
+          >
+            <BarChart3 className="size-4" aria-hidden="true" />
+            Ver asignación
+          </Button>
         </div>
 
         <div className="mt-5 space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="handoff-asesor">Asesor que la recibe</Label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Select
-                value={
-                  estrategiaDestino === 'fijo' && asesorDestinoId
-                    ? asesorDestinoId
-                    : estrategiaDestino === 'menor_carga'
-                      ? MENOR_CARGA
-                      : PRIMERO
-                }
-                onValueChange={elegirDestino}
-              >
-                <SelectTrigger id="handoff-asesor" className="w-full sm:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={PRIMERO}>El primero del equipo</SelectItem>
-                  <SelectItem value={MENOR_CARGA}>
-                    Quien tenga menos conversaciones activas
-                  </SelectItem>
-                  {(asesores ?? []).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => setViendoAsignacion(true)}
-              >
-                <BarChart3 className="size-4" aria-hidden="true" />
-                Ver asignación
-              </Button>
+            <div className="max-w-xl">
+              <DestinoSelector
+                idPrefix="handoff"
+                etiqueta="Quién recibe la conversación"
+                value={destino}
+                onChange={(d) => d && setDestino(d)}
+                usuarios={usuarios}
+              />
             </div>
             <p className="text-xs text-muted-foreground">
-              «El primero del equipo» es el primero por orden alfabético, así que todas las
-              transferencias le llegan a la misma persona. Si la conversación ya tiene un asesor
-              asignado, se queda con él: transferir no se la quita a quien la lleva.
+              Si la conversación ya tiene a alguien asignado, se queda con esa persona: transferir no se
+              la quita a quien la lleva.
             </p>
           </div>
 

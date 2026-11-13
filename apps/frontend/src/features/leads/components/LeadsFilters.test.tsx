@@ -18,6 +18,7 @@ vi.mock('@/features/tags/api', () => ({
 
 vi.mock('@/features/users/api', () => ({
   fetchTenantUsers: vi.fn(),
+  fetchTenantUsersInactivos: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('@/features/estados/api', () => ({

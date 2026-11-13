@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AsignacionDialog } from './AsignacionDialog.js';
 import type { AsesorMetricasDTO } from '../types.js';
@@ -24,6 +25,10 @@ function fila(nombre: string, activas: number, pagado = 0): AsesorMetricasDTO {
       pagado,
       perdido: 0,
     },
+    rolEmpresa: 'asesor',
+    coordinadorId: null,
+    esPrincipal: false,
+    enLinea: false,
   };
 }
 
@@ -47,9 +52,28 @@ describe('AsignacionDialog (HU-IA-07)', () => {
     renderDialog();
 
     const filas = await screen.findAllByRole('row');
-    // La primera es la cabecera.
-    expect(filas[1]).toHaveTextContent('Ana Ruiz');
-    expect(filas[2]).toHaveTextContent('Carlos Mera');
+    // La primera es la cabecera y la segunda el título de la sección «Asesores» (AUTH-06).
+    expect(filas[1]).toHaveTextContent('Asesores');
+    expect(filas[2]).toHaveTextContent('Ana Ruiz');
+    expect(filas[3]).toHaveTextContent('Carlos Mera');
+  });
+
+  it('agrupa por rol: cada quien se compara con los de su rol (AUTH-06)', async () => {
+    mockFetchMetricas.mockResolvedValue([
+      { ...fila('Admin Libre', 0), rolEmpresa: 'administrador' },
+      { ...fila('Ana Ruiz', 4), enLinea: true },
+    ]);
+    renderDialog();
+
+    const filas = await screen.findAllByRole('row');
+    expect(filas.map((f) => f.textContent)).toEqual([
+      expect.stringContaining('Persona'),
+      'Asesores',
+      expect.stringContaining('Ana Ruiz'),
+      'Administradores',
+      expect.stringContaining('Admin Libre'),
+    ]);
+    expect(screen.getByText('(en línea)')).toBeInTheDocument();
   });
 
   it('muestra las pagadas como métrica de desempeño', async () => {
@@ -87,5 +111,19 @@ describe('AsignacionDialog (HU-IA-07)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo cargar/i);
     expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
+  });
+
+  it('filtra la tabla por rol (AUTH-06)', async () => {
+    mockFetchMetricas.mockResolvedValue([
+      { ...fila('Admin Libre', 0), rolEmpresa: 'administrador' },
+      fila('Ana Ruiz', 4),
+    ]);
+    renderDialog();
+
+    await screen.findByText('Ana Ruiz');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Rol' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Administradores' }));
+    expect(screen.getByText('Admin Libre')).toBeInTheDocument();
+    expect(screen.queryByText('Ana Ruiz')).not.toBeInTheDocument();
   });
 });

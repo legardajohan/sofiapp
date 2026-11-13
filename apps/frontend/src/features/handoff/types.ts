@@ -1,3 +1,5 @@
+import type { DestinoAsignacion } from '@sofiapp/shared';
+import type { RolEmpresa } from '@/stores/authStore';
 /** Los disparadores, en el mismo orden en que los evalúa el backend (= su prioridad). */
 export type HandoffMotivo =
   | 'explicit_request'
@@ -31,6 +33,12 @@ export interface AsesorMetricasDTO {
   /** Conversaciones sin cerrar. Es la cifra que gobierna el reparto por menor carga. */
   activas: number;
   porEstado: Record<string, number>;
+  /** AUTH-06: para agrupar el reparto por rol y equipo. */
+  rolEmpresa: RolEmpresa | null;
+  coordinadorId: string | null;
+  esPrincipal: boolean;
+  /** Actividad en los últimos 5 minutos (la misma regla del filtro «solo en línea»). */
+  enLinea: boolean;
 }
 
 export type NivelMinimoInteres = 'tibio' | 'caliente';
@@ -46,6 +54,8 @@ export interface HandoffSettings {
   activo: boolean;
   asesorDestinoId: string | null;
   estrategiaDestino: EstrategiaDestino;
+  /** AUTH-06: a quién va la conversación (usuario o grupo, con reserva). Manda sobre los dos de arriba. */
+  destino: DestinoAsignacion;
   mensajeTransicion: string;
   reglas: HandoffReglas;
   condicionesExtras: CondicionExtra[];
@@ -53,7 +63,11 @@ export interface HandoffSettings {
   heredado: boolean;
 }
 
-export type UpdateHandoffSettingsPayload = Omit<HandoffSettings, 'heredado'>;
+/** AUTH-06: se envía `destino`; el formato previo queda para clientes viejos. */
+export type UpdateHandoffSettingsPayload = Omit<
+  HandoffSettings,
+  'heredado' | 'estrategiaDestino' | 'asesorDestinoId'
+>;
 
 export const MENSAJE_TRANSICION_MAX = 500;
 export const TERMINOS_MAX = 30;

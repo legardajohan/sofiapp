@@ -13,6 +13,10 @@ import { AdvisorActivityChart } from '../components/AdvisorActivityChart.js';
 import { useAdvisorActivity } from '../hooks/useAdvisorActivity.js';
 import { useActivityParams } from '../hooks/use-activity-params.js';
 import { ZONA_DEL_VISOR } from '../lib/zona-visor.js';
+import { RolUsuarioFilter } from '@/components/users/RolUsuarioFilter';
+import { grupoParaBackend } from '@/lib/grupos-usuarios';
+import { useTenantUsersConInactivos } from '@/features/users/hooks/useTenantUsers';
+import { useFiltroRolUsuarioParam } from '../hooks/use-grupo-param.js';
 
 const PRESETS: readonly PeriodoPreset[] = ['7d', '30d', 'mes', 'personalizado'];
 
@@ -25,31 +29,52 @@ function rangoLegible(desde: string, hasta: string): string {
 }
 
 /**
- * Productividad por asesor (HU-REP-01). Solo el rol Administrador (ADR 0017): las guardas
- * viven en el router (`RequireRole` + `RequireReportes`) y el backend decide.
+ * Productividad por persona (HU-REP-01). Los tres roles la ven completa (ADR 0018); AUTH-06 añade el
+ * filtro por grupo y compara a cada quien solo con los de su rol. Las guardas viven en el router.
  */
 export function AdvisorReportPage(): React.ReactElement {
   const period = usePeriodParams({ presets: PRESETS, defaultPreset: '30d' });
   const tablero = useDashboardRefresh(ADVISOR_REPORT_KEY);
-  const { data, dataUpdatedAt, isPending, isError, refetch } = useAdvisorReport(period.rango);
+  // AUTH-06: tres pares de filtros «rol + persona», independientes entre sí (cada uno en su URL).
+  const { data: usuarios } = useTenantUsersConInactivos();
+  const quienes = useFiltroRolUsuarioParam('grupo', 'persona');
+  const filtroActividad = useFiltroRolUsuarioParam('actividadGrupo', 'asesor');
+  const filtroTabla = useFiltroRolUsuarioParam('tablaGrupo', 'tablaPersona');
+  const grupo = grupoParaBackend(quienes.value);
+  // Indicadores y barras: lo que diga «Quiénes» (lo valida el backend).
+  const { data, dataUpdatedAt, isPending, isError, refetch } = useAdvisorReport({
+    ...period.rango,
+    ...(grupo ? { grupo } : {}),
+  });
+  // La tabla tiene su propio filtro: parte siempre de toda la empresa y filtra en el navegador.
+  const empresa = useAdvisorReport(period.rango);
   const filtros = useActivityParams();
   // Siempre todos los asesores: el filtro se aplica en la gráfica para que el color siga al asesor.
   const actividad = useAdvisorActivity({
     ...period.rango,
     granularidad: filtros.granularidad,
     ...(ZONA_DEL_VISOR ? { tz: ZONA_DEL_VISOR } : {}),
+    // El rol va al backend; la persona la resalta la gráfica (conserva el color de cada serie).
+    ...(filtroActividad.value.grupo ? { grupo: filtroActividad.value.grupo } : {}),
   });
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Productividad por asesor</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Productividad del equipo</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {data ? rangoLegible(data.rango.desde, data.rango.hasta) : 'Conversaciones atendidas, ventas cerradas y tiempo activo de cada asesor'}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <RolUsuarioFilter
+            idPrefix="reporte-quienes"
+            value={quienes.value}
+            onChange={quienes.setValue}
+            usuarios={usuarios}
+            etiquetaTodos="Toda la empresa"
+          />
           <PeriodFilter
             period={period}
             idPrefix="reporte-asesores"
@@ -84,10 +109,33 @@ export function AdvisorReportPage(): React.ReactElement {
             isLoading={actividad.isPending}
             granularidad={filtros.granularidad}
             onGranularidad={filtros.setGranularidad}
-            asesorId={filtros.asesorId}
-            onAsesor={filtros.setAsesorId}
+            asesorId={filtroActividad.value.persona ?? ''}
+            filtro={
+              <RolUsuarioFilter
+                idPrefix="reporte-actividad"
+                compacto
+                etiquetaRol="Rol del tiempo activo"
+                value={filtroActividad.value}
+                onChange={filtroActividad.setValue}
+                usuarios={usuarios}
+              />
+            }
           />
-          <AdvisorTable report={data} isLoading={isPending} />
+          <AdvisorTable
+            report={empresa.data}
+            isLoading={empresa.isPending}
+            filtro={filtroTabla.value}
+            filtroSlot={
+              <RolUsuarioFilter
+                idPrefix="reporte-tabla"
+                compacto
+                etiquetaRol="Rol del detalle"
+                value={filtroTabla.value}
+                onChange={filtroTabla.setValue}
+                usuarios={usuarios}
+              />
+            }
+          />
         </>
       )}
     </div>

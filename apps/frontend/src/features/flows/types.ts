@@ -1,4 +1,4 @@
-import type { ErrorGrafo } from '@sofiapp/shared';
+import type { DestinoAsignacion, ErrorGrafo } from '@sofiapp/shared';
 
 export const TIPOS_NODO = [
   'mensaje',
@@ -67,7 +67,8 @@ export type EfectoAccion =
   | { tipo: 'cambiar_estado'; estado: EstadoComercial }
   | { tipo: 'aplicar_etiquetas'; tagIds: string[] }
   | { tipo: 'crear_lead' }
-  | { tipo: 'asignar_asesor'; asesorId: string };
+  /** AUTH-06: `destino` (usuario o grupo) manda; `asesorId` es el formato de los nodos previos. */
+  | { tipo: 'asignar_asesor'; asesorId?: string; destino?: DestinoAsignacion };
 
 export type ConfigNodo =
   | { tipo: 'mensaje'; texto?: string; templateId?: string; parametros?: string[] }
@@ -89,7 +90,7 @@ export type ConfigNodo =
   | { tipo: 'intencion'; etiquetas: IEtiquetaIntencion[]; ramaPorDefecto: string }
   | { tipo: 'kb'; pregunta: string; kSobrescrito?: number; siNoHayRespuesta: string }
   | { tipo: 'accion'; efecto: EfectoAccion }
-  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
+  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string; destino?: DestinoAsignacion }
   | { tipo: 'espera'; minutos: number }
   | {
       tipo: 'ia';

@@ -1,8 +1,16 @@
 import type { HandoffMotivo } from '@/features/handoff/types';
+import type { RolEmpresa } from '@/stores/authStore';
+
+/** AUTH-06: rol y equipo de cada fila, para comparar solo dentro del mismo rol. */
+export interface RolDeFila {
+  rolEmpresa: RolEmpresa | null;
+  coordinadorId: string | null;
+  esPrincipal: boolean;
+}
 
 /** Espejo de `IAdvisorReportResponse` del backend (HU-REP-01). */
 
-export interface AdvisorRow {
+export interface AdvisorRow extends RolDeFila {
   asesorId: string;
   nombre: string;
   activo: boolean;
@@ -120,6 +128,6 @@ export interface AdvisorActivity {
   granularidad: Granularidad;
   timezone: string;
   /** Ordenados por tiempo total, de mayor a menor. */
-  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number }>;
+  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number } & RolDeFila>;
   periodos: ActivityPeriodRow[];
 }

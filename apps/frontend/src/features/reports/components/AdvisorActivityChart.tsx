@@ -8,7 +8,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { formatDuracion } from '../lib/duracion-format.js';
@@ -20,14 +19,15 @@ interface Props {
   granularidad: Granularidad;
   onGranularidad: (g: Granularidad) => void;
   /** `''` = todos. */
+  /** Persona resaltada (`''` = todas las del rol elegido). */
   asesorId: string;
-  onAsesor: (id: string) => void;
+  /** AUTH-06: el par de filtros «rol + persona» de esta gráfica. */
+  filtro: React.ReactNode;
 }
 
 /** Las cinco series de `--chart-1…5` (validadas para daltonismo en light y dark). El resto, a «Otros». */
 const COLORES = [1, 2, 3, 4, 5].map((n) => `hsl(var(--chart-${n}))`);
 const COLOR_OTROS = 'hsl(var(--muted-foreground) / 0.45)';
-const TODOS = 'todos';
 
 const GRANULARIDAD_LABEL: Record<Granularidad, string> = { dia: 'Día', semana: 'Semana', mes: 'Mes' };
 
@@ -92,7 +92,7 @@ export function AdvisorActivityChart({
   granularidad,
   onGranularidad,
   asesorId,
-  onAsesor,
+  filtro,
 }: Props): React.ReactElement {
   const series = useMemo(() => (actividad ? construirSeries(actividad, asesorId) : []), [actividad, asesorId]);
 
@@ -125,19 +125,7 @@ export function AdvisorActivityChart({
       isLoading={isLoading}
       action={
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={asesorId || TODOS} onValueChange={(v) => onAsesor(v === TODOS ? '' : v)}>
-            <SelectTrigger className="h-8 w-[200px] text-xs" aria-label="Asesor">
-              <SelectValue placeholder="Todos los asesores" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos los asesores</SelectItem>
-              {(actividad?.asesores ?? []).map((a) => (
-                <SelectItem key={a.asesorId} value={a.asesorId}>
-                  {a.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {filtro}
           <Tabs value={granularidad} onValueChange={(v) => onGranularidad(v as Granularidad)}>
             <TabsList className="h-8">
               {(Object.keys(GRANULARIDAD_LABEL) as Granularidad[]).map((g) => (

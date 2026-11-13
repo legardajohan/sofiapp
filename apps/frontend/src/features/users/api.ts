@@ -15,6 +15,12 @@ export async function fetchTenantUsers(): Promise<UserDTO[]> {
   return data;
 }
 
+/** AUTH-06: los desactivados, solo para filtros (no se puede asignar a ellos). */
+export async function fetchTenantUsersInactivos(): Promise<UserDTO[]> {
+  const { data } = await apiClient.get<UserDTO[]>('/users', { params: { activo: 'false' } });
+  return data;
+}
+
 // ── Gestión (AUTH-03/AUTH-04). Administrador, y coordinador sobre su equipo; el backend lo exige.
 
 export async function fetchManageUsers(filters: ManageUsersFilters): Promise<UserDTO[]> {

@@ -129,7 +129,9 @@ export function UsersPage(): React.ReactElement {
     [estado, rol, coordinador, q],
   );
   const { data: usuarios, isLoading, isFetching } = useManageUsers(filtros);
-  const { data: activos } = useTenantUsers();
+  // AUTH-06: refrescar al abrir la pantalla, para que una sesión abierta vea a los coordinadores
+  // creados después (el selector de coordinador del formulario sale de esta lista).
+  const { data: activos } = useTenantUsers({ alAbrir: true });
   // Todos los coordinadores (también inactivos), para poner nombre a la columna y al filtro.
   const { data: todosLosCoordinadores } = useManageUsers(
     { activo: 'todos', rolEmpresa: 'coordinador' },

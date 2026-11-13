@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
+import { useTenantUsersConInactivos } from '../../users/hooks/useTenantUsers.js';
+import { UserSelectItems } from '@/components/users/UserSelectItems';
 import { puedeConfigurar } from '@/lib/roles';
 import { useAuthStore } from '@/stores/authStore';
 import { useEstados } from '../../estados/hooks/useEstados.js';
@@ -54,7 +55,7 @@ function Campo({
 }
 
 export function LeadsFilters({ filtros, onChange, onClear }: Props): React.ReactElement {
-  const usuarios = useTenantUsers();
+  const usuarios = useTenantUsersConInactivos();
   const gestionaCatalogos = puedeConfigurar(useAuthStore((s) => s.user));
   const estados = useEstados();
   const semaforos = useSemaforos();
@@ -153,11 +154,7 @@ export function LeadsFilters({ filtros, onChange, onClear }: Props): React.React
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={TODOS}>Cualquier responsable</SelectItem>
-            {(usuarios.data ?? []).map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.nombre}
-              </SelectItem>
-            ))}
+            <UserSelectItems usuarios={usuarios.data} incluirInactivos />
           </SelectContent>
         </Select>
       </Campo>

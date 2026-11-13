@@ -5,12 +5,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { ROL_EMPRESA_LABEL } from '@/lib/roles';
+import { agruparPorRol } from '@/lib/grupos-usuarios';
 import { useAuthStore } from '@/stores/authStore';
 import { useTenantUsers } from '@/features/users/hooks/useTenantUsers';
 import { useAssign } from '../hooks/useAssign.js';
@@ -25,7 +26,9 @@ interface Props {
 /** Menú "Asignar a…" de la cabecera del hilo: asignármela, reasignar o quitar (HU-OMNI-02). */
 export function AssignMenu({ conversationId, asignadoA, asignadoANombre }: Props): React.ReactElement {
   const me = useAuthStore((s) => s.user);
-  const { data: admins } = useTenantUsers();
+  // AUTH-06: se vuelve a pedir al abrir la conversación, para ver a quien se dio de alta después.
+  const { data: admins } = useTenantUsers({ alAbrir: true });
+  const secciones = agruparPorRol(admins ?? []);
   const assign = useAssign(conversationId);
 
   const pending = assign.isPending;
@@ -59,29 +62,34 @@ export function AssignMenu({ conversationId, asignadoA, asignadoANombre }: Props
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
-        {admins?.map((admin) => {
-          const selected = admin.id === asignadoA;
-          return (
-            <DropdownMenuItem
-              key={admin.id}
-              disabled={pending || selected}
-              onClick={() => assign.mutate(admin.id)}
-            >
-              <Avatar className="h-5 w-5">
-                <AvatarFallback className="text-[9px] font-medium">
-                  {personInitials(admin.nombre)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="min-w-0 flex-1 truncate">
-                {admin.nombre}
-                {admin.rolEmpresa ? (
-                  <span className="text-muted-foreground"> · {ROL_EMPRESA_LABEL[admin.rolEmpresa]}</span>
-                ) : null}
-              </span>
-              {selected ? <Check className="h-4 w-4 text-primary" /> : null}
-            </DropdownMenuItem>
-          );
-        })}
+        {secciones.map((seccion) => (
+          <DropdownMenuGroup key={seccion.clave}>
+            <DropdownMenuLabel className="pb-0.5 pt-2 text-xs font-medium text-muted-foreground">
+              {seccion.etiqueta}
+            </DropdownMenuLabel>
+            {seccion.usuarios.map((admin) => {
+              const selected = admin.id === asignadoA;
+              return (
+                <DropdownMenuItem
+                  key={admin.id}
+                  disabled={pending || selected}
+                  onClick={() => assign.mutate(admin.id)}
+                >
+                  <Avatar className="h-5 w-5">
+                    <AvatarFallback className="text-[9px] font-medium">
+                      {personInitials(admin.nombre)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1 truncate">
+                    {admin.nombre}
+                    {admin.esPrincipal ? <span className="text-muted-foreground"> · principal</span> : null}
+                  </span>
+                  {selected ? <Check className="h-4 w-4 text-primary" /> : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuGroup>
+        ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={pending || !asignadoA}

@@ -4,8 +4,10 @@ export interface ReportRangeParams {
   hasta?: string;
 }
 
-/** Query de `GET /reports/by-advisor` (HU-REP-01). */
-export type AdvisorReportParams = ReportRangeParams;
+/** Query de `GET /reports/by-advisor` (HU-REP-01). AUTH-06: `grupo` con la sintaxis de `serializarGrupoQuery`. */
+export interface AdvisorReportParams extends ReportRangeParams {
+  grupo?: string;
+}
 
 /** Query de `GET /reports/handoff-rate` (HU-REP-02). */
 export type HandoffRateParams = ReportRangeParams;
@@ -25,4 +27,5 @@ export interface AdvisorActivityParams extends ReportRangeParams {
   tz?: string;
   granularidad?: 'dia' | 'semana' | 'mes';
   asesorId?: string;
+  grupo?: string;
 }
