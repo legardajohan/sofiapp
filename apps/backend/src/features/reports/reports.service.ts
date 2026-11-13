@@ -8,6 +8,8 @@ import { filtroClientesReales, matchClientesReales } from '../cliente/cliente.fi
 import { Lead } from '../lead/lead.model.js';
 import { AuditEvent } from '../audit/audit.model.js';
 import { User } from '../users/user.model.js';
+import { rolEmpresaDe, type IUserSource } from '../users/user.mapper.js';
+import { idsDelFiltro } from '../users/user.grupos.js';
 import { ActividadAsesor } from '../activity/activity.model.js';
 import { KEY_ESTADO_VENTA } from '../estado/estado.types.js';
 import { MOTIVOS_HANDOFF, type HandoffMotivo } from '../ai/ai-handoff.types.js';
@@ -23,6 +25,7 @@ import {
   type IAdvisorActivityResponse,
   type IAdvisorReportResponse,
   type IAdvisorRow,
+  type IRolDeFila,
   type IHandoffRateResponse,
   type IPeakDayRow,
   type IPeakHourRow,
@@ -150,6 +153,19 @@ async function contarVentas(tenantOid: Types.ObjectId, r: Rango): Promise<Map<st
 }
 
 /**
+ * AUTH-06: ventas cerradas por usuario en un rango, con la MISMA definición que el reporte de
+ * productividad (para que el reparto «más ventas cerradas» cuadre con lo que se ve en Reportes).
+ * Lo usa el resolvedor de destinos; las ventas sin responsable no cuentan para nadie.
+ */
+export async function ventasPorUsuario(tenantId: string | Types.ObjectId, desde: Date, hasta: Date): Promise<Map<string, number>> {
+  const tenantOid = tenantId instanceof Types.ObjectId ? tenantId : new Types.ObjectId(tenantId);
+  const conteo = await contarVentas(tenantOid, { desde, hasta });
+  const porUsuario = new Map<string, number>();
+  for (const [id, n] of conteo) if (id) porUsuario.set(id, n);
+  return porUsuario;
+}
+
+/**
  * Tiempo activo (HU-REP-06): segundos de las cubetas horarias de `ActividadAsesor` cuya hora cae en
  * el rango, por asesor. Mismo rango UTC que el resto del reporte, para que la fila cuadre consigo misma.
  */
@@ -163,6 +179,17 @@ async function sumarActividad(tenantOid: Types.ObjectId, r: Rango): Promise<Map<
 
 function compararFilas(a: IAdvisorRow, b: IAdvisorRow): number {
   return b.conversacionesAtendidas - a.conversacionesAtendidas || a.nombre.localeCompare(b.nombre, 'es');
+}
+
+/** Lo mínimo de `User` para nombrar una fila y saber su rol y equipo (AUTH-06). */
+const CAMPOS_ROL = { nombre: 1, activo: 1, rol: 1, rolEmpresa: 1, subrol: 1, coordinadorId: 1, esPrincipal: 1 } as const;
+
+function rolDeFila(u: IUserSource): IRolDeFila {
+  return {
+    rolEmpresa: rolEmpresaDe(u) ?? null,
+    coordinadorId: u.coordinadorId ? String(u.coordinadorId) : null,
+    esPrincipal: u.esPrincipal === true,
+  };
 }
 
 export async function getAdvisorReport(
@@ -179,14 +206,21 @@ export async function getAdvisorReport(
     contarVentas(tenantOid, rango),
     sumarActividad(tenantOid, rango),
     findScoped(User, tenantOid, {})
-      .select({ nombre: 1, activo: 1 })
-      .lean<Array<{ _id: Types.ObjectId; nombre: string; activo?: boolean }>>(),
+      .select(CAMPOS_ROL)
+      .lean<IUserSource[]>(),
   ]);
+  // AUTH-06: con `grupo`, solo las filas de ese grupo (404 si nombra a alguien de otro tenant).
+  const delGrupo = q.grupo ? await idsDelFiltro(tenantOid, q.grupo) : null;
 
   const usados = new Set<string>();
   const porAsesor: IAdvisorRow[] = [];
   for (const u of usuarios) {
     const id = String(u._id);
+    if (delGrupo && !delGrupo.has(id)) {
+      // Fuera del grupo: tampoco es «sin asignar», así que cuenta como usado y no suma en totales.
+      usados.add(id);
+      continue;
+    }
     const fila = {
       conversacionesAtendidas: atendidas.get(id) ?? 0,
       asignadasActivas: asignadas.get(id) ?? 0,
@@ -203,6 +237,7 @@ export async function getAdvisorReport(
       asesorId: id,
       nombre: u.nombre,
       activo,
+      ...rolDeFila(u),
       ...fila,
       tasaCierre: ratio(fila.ventas, fila.conversacionesAtendidas),
       segundosActivos,
@@ -214,7 +249,10 @@ export async function getAdvisorReport(
   // que los totales cuadren con los datos operativos (DoD).
   const huerfanos = (m: Map<string | null, number>): number =>
     [...m.entries()].reduce((s, [k, n]) => (k !== null && usados.has(k) ? s : s + n), 0);
-  const sinAsignar = { conversacionesAtendidas: huerfanos(atendidas), ventas: huerfanos(ventas) };
+  // Con un grupo, el reporte es de ese grupo: lo que no tiene dueño no le pertenece.
+  const sinAsignar = delGrupo
+    ? { conversacionesAtendidas: 0, ventas: 0 }
+    : { conversacionesAtendidas: huerfanos(atendidas), ventas: huerfanos(ventas) };
 
   const suma = (k: 'conversacionesAtendidas' | 'asignadasActivas' | 'ventas' | 'segundosActivos'): number =>
     porAsesor.reduce((s, f) => s + f[k], 0);
@@ -611,7 +649,13 @@ export async function getAdvisorActivity(
 ): Promise<IAdvisorActivityResponse> {
   const rango = resolverRango(q, now);
   const tenantOid = new Types.ObjectId(tenantId);
-  const filas = await sumarActividadPorDia(tenantOid, rango, q.tz, q.asesorId);
+  // AUTH-06: `grupo` acota a un rol, equipo o usuario; `asesorId` (formato previo) es un usuario.
+  const filtro = q.grupo ?? (q.asesorId ? { tipo: 'usuario' as const, usuarioId: q.asesorId } : null);
+  const delGrupo = filtro && filtro.tipo !== 'usuario' ? await idsDelFiltro(tenantOid, filtro) : null;
+  const unUsuario = filtro?.tipo === 'usuario' ? filtro.usuarioId : undefined;
+  if (q.grupo?.tipo === 'usuario') await idsDelFiltro(tenantOid, q.grupo); // 404 si es de otro tenant
+  const todas = await sumarActividadPorDia(tenantOid, rango, q.tz, unUsuario);
+  const filas = delGrupo ? todas.filter((f) => delGrupo.has(String(f._id.u))) : todas;
 
   // Todos los periodos del rango, en orden, para que la gráfica no tenga huecos.
   const periodos = new Map<string, Map<string, number>>();
@@ -633,13 +677,19 @@ export async function getAdvisorActivity(
   const usuarios = await findScoped(User, tenantOid, {
     _id: { $in: [...totalPorAsesor.keys()].map((id) => new Types.ObjectId(id)) },
   })
-    .select({ nombre: 1 })
-    .lean<Array<{ _id: Types.ObjectId; nombre: string }>>();
+    .select(CAMPOS_ROL)
+    .lean<IUserSource[]>();
   const nombres = new Map(usuarios.map((u) => [String(u._id), u.nombre]));
+  const roles = new Map(usuarios.map((u) => [String(u._id), rolDeFila(u)]));
 
   const asesores = [...totalPorAsesor.entries()]
     .filter(([id]) => nombres.has(id))
-    .map(([asesorId, s]) => ({ asesorId, nombre: nombres.get(asesorId) ?? '', totalSegundos: Math.round(s) }))
+    .map(([asesorId, s]) => ({
+      asesorId,
+      nombre: nombres.get(asesorId) ?? '',
+      totalSegundos: Math.round(s),
+      ...(roles.get(asesorId) ?? { rolEmpresa: null, coordinadorId: null, esPrincipal: false }),
+    }))
     .sort((a, b) => b.totalSegundos - a.totalSegundos || a.nombre.localeCompare(b.nombre, 'es'));
 
   const filasPeriodo: IActivityPeriodRow[] = [...periodos.entries()].map(([periodo, porAsesor]) => {

@@ -1,4 +1,6 @@
 import type { Document, Types } from 'mongoose';
+import type { DestinoAsignacion } from '@sofiapp/shared';
+import type { RolEmpresa } from '../users/user.types.js';
 
 /**
  * Los disparadores de handoff, **en orden de evaluación**.
@@ -86,6 +88,12 @@ export interface IHandoffSettings {
    * tienen y `toDTO` lo deriva de `asesorDestinoId`, así que no hace falta migrar nada.
    */
   estrategiaDestino?: EstrategiaDestino;
+  /**
+   * AUTH-06: a quién va la conversación, por usuario o por grupo de rol/equipo, con reserva. Ausente
+   * en los documentos previos: `toDTO` lo deriva de `estrategiaDestino`/`asesorDestinoId`, así que no
+   * hay migración. Al guardar se escriben los dos formatos durante un release.
+   */
+  destino?: DestinoAsignacion;
   /** Lo que se le dice al cliente al transferirlo. Es copy de cara al cliente, lo edita el admin. */
   mensajeTransicion: string;
   reglas: IHandoffReglas;
@@ -100,6 +108,8 @@ export interface HandoffSettingsDTO {
   activo: boolean;
   asesorDestinoId: string | null;
   estrategiaDestino: EstrategiaDestino;
+  /** AUTH-06. Siempre presente: traducido del formato viejo si el documento es previo. */
+  destino: DestinoAsignacion;
   mensajeTransicion: string;
   reglas: IHandoffReglas;
   condicionesExtras: ICondicionExtra[];
@@ -107,7 +117,18 @@ export interface HandoffSettingsDTO {
   heredado: boolean;
 }
 
-export type UpdateHandoffSettingsDTO = Omit<HandoffSettingsDTO, 'heredado'>;
+/**
+ * Lo que acepta el PUT. `destino` es el formato de AUTH-06; `estrategiaDestino` + `asesorDestinoId` se
+ * siguen aceptando durante un release (clientes viejos). Si llega `destino`, manda.
+ */
+export type UpdateHandoffSettingsDTO = Omit<
+  HandoffSettingsDTO,
+  'heredado' | 'destino' | 'estrategiaDestino' | 'asesorDestinoId'
+> & {
+  destino?: DestinoAsignacion;
+  estrategiaDestino?: EstrategiaDestino;
+  asesorDestinoId?: string | null;
+};
 
 /**
  * Resultado de evaluar los disparadores. Unión discriminada en vez de `{ dispara, motivo? }` para
@@ -147,6 +168,11 @@ export interface AsesorMetricasDTO {
   activas: number;
   /** Desglose completo, incluidos los cierres. Un asesor sin nada trae los cinco en 0. */
   porEstado: Record<string, number>;
+  /** AUTH-06: rol, equipo y si está en línea, para agrupar el panel «Ver asignación». */
+  rolEmpresa: RolEmpresa | null;
+  coordinadorId: string | null;
+  esPrincipal: boolean;
+  enLinea: boolean;
 }
 
 export const NO_DISPARA: HandoffDecision = { dispara: false };

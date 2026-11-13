@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import app from '../../app.js';
 import { crearAsesor, crearHilo, crearLead, crearMensaje } from './reports.fixtures.js';
 import type { IAdvisorReportResponse } from './reports.types.js';
+import { User } from '../users/user.model.js';
 
 /*
  * Invariante multi-tenant de HU-REP-01 (docs/multi-tenancy.md §8): el reporte de A solo cuenta lo
@@ -72,5 +73,44 @@ describe('HU-REP-01 — aislamiento del reporte por asesor', () => {
     for (const pii of ['573009', '573118', 'Contacto secreto', 'Lead secreto', 'Texto privado', '@pii.test']) {
       expect(raw).not.toContain(pii);
     }
+  });
+});
+
+// AUTH-06 — `?grupo=` acota el reporte y se valida contra el tenant del token.
+describe('AUTH-06 — filtro por grupo del reporte por asesor', () => {
+  const tenantA = new Types.ObjectId();
+  const tenantB = new Types.ObjectId();
+
+  async function conRol(id: Types.ObjectId, rolEmpresa: string, coordinadorId?: Types.ObjectId): Promise<void> {
+    await User.collection.updateOne({ _id: id }, { $set: { rolEmpresa, coordinadorId: coordinadorId ?? null } });
+  }
+
+  const get = (tenant: Types.ObjectId, qs: string): request.Test =>
+    request(app).get(`/api/reports/by-advisor${QS}&${qs}`).set('Cookie', `token=${tokenDe(tenant)}`);
+
+  it('filtra por rol y por equipo, con rol y equipo en cada fila', async () => {
+    const coord = await crearAsesor(tenantA, 'Carla');
+    await conRol(coord, 'coordinador');
+    const laura = await crearAsesor(tenantA, 'Laura');
+    await conRol(laura, 'asesor', coord);
+    const pedro = await crearAsesor(tenantA, 'Pedro');
+    await conRol(pedro, 'asesor');
+
+    const porRol = await get(tenantA, 'grupo=rol:asesor');
+    expect(porRol.status).toBe(200);
+    expect((porRol.body as IAdvisorReportResponse).porAsesor.map((f) => f.nombre).sort()).toEqual(['Laura', 'Pedro']);
+    expect((porRol.body as IAdvisorReportResponse).porAsesor[0]).toMatchObject({ rolEmpresa: 'asesor' });
+
+    const porEquipo = await get(tenantA, `grupo=equipo:${coord.toString()}`);
+    expect((porEquipo.body as IAdvisorReportResponse).porAsesor.map((f) => f.nombre)).toEqual(['Laura']);
+  });
+
+  it('un equipo o un usuario de otro tenant → 404; un grupo mal escrito → 400', async () => {
+    const coordB = await crearAsesor(tenantB, 'Coord B');
+    await conRol(coordB, 'coordinador');
+
+    expect((await get(tenantA, `grupo=equipo:${coordB.toString()}`)).status).toBe(404);
+    expect((await get(tenantA, `grupo=usuario:${coordB.toString()}`)).status).toBe(404);
+    expect((await get(tenantA, 'grupo=rol:jefe')).status).toBe(400);
   });
 });

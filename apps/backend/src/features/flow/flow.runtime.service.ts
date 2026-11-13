@@ -41,6 +41,9 @@ import type { IMessage } from '../message/message.types.js';
 import { searchKnowledge } from '../kb/kb.retrieval.service.js';
 import { avanzar } from './flow.engine.js';
 import { getActiveFlow, resolverFlujoPara } from './flow.service.js';
+import { getHandoffSettings } from '../ai/ai-handoff.service.js';
+import { resolverDestinoAsignacion } from '../users/user.destino.js';
+import type { DestinoAsignacion } from '@sofiapp/shared';
 import { FlowState } from './flow.model.js';
 import { evaluarTrigger } from './flow.trigger.js';
 import type {
@@ -200,6 +203,47 @@ async function resolverRequiere(
  */
 type CategoriaFlujo = Extract<CategoriaEnvio, 'ia' | 'flujo'>;
 
+/** Formato previo a AUTH-06 (`asesorId` / `notificarAsesorId`): un usuario fijo sin reserva. */
+function destinoDeUsuario(usuarioId: string | undefined): DestinoAsignacion | null {
+  return usuarioId ? { modo: 'usuario', usuarioId, reserva: { tipo: 'sin_asignar' } } : null;
+}
+
+/**
+ * A quién va la conversación en un `handoff` de flujo (AUTH-06):
+ *  - con `destino` en el nodo, manda ese destino y su reserva (puede decidir dejarla sin asignar);
+ *  - con el `notificarAsesorId` previo, ese usuario; si ya no es asignable, el destino general;
+ *  - sin nada, el destino de la configuración de transferencia del tenant — antes quedaba sin dueño.
+ * El destino general **no le quita** la conversación a quien ya la tenga (igual que el handoff de la
+ * IA); un destino elegido en el nodo sí reasigna, como hacía `notificarAsesorId`. Nunca lanza.
+ */
+async function asignarPorHandoffDeFlujo(
+  tenantId: TenantId,
+  clienteId: string,
+  destinoNodo: DestinoAsignacion | undefined,
+  notificarAsesorId: string | undefined,
+): Promise<{ id: string; nombre: string } | null> {
+  const t = tenantId.toString();
+  try {
+    const delNodo = destinoNodo ?? destinoDeUsuario(notificarAsesorId);
+    let elegido = delNodo ? await resolverDestinoAsignacion(t, delNodo) : null;
+    if (!elegido && !destinoNodo) {
+      const cliente = await findByIdScoped(Cliente, t, clienteId).select('asesorId').lean<{ asesorId?: Types.ObjectId | null }>();
+      if (cliente?.asesorId) return null;
+      elegido = await resolverDestinoAsignacion(t, (await getHandoffSettings(t)).destino);
+    }
+    if (!elegido) return null;
+    const r = await assignConversation(t, ACTOR_SISTEMA_FLUJO, clienteId, elegido);
+    return r.asignadoA ? { id: r.asignadoA, nombre: r.asignadoANombre ?? '' } : null;
+  } catch (err) {
+    logger.warn('El handoff del flujo no pudo asignar la conversación; queda sin asignar', {
+      tenantId: t,
+      clienteId,
+      error: String(err),
+    });
+    return null;
+  }
+}
+
 /** Ejecuta un efecto y traga su propio error: un nodo mal configurado no puede tumbar el resto de
  *  efectos de la misma pasada ni la persistencia del `FlowState`. Queda registrado en el log. */
 async function ejecutarEfecto(
@@ -292,43 +336,28 @@ async function ejecutarEfecto(
         }
         return;
       }
-      case 'asignar_asesor':
-        // AUTH-03: el asesor del nodo puede haberse desactivado después de guardar el flujo. No es
-        // un fallo del flujo: la conversación sigue sin dueño y la reparte la configuración
-        // general, igual que en el `handoff` de abajo.
+      case 'asignar_asesor': {
+        // AUTH-06: el destino del nodo (usuario o grupo) lo resuelve el resolvedor único. Un nodo
+        // previo con `asesorId` es un destino `usuario` cuya reserva es dejarla sin asignar: AUTH-03
+        // ya decidió que un asesor desactivado después de guardar el flujo no es un fallo del flujo.
+        const destino = efecto.destino ?? destinoDeUsuario(efecto.asesorId);
+        if (!destino) return;
         try {
-          await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, efecto.asesorId);
+          const elegido = await resolverDestinoAsignacion(tenantId, destino);
+          if (elegido) await assignConversation(tenantId.toString(), ACTOR_SISTEMA_FLUJO, clienteId, elegido);
+          else logger.warn('El nodo asignar_asesor no encontró a quién asignar; queda sin asignar', { tenantId: tenantId.toString(), clienteId });
         } catch (err) {
-          logger.warn('El asesor del nodo asignar_asesor no se pudo asignar; queda sin asignar', {
+          logger.warn('El nodo asignar_asesor no pudo asignar; queda sin asignar', {
             tenantId: tenantId.toString(),
             clienteId,
             error: String(err),
           });
         }
         return;
+      }
       case 'handoff': {
         await setIaHabilitada(tenantId.toString(), clienteId, false);
-        // Un asesor elegido en el nodo MANDA sobre la asignación automática (balanceo). Sin él, la
-        // conversación queda sin dueño y la reparte la configuración general. Si el asesor ya no es
-        // válido (desactivado, borrado) no se rompe el traspaso: queda para el reparto automático.
-        let asesor: { id: string; nombre: string } | null = null;
-        if (efecto.notificarAsesorId) {
-          try {
-            const r = await assignConversation(
-              tenantId.toString(),
-              ACTOR_SISTEMA_FLUJO,
-              clienteId,
-              efecto.notificarAsesorId,
-            );
-            if (r.asignadoA) asesor = { id: r.asignadoA, nombre: r.asignadoANombre ?? '' };
-          } catch (err) {
-            logger.warn('El asesor del nodo handoff no se pudo asignar; queda al reparto automático', {
-              tenantId: tenantId.toString(),
-              clienteId,
-              error: String(err),
-            });
-          }
-        }
+        const asesor = await asignarPorHandoffDeFlujo(tenantId, clienteId, efecto.destino, efecto.notificarAsesorId);
         await emitirEfectoPrueba(tenantId, clienteId, { tipo: 'handoff', motivo: 'flujo', asesor });
         return;
       }

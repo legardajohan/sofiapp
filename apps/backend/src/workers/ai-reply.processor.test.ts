@@ -109,6 +109,7 @@ function handoffSettings(overrides: Partial<HandoffSettingsDTO> = {}): HandoffSe
     activo: false,
     asesorDestinoId: null,
     estrategiaDestino: 'primero',
+    destino: { modo: 'grupo', grupo: { tipo: 'todos' }, criterio: 'primero', soloEnLinea: false, reserva: { tipo: 'cualquiera' } },
     mensajeTransicion: MENSAJE_TRANSICION,
     condicionesExtras: [],
     heredado: true,
@@ -418,7 +419,7 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       tenantId.toString(),
       clienteId.toString(),
       'explicit_request',
-      null,
+      handoffSettings().destino,
       'primero',
       // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
       null,
@@ -453,7 +454,7 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       tenantId.toString(),
       clienteId.toString(),
       'low_confidence',
-      null,
+      handoffSettings().destino,
       'primero',
       // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
       null,
@@ -487,7 +488,7 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       tenantId.toString(),
       clienteId.toString(),
       'intent_purchase',
-      null,
+      handoffSettings().destino,
       'primero',
       // Un disparador de fabrica no arrastra ninguna condicion del admin (HU-IA-07).
       null,
@@ -502,6 +503,7 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
         // Desde HU-IA-07 el asesor fijo solo manda con la estrategia `fijo`.
         estrategiaDestino: 'fijo',
         asesorDestinoId: asesor,
+        destino: { modo: 'usuario', usuarioId: asesor, reserva: { tipo: 'cualquiera' } },
         reglas: {
           ...handoffSettings().reglas,
           keyword: { activa: true, palabras: ['reclamo'] },
@@ -517,7 +519,7 @@ describe('processAiReplyJob — handoff a un humano (HU-IA-03)', () => {
       tenantId.toString(),
       clienteId.toString(),
       'keyword',
-      asesor,
+      { modo: 'usuario', usuarioId: asesor, reserva: { tipo: 'cualquiera' } },
       'fijo',
       null,
     );
@@ -789,7 +791,7 @@ describe('processAiReplyJob — condiciones propias de transferencia (HU-IA-07)'
       tenantId.toString(),
       clienteId.toString(),
       'custom',
-      null,
+      handoffSettings().destino,
       'primero',
       { key: 'facturacion', nombre: 'Facturación' },
     );

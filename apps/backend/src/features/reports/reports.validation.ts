@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DIA_MS } from '../../utils/date-range.util.js';
 import { GRANULARIDADES, RANGO_MAX_DIAS, TOP_DEFAULT, TOP_MAX, TZ_DEFAULT } from './reports.types.js';
+import { grupoQuerySchema } from '../users/user.grupos.validation.js';
 
 const rangoQueryBase = z.object({
   desde: z.coerce.date().optional(),
@@ -27,8 +28,11 @@ export const rangoReporteQuerySchema = z.object({ query: conReglasDeRango(rangoQ
 
 export type RangoReporteQuery = z.infer<typeof rangoReporteQuerySchema>['query'];
 
-export const advisorReportQuerySchema = rangoReporteQuerySchema;
-export type AdvisorReportQuery = RangoReporteQuery;
+/** AUTH-06: `?grupo=` (rol, administradores sin el principal, equipo o usuario) acota las filas. */
+export const advisorReportQuerySchema = z.object({
+  query: conReglasDeRango(rangoQueryBase.extend({ grupo: grupoQuerySchema.optional() })),
+});
+export type AdvisorReportQuery = z.infer<typeof advisorReportQuerySchema>['query'];
 
 export const handoffRateQuerySchema = rangoReporteQuerySchema;
 export type HandoffRateQuery = RangoReporteQuery;
@@ -69,6 +73,8 @@ export const advisorActivityQuerySchema = z.object({
       tz: zonaQuery,
       granularidad: z.enum(GRANULARIDADES).default('dia'),
       asesorId: z.string().regex(/^[0-9a-f]{24}$/i, 'ID de asesor inválido.').optional(),
+      // AUTH-06. `asesorId` equivale a `grupo=usuario:<id>` y se sigue aceptando.
+      grupo: grupoQuerySchema.optional(),
     }),
   ),
 });

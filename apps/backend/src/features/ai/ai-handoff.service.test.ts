@@ -27,6 +27,7 @@ function settings(
     activo: true,
     asesorDestinoId: null,
     estrategiaDestino: 'primero',
+    destino: { modo: 'grupo', grupo: { tipo: 'todos' }, criterio: 'primero', soloEnLinea: false, reserva: { tipo: 'cualquiera' } },
     mensajeTransicion: 'Ya le pasé tu conversación a un asesor.',
     condicionesExtras,
     heredado: false,

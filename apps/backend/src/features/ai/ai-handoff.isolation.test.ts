@@ -91,7 +91,7 @@ describe('HU-IA-03 — aislamiento multi-tenant de la configuración de handoff'
     const adminDeB = await crearAdmin(tenantB, 'AdminB');
 
     await expect(
-      updateHandoffSettings(tenantA.toString(), dto({ asesorDestinoId: adminDeB })),
+      updateHandoffSettings(tenantA.toString(), dto({ estrategiaDestino: 'fijo', asesorDestinoId: adminDeB })),
     ).rejects.toThrow();
     // Y no se escribió nada: la validación va ANTES del upsert.
     expect(await HandoffSettings.countDocuments({ tenantId: tenantA })).toBe(0);
@@ -100,7 +100,7 @@ describe('HU-IA-03 — aislamiento multi-tenant de la configuración de handoff'
   it('sí acepta a un admin activo del propio tenant', async () => {
     const adminDeA = await crearAdmin(tenantA, 'AdminA');
 
-    const s = await updateHandoffSettings(tenantA.toString(), dto({ asesorDestinoId: adminDeA }));
+    const s = await updateHandoffSettings(tenantA.toString(), dto({ estrategiaDestino: 'fijo', asesorDestinoId: adminDeA }));
     expect(s.asesorDestinoId).toBe(adminDeA);
   });
 
@@ -117,5 +117,67 @@ describe('HU-IA-03 — aislamiento multi-tenant de la configuración de handoff'
 
     const activo = await crearAdmin(tenantA, 'Activo');
     expect(await primerAdminActivo(tenantA.toString())).toBe(activo);
+  });
+});
+
+// AUTH-06 — el destino por grupo también se valida contra el tenant, y lo guardado antes se traduce.
+describe('AUTH-06 — destino de la transferencia', () => {
+  beforeEach(async () => {
+    await HandoffSettings.deleteMany({});
+    await User.deleteMany({});
+  });
+
+  it('un equipo cuyo coordinador es de otro tenant → 404 y no se escribe nada', async () => {
+    const coordB = await User.create({
+      tenantId: tenantB,
+      nombre: 'Coord B',
+      email: `cb-${new Types.ObjectId().toString()}@x.com`,
+      passwordHash: 'x',
+      rol: 'admin',
+      rolEmpresa: 'coordinador',
+      activo: true,
+    });
+    await expect(
+      updateHandoffSettings(
+        tenantA.toString(),
+        dto({
+          destino: {
+            modo: 'grupo',
+            grupo: { tipo: 'equipo', coordinadorId: String(coordB._id) },
+            criterio: 'menor_carga',
+            soloEnLinea: false,
+            reserva: { tipo: 'cualquiera' },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(await HandoffSettings.countDocuments({ tenantId: tenantA })).toBe(0);
+  });
+
+  it('guarda `destino` y también el formato previo; un documento previo se lee traducido', async () => {
+    const s = await updateHandoffSettings(
+      tenantA.toString(),
+      dto({
+        destino: {
+          modo: 'grupo',
+          grupo: { tipo: 'rol', rol: 'asesor' },
+          criterio: 'menor_carga',
+          soloEnLinea: true,
+          reserva: { tipo: 'sin_asignar' },
+        },
+      }),
+    );
+    expect(s.destino).toMatchObject({ grupo: { tipo: 'rol', rol: 'asesor' }, soloEnLinea: true });
+    expect(s.estrategiaDestino).toBe('menor_carga');
+
+    await HandoffSettings.collection.updateOne({ tenantId: tenantA }, { $unset: { destino: '' } });
+    const leido = await getHandoffSettings(tenantA.toString());
+    expect(leido.destino).toEqual({
+      modo: 'grupo',
+      grupo: { tipo: 'todos' },
+      criterio: 'menor_carga',
+      soloEnLinea: false,
+      reserva: { tipo: 'cualquiera' },
+    });
   });
 });

@@ -1,3 +1,4 @@
+import type { RolEmpresa } from '../users/user.types.js';
 import type { HandoffMotivo } from '../ai/ai-handoff.types.js';
 
 /**
@@ -19,7 +20,14 @@ export { PREFIJO_CLIENTE_DEMO } from '../cliente/cliente.filters.js';
 export const RANGO_DEFAULT_DIAS = 30;
 export const RANGO_MAX_DIAS = 366;
 
-export interface IAdvisorRow {
+/** AUTH-06: rol y equipo de cada fila, para comparar solo dentro del mismo rol. */
+export interface IRolDeFila {
+  rolEmpresa: RolEmpresa | null;
+  coordinadorId: string | null;
+  esPrincipal: boolean;
+}
+
+export interface IAdvisorRow extends IRolDeFila {
   asesorId: string;
   nombre: string;
   activo: boolean;
@@ -195,7 +203,7 @@ export interface IAdvisorActivityResponse {
   granularidad: Granularidad;
   timezone: string;
   /** Los asesores que aparecen en `periodos`, con su nombre, ordenados por tiempo total. */
-  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number }>;
+  asesores: Array<{ asesorId: string; nombre: string; totalSegundos: number } & IRolDeFila>;
   /** Todos los periodos del rango en orden, también los vacíos. */
   periodos: IActivityPeriodRow[];
 }

@@ -146,7 +146,7 @@ describe('ejecutarFlujo — nodo handoff con asesor elegido', () => {
     expect(String(cliente?.asesorId)).toBe(asesorId);
   });
 
-  it('sin asesor en el nodo, la conversación queda sin dueño (la reparte la configuración general)', async () => {
+  it('sin nadie activo en la empresa, la conversación queda sin dueño', async () => {
     await crearFlowActivo([nodoHandoff], [], 'h1');
     const clienteId = await crearCliente(true);
 
@@ -537,5 +537,96 @@ describe('ejecutarFlujo — asignar_asesor con asesor inactivo (AUTH-03)', () =>
     await expect(ejecutarFlujo(tenantId.toString(), clienteId, 'hola')).resolves.toBeDefined();
     const cliente = await Cliente.findById(clienteId).lean();
     expect(cliente?.asesorId ?? null).toBeNull();
+  });
+});
+
+// AUTH-06 — los nodos resuelven su destino con el mismo resolvedor que la transferencia de la IA.
+describe('ejecutarFlujo — destinos por rol (AUTH-06)', () => {
+  async function crearUsuario(nombre: string, rolEmpresa: 'administrador' | 'coordinador' | 'asesor'): Promise<string> {
+    const doc = await createScoped(User, tenantId, {
+      nombre,
+      email: `${nombre.toLowerCase()}${Math.random()}@empresa.test`,
+      passwordHash: 'x',
+      rol: 'admin',
+      rolEmpresa,
+      activo: true,
+    });
+    return String(doc._id);
+  }
+
+  const aCoordinadores = {
+    modo: 'grupo' as const,
+    grupo: { tipo: 'rol' as const, rol: 'coordinador' as const },
+    criterio: 'primero' as const,
+    soloEnLinea: false,
+    reserva: { tipo: 'sin_asignar' as const },
+  };
+
+  it('handoff sin destino propio usa la configuración de transferencia (antes quedaba sin dueño)', async () => {
+    const admin = await crearUsuario('Alba', 'administrador');
+    await crearFlowActivo([nodoHandoff], [], 'h1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    // De fábrica, la configuración es «el primero de la empresa».
+    expect(String((await Cliente.findById(clienteId).lean())?.asesorId)).toBe(admin);
+  });
+
+  it('handoff sin destino propio no le quita la conversación a quien ya la tiene', async () => {
+    await crearUsuario('Alba', 'administrador');
+    const duena = await crearUsuario('Zoe', 'asesor');
+    await crearFlowActivo([nodoHandoff], [], 'h1');
+    const clienteId = await crearCliente(true);
+    await Cliente.updateOne({ _id: clienteId }, { $set: { asesorId: new Types.ObjectId(duena) } });
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    expect(String((await Cliente.findById(clienteId).lean())?.asesorId)).toBe(duena);
+  });
+
+  it('handoff con un grupo asigna dentro del rol pedido', async () => {
+    await crearUsuario('Alba', 'administrador');
+    const coord = await crearUsuario('Carla', 'coordinador');
+    await crearFlowActivo([{ ...nodoHandoff, config: { tipo: 'handoff', destino: aCoordinadores } }], [], 'h1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    expect(String((await Cliente.findById(clienteId).lean())?.asesorId)).toBe(coord);
+  });
+
+  it('con el grupo vacío y reserva «sin asignar», queda sin dueño pero el traspaso ocurre', async () => {
+    await crearUsuario('Alba', 'administrador');
+    await crearFlowActivo([{ ...nodoHandoff, config: { tipo: 'handoff', destino: aCoordinadores } }], [], 'h1');
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'necesito un humano');
+
+    const cliente = await Cliente.findById(clienteId).lean();
+    expect(cliente?.iaHabilitada).toBe(false);
+    expect(cliente?.asesorId ?? null).toBeNull();
+  });
+
+  it('asignar_asesor con un grupo asigna al elegido del grupo', async () => {
+    await crearUsuario('Alba', 'administrador');
+    const coord = await crearUsuario('Carla', 'coordinador');
+    await crearFlowActivo(
+      [
+        {
+          id: 'a1',
+          posicion: { x: 0, y: 0 },
+          tipo: 'accion',
+          config: { tipo: 'accion', efecto: { tipo: 'asignar_asesor', destino: aCoordinadores } },
+        },
+      ],
+      [],
+      'a1',
+    );
+    const clienteId = await crearCliente(true);
+
+    await ejecutarFlujo(tenantId.toString(), clienteId, 'hola');
+
+    expect(String((await Cliente.findById(clienteId).lean())?.asesorId)).toBe(coord);
   });
 });

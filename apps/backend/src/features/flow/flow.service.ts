@@ -13,6 +13,7 @@ import { AppError } from '../../utils/AppError.js';
 import { Flow } from './flow.model.js';
 import { getCamposPorKey } from '../contact-field/contact-field.service.js';
 import { configNodoEstricto } from './flow.validation.js';
+import { assertDestinoDelTenant } from '../users/user.grupos.js';
 import type { ICliente } from '../cliente/cliente.types.js';
 import type {
   CreateFlowDTO,
@@ -135,7 +136,22 @@ function assertConfigsEstrictas(nodos: INodo[]): void {
  * `saltarSiExiste` (true) y `sobrescribir` (false) quedan explícitos. Una `captura` sin destino, o con
  * `variable`, no se toca: los flujos anteriores siguen igual.
  */
+/**
+ * AUTH-06. Los destinos de los nodos `asignar_asesor` y `handoff` llegan del cuerpo de la petición:
+ * cada usuario o coordinador que nombran tiene que ser de ESTE tenant (404 si no), aunque el flujo se
+ * guarde como borrador. Es el único punto por el que un id de otra empresa entraría en un flujo.
+ */
+async function assertDestinosDelTenant(tenantId: TenantId, nodos: INodo[]): Promise<void> {
+  for (const nodo of nodos) {
+    const c = nodo.config;
+    const destino =
+      c.tipo === 'handoff' ? c.destino : c.tipo === 'accion' && c.efecto.tipo === 'asignar_asesor' ? c.efecto.destino : undefined;
+    if (destino) await assertDestinoDelTenant(tenantId, destino);
+  }
+}
+
 async function canonizarCapturas(tenantId: TenantId, nodos: INodo[]): Promise<INodo[]> {
+  await assertDestinosDelTenant(tenantId, nodos);
   const keys = nodos.flatMap((n) =>
     n.config.tipo === 'captura' && n.config.destino?.tipo === 'atributo' && n.config.destino.key
       ? [n.config.destino.key]
@@ -292,6 +308,16 @@ export async function updateFlow(
  */
 export async function countFlowsReferencingUser(tenantId: TenantId, userId: string): Promise<number> {
   return countScoped(Flow, tenantId, {
-    $or: [{ 'nodos.config.efecto.asesorId': userId }, { 'nodos.config.notificarAsesorId': userId }],
+    $or: [
+      { 'nodos.config.efecto.asesorId': userId },
+      { 'nodos.config.notificarAsesorId': userId },
+      // AUTH-06: el usuario fijo de un destino, o el coordinador de un equipo (grupo o reserva).
+      { 'nodos.config.efecto.destino.usuarioId': userId },
+      { 'nodos.config.destino.usuarioId': userId },
+      { 'nodos.config.efecto.destino.grupo.coordinadorId': userId },
+      { 'nodos.config.destino.grupo.coordinadorId': userId },
+      { 'nodos.config.efecto.destino.reserva.grupo.coordinadorId': userId },
+      { 'nodos.config.destino.reserva.grupo.coordinadorId': userId },
+    ],
   });
 }

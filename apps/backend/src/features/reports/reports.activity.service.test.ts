@@ -88,7 +88,11 @@ describe('getAdvisorActivity (HU-REP-06)', () => {
       porAsesor: [{ asesorId: ana.toString(), segundos: 1800 }],
     });
     expect(r.periodos[0]).toEqual({ periodo: '2026-09-14', totalSegundos: 0, porAsesor: [] });
-    expect(r.asesores).toEqual([{ asesorId: ana.toString(), nombre: 'Ana', totalSegundos: 1800 }]);
+    expect(r.asesores).toEqual([
+      expect.objectContaining({ asesorId: ana.toString(), nombre: 'Ana', totalSegundos: 1800 }),
+    ]);
+    // AUTH-06: cada fila trae su rol y equipo para comparar dentro del mismo rol.
+    expect(r.asesores[0]).toHaveProperty('rolEmpresa');
   });
 
   it('por semana empieza en lunes; por mes en el día 1', async () => {

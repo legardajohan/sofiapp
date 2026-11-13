@@ -89,7 +89,18 @@ describe('analizarGrafo — contenido incompleto', () => {
     expect(faltante({ tipo: 'intencion', etiquetas: [], ramaPorDefecto: 'fin' })).toContain('al menos una intención');
     expect(faltante({ tipo: 'kb', pregunta: 'ultimo_mensaje', siNoHayRespuesta: '' })).toContain('el texto de respaldo');
     expect(faltante({ tipo: 'accion', efecto: { tipo: 'aplicar_etiquetas', tagIds: [] } })).toContain('al menos una etiqueta');
-    expect(faltante({ tipo: 'accion', efecto: { tipo: 'asignar_asesor', asesorId: '' } })).toContain('el asesor');
+    expect(faltante({ tipo: 'accion', efecto: { tipo: 'asignar_asesor', asesorId: '' } })).toContain('a quién se asigna');
+    // AUTH-06: un destino de grupo de equipo sin coordinador también está incompleto, y en el handoff.
+    const sinCoord = {
+      modo: 'grupo' as const,
+      grupo: { tipo: 'equipo' as const, coordinadorId: '' },
+      criterio: 'primero' as const,
+      soloEnLinea: false,
+      reserva: { tipo: 'cualquiera' as const },
+    };
+    expect(faltante({ tipo: 'accion', efecto: { tipo: 'asignar_asesor', destino: sinCoord } })).toContain('a quién se asigna');
+    expect(faltante({ tipo: 'handoff', destino: sinCoord })).toContain('a quién se transfiere');
+    expect(faltante({ tipo: 'handoff' })).toBeUndefined();
     expect(faltante({ tipo: 'ia', objetivo: 'corto', salidas: [], ramaPorDefecto: 'fin' })).toContain('mínimo 10 caracteres');
   });
 

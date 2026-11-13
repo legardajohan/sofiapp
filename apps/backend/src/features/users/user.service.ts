@@ -229,7 +229,7 @@ function assertPuedeConcederPermiso(actor: IActorGestion, valor: boolean | undef
 }
 
 /** El coordinador de un asesor tiene que ser un coordinador **activo** del mismo tenant. */
-async function assertCoordinadorValido(
+export async function assertCoordinadorValido(
   tenantId: TenantId,
   coordinadorId: string,
   session?: ClientSession,

@@ -29,7 +29,8 @@ import type { IUserResponse } from '../users/user.types.js';
 import { assertTagsDelTenant, findSemaforoTags, findTagsByIds } from '../tag/tag.service.js';
 import { toSemaforoIAResponse } from '../ai/ai-semaforo.types.js';
 import { toResumenResponse } from '../cliente/cliente.service.js';
-import { asesorConMenorCarga, primerAdminActivo } from '../ai/ai-handoff.service.js';
+import { DESTINO_POR_DEFECTO, type DestinoAsignacion } from '@sofiapp/shared';
+import { destinoDesdeLegado, resolverDestinoAsignacion } from '../users/user.destino.js';
 import type {
   EstrategiaDestino,
   HandoffMotivo,
@@ -829,12 +830,15 @@ export async function handoffConversation(
   tenantId: string,
   clienteId: string,
   motivo: HandoffMotivo,
-  asesorDestinoId: string | null,
   /**
-   * Cómo se elige el destino (HU-IA-07). Omitirlo reproduce el comportamiento anterior a esa
-   * historia: se deriva de si hay asesor fijo, la misma regla que usa `toDTO` para los documentos
-   * guardados antes. Sin esta derivación, una llamada de cuatro argumentos ignoraría en silencio el
-   * asesor que le pasan.
+   * A quién va (AUTH-06): un `DestinoAsignacion` (usuario o grupo de rol/equipo, con reserva), o —
+   * formato previo — el id del asesor fijo / `null`, que junto a `estrategiaDestino` se traduce con
+   * `destinoDesdeLegado`.
+   */
+  destinoOAsesor: DestinoAsignacion | string | null,
+  /**
+   * Formato previo (HU-IA-07); solo se mira si el argumento anterior no es un destino. Omitirlo se
+   * deriva de si hay asesor fijo, la misma regla que usa `toDTO` para los documentos guardados antes.
    */
   estrategiaDestino?: EstrategiaDestino,
   /** Qué condición propia del admin lo disparó, cuando el motivo es `custom` (HU-IA-07). */
@@ -852,10 +856,13 @@ export async function handoffConversation(
   if (source.iaHabilitada === false) return;
 
   const yaTeniaAsesor = !!source.asesorId;
-  const estrategia = estrategiaDestino ?? (asesorDestinoId ? 'fijo' : 'primero');
+  const destinoConfigurado =
+    destinoOAsesor !== null && typeof destinoOAsesor === 'object'
+      ? destinoOAsesor
+      : destinoDesdeLegado(estrategiaDestino, destinoOAsesor);
   const destino = yaTeniaAsesor
     ? String(source.asesorId)
-    : await resolverDestino(tenantId, estrategia, asesorDestinoId);
+    : await resolverDestino(tenantId, destinoConfigurado);
 
   const updated = await findOneAndUpdateScoped(
     Cliente,
@@ -951,40 +958,20 @@ export async function handoffConversation(
 }
 
 /**
- * A quién se le pasa la conversación. El destino configurado manda, pero puede haber quedado
- * obsoleto —el asesor se dio de baja o lo desactivaron— y entonces vale más asignarla a cualquiera
- * activo que dejarla sin dueño.
+ * A quién se le pasa la conversación (AUTH-06): lo decide el resolvedor único. Si falla (p. ej. la
+ * agregación de carga), se reintenta con el destino por defecto en vez de propagar: un handoff que no
+ * asigna deja a un cliente esperando; uno que asigna al primero es solo un reparto subóptimo.
  */
-async function resolverDestino(
-  tenantId: string,
-  estrategia: EstrategiaDestino,
-  asesorDestinoId: string | null,
-): Promise<string | null> {
-  if (estrategia === 'fijo' && asesorDestinoId) {
-    try {
-      await assertAssignableAdmin(tenantId, asesorDestinoId);
-      return asesorDestinoId;
-    } catch {
-      logger.warn('Handoff: el asesor destino configurado ya no es asignable', {
-        tenantId,
-        asesorDestinoId,
-      });
-    }
+async function resolverDestino(tenantId: string, destino: DestinoAsignacion): Promise<string | null> {
+  try {
+    return await resolverDestinoAsignacion(tenantId, destino);
+  } catch (err: unknown) {
+    logger.warn('Handoff: falló el reparto configurado; se usa el destino por defecto', {
+      tenantId,
+      error: String(err),
+    });
+    return resolverDestinoAsignacion(tenantId, DESTINO_POR_DEFECTO);
   }
-
-  if (estrategia === 'menor_carga') {
-    try {
-      const elegido = await asesorConMenorCarga(tenantId);
-      if (elegido) return elegido;
-    } catch (err: unknown) {
-      // No se propaga, y el fallback de abajo asigna igual: un handoff que no asigna deja a un
-      // cliente esperando, mientras que uno que asigna al primero en vez de al de menos carga es
-      // solo un reparto subóptimo. La diferencia de coste entre los dos errores no admite discusión.
-      logger.warn('Handoff: falló el reparto por carga', { tenantId, error: String(err) });
-    }
-  }
-
-  return primerAdminActivo(tenantId);
 }
 
 /**

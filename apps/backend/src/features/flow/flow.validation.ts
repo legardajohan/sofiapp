@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ESTADOS_COMERCIALES } from '../cliente/cliente.types.js';
 import { CAMPOS_FIJOS_CONTACTO } from '../contact-field/contact-field.types.js';
 import { OPERADORES, TIPOS_NODO } from './flow.types.js';
+import { destinoAsignacionBorradorSchema, destinoAsignacionSchema } from '../users/user.grupos.validation.js';
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido.');
 const empty = z.object({});
@@ -55,12 +56,23 @@ function construirConfigNodo(estricto: boolean) {
     })
     .strict();
 
-  const efectoAccion = z.discriminatedUnion('tipo', [
-    z.object({ tipo: z.literal('cambiar_estado'), estado: z.enum(ESTADOS_COMERCIALES) }).strict(),
-    z.object({ tipo: z.literal('aplicar_etiquetas'), tagIds: z.array(objectId).min(minLista) }).strict(),
-    z.object({ tipo: z.literal('crear_lead') }).strict(),
-    z.object({ tipo: z.literal('asignar_asesor'), asesorId }).strict(),
-  ]);
+  // AUTH-06: el destino (usuario o grupo de rol/equipo) de la asignación y del handoff. En borrador
+  // admite ids vacíos; la versión estricta, completos.
+  const destino = estricto ? destinoAsignacionSchema : destinoAsignacionBorradorSchema;
+
+  const efectoAccion = z
+    .discriminatedUnion('tipo', [
+      z.object({ tipo: z.literal('cambiar_estado'), estado: z.enum(ESTADOS_COMERCIALES) }).strict(),
+      z.object({ tipo: z.literal('aplicar_etiquetas'), tagIds: z.array(objectId).min(minLista) }).strict(),
+      z.object({ tipo: z.literal('crear_lead') }).strict(),
+      // `asesorId` es el formato previo a AUTH-06; `destino` manda si llegan los dos.
+      z.object({ tipo: z.literal('asignar_asesor'), asesorId: asesorId.optional(), destino: destino.optional() }).strict(),
+    ])
+    .superRefine((efecto, ctx) => {
+      if (estricto && efecto.tipo === 'asignar_asesor' && !efecto.destino && !efecto.asesorId) {
+        ctx.addIssue({ code: 'custom', path: ['destino'], message: 'Elige a quién se asigna la conversación.' });
+      }
+    });
 
   /** HU-FLOW-05. La existencia de la `key` en el catálogo la comprueba el service (necesita `tenantId`). */
   const destinoCaptura = z.discriminatedUnion('tipo', [
@@ -120,6 +132,8 @@ function construirConfigNodo(estricto: boolean) {
         tipo: z.literal('handoff'),
         motivo: z.string().optional(),
         notificarAsesorId: objectId.optional(),
+        // AUTH-06. Sin destino ni `notificarAsesorId`, usa el de la configuración de transferencia.
+        destino: destino.optional(),
       })
       .strict(),
     z.object({ tipo: z.literal('espera'), minutos: z.number().int().positive() }).strict(),
