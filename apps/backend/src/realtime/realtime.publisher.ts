@@ -86,6 +86,12 @@ export function subscribeRealtime(io: Server): void {
       return;
     }
 
+    if (evt.type === 'pendiente:vencido') {
+      // HU-PDF-02: el aviso es del autor de la nota, no del tenant entero.
+      io.to(`asesor:${evt.targetUserId}`).emit(evt.type, evt);
+      return;
+    }
+
     io.to(`tenant:${evt.tenantId}`).emit(evt.type, evt);
   });
 }

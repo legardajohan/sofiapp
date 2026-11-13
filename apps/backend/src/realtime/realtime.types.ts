@@ -115,4 +115,25 @@ export type RealtimeEvent =
       ownerId: string;
       efecto: SandboxEfecto;
       at: string;
+    }
+  | {
+      /**
+       * HU-PDF-02 — venció el recordatorio de una nota pendiente. Va SOLO al room del autor
+       * (`asesor:<targetUserId>`), que es quien recibe el aviso. Sin el texto de la nota: el
+       * cliente refetchea `GET /api/organizador/activos` con su propio permiso.
+       */
+      type: 'pendiente:vencido';
+      tenantId: string;
+      targetUserId: string;
+      notaId: string;
+    }
+  | {
+      /**
+       * HU-PDF-02 — un pendiente se cerró, se pospuso o se reabrió. Al room del tenant: el
+       * Organizador y la columna Pendientes del embudo son vistas compartidas, y las demás pestañas
+       * del propio usuario retiran el aviso con este mismo evento.
+       */
+      type: 'pendiente:updated';
+      tenantId: string;
+      notaId: string;
     };

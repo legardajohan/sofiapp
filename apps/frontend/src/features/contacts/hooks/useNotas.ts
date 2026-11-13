@@ -27,6 +27,8 @@ export function useNotas(clienteId: string | null, habilitado: boolean) {
 function invalidarNotas(qc: QueryClient, clienteId: string | null): void {
   void qc.invalidateQueries({ queryKey: ['contact-notas', clienteId] });
   void qc.invalidateQueries({ queryKey: PENDIENTES_KEY });
+  // HU-PDF-02: la nota ES el recordatorio; programarla o editarla cambia el Organizador.
+  void qc.invalidateQueries({ queryKey: ['organizador'] });
 }
 
 export function useCreateNota(clienteId: string | null) {

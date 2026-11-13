@@ -15,7 +15,8 @@ import { recordAuditEvent } from '../audit/audit.service.js';
 import { findUsersByIds } from '../users/user.service.js';
 import type { IUserResponse } from '../users/user.types.js';
 import type { IPaginated } from '../conversation/conversation.types.js';
-import { diaEnZona } from '../pendiente/pendiente.fechas.js';
+import { diaEnZona, instanteRecordatorio } from '../pendiente/pendiente.fechas.js';
+import { registrarEvento, snapshotProgramacion } from '../organizador/organizador.eventos.js';
 import { ContactNote } from './contact-note.model.js';
 import type { IContactNote, IContactNoteLean, INotaResponse } from './contact-note.types.js';
 import type { UpdateNotaBody } from './contact-note.validation.js';
@@ -28,8 +29,26 @@ export type CambiosNota = Omit<UpdateNotaBody, 'tz'> & { tz?: string };
 /** Lo que define a un pendiente más allá del texto. `null` en todo cuando la nota no lo es. */
 type CamposPendiente = Pick<
   IContactNote,
-  'pendiente' | 'programadoDia' | 'programadoHora' | 'estadoPendiente' | 'cerradoAt' | 'cerradoPorId'
+  | 'pendiente'
+  | 'programadoDia'
+  | 'programadoHora'
+  | 'estadoPendiente'
+  | 'cerradoAt'
+  | 'cerradoPorId'
+  | 'recordatorioAt'
+  | 'programadoTz'
+  | 'notificadoPara'
+  | 'vecesPospuesto'
+  | 'avisoAntesMin'
+  | 'avisoAt'
 >;
+
+const MINUTO_MS = 60_000;
+
+/** Instante del aviso: la hora del pendiente menos la anticipación pedida (HU-PDF-02 A1). */
+function instanteAviso(recordatorioAt: Date, antesMin: number): Date {
+  return new Date(recordatorioAt.getTime() - antesMin * MINUTO_MS);
+}
 
 const SIN_PENDIENTE: CamposPendiente = {
   pendiente: false,
@@ -38,7 +57,43 @@ const SIN_PENDIENTE: CamposPendiente = {
   estadoPendiente: null,
   cerradoAt: null,
   cerradoPorId: null,
+  recordatorioAt: null,
+  programadoTz: null,
+  notificadoPara: null,
+  vecesPospuesto: 0,
+  avisoAntesMin: 0,
+  avisoAt: null,
 };
+
+/**
+ * Un pendiente que nace (alta o encendido del interruptor): abierto, programado y con su
+ * recordatorio del Organizador ya calculado (HU-PDF-02). Sin fecha elegida, el día de hoy en la zona
+ * de quien escribe (RN10); sin hora, el aviso es a las 08:00 (D1).
+ */
+function pendienteNuevo(
+  dia: string | undefined,
+  hora: string | null | undefined,
+  tz: string,
+  antesMin = 0,
+): CamposPendiente {
+  const programadoDia = dia ?? diaEnZona(new Date(), tz);
+  const programadoHora = hora ?? null;
+  const recordatorioAt = instanteRecordatorio(programadoDia, programadoHora, tz);
+  return {
+    pendiente: true,
+    programadoDia,
+    programadoHora,
+    estadoPendiente: 'abierto',
+    cerradoAt: null,
+    cerradoPorId: null,
+    recordatorioAt,
+    programadoTz: tz,
+    notificadoPara: null,
+    vecesPospuesto: 0,
+    avisoAntesMin: antesMin,
+    avisoAt: instanteAviso(recordatorioAt, antesMin),
+  };
+}
 
 function toNotaResponse(
   nota: IContactNoteLean,
@@ -56,6 +111,7 @@ function toNotaResponse(
     programadoHora: pendiente ? (nota.programadoHora ?? null) : null,
     estadoPendiente: pendiente ? (nota.estadoPendiente ?? 'abierto') : null,
     cerradoAt: pendiente && nota.cerradoAt ? nota.cerradoAt.toISOString() : null,
+    avisoAntesMin: pendiente ? (nota.avisoAntesMin ?? 0) : 0,
     createdAt: nota.createdAt.toISOString(),
     updatedAt: (nota.updatedAt ?? nota.createdAt).toISOString(),
   };
@@ -86,6 +142,8 @@ export interface OpcionesNuevaNota {
   pendiente?: boolean;
   programadoDia?: string;
   programadoHora?: string;
+  /** HU-PDF-02 A1 — «Recordarme N minutos antes». */
+  avisoAntesMin?: number;
   /** Zona del navegador: decide qué día es «hoy» cuando no se elige fecha (RN10). */
   tz?: string;
 }
@@ -100,15 +158,12 @@ export async function createNota(
   await assertContactoDelTenant(tenantId, clienteId);
 
   const campos: CamposPendiente = opciones.pendiente
-    ? {
-        pendiente: true,
-        // RN10: sin fecha elegida, el pendiente es del día en que se crea para quien lo crea.
-        programadoDia: opciones.programadoDia ?? diaEnZona(new Date(), opciones.tz ?? 'America/Bogota'),
-        programadoHora: opciones.programadoHora ?? null,
-        estadoPendiente: 'abierto',
-        cerradoAt: null,
-        cerradoPorId: null,
-      }
+    ? pendienteNuevo(
+        opciones.programadoDia,
+        opciones.programadoHora,
+        opciones.tz ?? 'America/Bogota',
+        opciones.avisoAntesMin ?? 0,
+      )
     : SIN_PENDIENTE;
 
   const creada = await createScoped(ContactNote, tenantId, {
@@ -131,6 +186,19 @@ export async function createNota(
     antes: {},
     despues: { clienteId, ...resumenAuditoria(campos) },
   });
+
+  // HU-PDF-02: el pendiente entra al historial del Organizador desde su alta.
+  if (campos.pendiente) {
+    await registrarEvento(tenantId, {
+      notaId: nota._id,
+      clienteId,
+      responsableId: autorId,
+      tipo: 'programado',
+      actorId: autorId,
+      origen: 'nota',
+      despues: snapshotProgramacion(campos),
+    });
+  }
 
   const userMap = await findUsersByIds(tenantId, [autorId]);
   return toNotaResponse(nota, userMap);
@@ -179,21 +247,22 @@ function cambiosDePendiente(
   cambios: CambiosNota,
 ): Partial<CamposPendiente> {
   const eraPendiente = previa.pendiente ?? false;
-  const programa = cambios.programadoDia !== undefined || cambios.programadoHora !== undefined;
+  const programa =
+    cambios.programadoDia !== undefined ||
+    cambios.programadoHora !== undefined ||
+    cambios.avisoAntesMin !== undefined;
 
   // RN4 + RN9: quitar el interruptor borra la programación y el cierre.
   if (cambios.pendiente === false) return eraPendiente ? SIN_PENDIENTE : {};
 
   // Encender el pendiente en una nota que no lo era: nace abierto y programado (RN10).
   if (cambios.pendiente === true && !eraPendiente) {
-    return {
-      pendiente: true,
-      programadoDia: cambios.programadoDia ?? diaEnZona(new Date(), cambios.tz ?? 'America/Bogota'),
-      programadoHora: cambios.programadoHora ?? null,
-      estadoPendiente: 'abierto',
-      cerradoAt: null,
-      cerradoPorId: null,
-    };
+    return pendienteNuevo(
+      cambios.programadoDia,
+      cambios.programadoHora,
+      cambios.tz ?? 'America/Bogota',
+      cambios.avisoAntesMin ?? 0,
+    );
   }
 
   if (!programa) return {};
@@ -203,6 +272,25 @@ function cambiosDePendiente(
   const set: Partial<CamposPendiente> = {};
   if (cambios.programadoDia !== undefined) set.programadoDia = cambios.programadoDia;
   if (cambios.programadoHora !== undefined) set.programadoHora = cambios.programadoHora;
+
+  // HU-PDF-02 (CA-12): reprogramar la nota ES reprogramar su recordatorio — mismo documento, nunca
+  // uno nuevo. Solo si el instante cambia se rearma el aviso; guardar la misma hora no re-notifica.
+  const tz = cambios.tz ?? previa.programadoTz ?? 'America/Bogota';
+  const dia = set.programadoDia ?? previa.programadoDia ?? diaEnZona(previa.createdAt, tz);
+  const hora = set.programadoHora !== undefined ? set.programadoHora : (previa.programadoHora ?? null);
+  const recordatorioAt = instanteRecordatorio(dia, hora, tz);
+  const antesMin = cambios.avisoAntesMin ?? previa.avisoAntesMin ?? 0;
+  const avisoAt = instanteAviso(recordatorioAt, antesMin);
+  if (cambios.avisoAntesMin !== undefined) set.avisoAntesMin = antesMin;
+  if (previa.recordatorioAt?.getTime() !== recordatorioAt.getTime()) {
+    set.recordatorioAt = recordatorioAt;
+    set.programadoTz = tz;
+  }
+  // Rearma el aviso solo si su instante cambia: guardar lo mismo no re-notifica.
+  if (previa.avisoAt?.getTime() !== avisoAt.getTime()) {
+    set.avisoAt = avisoAt;
+    set.notificadoPara = null;
+  }
   return set;
 }
 
@@ -233,6 +321,23 @@ export async function updateNota(
           .lean<IContactNoteLean>();
   // Borrada entre la lectura y la escritura.
   if (!actualizada) throw new AppError('Nota no encontrada.', 404);
+
+  // HU-PDF-02: programar o reprogramar queda en el historial del pendiente.
+  const encendido = !(previa.pendiente ?? false) && (actualizada.pendiente ?? false);
+  if (encendido || 'recordatorioAt' in set || 'avisoAt' in set) {
+    if (actualizada.pendiente) {
+      await registrarEvento(tenantId, {
+        notaId,
+        clienteId,
+        responsableId: previa.autorId,
+        tipo: encendido ? 'programado' : 'reprogramado',
+        actorId,
+        origen: 'nota',
+        antes: encendido ? null : snapshotProgramacion(previa),
+        despues: snapshotProgramacion(actualizada),
+      });
+    }
+  }
 
   // Igual que en el alta: se audita qué cambió, jamás el texto.
   await recordAuditEvent(tenantId, {

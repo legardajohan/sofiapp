@@ -34,6 +34,7 @@ import { useDeleteNota, useUpdateNota } from '../hooks/useNotas.js';
 import { fechaCompleta, fechaHora } from '../lib/fecha.js';
 import type { CambiosNota, NotaDTO } from '../types.js';
 import { ProgramacionPendiente } from './ProgramacionPendiente.js';
+import type { AnticipacionAviso } from '../types.js';
 
 interface Props {
   clienteId: string;
@@ -84,6 +85,7 @@ export function NotaItem({ clienteId, nota }: Props): React.ReactElement {
   const [borrador, setBorrador] = useState(nota.texto);
   const [dia, setDia] = useState(nota.programadoDia);
   const [hora, setHora] = useState(nota.programadoHora);
+  const [aviso, setAviso] = useState<AnticipacionAviso>(nota.avisoAntesMin ?? 0);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const actualizar = useUpdateNota(clienteId);
   const eliminar = useDeleteNota(clienteId);
@@ -93,6 +95,7 @@ export function NotaItem({ clienteId, nota }: Props): React.ReactElement {
     ...(textoNuevo !== nota.texto ? { texto: textoNuevo } : {}),
     ...(nota.pendiente && dia && dia !== nota.programadoDia ? { programadoDia: dia } : {}),
     ...(nota.pendiente && hora !== nota.programadoHora ? { programadoHora: hora } : {}),
+    ...(nota.pendiente && aviso !== (nota.avisoAntesMin ?? 0) ? { avisoAntesMin: aviso } : {}),
   };
   const puedeGuardar =
     textoNuevo.length > 0 && Object.keys(cambios).length > 0 && !actualizar.isPending;
@@ -101,6 +104,7 @@ export function NotaItem({ clienteId, nota }: Props): React.ReactElement {
     setBorrador(nota.texto);
     setDia(nota.programadoDia);
     setHora(nota.programadoHora);
+    setAviso(nota.avisoAntesMin ?? 0);
     setEditando(true);
   }
 
@@ -142,6 +146,8 @@ export function NotaItem({ clienteId, nota }: Props): React.ReactElement {
               hora={hora}
               onDiaChange={setDia}
               onHoraChange={setHora}
+              aviso={aviso}
+              onAvisoChange={setAviso}
               disabled={actualizar.isPending}
             />
           )}
