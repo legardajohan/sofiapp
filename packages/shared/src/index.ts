@@ -7,3 +7,25 @@ export type {
   ErrorGrafo,
   NodoGrafo,
 } from './flow-graph.js';
+export {
+  CRITERIOS_DESTINO,
+  DESTINO_POR_DEFECTO,
+  RESERVA_POR_DEFECTO,
+  ROLES_DESTINO,
+  VENTANA_VENTAS_DIAS,
+  grupoDeCoordinador,
+  perteneceAlGrupo,
+  destinoCompleto,
+  etiquetaGrupo,
+  parsearGrupoQuery,
+  serializarGrupoQuery,
+} from './destino-usuarios.js';
+export type {
+  CriterioDestino,
+  DestinoAsignacion,
+  FiltroGrupo,
+  GrupoUsuarios,
+  MiembroGrupo,
+  ReservaDestino,
+  RolEmpresaDestino,
+} from './destino-usuarios.js';

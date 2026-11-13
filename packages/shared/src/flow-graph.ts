@@ -10,6 +10,7 @@
  * Los errores de **forma** (ids repetidos, tipos inválidos, campos no permitidos) no se reportan
  * aquí: los rechaza el esquema Zod del backend porque no se pueden persistir.
  */
+import { destinoCompleto, type DestinoAsignacion } from './destino-usuarios.js';
 
 export type CodigoErrorGrafo =
   | 'NODO_HUERFANO'
@@ -46,8 +47,11 @@ export type ConfigGrafo =
       ramaPorDefecto: string;
     }
   | { tipo: 'kb'; pregunta: string; siNoHayRespuesta: string }
-  | { tipo: 'accion'; efecto: { tipo: string; tagIds?: string[]; asesorId?: string; estado?: string } }
-  | { tipo: 'handoff' }
+  | {
+      tipo: 'accion';
+      efecto: { tipo: string; tagIds?: string[]; asesorId?: string; estado?: string; destino?: DestinoAsignacion };
+    }
+  | { tipo: 'handoff'; destino?: DestinoAsignacion }
   | { tipo: 'espera'; minutos: number }
   | {
       tipo: 'ia';
@@ -144,7 +148,11 @@ function faltantesDeContenido(config: ConfigGrafo): string[] {
       if (config.efecto.tipo === 'aplicar_etiquetas' && (config.efecto.tagIds ?? []).length === 0) {
         faltan.push('al menos una etiqueta');
       }
-      if (config.efecto.tipo === 'asignar_asesor' && vacio(config.efecto.asesorId)) faltan.push('el asesor');
+      if (config.efecto.tipo === 'asignar_asesor') {
+        // AUTH-06: el destino (usuario o grupo) manda; `asesorId` es el formato previo.
+        const d = config.efecto.destino;
+        if (d ? !destinoCompleto(d) : vacio(config.efecto.asesorId)) faltan.push('a quién se asigna');
+      }
       if (config.efecto.tipo === 'cambiar_estado' && vacio(config.efecto.estado)) faltan.push('el estado');
       break;
     case 'ia':
@@ -157,6 +165,9 @@ function faltantesDeContenido(config: ConfigGrafo): string[] {
       }
       break;
     case 'handoff':
+      // Sin destino usa el de la configuración de transferencia; con uno, tiene que estar completo.
+      if (config.destino && !destinoCompleto(config.destino)) faltan.push('a quién se transfiere');
+      break;
     case 'espera':
       break;
   }
