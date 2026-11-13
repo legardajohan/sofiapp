@@ -707,8 +707,8 @@ clave extra es un 400, no un campo ignorado):
 | `condicion` | `{ variable: "ultimo_mensaje"\|"var:<nombre>", ramas: [{ operador: "igual_a"\|"contiene"\|"opcion_elegida", valor, nodoDestino }], ramaPorDefecto }` |
 | `intencion` | `{ etiquetas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto }` |
 | `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
-| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
-| `handoff` | `{ motivo?, notificarAsesorId? }` |
+| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId?, destino? } }` — AUTH-06: `destino` (`DestinoAsignacion`) manda; `asesorId` es el formato previo |
+| `handoff` | `{ motivo?, notificarAsesorId?, destino? }` — AUTH-06: `destino` (`DestinoAsignacion`) manda; sin destino ni `notificarAsesorId`, usa el de `handoff_settings` |
 | `espera` | `{ minutos }` — job diferido, HU-FLOW-02 |
 | `ia` | `{ objetivo, salidas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto, maxTurnos, usarKb }` — conversa varios turnos con `AIService.extract()` (historial real, no solo el último mensaje) y retoma el flujo por la salida que la IA decide cumplida; `maxTurnos` (1-10) fuerza salida por `ramaPorDefecto` sin llamar de nuevo a la IA. HU-FLOW-03 |
 
@@ -1117,6 +1117,8 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   // A quién le llega la conversación (HU-IA-07). `asesorDestinoId` solo significa algo con "fijo".
   estrategiaDestino: "primero" | "menor_carga" | "fijo",   // default "primero"
   asesorDestinoId: ObjectId?,     // ref User (admin activo del tenant)
+  // AUTH-06 (ADR 0019). Manda sobre los dos de arriba, que se siguen escribiendo un release.
+  destino?: DestinoAsignacion,    // ver abajo; ausente en documentos previos → se deriva al leer
   mensajeTransicion: String,      // lo que lee el cliente al ser transferido
   reglas: {                       // los CUATRO disparadores de fábrica, objeto fijo
     explicitRequest: { activa: Boolean, frases: [String] },
@@ -1143,6 +1145,13 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > endpoints nuevos, y sin criterio de orden que inventar: el orden es el del array, que es el que ve
 > quien las configura. Se evalúan **después** de las dos reglas de texto de fábrica y **antes** de
 > `lowConfidence`/`intentPurchase`, porque son gratis: no llaman al modelo.
+>
+> **`DestinoAsignacion` (AUTH-06, `packages/shared/src/destino-usuarios.ts`):**
+> `{ modo: "usuario", usuarioId, reserva }` | `{ modo: "grupo", grupo, criterio: "primero" | "menor_carga",
+> soloEnLinea: Boolean, reserva }`. `grupo`: `{ tipo: "todos" }` | `{ tipo: "rol", rol, excluirPrincipal? }`
+> | `{ tipo: "equipo", coordinadorId, incluirCoordinador? }`. `reserva`: `{ tipo: "cualquiera" }` |
+> `{ tipo: "grupo", grupo }` | `{ tipo: "sin_asignar" }`. Se guarda como `Mixed`; la forma la valida
+> Zod en el borde. Sin migración: un documento sin `destino` lo deriva de `estrategiaDestino`.
 >
 > **`estrategiaDestino` y `condicionesExtras` no necesitaron migración.** Los documentos guardados
 > antes de HU-IA-07 no los traen, y el servicio los deriva al leer (`asesorDestinoId ? "fijo" :

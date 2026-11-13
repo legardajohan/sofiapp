@@ -149,6 +149,27 @@ varios, se ejecuta un solo handoff: el del primero de la lista.
 > Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
 > que no tienen dueño.
 
+### Destino por rol (AUTH-06 · ADR 0019)
+
+Desde AUTH-06 el destino es un **grupo de usuarios** más un criterio, y lo comparten la transferencia
+de la IA y los nodos `handoff` / `asignar_asesor` de los flujos:
+
+- **Grupo:** todos · un rol (Asesores, Coordinadores, Administradores, o Administradores **excepto el
+  principal**) · el **grupo de un coordinador** (él y sus asesores) · o una persona concreta del grupo
+  elegido. Solo cuentan usuarios activos y no eliminados.
+- **Criterio («dentro del grupo, se elige a»):** quien tenga menos conversaciones activas, o quien
+  tenga **más ventas cerradas en los últimos 30 días** (misma definición de venta que el reporte de
+  productividad). Empate → el primero por nombre. Se compara solo dentro del grupo. «El primero por
+  orden alfabético» ya no se ofrece, pero las configuraciones que lo tienen guardado siguen valiendo.
+- **Solo en línea** (opcional): quien tuvo actividad en SofiApp en los últimos 5 minutos.
+- **Si no hay nadie disponible** (reserva): cualquier usuario activo (por defecto), otro grupo, o
+  dejarla sin asignar.
+- Las tres estrategias anteriores equivalen a: `primero` = cualquier usuario + el primero;
+  `menor_carga` = cualquier usuario + menos carga; `fijo` = una persona.
+- Un nodo `handoff` sin destino propio usa el de la transferencia (antes la dejaba sin dueño).
+- Cambiar el rol de alguien **no** mueve sus conversaciones: solo cambia en qué grupos entra a partir
+  de la siguiente asignación.
+
 ## 4ter. Horarios de envío (HU-CONF-01)
 
 Cada envío a un cliente declara una **categoría**, y la empresa decide por categoría si sale a

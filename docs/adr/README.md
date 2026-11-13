@@ -24,6 +24,7 @@ marca al anterior como *Reemplazado*.
 | [0016](0016-gestion-usuarios-y-revocacion.md) | Gestión de usuarios por subrol y revocación de sesiones | Aceptada (§1 reemplazada por 0017) |
 | [0017](0017-roles-de-empresa.md) | Roles de empresa: Administrador, Coordinador y Asesor | Aceptada (gates y alcance del coordinador reemplazados por 0018) |
 | [0018](0018-usuario-principal-y-accesos-iguales.md) | Usuario principal, jerarquía de gestión y accesos iguales | Aceptada |
+| [0019](0019-destinos-por-rol.md) | Destinos por rol: grupo de usuarios y resolvedor único | Aceptada |
 
 ## Convención
 
