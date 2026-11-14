@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookText,
   CalendarClock,
+  ClipboardList,
   Bot,
   Building2,
   Columns3,
@@ -29,7 +30,12 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RolEmpresa, UserRol } from '@/stores/authStore';
-import { ROLES_CONFIGURACION, ROLES_GESTION_USUARIOS, ROLES_REPORTES } from '@/lib/roles';
+import {
+  ROLES_CONFIGURACION,
+  ROLES_DATOS_SENSIBLES,
+  ROLES_GESTION_USUARIOS,
+  ROLES_REPORTES,
+} from '@/lib/roles';
 
 export interface NavSubItem {
   label: string;
@@ -88,6 +94,16 @@ export const navGroups: NavGroup[] = [
       { label: 'Leads', to: '/leads', icon: Target, roles: ['admin'] },
       { label: 'Flujos', to: '/flows', icon: Workflow, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
       { label: 'Etapas del embudo', to: '/etapas', icon: Columns3, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
+      // HU-PDF-02: inmediatamente debajo del embudo. Muestra el texto de las notas, así que lleva
+      // el mismo gate de rol de empresa que leerlas (ROLES_DATOS_SENSIBLES).
+      {
+        label: 'Organizador',
+        to: '/organizador',
+        // Mismo ícono que la columna Pendientes del embudo: es la misma lista, vista completa.
+        icon: ClipboardList,
+        roles: ['admin'],
+        rolesEmpresa: ROLES_DATOS_SENSIBLES,
+      },
       { label: 'Etiquetas', to: '/etiquetas', icon: Tags, roles: ['admin'], rolesEmpresa: ROLES_CONFIGURACION },
       {
         label: 'Clientes',

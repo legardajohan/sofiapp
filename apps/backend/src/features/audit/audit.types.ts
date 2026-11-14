@@ -18,6 +18,8 @@ export type AuditAccion =
   | 'contact-note.delete'
   | 'contact-note.pendiente-cerrar'
   | 'contact-note.pendiente-reabrir'
+  /** HU-PDF-02 — aplazamiento desde el Organizador. Nunca el texto de la nota. */
+  | 'contact-note.pendiente-posponer'
   | 'lead.create'
   | 'lead.update'
   | 'lead.delete'

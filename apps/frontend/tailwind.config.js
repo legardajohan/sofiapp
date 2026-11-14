@@ -48,6 +48,11 @@ export default {
   				foreground: 'hsl(var(--success-foreground))',
   				subtle: 'hsl(var(--success-subtle))'
   			},
+  			warning: {
+  				DEFAULT: 'hsl(var(--warning))',
+  				foreground: 'hsl(var(--warning-foreground))',
+  				subtle: 'hsl(var(--warning-subtle))'
+  			},
   			adjunto: {
   				galeria: 'hsl(var(--adjunto-galeria))',
   				documento: 'hsl(var(--adjunto-documento))'

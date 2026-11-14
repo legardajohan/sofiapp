@@ -157,6 +157,11 @@ const EnvSchema = z.object({
   REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().positive().default(600_000),
   REMINDER_SWEEP_BATCH: z.coerce.number().positive().default(200),
 
+  // HU-PDF-02 — barrido del Organizador: cada cuánto se buscan recordatorios vencidos (precisión
+  // del aviso en vivo) y cuántos se procesan por pasada.
+  ORGANIZADOR_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  ORGANIZADOR_SWEEP_BATCH: z.coerce.number().int().positive().default(500),
+
   // HU-REP-06 — tiempo activo del asesor. Cada cuánto late una pestaña activa y cuánto retraso se le
   // perdona a un latido antes de tratar el hueco como inactividad. Deben coincidir con las
   // constantes del frontend (`features/activity`): si el navegador late más despacio que esto, cada

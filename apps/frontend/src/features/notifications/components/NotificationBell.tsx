@@ -13,6 +13,22 @@ import { useNotifications } from '../hooks/useNotifications.js';
 import { useUnreadCount } from '../hooks/useUnreadCount.js';
 import { haceRelativo } from '../lib/format.js';
 import type { NotificationDTO, NotificationTipo } from '../types.js';
+import {
+  useAvisosActivos,
+  useRecordatoriosActivos,
+} from '@/features/organizador/hooks/useOrganizador';
+import { RecordatorioCard } from '@/features/organizador/components/RecordatorioCard';
+
+/**
+ * Recordatorios vencidos que cuentan en la campana (HU-PDF-02): solo con el Organizador encendido.
+ * No son documentos `notifications`: no se «leen», se cierran o se posponen.
+ */
+function useConteoRecordatorios(): number | undefined {
+  const habilitado = useAvisosActivos();
+  const { data } = useRecordatoriosActivos();
+  if (!habilitado) return 0;
+  return data?.total;
+}
 
 // Mismo vocabulario de íconos que los filtros de la bandeja (nav-config.ts): Sparkles es Sofi,
 // UserCheck es "asignado a un admin".
@@ -29,7 +45,13 @@ const RING_MS = 700;
  * color primario y contador; y al llegar una nueva (el contador sube) se sacude una vez.
  */
 export function NotificationBellButton(): React.ReactElement {
-  const { data: unreadData } = useUnreadCount();
+  const { data: unreadNotif } = useUnreadCount();
+  const recordatorios = useConteoRecordatorios();
+  // El contador suma lo que pide atención: notificaciones sin leer + recordatorios sin gestionar.
+  const unreadData =
+    unreadNotif === undefined && recordatorios === undefined
+      ? undefined
+      : (unreadNotif ?? 0) + (recordatorios ?? 0);
   const unreadCount = unreadData ?? 0;
   const [ringing, setRinging] = useState(false);
   // `undefined` hasta la primera lectura: el valor con el que carga la página no cuenta como "nueva".
@@ -47,6 +69,16 @@ export function NotificationBellButton(): React.ReactElement {
 
   const hasUnread = unreadCount > 0;
   const Icono = hasUnread ? BellRing : Bell;
+  // Dos contadores, dos colores: rojo para notificaciones sin leer (lo de siempre) y naranja para
+  // los pendientes del Organizador. Un pendiente pide atención, no es una alerta de error.
+  const notif = unreadNotif ?? 0;
+  const pendientes = recordatorios ?? 0;
+  const etiqueta = [
+    notif > 0 ? `${notif} sin leer` : null,
+    pendientes > 0 ? `${pendientes} ${pendientes === 1 ? 'pendiente' : 'pendientes'}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <PopoverTrigger asChild>
@@ -54,19 +86,31 @@ export function NotificationBellButton(): React.ReactElement {
         type="button"
         variant="ghost"
         size="icon"
-        aria-label={hasUnread ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+        aria-label={hasUnread ? `Notificaciones, ${etiqueta}` : 'Notificaciones'}
         className={cn(
           'relative h-9 w-9 shrink-0 transition-[transform,color] duration-150 ease-out active:scale-95',
-          hasUnread && 'text-primary',
+          // Solo pendientes → la campana se tiñe de naranja; con notificaciones sin leer, primario.
+          notif > 0 ? 'text-primary' : pendientes > 0 && 'text-warning',
         )}
       >
         <Icono className={cn('h-[1.2rem] w-[1.2rem]', ringing && 'bell-ring')} />
-        {hasUnread && (
+        {notif > 0 && (
           <Badge
             variant="destructive"
             className="absolute -right-0.5 -top-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px] leading-none tabular-nums"
           >
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {notif > 9 ? '9+' : notif}
+          </Badge>
+        )}
+        {pendientes > 0 && (
+          <Badge
+            className={cn(
+              'absolute -right-0.5 h-4 min-w-4 justify-center rounded-full border-transparent bg-warning px-1 text-[10px] leading-none tabular-nums text-warning-foreground shadow-none hover:bg-warning',
+              // Si ya está el rojo arriba, el naranja baja a la esquina inferior para no taparse.
+              notif > 0 ? '-bottom-0.5' : '-top-0.5',
+            )}
+          >
+            {pendientes > 9 ? '9+' : pendientes}
           </Badge>
         )}
       </Button>
@@ -85,6 +129,9 @@ export function NotificationPanel({ onNavigate }: { onNavigate: () => void }): R
   const markAllRead = useMarkAllNotificationsRead();
 
   const notificaciones = bandeja?.data ?? [];
+  const avisosActivos = useAvisosActivos();
+  const { data: activos } = useRecordatoriosActivos();
+  const recordatorios = avisosActivos ? (activos?.items ?? []) : [];
 
   function abrir(n: NotificationDTO): void {
     if (!n.leidaAt) markRead.mutate(n.id);
@@ -110,6 +157,18 @@ export function NotificationPanel({ onNavigate }: { onNavigate: () => void }): R
       </div>
       <Separator />
       <ScrollArea className="h-80">
+        {recordatorios.length > 0 && (
+          <section aria-label="Recordatorios" className="border-b border-warning/15 bg-warning-subtle/50">
+            <p className="px-4 pb-1 pt-3 text-xs font-medium text-warning">
+              Recordatorios ({activos?.total ?? recordatorios.length})
+            </p>
+            {recordatorios.map((r) => (
+              <div key={r.id} className="border-b border-warning/15 last:border-b-0">
+                <RecordatorioCard recordatorio={r} compacta onAccion={onNavigate} />
+              </div>
+            ))}
+          </section>
+        )}
         {isLoading ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">Cargando…</div>
         ) : notificaciones.length === 0 ? (

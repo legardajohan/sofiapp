@@ -4,7 +4,9 @@ import {
   FLOW_REMINDER_JOB,
   REMINDER_SWEEP_JOB,
   SANDBOX_SWEEP_JOB,
+  ORGANIZADOR_SWEEP_JOB,
 } from '../config/queues.js';
+import { processOrganizadorSweep } from './organizador-sweep.processor.js';
 import { logger } from '../utils/logger.js';
 import { reanudarFlujo } from '../features/flow/flow.runtime.service.js';
 import { enviarRecordatorio, ejecutarBarridoRecordatorios } from '../features/flow/flow.reminder.service.js';
@@ -34,6 +36,9 @@ export async function processFlowRuntimeJob(job: Job<FlowJobData | Record<string
       return;
     case SANDBOX_SWEEP_JOB:
       await barrerSesionesInactivas(new Date());
+      return;
+    case ORGANIZADOR_SWEEP_JOB:
+      await processOrganizadorSweep(new Date());
       return;
     default:
       logger.warn('flow-runtime: job con nombre desconocido', { name: job.name, id: job.id });

@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { es } from 'react-day-picker/locale';
 import { CalendarDays, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { aDiaCivil, deDiaCivil, etiquetaDia } from '@/lib/agenda';
+import type { AnticipacionAviso } from '../types.js';
 
 interface Props {
   /** Día civil elegido; `null` = no se eligió y el pendiente será de hoy (RN10). */
@@ -15,6 +19,19 @@ interface Props {
   onDiaChange: (dia: string) => void;
   onHoraChange: (hora: string | null) => void;
   disabled?: boolean;
+  /**
+   * HU-PDF-02 (posponer): la hora es obligatoria y solo se ofrecen días desde hoy. Sin quitar la
+   * hora ni la ayuda de «todo el día». Por defecto apagado: la ficha de contacto no cambia.
+   */
+  horaObligatoria?: boolean;
+  /** `id` del `input` de hora, para enlazarlo con un `Label` externo. */
+  horaId?: string;
+  /**
+   * HU-PDF-02 A1 — «Recordarme antes». Solo se pinta si llega `onAvisoChange` (la ficha del
+   * contacto); posponer conserva la anticipación que ya tenía la nota y no la ofrece.
+   */
+  aviso?: AnticipacionAviso;
+  onAvisoChange?: (aviso: AnticipacionAviso) => void;
 }
 
 /**
@@ -34,8 +51,13 @@ export function ProgramacionPendiente({
   onDiaChange,
   onHoraChange,
   disabled = false,
+  horaObligatoria = false,
+  horaId,
+  aviso = 0,
+  onAvisoChange,
 }: Props): React.ReactElement {
   const [abierto, setAbierto] = useState(false);
+  const avisoId = useId();
   const diaVisible = dia ?? aDiaCivil(new Date());
 
   return (
@@ -61,6 +83,7 @@ export function ProgramacionPendiente({
               locale={es}
               selected={deDiaCivil(diaVisible)}
               defaultMonth={deDiaCivil(diaVisible)}
+              {...(horaObligatoria ? { disabled: { before: deDiaCivil(aDiaCivil(new Date())) } } : {})}
               onSelect={(fecha) => {
                 if (!fecha) return;
                 onDiaChange(aDiaCivil(fecha));
@@ -72,6 +95,8 @@ export function ProgramacionPendiente({
 
         <Input
           type="time"
+          id={horaId}
+          required={horaObligatoria}
           aria-label="Hora del pendiente"
           value={hora ?? ''}
           disabled={disabled}
@@ -79,7 +104,7 @@ export function ProgramacionPendiente({
           className="h-8 w-[6.5rem] px-2 text-xs tabular-nums"
         />
 
-        {hora && (
+        {hora && !horaObligatoria && (
           <Button
             type="button"
             variant="ghost"
@@ -94,9 +119,47 @@ export function ProgramacionPendiente({
           </Button>
         )}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        {hora ? 'Irá a Pendientes del embudo a esa hora.' : 'Sin hora, es un pendiente de todo el día.'}
-      </p>
+      {onAvisoChange && (
+        <div className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1">
+          <Checkbox
+            id={avisoId}
+            checked={aviso > 0}
+            disabled={disabled}
+            // Activar la casilla elige la opción corta; el usuario la cambia a 10 si quiere.
+            onCheckedChange={(v) => onAvisoChange(v === true ? 5 : 0)}
+          />
+          <Label htmlFor={avisoId} className="cursor-pointer text-xs font-normal text-foreground">
+            Recordarme antes
+          </Label>
+          {aviso > 0 && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              variant="outline"
+              value={String(aviso)}
+              disabled={disabled}
+              aria-label="Cuánto antes avisar"
+              // Radix devuelve '' al pulsar la opción ya activa: se ignora para no quedar sin valor.
+              onValueChange={(v) => {
+                if (v === '5' || v === '10') onAvisoChange(Number(v) as AnticipacionAviso);
+              }}
+              className="gap-1"
+            >
+              <ToggleGroupItem value="5" className="h-7 px-2 text-xs">
+                5 min
+              </ToggleGroupItem>
+              <ToggleGroupItem value="10" className="h-7 px-2 text-xs">
+                10 min
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
+        </div>
+      )}
+      {!horaObligatoria && (
+        <p className="text-[11px] text-muted-foreground">
+          {hora ? 'Irá a Pendientes del embudo a esa hora.' : 'Sin hora, es un pendiente de todo el día.'}
+        </p>
+      )}
     </div>
   );
 }

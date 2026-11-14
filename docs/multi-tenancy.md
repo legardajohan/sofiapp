@@ -133,6 +133,14 @@ propio código:
    anteriores, **solo proyecta `(tenantId, _id)`**; el borrado de cada sesión usa `*Scoped` con el
    `tenantId` de su propia fila. Test: `sandbox.service.test.ts` + `sandbox.isolation.test.ts`.
 
+7. **Barrido del Organizador (HU-PDF-02)** — `workers/organizador-sweep.processor.ts` consulta
+   `ContactNote.find({ pendiente: true, estadoPendiente: 'abierto', recordatorioAt: { $lte: now } })`
+   (y los legados sin `recordatorioAt`) sin `tenantId`: job `organizador-sweep` cada minuto, cola
+   `flow-runtime`. **Solo proyecta `(_id, tenantId, programación)`**; marcar el aviso, escribir el
+   evento `vencido` y rellenar el instante usan `*Scoped` con el `tenantId` de cada fila, y el evento
+   de tiempo real va al room `asesor:<autorId>`. Test: `organizador-sweep.processor.test.ts` +
+   `organizador.isolation.test.ts`.
+
 ### Datos de prueba fuera de las cifras de negocio (HU-IA-08)
 
 Un `Cliente` con `esPrueba` y un `Lead` con `esPrueba` no cuentan en nada que un tenant mire. Toda

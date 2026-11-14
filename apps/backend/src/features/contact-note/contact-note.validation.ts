@@ -15,6 +15,10 @@ const dia = z.string().refine(esDiaValido, 'Fecha inválida: usa el formato AAAA
 const hora = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida: usa el formato HH:mm.');
 /** Zona del navegador: con ella el servidor sabe qué día es «hoy» para quien escribe. */
 const tz = z.string().refine(esZonaIana, 'Zona horaria inválida.').default('America/Bogota');
+/** HU-PDF-02 A1 — «Recordarme 5/10 minutos antes». */
+const avisoAntesMin = z.union([z.literal(0), z.literal(5), z.literal(10)], {
+  message: 'La anticipación del aviso debe ser 0, 5 o 10 minutos.',
+});
 
 export const createNotaSchema = z.object({
   body: z
@@ -24,13 +28,21 @@ export const createNotaSchema = z.object({
       pendiente: z.boolean().default(false),
       programadoDia: dia.optional(),
       programadoHora: hora.optional(),
+      avisoAntesMin: avisoAntesMin.optional(),
       tz,
     })
-    // RN9: la programación solo existe en un pendiente.
-    .refine((b) => b.pendiente || (b.programadoDia === undefined && b.programadoHora === undefined), {
-      message: 'Solo un pendiente se puede programar.',
-      path: ['pendiente'],
-    }),
+    // RN9: la programación (y su aviso) solo existe en un pendiente.
+    .refine(
+      (b) =>
+        b.pendiente ||
+        (b.programadoDia === undefined &&
+          b.programadoHora === undefined &&
+          b.avisoAntesMin === undefined),
+      {
+        message: 'Solo un pendiente se puede programar.',
+        path: ['pendiente'],
+      },
+    ),
   params,
   query: empty,
 });
@@ -52,6 +64,7 @@ export const updateNotaSchema = z.object({
       programadoDia: dia.optional(),
       // `null` quita la hora: el pendiente pasa a ser de todo el día.
       programadoHora: hora.nullable().optional(),
+      avisoAntesMin: avisoAntesMin.optional(),
       tz,
     })
     .refine(
@@ -59,11 +72,16 @@ export const updateNotaSchema = z.object({
         b.texto !== undefined ||
         b.pendiente !== undefined ||
         b.programadoDia !== undefined ||
-        b.programadoHora !== undefined,
+        b.programadoHora !== undefined ||
+        b.avisoAntesMin !== undefined,
       { message: 'Indica qué quieres cambiar de la nota.' },
     )
     .refine(
-      (b) => b.pendiente !== false || (b.programadoDia === undefined && b.programadoHora === undefined),
+      (b) =>
+        b.pendiente !== false ||
+        (b.programadoDia === undefined &&
+          b.programadoHora === undefined &&
+          b.avisoAntesMin === undefined),
       { message: 'Un pendiente que se quita no se puede programar.', path: ['pendiente'] },
     ),
   params: notaParams,

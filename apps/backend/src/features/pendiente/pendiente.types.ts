@@ -54,6 +54,8 @@ export interface IPendienteResponse {
   /** Solo en los cerrados. */
   cerradoAt: string | null;
   cerradoPor: { id: string; nombre: string | null } | null;
+  /** HU-PDF-02: instante del recordatorio (UTC). Es la `version` que exige cerrar con motivo. */
+  recordatorioAt?: string | null;
   lead: IPendienteLeadResponse;
 }
 

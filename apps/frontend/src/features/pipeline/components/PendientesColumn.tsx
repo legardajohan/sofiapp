@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { esSinPermiso } from '@/features/contacts/lib/errors';
-import { useCerrarPendiente, usePendientes, useReabrirPendiente } from '../hooks/usePendientes.js';
+import { usePendientes, useReabrirPendiente } from '../hooks/usePendientes.js';
+import { useGestionPendienteStore } from '@/features/organizador/useGestionPendienteStore';
+import { desdeEmbudo } from '@/features/organizador/lib/organizador';
 import { PendienteCard } from './PendienteCard.js';
 import { PendientesPdfPopover } from './PendientesPdfPopover.js';
 import type { EstadoPendiente, PendienteDTO } from '../types.js';
@@ -29,12 +31,14 @@ interface ListaProps {
 function ListaPendientes({ estado, habilitado, onAbrir }: ListaProps): React.ReactElement {
   const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     usePendientes(estado, habilitado);
-  const cerrar = useCerrarPendiente();
+  // HU-PDF-02 (D3): cerrar exige motivo también desde el embudo — abre el mismo modal que el
+  // Organizador. Reabrir sigue siendo directo desde el historial.
+  const abrirGestion = useGestionPendienteStore((s) => s.abrir);
   const reabrir = useReabrirPendiente();
 
   const pendientes = data?.pages.flatMap((p) => p.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const enCurso = cerrar.isPending ? cerrar.variables : reabrir.isPending ? reabrir.variables : null;
+  const enCurso = reabrir.isPending ? reabrir.variables : null;
 
   if (isLoading) {
     return (
@@ -74,7 +78,7 @@ function ListaPendientes({ estado, habilitado, onAbrir }: ListaProps): React.Rea
           onAbrir={onAbrir}
           ocupado={enCurso === p.id}
           {...(estado === 'abierto'
-            ? { onCerrar: (x: PendienteDTO) => cerrar.mutate(x.id) }
+            ? { onCerrar: (x: PendienteDTO) => abrirGestion(desdeEmbudo(x), 'cerrar') }
             : { onReabrir: (x: PendienteDTO) => reabrir.mutate(x.id) })}
         />
       ))}

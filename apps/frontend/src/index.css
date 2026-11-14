@@ -108,6 +108,12 @@ body {
     --success: 142 76.2% 36.3%;
     --success-foreground: 0 0% 100%;
     --success-subtle: 138 76.5% 96.7%;
+    /* HU-PDF-02 — naranja de «pendiente por atender» (recordatorios del Organizador). Distinto del
+       rojo `destructive`: un recordatorio pide atención, no es un error. Texto blanco sobre
+       --warning ≥ 4.5:1 y --warning como texto sobre blanco ≥ 4.5:1. */
+    --warning: 17 88% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 33 100% 96%;
     --border: 235 25% 90.6%;
     --input: 231 20% 80.4%;
     --ring: 221 83.2% 53.3%;
@@ -183,6 +189,11 @@ body {
     --success: 142 60% 45%;
     --success-foreground: 0 0% 100%;
     --success-subtle: 142 35% 16%;
+    /* HU-PDF-02 — naranja de recordatorios en oscuro: más claro para contrastar con el fondo, con
+       texto oscuro encima. */
+    --warning: 27 96% 61%;
+    --warning-foreground: 20 14% 8%;
+    --warning-subtle: 20 60% 16%;
     --border: 228 16% 20%;
     --input: 228 16% 24%;
     --ring: 217 91% 60%;
@@ -441,6 +452,12 @@ body {
     --success: 142 76.2% 36.3%;
     --success-foreground: 0 0% 100%;
     --success-subtle: 138 76.5% 96.7%;
+    /* HU-PDF-02 — naranja de «pendiente por atender» (recordatorios del Organizador). Distinto del
+       rojo `destructive`: un recordatorio pide atención, no es un error. Texto blanco sobre
+       --warning ≥ 4.5:1 y --warning como texto sobre blanco ≥ 4.5:1. */
+    --warning: 17 88% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 33 100% 96%;
     --border: 235 25% 90.6%;
     --input: 231 20% 80.4%;
     --ring: 221 83.2% 53.3%;

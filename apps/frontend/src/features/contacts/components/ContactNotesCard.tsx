@@ -10,6 +10,7 @@ import { useCreateNota, useNotas } from '../hooks/useNotas.js';
 import { esSinPermiso } from '../lib/errors.js';
 import { NotaItem } from './NotaItem.js';
 import { ProgramacionPendiente } from './ProgramacionPendiente.js';
+import type { AnticipacionAviso } from '../types.js';
 
 interface Props {
   clienteId: string;
@@ -34,6 +35,8 @@ export function ContactNotesCard({
   // HU-PDF-01 A1: sin elegir nada, el pendiente es de hoy y de todo el día.
   const [programadoDia, setProgramadoDia] = useState<string | null>(null);
   const [programadoHora, setProgramadoHora] = useState<string | null>(null);
+  // HU-PDF-02 A1: sin anticipación por defecto; se vuelve a 0 tras cada nota.
+  const [avisoAntesMin, setAvisoAntesMin] = useState<AnticipacionAviso>(0);
   const switchId = useId();
   const { data, isLoading, error } = useNotas(clienteId, puedeVerSensibles);
   const crear = useCreateNota(clienteId);
@@ -54,6 +57,7 @@ export function ContactNotesCard({
         pendiente,
         ...(pendiente && programadoDia ? { programadoDia } : {}),
         ...(pendiente && programadoHora ? { programadoHora } : {}),
+        ...(pendiente && avisoAntesMin > 0 ? { avisoAntesMin } : {}),
       },
       {
         onSuccess: () => {
@@ -61,6 +65,7 @@ export function ContactNotesCard({
           setPendiente(false);
           setProgramadoDia(null);
           setProgramadoHora(null);
+          setAvisoAntesMin(0);
         },
       },
     );
@@ -131,6 +136,8 @@ export function ContactNotesCard({
               hora={programadoHora}
               onDiaChange={setProgramadoDia}
               onHoraChange={setProgramadoHora}
+              aviso={avisoAntesMin}
+              onAvisoChange={setAvisoAntesMin}
               disabled={crear.isPending}
             />
           </div>
