@@ -4,7 +4,7 @@ import {
   aplicarSemaforoSugerido,
   listClasificaciones,
 } from '../ai/ai-semaforo.service.js';
-import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-rol-empresa.middleware.js';
 import {
   assignConversation,
   generateConversationSummary,
@@ -52,7 +52,7 @@ export const getThreadController: RequestHandler = async (req, res) => {
 
 /**
  * Vista unificada de la conversación (HU-IA-04). El permiso se resuelve AQUÍ, del token, y se pasa
- * al service: el service no conoce `req`, y el subrol no puede llegar del cliente.
+ * al service: el service no conoce `req`, y el rol no puede llegar del cliente.
  */
 export const getOverviewController: RequestHandler = async (req, res) => {
   const tenantId = req.user!.tenantId!.toString();

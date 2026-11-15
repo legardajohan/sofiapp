@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { objectIdSchema } from '../../utils/validation.js';
+import { destinoAsignacionSchema } from '../users/user.grupos.validation.js';
 
 const empty = z.object({});
 
@@ -82,8 +83,10 @@ export const updateHandoffSettingsSchema = z.object({
     // Se valida solo la forma. Que el usuario sea un admin ACTIVO DEL TENANT lo comprueba el
     // servicio con `assertAssignableAdmin`, porque este id llega del cuerpo de la petición y es el
     // único punto por el que podría colarse un usuario de otra empresa.
-    asesorDestinoId: objectIdSchema.nullable(),
-    estrategiaDestino: z.enum(['primero', 'menor_carga', 'fijo']),
+    asesorDestinoId: objectIdSchema.nullable().optional(),
+    estrategiaDestino: z.enum(['primero', 'menor_carga', 'fijo']).optional(),
+    // AUTH-06. Si llega, manda sobre el formato viejo (que se sigue aceptando durante un release).
+    destino: destinoAsignacionSchema.optional(),
     mensajeTransicion: z.string().trim().min(1).max(500),
     condicionesExtras: condicionesExtras,
     reglas: z.object({
@@ -104,14 +107,19 @@ export const updateHandoffSettingsSchema = z.object({
     }),
   })
     .superRefine((body, ctx) => {
-      if (body.estrategiaDestino === 'fijo' && body.asesorDestinoId === null) {
+      if (body.destino) return;
+      if (body.estrategiaDestino === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['destino'], message: 'Indica a quién se transfiere.' });
+        return;
+      }
+      if (body.estrategiaDestino === 'fijo' && !body.asesorDestinoId) {
         ctx.addIssue({
           code: 'custom',
           path: ['asesorDestinoId'],
           message: 'Elige a qué asesor se transfiere.',
         });
       }
-      if (body.estrategiaDestino !== 'fijo' && body.asesorDestinoId !== null) {
+      if (body.estrategiaDestino !== 'fijo' && body.asesorDestinoId) {
         ctx.addIssue({
           code: 'custom',
           path: ['asesorDestinoId'],

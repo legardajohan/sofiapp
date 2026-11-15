@@ -129,7 +129,7 @@ export const updateClienteSchema = z.object({
       // Baja de campañas (HU-MARK-01). Entra por aquí y no por un endpoint propio porque es un
       // dato de la ficha del contacto, como el resto: quien atiende la conversación es quien se
       // entera de que la persona no quiere recibir más difusiones. NO es sensible (no revela nada
-      // de la persona), así que no pasa por el gate de subrol.
+      // de la persona), así que no pasa por el gate de rol.
       marketingOptOut: z.boolean().optional(),
       // HU-MARK-07. Mismo criterio que el opt-out: dato de la ficha, no sensible.
       bloqueado: z.boolean().optional(),

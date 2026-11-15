@@ -83,7 +83,7 @@ export function toConversationResponse(
     asesorId,
     asignadoA: asesorId,
     asignadoANombre: asignado?.nombre ?? null,
-    asignadoASubrol: asignado?.subrol ?? null,
+    asignadoARol: asignado?.rolEmpresa ?? null,
     iaHabilitada: cliente.iaHabilitada ?? true,
     ventana24hAbierta: !!cliente.ventana24hExpiraEn && cliente.ventana24hExpiraEn > now,
     estadoComercial: cliente.estadoComercial,

@@ -25,7 +25,7 @@ async function crearAdmin(tenantId: Types.ObjectId, nombre: string): Promise<str
     nombre,
     email: `${nombre}-${new Types.ObjectId().toString()}@x.com`,
     passwordHash: 'x',
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo: true,
   });
   return (u._id as Types.ObjectId).toString();

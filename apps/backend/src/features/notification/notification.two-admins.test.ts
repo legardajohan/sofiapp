@@ -25,7 +25,7 @@ describe('HU-NOTIF-01 — dos admins delegan un chat', () => {
       nombre: 'Ana',
       email: `ana-${new Types.ObjectId().toString()}@t.com`,
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     const beto = await UserModel.create({
@@ -33,7 +33,7 @@ describe('HU-NOTIF-01 — dos admins delegan un chat', () => {
       nombre: 'Beto',
       email: `beto-${new Types.ObjectId().toString()}@t.com`,
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     const admOtroTenant = await UserModel.create({
@@ -41,7 +41,7 @@ describe('HU-NOTIF-01 — dos admins delegan un chat', () => {
       nombre: 'Externo',
       email: `externo-${new Types.ObjectId().toString()}@t.com`,
       passwordHash: 'hash',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 

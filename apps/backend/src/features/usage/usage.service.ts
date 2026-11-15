@@ -24,12 +24,9 @@ import type {
 
 type TenantId = string | Types.ObjectId;
 
-// Roles que ocupan un "puesto"/asiento comercial (consumen la cuota `administradores`).
-// El `superadmin` es global (no pertenece a un tenant) y NO ocupa asiento.
-// Tras AUTH-02 los roles se colapsaron a superadmin/admin (coordinador/asesor desaparecieron;
-// lo que antes eran esos puestos hoy es un `admin` con `subrol` de metadata). El único rol que
-// ocupa asiento cobrable dentro del tenant es 'admin'; el superadmin es global y no cuenta.
-const ROLES_CON_PUESTO = ['admin'] as const;
+// Cuota `administradores` (AUTH-04, ADR 0017): solo los usuarios con rol de empresa Administrador.
+// Coordinadores y asesores consumen `usuarios`, no `administradores`. El superadmin es global y no
+// pertenece a ningún tenant, así que nunca cuenta.
 
 /** Periodo actual en formato 'YYYY-MM' (UTC en el MVP). */
 export function getCurrentPeriodo(now: Date = new Date()): string {
@@ -67,7 +64,8 @@ export async function getMetricUsed(tenantId: TenantId, metric: QuotaMetric): Pr
     case 'administradores':
       return countScoped(UserModel, tenantId, {
         activo: true,
-        rol: { $in: ROLES_CON_PUESTO },
+        rol: 'admin',
+        rolEmpresa: 'administrador',
       });
     case 'leads':
       // HU-IA-08: la conversación de prueba de un admin no consume la cuota de leads del plan.
@@ -118,6 +116,25 @@ function buildMetric(usado: number, limite: number): IMetricUsage {
   const restante = Math.max(limite - usado, 0);
   const porcentaje = limite > 0 ? Math.round((usado / limite) * 100) : 0;
   return { usado, limite, restante, porcentaje };
+}
+
+/**
+ * Uso de los puestos del plan (usuarios y administradores) para la pantalla Usuarios del propio
+ * tenant (AUTH-05). `limite: null` = el tenant no tiene plan (o está inactivo): sin límite.
+ */
+export async function getSeatUsage(tenantId: TenantId): Promise<{
+  usuarios: { usado: number; limite: number | null };
+  administradores: { usado: number; limite: number | null };
+}> {
+  const { limites } = await resolveTenantWithLimits(tenantId);
+  const [usuarios, administradores] = await Promise.all([
+    getMetricUsed(tenantId, 'usuarios'),
+    getMetricUsed(tenantId, 'administradores'),
+  ]);
+  return {
+    usuarios: { usado: usuarios, limite: limites ? limites.usuarios : null },
+    administradores: { usado: administradores, limite: limites ? (limites.administradores ?? null) : null },
+  };
 }
 
 /** Consumo vs límite por métrica para el panel del superadmin. */

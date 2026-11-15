@@ -5,7 +5,8 @@
 | Término | Definición |
 |---|---|
 | **Tenant / Empresa** | Entidad comercial que alquila SofiApp. Raíz del aislamiento multi-tenant. |
-| **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): Director, Gerente, Coordinador, Secretaria (`AUTH-02`). |
+| **Usuario del panel** | Persona con login. Rol: `superadmin` o `admin`. Un `admin` lleva un **rol de empresa** obligatorio (`AUTH-04`, ADR 0017): **Administrador**, **Coordinador** o **Asesor**; desde `AUTH-05` (ADR 0018) los tres tienen los mismos accesos y solo difieren en a quién gestionan en Usuarios. El **usuario principal** es el Administrador que creó el superadmin con la empresa (uno por tenant, intocable desde la empresa). Un usuario **eliminado** (borrado lógico) está además inactivo y no aparece en listados. Un usuario **inactivo** no puede iniciar sesión, sus sesiones abiertas se revocan al desactivarlo y no puede tener conversaciones asignadas. |
+| **Equipo** | Los asesores de un coordinador (`User.coordinadorId`). Nace al crear un asesor desde el coordinador o cuando el Administrador se lo asigna; el Administrador mueve asesores entre equipos o los deja sin coordinador. Un coordinador que se desactiva o deja de serlo no puede dejar a su equipo colgando: pasa a otro coordinador o queda sin coordinador. |
 | **Cliente / Prospecto** | Contacto. Entidad de datos (`Cliente`), nunca inicia sesión. Es a la vez el contacto y la conversación. |
 | **Lead / Oportunidad** | Intento de venta concreto (`Lead`, HU-CRM-01), creado al convertir una conversación. Único **por teléfono** dentro del tenant, mientras el `Cliente` es único por `metaUserId`: un mismo contacto puede generar varios leads en el tiempo (recompra, segundo producto, ciclo reabierto). |
 | **Canal** | Origen de la comunicación: `whatsapp | instagram | messenger | formulario | web`. |
@@ -24,8 +25,8 @@
 | **HSM** | Plantilla de mensaje aprobada por Meta para envíos proactivos. Cada envío guarda el texto que el cliente leyó (variables ya resueltas) y una foto de la plantilla (`HU-MARK-05`). |
 | **Origen del mensaje** | Quién lo originó cuando no basta con `sender`. Hoy solo `campana` (`HU-MARK-05`): una campaña se envía como `sender: 'bot'`, pero la bandeja la etiqueta "Campaña" y no "Sofi", para que el asesor no crea que la IA escribió por su cuenta. |
 | **Variable de contacto** | Hueco `{{n}}` de una campaña que se rellena por destinatario con su `nombre` o `telefono` (`HU-MARK-05`). Lleva un texto de respaldo para el contacto que no tiene el dato: Meta rechaza un parámetro vacío. |
-| **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los subroles autorizados. |
-| **Dato sensible** | Dato personal del contacto que se cifra en reposo y solo se muestra en claro a los subroles autorizados: correo, documento, notas y los atributos personalizados marcados `sensible` (HU-CRM-02, ADR 0006). Al resto le llega enmascarado. |
+| **Nota de contacto** | Asiento de seguimiento que un usuario escribe sobre un contacto (`ContactNote`, HU-CRM-02). Se agrega, no se edita ni se borra: es historial. Su texto se cifra y solo la leen los roles autorizados (Administrador, ADR 0017). |
+| **Dato sensible** | Dato personal del contacto que se cifra en reposo y solo se muestra en claro a los roles autorizados (Administrador, ADR 0017): correo, documento, notas y los atributos personalizados marcados `sensible` (HU-CRM-02, ADR 0006). Al resto le llega enmascarado. |
 | **Atributo personalizado** | Valor de un **campo personalizado** sobre un contacto (`Cliente.atributos`). Su clave, etiqueta y marca `sensible` salen del catálogo de la empresa (HU-FLOW-05). Sustituye a `customFields`. |
 | **Campo personalizado** | Dato propio de una empresa (colegio, ciudad, presupuesto…) definido **una vez** en el catálogo `contact_fields` (clave, etiqueta, tipo, sensible). Lo comparten la ficha del contacto y el nodo `captura`; así cada dato tiene una sola clave. Borrarlo lo **archiva**. |
 | **Campo del contacto (fijo)** | Dato con columna propia en la ficha: `nombre`, `correo`, `documento`, `rolContacto`. Un nodo `captura` puede escribir en ellos; el teléfono no (el webhook lo reescribe). |
@@ -147,6 +148,27 @@ varios, se ejecuta un solo handoff: el del primero de la lista.
 
 > Si la conversación **ya tiene asesor**, transferir no se la quita: el destino solo decide para las
 > que no tienen dueño.
+
+### Destino por rol (AUTH-06 · ADR 0019)
+
+Desde AUTH-06 el destino es un **grupo de usuarios** más un criterio, y lo comparten la transferencia
+de la IA y los nodos `handoff` / `asignar_asesor` de los flujos:
+
+- **Grupo:** todos · un rol (Asesores, Coordinadores, Administradores, o Administradores **excepto el
+  principal**) · el **grupo de un coordinador** (él y sus asesores) · o una persona concreta del grupo
+  elegido. Solo cuentan usuarios activos y no eliminados.
+- **Criterio («dentro del grupo, se elige a»):** quien tenga menos conversaciones activas, o quien
+  tenga **más ventas cerradas en los últimos 30 días** (misma definición de venta que el reporte de
+  productividad). Empate → el primero por nombre. Se compara solo dentro del grupo. «El primero por
+  orden alfabético» ya no se ofrece, pero las configuraciones que lo tienen guardado siguen valiendo.
+- **Solo en línea** (opcional): quien tuvo actividad en SofiApp en los últimos 5 minutos.
+- **Si no hay nadie disponible** (reserva): cualquier usuario activo (por defecto), otro grupo, o
+  dejarla sin asignar.
+- Las tres estrategias anteriores equivalen a: `primero` = cualquier usuario + el primero;
+  `menor_carga` = cualquier usuario + menos carga; `fijo` = una persona.
+- Un nodo `handoff` sin destino propio usa el de la transferencia (antes la dejaba sin dueño).
+- Cambiar el rol de alguien **no** mueve sus conversaciones: solo cambia en qué grupos entra a partir
+  de la siguiente asignación.
 
 ## 4ter. Horarios de envío (HU-CONF-01)
 
@@ -303,8 +325,8 @@ Definiciones únicas que usa `GET /api/reports/by-advisor`. Cuadran con la bande
   asignar**, para que los totales cuadren.
 
 Limitación aceptada: `Message` no registra **qué** usuario respondió, así que una reasignación
-dentro del periodo atribuye las respuestas al asesor actual. Solo lo ven Director, Gerente y el
-`admin` sin subrol (ADR 0011).
+dentro del periodo atribuye las respuestas al asesor actual. Solo lo ve el rol Administrador
+(ADR 0017; AUTH-05 suma al coordinador sobre su equipo).
 
 **Tiempo activo (HU-REP-06):** tiempo en que el asesor tuvo SofiApp **visible y en uso**: pestaña
 visible e interacción (teclado, clic, scroll, toque, foco) en los últimos 5 min. Mientras se cumple,
@@ -439,10 +461,10 @@ el admin escribe como si fuera un cliente y recibe lo que recibiría por WhatsAp
    definitivo y exige un motivo del enum cerrado; libera el teléfono y deja rastro en `AuditEvent`.
    Un lead que se pierde no se borra: pasa a `estado: 'perdido'`.
 8. Una `ContactNote` pertenece a exactamente un `Tenant` y su `clienteId` es del mismo tenant
-   (validado antes de escribir en `createNota`). Solo la leen los subroles autorizados. No se edita
+   (validado antes de escribir en `createNota`). Solo la leen los roles autorizados. No se edita
    ni se borra: es un asiento del historial (HU-CRM-02).
 9. Un dato sensible del contacto (`correoEnc`, `documentoEnc`, `atributos[].valor` con
    `sensible: true`) **nunca** sale hacia quien no puede verlo, ni por la API ni por
-   `audit_events`, donde se guarda como `"[oculto]"`. Editarlo exige subrol autorizado; leerlo sin
+   `audit_events`, donde se guarda como `"[oculto]"`. Editarlo exige un rol autorizado; leerlo sin
    él devuelve el valor enmascarado, nunca vacío (HU-CRM-02, ADR 0006). El cifrado en reposo está
    desactivado: en la base el valor está en claro (ver `docs/data-model.md`).

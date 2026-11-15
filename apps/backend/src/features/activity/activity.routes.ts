@@ -10,7 +10,7 @@ import { heartbeatController } from './activity.controller.js';
 const router: ExpressRouter = Router();
 
 // HU-REP-06: latido de un asesor con la pestaña visible y en uso. Todo admin late, con o sin
-// subrol: el gate de reportes (ADR 0011) aplica a quién LEE el tiempo, no a quién lo genera.
+// rol de empresa: el gate de reportes (ADR 0011) aplica a quién LEE el tiempo, no a quién lo genera.
 router.post(
   '/heartbeat',
   authenticateJWT,

@@ -115,6 +115,23 @@ describe('plan.service — HU-SAAS-02', () => {
       });
       expect(bad.success).toBe(false);
     });
+
+    it('AUTH-05: al crear, administradores no puede superar a usuarios (Zod)', () => {
+      const body = (u: number, a: number): unknown => ({
+        body: { nombre: 'Rel', periodicidad: 'mensual', limites: { ...limites, usuarios: u, administradores: a }, precio: 0 },
+      });
+      expect(createPlanSchema.safeParse(body(5, 6)).success).toBe(false);
+      expect(createPlanSchema.safeParse(body(5, 5)).success).toBe(true);
+    });
+
+    it('AUTH-05: al editar, compara contra los límites guardados (400)', async () => {
+      await updateSettings({ maxAdministradoresPorPlan: 100 });
+      const plan = await createPlan({ nombre: 'Rel', periodicidad: 'mensual', limites, precio: 0 });
+      await expect(updatePlan(plan._id, { limites: { administradores: 4 } })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(updatePlan(plan._id, { limites: { usuarios: 2 } })).rejects.toMatchObject({ statusCode: 400 });
+      const ok = await updatePlan(plan._id, { limites: { usuarios: 10, administradores: 4 } });
+      expect(ok.limites).toMatchObject({ usuarios: 10, administradores: 4 });
+    });
   });
 
   describe('perfilesPermitidos (Fase B)', () => {

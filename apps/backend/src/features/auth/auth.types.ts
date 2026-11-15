@@ -1,9 +1,15 @@
 import type { Types } from 'mongoose';
-import type { AdminSubrol, UserRol } from '../users/user.types.js';
+import { resolverRolEmpresa } from '../users/user.rol-empresa.js';
+import type { RolEmpresa, UserRol } from '../users/user.types.js';
 
 export interface LoginDTO {
   email: string;
   password: string;
+}
+
+export interface ChangeOwnPasswordDTO {
+  actual: string;
+  nueva: string;
 }
 
 export interface ISessionUser {
@@ -11,8 +17,14 @@ export interface ISessionUser {
   nombre: string;
   email: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  rolEmpresa?: RolEmpresa;
   tenantId: string | null;
+  /**
+   * AUTH-05. Salen de BD en `login` y `/me`, **no** del JWT: el frontend los usa solo para mostrar u
+   * ocultar acciones; el backend decide con lo que lee en cada petición.
+   */
+  esPrincipal: boolean;
+  puedeGestionarAdministradores: boolean;
 }
 
 export interface ISessionUserSource {
@@ -20,8 +32,12 @@ export interface ISessionUserSource {
   nombre: string;
   email: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  rolEmpresa?: RolEmpresa;
+  /** Solo en documentos aún no migrados (AUTH-02). */
+  subrol?: unknown;
   tenantId: Types.ObjectId | null;
+  esPrincipal?: boolean;
+  puedeGestionarAdministradores?: boolean;
 }
 
 export function mapUserToSession(user: ISessionUserSource): ISessionUser {
@@ -30,7 +46,9 @@ export function mapUserToSession(user: ISessionUserSource): ISessionUser {
     nombre: user.nombre,
     email: user.email,
     rol: user.rol,
-    subrol: user.subrol,
+    ...(user.rol === 'admin' ? { rolEmpresa: resolverRolEmpresa(user) } : {}),
     tenantId: user.tenantId ? user.tenantId.toString() : null,
+    esPrincipal: user.esPrincipal === true,
+    puedeGestionarAdministradores: user.puedeGestionarAdministradores === true,
   };
 }

@@ -54,7 +54,7 @@ describe('HU-CRM-04 — semáforo del lead', () => {
       nombre: 'Diego',
       email: 'diego@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     asesor = String(usuario._id);

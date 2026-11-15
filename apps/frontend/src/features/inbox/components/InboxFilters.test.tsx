@@ -16,6 +16,7 @@ vi.mock('@/features/tags/api', () => ({
 
 vi.mock('@/features/users/api', () => ({
   fetchTenantUsers: vi.fn(),
+  fetchTenantUsersInactivos: vi.fn().mockResolvedValue([]),
 }));
 
 const mockFetchTags = vi.mocked(fetchTags);

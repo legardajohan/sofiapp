@@ -1,4 +1,4 @@
-import type { AdminSubrol } from '../users/user.types.js';
+import type { RolEmpresa } from '../users/user.types.js';
 import type {
   Direccion,
   IPreviewEnlace,
@@ -34,7 +34,7 @@ export interface IConversationResponse {
   /** Alias público del contrato HTTP (HU-OMNI-02): mismo valor que `asesorId`. */
   asignadoA: string | null;
   asignadoANombre: string | null;
-  asignadoASubrol: AdminSubrol | null;
+  asignadoARol: RolEmpresa | null;
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;

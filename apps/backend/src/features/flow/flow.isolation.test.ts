@@ -6,6 +6,7 @@ import { Message } from '../message/message.model.js';
 import { Flow, FlowState } from './flow.model.js';
 import { createFlow, getFlowById, listFlows } from './flow.service.js';
 import type { INodo } from './flow.types.js';
+import { User } from '../users/user.model.js';
 
 // `vi.mock` se sube por encima de TODO el módulo, incluidas las `const` de arriba: `vi.hoisted`
 // es la forma soportada de tener una referencia al mock disponible dentro de la factory.
@@ -222,5 +223,65 @@ describe('HU-FLOW-01-V2 — aislamiento multi-tenant', () => {
 
       expect(searchKnowledgeMock).toHaveBeenCalledWith(tenantA.toString(), 'hola desde A');
     });
+  });
+});
+
+// AUTH-06 — los destinos de los nodos no pueden nombrar a usuarios de otra empresa.
+describe('AUTH-06 — destinos de nodos y aislamiento', () => {
+  async function usuarioDe(tenant: Types.ObjectId, rolEmpresa: string): Promise<string> {
+    const u = await User.create({
+      tenantId: tenant,
+      nombre: 'U',
+      email: `u-${new Types.ObjectId().toString()}@x.com`,
+      passwordHash: 'x',
+      rol: 'admin',
+      rolEmpresa,
+      activo: true,
+    });
+    return String(u._id);
+  }
+
+  const nodoHandoffA = (destino: INodo['config']): INodo => ({ id: 'h1', posicion: { x: 0, y: 0 }, tipo: 'handoff', config: destino });
+
+  it('un usuario o coordinador de otro tenant en un destino → 404 al guardar', async () => {
+    const deB = await usuarioDe(tenantB, 'coordinador');
+    await expect(
+      createFlow(tenantA, {
+        nombre: 'Fuga',
+        nodos: [nodoHandoffA({ tipo: 'handoff', destino: { modo: 'usuario', usuarioId: deB, reserva: { tipo: 'cualquiera' } } })],
+        aristas: [],
+        entrada: 'h1',
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      createFlow(tenantA, {
+        nombre: 'Fuga 2',
+        nodos: [
+          nodoHandoffA({
+            tipo: 'handoff',
+            destino: {
+              modo: 'grupo',
+              grupo: { tipo: 'equipo', coordinadorId: deB },
+              criterio: 'primero',
+              soloEnLinea: false,
+              reserva: { tipo: 'cualquiera' },
+            },
+          }),
+        ],
+        aristas: [],
+        entrada: 'h1',
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('un destino del propio tenant se guarda', async () => {
+    const deA = await usuarioDe(tenantA, 'asesor');
+    const flow = await createFlow(tenantA, {
+      nombre: 'Ok',
+      nodos: [nodoHandoffA({ tipo: 'handoff', destino: { modo: 'usuario', usuarioId: deA, reserva: { tipo: 'cualquiera' } } })],
+      aristas: [],
+      entrada: 'h1',
+    });
+    expect(flow.nodos[0]?.config).toMatchObject({ destino: { usuarioId: deA } });
   });
 });

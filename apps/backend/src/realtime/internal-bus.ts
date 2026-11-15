@@ -18,6 +18,17 @@ export interface MensajeInvalidacion {
   tenantId: string;
 }
 
+/**
+ * Sesiones de un usuario revocadas (AUTH-03): cada proceso web corta los sockets vivos de ese
+ * usuario. La validación de REST no depende de este aviso —consulta la lista de revocación—; esto
+ * solo cierra lo que ya estaba conectado.
+ */
+export const SESSION_REVOKE_CHANNEL = 'session:revoke';
+
+export interface MensajeSesionRevocada extends MensajeInvalidacion {
+  userId: string;
+}
+
 let publisher: Redis | null = null;
 
 function getPublisher(): Redis {
@@ -28,7 +39,7 @@ function getPublisher(): Redis {
   return publisher;
 }
 
-export async function publicarInterno(canal: string, mensaje: MensajeInvalidacion): Promise<void> {
+export async function publicarInterno<M extends MensajeInvalidacion>(canal: string, mensaje: M): Promise<void> {
   try {
     await getPublisher().publish(canal, JSON.stringify(mensaje));
   } catch (err) {
@@ -36,7 +47,10 @@ export async function publicarInterno(canal: string, mensaje: MensajeInvalidacio
   }
 }
 
-export function suscribirInterno(canal: string, handler: (mensaje: MensajeInvalidacion) => void): void {
+export function suscribirInterno<M extends MensajeInvalidacion = MensajeInvalidacion>(
+  canal: string,
+  handler: (mensaje: M) => void,
+): void {
   const subscriber = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   subscriber.on('error', (err) => logger.error('Redis internal-bus subscriber error', { error: String(err) }));
   subscriber.subscribe(canal, (err) => {
@@ -44,10 +58,20 @@ export function suscribirInterno(canal: string, handler: (mensaje: MensajeInvali
   });
   subscriber.on('message', (_canal, raw) => {
     try {
-      const mensaje = JSON.parse(raw) as MensajeInvalidacion;
+      const mensaje = JSON.parse(raw) as M;
       if (typeof mensaje.tenantId === 'string') handler(mensaje);
     } catch (err) {
       logger.error('Mensaje ilegible en el bus interno', { error: String(err), canal });
     }
+  });
+}
+
+export async function publicarSesionRevocada(mensaje: MensajeSesionRevocada): Promise<void> {
+  await publicarInterno(SESSION_REVOKE_CHANNEL, mensaje);
+}
+
+export function suscribirSesionRevocada(handler: (mensaje: MensajeSesionRevocada) => void): void {
+  suscribirInterno<MensajeSesionRevocada>(SESSION_REVOKE_CHANNEL, (mensaje) => {
+    if (typeof mensaje.userId === 'string') handler(mensaje);
   });
 }

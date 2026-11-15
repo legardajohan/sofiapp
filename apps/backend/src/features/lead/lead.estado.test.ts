@@ -41,7 +41,7 @@ async function crearAsesor(nombre: string): Promise<string> {
     nombre,
     email: `${nombre.toLowerCase()}@empresa.test`,
     passwordHash: 'x',
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo: true,
   });
   return String(doc._id);

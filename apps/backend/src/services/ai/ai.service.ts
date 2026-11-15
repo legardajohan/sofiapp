@@ -30,7 +30,7 @@ import type {
 
 /**
  * Tope del `motivo` de la clasificación (HU-IA-05). El texto acaba en `audit_events`, que no tiene
- * control de acceso por subrol, así que se recorta aquí además de pedirlo en la plantilla: lo que
+ * control de acceso por rol de empresa, así que se recorta aquí además de pedirlo en la plantilla: lo que
  * el modelo devuelve no es una promesa, es una sugerencia.
  */
 const MOTIVO_MAX_LEN = 240;

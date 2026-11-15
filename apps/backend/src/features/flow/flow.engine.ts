@@ -202,7 +202,7 @@ function ejecutarNodo(
 
     case 'handoff':
       return {
-        efectos: [{ tipo: 'handoff', motivo: config.motivo, notificarAsesorId: config.notificarAsesorId }],
+        efectos: [{ tipo: 'handoff', motivo: config.motivo, notificarAsesorId: config.notificarAsesorId, destino: config.destino }],
         siguiente: null,
         variables,
         esperandoRespuesta: false,

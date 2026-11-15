@@ -381,7 +381,7 @@ export async function updateCliente(
   for (const [campo, columna] of CAMPOS_SENSIBLES) {
     const valor = dto[campo];
     if (valor === undefined) continue;
-    // La bitácora registra QUE cambió, nunca a qué: `audit_events` no tiene gate por subrol, así
+    // La bitácora registra QUE cambió, nunca a qué: `audit_events` no tiene gate por rol, así
     // que volcar ahí el antes/después reabriría por detrás el agujero que este feature viene a
     // cerrar.
     antes[campo] = cliente[columna] ? SENSIBLE_MARKER : null;
@@ -471,7 +471,7 @@ function normalizarPorTipo(valor: unknown, tipoDato: 'texto' | 'numero' | 'fecha
 /**
  * Escribe en la ficha el dato que un nodo `captura` obtuvo (HU-FLOW-05). Lo llama el runtime del motor
  * como sistema, no un humano: por eso no pasa por `updateCliente` (que reemplaza el arreglo de
- * atributos completo y exige el permiso de subrol de un asesor) sino que **fusiona por `key`** y no
+ * atributos completo y exige el permiso de rol de un asesor) sino que **fusiona por `key`** y no
  * toca los demás atributos.
  *
  * Nunca lanza por un dato malo: un valor inválido, un campo archivado o un dato que ya existía se
@@ -718,7 +718,7 @@ function fusionarExtraccion(
     : (nuevo.nombreCompleto ?? anterior?.nombreCompleto ?? null);
 
   // El correo pasa por el mismo camino de persistencia que el correo manual (HU-CRM-02): es el
-  // mismo dato personal y queda bajo el mismo gate por subrol al leerlo.
+  // mismo dato personal y queda bajo el mismo gate por rol al leerlo.
   const correoNuevo = nuevo.correo === null ? null : toStoredValue(nuevo.correo);
   const correo = confirmado('correo')
     ? (anterior?.correo ?? null)
@@ -775,7 +775,7 @@ function extraccionCambio(anterior: IDatosExtraidos | undefined, nuevo: IDatosEx
 
 /**
  * Proyección de la extracción para la bitácora. El correo va como `[oculto]`: `audit_events` no
- * tiene control de acceso por subrol (`docs/data-model.md`), así que no puede llevarlo en claro.
+ * tiene control de acceso por rol de empresa (`docs/data-model.md`), así que no puede llevarlo en claro.
  * El `interes` sí va tal cual — es un dato comercial, no personal.
  */
 function resumirExtraccion(datos: IDatosExtraidos | undefined): Record<string, unknown> {

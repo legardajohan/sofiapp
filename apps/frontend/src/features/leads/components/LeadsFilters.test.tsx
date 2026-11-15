@@ -18,6 +18,7 @@ vi.mock('@/features/tags/api', () => ({
 
 vi.mock('@/features/users/api', () => ({
   fetchTenantUsers: vi.fn(),
+  fetchTenantUsersInactivos: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('@/features/estados/api', () => ({
@@ -74,6 +75,9 @@ beforeEach(() => {
       tenantId: 'te1',
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
+      esPrincipal: false,
+      puedeGestionarAdministradores: false,
+      coordinadorId: null,
       rol: 'admin',
       activo: true,
     },

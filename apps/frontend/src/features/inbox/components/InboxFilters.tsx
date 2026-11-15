@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useTenantUsers } from '@/features/users/hooks/useTenantUsers';
+import { useTenantUsersConInactivos } from '@/features/users/hooks/useTenantUsers';
+import { UserSelectItems } from '@/components/users/UserSelectItems';
 import { useTags } from '@/features/tags/hooks/useTags';
 import type { EstadoComercial, FiltroBandeja } from '../types.js';
 
@@ -50,7 +51,8 @@ export function InboxFilters({
   etiqueta,
   onEtiquetaChange,
 }: Props): React.ReactElement {
-  const { data: admins } = useTenantUsers();
+  // AUTH-06: con inactivos, para encontrar las conversaciones de alguien que ya no está.
+  const { data: admins } = useTenantUsersConInactivos();
   const { data: etiquetas } = useTags();
 
   return (
@@ -87,11 +89,7 @@ export function InboxFilters({
           <SelectContent>
             <SelectItem value={TODOS}>Todos los responsables</SelectItem>
             <SelectItem value={SIN_ASIGNAR}>Sin asignar</SelectItem>
-            {admins?.map((admin) => (
-              <SelectItem key={admin.id} value={admin.id}>
-                {admin.nombre}
-              </SelectItem>
-            ))}
+            <UserSelectItems usuarios={admins} incluirInactivos />
           </SelectContent>
         </Select>
 

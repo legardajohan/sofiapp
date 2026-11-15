@@ -89,7 +89,7 @@ beforeEach(() => {
   }
   useAuthStore.setState({
     status: 'authenticated',
-    user: { sub: 'u1', nombre: 'Ana', rol: 'admin' },
+    user: { sub: 'u1', nombre: 'Ana', rol: 'admin', rolEmpresa: 'administrador' },
   });
   vi.mocked(fetchPreferencia).mockResolvedValue({ activo: true });
   vi.mocked(fetchMotivos).mockResolvedValue({
@@ -103,14 +103,16 @@ beforeEach(() => {
 
 describe('HU-PDF-02 — menú (CA-01)', () => {
   it('«Organizador» va justo debajo de «Etapas del embudo»', () => {
-    const operacion = navGroupsForRole('admin').find((g) => g.label === 'Operación');
+    const operacion = navGroupsForRole('admin', 'administrador').find((g) => g.label === 'Operación');
     const labels = operacion?.items.map((i) => i.label) ?? [];
     expect(labels[labels.indexOf('Etapas del embudo') + 1]).toBe('Organizador');
   });
 
-  it('se oculta a un subrol sin acceso a las notas', () => {
-    const operacion = navGroupsForRole('admin', 'coordinator').find((g) => g.label === 'Operación');
-    expect(operacion?.items.some((i) => i.label === 'Organizador')).toBe(false);
+  it('lo ven los tres roles de empresa (AUTH-05)', () => {
+    for (const rol of ['administrador', 'coordinador', 'asesor'] as const) {
+      const operacion = navGroupsForRole('admin', rol).find((g) => g.label === 'Operación');
+      expect(operacion?.items.some((i) => i.label === 'Organizador'), rol).toBe(true);
+    }
   });
 });
 

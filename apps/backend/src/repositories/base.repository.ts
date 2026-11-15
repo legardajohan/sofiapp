@@ -5,6 +5,7 @@ import type {
   HydratedDocument,
   Model,
   PipelineStage,
+  SaveOptions,
   UpdateQuery,
 } from 'mongoose';
 
@@ -30,9 +31,12 @@ export async function createScoped<T>(
   m: Model<T>,
   tenantId: TenantId,
   data: Record<string, unknown>,
+  options: SaveOptions = {},
 ): Promise<HydratedDocument<T>> {
+  // `options` existe para pasar la `session` de una transacción (AUTH-03); el `tenantId` se
+  // fuerza igual, venga lo que venga en `data`.
   const doc = new m({ ...data, tenantId });
-  return doc.save() as Promise<HydratedDocument<T>>;
+  return doc.save(options) as Promise<HydratedDocument<T>>;
 }
 
 export function findOneAndUpdateScoped<T>(

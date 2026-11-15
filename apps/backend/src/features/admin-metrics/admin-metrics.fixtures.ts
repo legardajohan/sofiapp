@@ -66,6 +66,7 @@ export async function sembrar(tenantId: Types.ObjectId | null, marca: string, s:
     email: `${marca}-${i}-${new Types.ObjectId().toString()}@pii.test`,
     passwordHash: 'x',
     rol: 'admin',
+    rolEmpresa: 'administrador',
     activo,
     createdAt,
   }));

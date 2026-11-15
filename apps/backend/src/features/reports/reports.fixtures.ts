@@ -28,6 +28,7 @@ export async function crearAsesor(
     email: `${nombre.toLowerCase().replace(/\s+/g, '.')}.${_id.toString()}@pii.test`,
     passwordHash: 'x',
     rol: 'admin',
+    rolEmpresa: 'administrador',
     activo: opts.activo ?? true,
     createdAt: new Date(),
   });

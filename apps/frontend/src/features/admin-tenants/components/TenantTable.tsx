@@ -1,4 +1,6 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { KeyRound, Pencil, Trash2 } from 'lucide-react';
+import { ResetPrincipalPasswordDialog } from './ResetPrincipalPasswordDialog.js';
 import { TenantStatusSwitch } from './TenantStatusSwitch.js';
 import {
   AlertDialog,
@@ -52,6 +54,8 @@ export function TenantTable({
   onDelete,
 }: Props): React.ReactElement {
   const totalPages = Math.ceil(total / limit);
+  // AUTH-05: empresa cuyo usuario principal recupera el acceso.
+  const [porRestablecer, setPorRestablecer] = useState<ITenant | null>(null);
 
   return (
     <div>
@@ -101,6 +105,15 @@ export function TenantTable({
                         onClick={() => onEdit(tenant)}
                       >
                         <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Restablecer la contraseña del usuario principal de ${tenant.nombre}`}
+                        title="Restablecer contraseña del usuario principal"
+                        onClick={() => setPorRestablecer(tenant)}
+                      >
+                        <KeyRound className="size-4" />
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -167,6 +180,13 @@ export function TenantTable({
           </div>
         </div>
       )}
+
+      <ResetPrincipalPasswordDialog
+        tenant={porRestablecer}
+        onOpenChange={(abierto) => {
+          if (!abierto) setPorRestablecer(null);
+        }}
+      />
     </div>
   );
 }

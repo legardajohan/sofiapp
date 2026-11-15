@@ -241,7 +241,7 @@ async function ejecutarHandoff(
     tenantId,
     clienteId,
     motivo,
-    settings.asesorDestinoId,
+    settings.destino,
     settings.estrategiaDestino,
     decision.condicion ?? null,
   );

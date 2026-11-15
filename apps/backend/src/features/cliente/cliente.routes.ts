@@ -40,7 +40,7 @@ router.post(
   asyncHandler(extractContactDataController),
 );
 
-// Confirmar los datos extraídos (HU-IA-06). SIN `authorizeSubrol`, por el mismo motivo que el PATCH
+// Confirmar los datos extraídos (HU-IA-06). SIN `authorizeRolEmpresa`, por el mismo motivo que el PATCH
 // de abajo: el gate del correo es por campo, dentro del service, para que un `coordinator` pueda
 // confirmar el nombre y el interés aunque no pueda tocar el correo.
 router.post(
@@ -52,7 +52,7 @@ router.post(
   asyncHandler(confirmarExtraccionController),
 );
 
-// Edición de la ficha (HU-CRM-02). SIN `authorizeSubrol`: el gate de los datos sensibles es por
+// Edición de la ficha (HU-CRM-02). SIN `authorizeRolEmpresa`: el gate de los datos sensibles es por
 // campo, dentro del service, para no quitarle al `coordinator` la edición de los no sensibles.
 router.patch(
   '/:id',

@@ -75,7 +75,7 @@ apps/frontend/src/
 
 docs/
 ├── data-model.md · api-contract.md · domain.md
-└── adr/0016-recordatorios-por-barrido.md + README.md
+└── adr/0020-recordatorios-por-barrido.md + README.md
 ```
 
 ## Contratos — backend
@@ -465,7 +465,7 @@ export interface PosponerPendienteInput { motivo; nuevoDia; nuevaHora; tz; tagId
 - **Por qué barrido y no un job con `delay` por recordatorio:** reprogramar es solo escribir un
   campo (no hay que cancelar/reencolar jobs), sobrevive a pérdidas de Redis y a reinicios, y el
   coste es una consulta indexada por minuto. Precisión ≤ 60 s, suficiente para compromisos
-  comerciales. Detalle en ADR 0016.
+  comerciales. Detalle en ADR 0020.
 - **Por qué no se crean documentos `notifications`:** tendrían su propio leído/no leído, que se
   desincronizaría del estado del pendiente (un aviso «leído» pero sin gestionar). La campana se
   reutiliza como **superficie**; la verdad es la nota.
@@ -480,7 +480,7 @@ export interface PosponerPendienteInput { motivo; nuevoDia; nuevaHora; tz; tagId
   `usePendientes`).
 - Actualizar `docs/data-model.md` (campos de `contact_notes` + 3 colecciones + índices),
   `docs/api-contract.md` (endpoints + códigos), `docs/domain.md` (estados del pendiente y
-  transiciones), `docs/multi-tenancy.md` (barrido del worker), ADR 0016 + `docs/adr/README.md`.
+  transiciones), `docs/multi-tenancy.md` (barrido del worker), ADR 0020 + `docs/adr/README.md`.
 
 ## Verificación
 

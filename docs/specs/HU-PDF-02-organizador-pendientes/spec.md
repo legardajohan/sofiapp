@@ -106,7 +106,7 @@ próximo, vencido, pospuesto y cerrado, con el historial completo de cada pendie
     nueva fecha y hora obligatorias y futuras, etiquetas, «Confirmar aplazamiento»).
 11. La tarjeta de la columna Pendientes del embudo abre el modal de cierre.
 
-**Docs:** `docs/data-model.md`, `docs/api-contract.md`, `docs/domain.md` y **ADR 0016**
+**Docs:** `docs/data-model.md`, `docs/api-contract.md`, `docs/domain.md` y **ADR 0020**
 (recordatorios por barrido del worker + estado derivado).
 
 ### Fuera de alcance

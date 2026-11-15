@@ -34,18 +34,25 @@ de datos y nunca accede a la plataforma.
 | Rol | Función | Accede al panel | Notas |
 |---|---|---|---|
 | **Superadministrador** | Dueño de la plataforma. Crea y suspende empresas (tenants), **activa planes manualmente**, ve métricas globales cross-tenant. | Sí | `User` **global sin `tenantId`**; sus rutas saltan `requireTenant`. |
-| **Administrador** | Único rol dentro de una empresa. Primer usuario al activar el tenant; gestiona usuarios, conecta WhatsApp, configura catálogo, atiende la bandeja omnicanal, edita prospectos y cambia su estado. Todo `admin` ve exactamente las mismas pantallas y endpoints. | Sí | Puede llevar un **subrol interno** opcional (metadata, sin efecto en permisos): `director \| manager \| coordinator \| secretary` (Director, Gerente, Coordinador, Secretaria) — ver `AUTH-02`. |
+| **Administrador** | Crea y gestiona Coordinadores y Asesores (alta, edición, contraseña, activar/desactivar, eliminar) y reparte asesores entre coordinadores. A otros Administradores solo si el usuario principal le concede el permiso **gestionar administradores**. El **usuario principal** es el Administrador que crea el superadmin al dar de alta la empresa: nadie de la empresa lo toca, él solo cambia su contraseña con la actual y, si la olvida, solo el superadmin la restablece. | Sí | `rolEmpresa: 'administrador'` (+ `esPrincipal`, `puedeGestionarAdministradores`; `AUTH-05`, ADR 0018). |
+| **Coordinador** | Opcional: una empresa puede no tener ninguno. Crea asesores (para su equipo, otro o ninguno) y gestiona a los de **su equipo y a los que no tienen coordinador**; puede moverlos a otro coordinador. | Sí | `rolEmpresa: 'coordinador'`. |
+| **Asesor** | Usa todo el panel igual que los demás roles, pero **no entra a Usuarios**. Puede tener coordinador o no. | Sí | `rolEmpresa: 'asesor'`, con `coordinadorId` opcional (su equipo). |
 | **Cliente final / Prospecto** | Lead. Interactúa por WhatsApp/IG/Messenger/web. | **No** | Se modela como documento `Cliente`; nunca inicia sesión. |
 
 > **Cambio respecto al backlog original:** el rol *Verificador de Pagos* se **elimina**. No hay
 > verificación de comprobantes; marcar a un cliente como pagado es un simple cambio de atributo
 > que hace un `admin` (ver §5, Módulo de estados).
 >
-> **Simplificación de roles (`AUTH-02`):** los roles *Coordinador* y *Asesor* del backlog
-> original se **fusionan en `admin`** — todo usuario de un tenant es `admin` y ve las mismas
-> pantallas; la distinción de función/jerarquía se expresa con el `subrol` (metadata, no afecta
-> autorización). El campo `asesorId` en `Cliente`/conversaciones se conserva con ese nombre, pero
-> ahora referencia al usuario `admin` asignado a la conversación.
+> **Roles de empresa (`AUTH-04`, ADR 0017):** todo usuario de un tenant sigue siendo `rol: 'admin'`
+> para el login; lo que define qué puede hacer es `rolEmpresa` (Administrador > Coordinador > Asesor),
+> que reemplaza a los subroles de `AUTH-02` (Director y Gerente → Administrador, Coordinador →
+> Coordinador, Secretaria → Asesor). El campo `asesorId` en `Cliente`/conversaciones conserva su
+> nombre y referencia al usuario asignado a la conversación.
+>
+> **Accesos iguales (`AUTH-05`, ADR 0018):** los tres roles ven y hacen lo mismo en bandeja, leads,
+> contactos, datos sensibles, reportes, configuración y campañas. La única diferencia es la gestión de
+> usuarios. Eliminar un usuario es un borrado lógico: desaparece, libera su puesto del plan y su email,
+> y el historial conserva su nombre.
 
 ## 4. Captura de datos por IA (alto valor)
 
@@ -64,7 +71,7 @@ El motor de IA (Gemini 1.5 Flash) hace **slot filling** sobre la conversación y
 | Módulo | Estado | Descripción |
 |---|---|---|
 | **INF — Infraestructura y Multi-Tenancy** | MVP | Monorepo, modelo de Tenant, middleware de resolución, esquemas con `tenantId`, deploy, CI/CD. |
-| **AUTH — Autenticación y RBAC** | MVP | JWT con alcance de tenant, motor RBAC (2 roles: `superadmin`/`admin`, con subroles internos de `admin` como metadata), gestión de usuarios internos. |
+| **AUTH — Autenticación y RBAC** | MVP | JWT con alcance de tenant, motor RBAC (`superadmin`/`admin` + roles de empresa Administrador/Coordinador/Asesor — `AUTH-04`), gestión de usuarios internos por empresa (alta, edición, rol, equipos de coordinador, activar/desactivar con revocación inmediata de sesión — `AUTH-03`/`AUTH-04`). |
 | **SAAS — Panel Superadmin** | MVP | CRUD de empresas, **activación manual de planes**, métricas globales cross-tenant. |
 | **M01 — Bandeja Omnicanal (Meta)** | MVP | Webhook multi-tenant, Embedded Signup por empresa, envío outbound, normalización IG/FB, UI de bandeja. |
 | **M02 — Gestión de prospectos por ESTADOS** | MVP | CRUD tenant-scoped, transición de `estadoComercial`, dashboard de conversión. Etapas configurables por tenant (HU-CRM-03) y **embudo con tablero Kanban y drag&drop** (HU-PIPE-01, ver ADR 0007). |

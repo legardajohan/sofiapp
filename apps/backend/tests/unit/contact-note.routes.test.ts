@@ -84,20 +84,20 @@ describe('contact-note.routes — montaje y gate por subrol (HU-CRM-02)', () => 
     expect(res.body.data[0].texto).toBe('Primera');
   });
 
-  it('un coordinator recibe 403 tanto al leer como al crear', async () => {
+  it('un coordinator también lee y crea notas (AUTH-05: accesos iguales)', async () => {
     const clienteId = await seedCliente();
 
     const post = await request(app)
       .post(`/api/clientes/${clienteId}/notas`)
       .set('Cookie', cookies('coordinator'))
       .set('X-CSRF-Token', CSRF)
-      .send({ texto: 'No debería entrar' });
-    expect(post.status).toBe(403);
+      .send({ texto: 'Nota del coordinador' });
+    expect(post.status).toBe(201);
 
     const get = await request(app)
       .get(`/api/clientes/${clienteId}/notas`)
       .set('Cookie', cookies('coordinator'));
-    expect(get.status).toBe(403);
+    expect(get.status).toBe(200);
   });
 
   it('sin sesión → 401, no 404: la ruta existe', async () => {
@@ -128,23 +128,23 @@ describe('contact-note.routes — montaje y gate por subrol (HU-CRM-02)', () => 
     expect(res.status).toBe(400);
   });
 
-  it('PATCH /api/clientes/:id: un coordinator edita el nombre pero no el correo', async () => {
+  it('PATCH /api/clientes/:id: un coordinator edita el nombre y también el correo (AUTH-05)', async () => {
     const clienteId = await seedCliente();
     const cookie = cookies('coordinator');
 
-    const permitido = await request(app)
+    const nombre = await request(app)
       .patch(`/api/clientes/${clienteId}`)
       .set('Cookie', cookie)
       .set('X-CSRF-Token', CSRF)
       .send({ nombre: 'Ana' });
-    expect(permitido.status).toBe(200);
-    expect(permitido.body.nombre).toBe('Ana');
+    expect(nombre.status).toBe(200);
+    expect(nombre.body.nombre).toBe('Ana');
 
-    const prohibido = await request(app)
+    const correo = await request(app)
       .patch(`/api/clientes/${clienteId}`)
       .set('Cookie', cookie)
       .set('X-CSRF-Token', CSRF)
       .send({ correo: 'ana@empresa.com' });
-    expect(prohibido.status).toBe(403);
+    expect(correo.status).toBe(200);
   });
 });

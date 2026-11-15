@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ContactEditDialog } from './ContactEditDialog.js';
+import { useAuthStore } from '@/stores/authStore';
 import {
   createContactOption,
   deleteContactOption,
@@ -131,6 +132,8 @@ function renderDialog(
 // diálogo necesita la respuesta del catálogo, no solo los que lo gestionan.
 beforeEach(() => {
   vi.clearAllMocks();
+  // Gestionar los catálogos es del Administrador (AUTH-04); el caso del asesor va en su propio test.
+  useAuthStore.setState({ user: { sub: 'u1', rol: 'admin', rolEmpresa: 'administrador' }, status: 'authenticated' });
   mockUpdate.mockResolvedValue(contacto());
   mockOpciones.mockResolvedValue(OPCIONES);
   mockCampos.mockResolvedValue(CAMPOS);
@@ -247,7 +250,18 @@ describe('ContactEditDialog (HU-CRM-02)', () => {
 
     expect(screen.getByLabelText(/Correo/)).toBeDisabled();
     expect(screen.getByLabelText(/Documento/)).toBeDisabled();
-    expect(screen.getByText(/Solo Dirección y Gerencia/)).toBeInTheDocument();
+    expect(screen.getByText(/Tu usuario no tiene acceso a este dato/)).toBeInTheDocument();
+  });
+
+  it('el asesor ve las mismas acciones de catálogo que el administrador (AUTH-05: accesos iguales)', () => {
+    const acciones = (): number =>
+      screen.queryAllByRole('button', { name: /Gestionar las opciones de|^Administrar$/ }).length;
+    renderDialog(contacto());
+    const delAdministrador = acciones();
+    cleanup();
+    useAuthStore.setState({ user: { sub: 'u2', rol: 'admin', rolEmpresa: 'asesor' }, status: 'authenticated' });
+    renderDialog(contacto());
+    expect(acciones()).toBe(delAdministrador);
   });
 
   it('sin permiso, el valor enmascarado NO se siembra en el input', () => {

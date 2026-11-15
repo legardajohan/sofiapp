@@ -146,7 +146,7 @@ describe('GET/PUT /api/ai/handoff-rules (HU-IA-03)', () => {
       nombre: 'Ajeno',
       email: 'ajeno@x.com',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -335,7 +335,7 @@ describe('GET /api/ai/handoff-rules/asesores/metricas (HU-IA-07)', () => {
       nombre: 'Ana Ruiz',
       email: 'ana@empresa.test',
       passwordHash: 'x'.repeat(20),
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -353,7 +353,7 @@ describe('GET /api/ai/handoff-rules/asesores/metricas (HU-IA-07)', () => {
       nombre: 'De otra empresa',
       email: 'ajeno@empresa.test',
       passwordHash: 'x'.repeat(20),
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 

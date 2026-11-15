@@ -29,6 +29,7 @@ const BASE: HandoffSettings = {
   activo: true,
   asesorDestinoId: null,
   estrategiaDestino: 'primero',
+  destino: { modo: 'grupo', grupo: { tipo: 'todos' }, criterio: 'primero', soloEnLinea: false, reserva: { tipo: 'cualquiera' } },
   mensajeTransicion: 'Ya le pasé tu conversación a un asesor.',
   heredado: false,
   condicionesExtras: [],
@@ -52,7 +53,9 @@ function renderForm(over: Partial<HandoffSettings> = {}): void {
 describe('HandoffSettingsForm (HU-IA-07)', () => {
   beforeEach(() => {
     mockSave.mockReset().mockResolvedValue(BASE);
-    mockFetchUsers.mockReset().mockResolvedValue([{ id: 'u1', nombre: 'Ana Ruiz' }]);
+    mockFetchUsers.mockReset().mockResolvedValue([
+      { id: 'u1', nombre: 'Ana Ruiz', activo: true, rolEmpresa: 'asesor', esPrincipal: false, coordinadorId: null },
+    ]);
     mockFetchMetricas.mockReset().mockResolvedValue([]);
   });
 
@@ -119,34 +122,54 @@ describe('HandoffSettingsForm (HU-IA-07)', () => {
   });
 
   // AC14: la estrategia y el asesor son un solo destino, no dos campos sueltos.
-  it('elegir el reparto por carga guarda la estrategia sin asesor fijo', async () => {
+  // AUTH-06: el destino se elige por grupo de rol (o persona), no entre todos mezclados.
+  it('elegir «Asesores» guarda un destino de grupo por rol y conserva el criterio elegido', async () => {
     renderForm();
 
-    await userEvent.click(screen.getByLabelText('Asesor que la recibe'));
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'Quien tenga menos conversaciones activas' }),
-    );
+    await userEvent.click(screen.getByLabelText('Quién recibe la conversación'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Asesores' }));
+    // El destino de fábrica era «el primero»: cambiar de grupo no cambia el criterio a escondidas.
+    expect(screen.getByLabelText('Dentro del grupo, se elige a')).toHaveTextContent('El primero por orden alfabético');
+    await userEvent.click(screen.getByLabelText('Dentro del grupo, se elige a'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Quien tenga menos conversaciones activas' }));
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }));
 
     // Sobre el primer argumento y no con `toHaveBeenCalledWith`: TanStack Query le pasa a la
     // `mutationFn` un segundo parámetro de contexto que aquí no importa.
     expect(mockSave.mock.calls[0]![0]).toMatchObject({
-      estrategiaDestino: 'menor_carga',
-      asesorDestinoId: null,
+      destino: {
+        modo: 'grupo',
+        grupo: { tipo: 'rol', rol: 'asesor' },
+        criterio: 'menor_carga',
+        soloEnLinea: false,
+        reserva: { tipo: 'cualquiera' },
+      },
     });
   });
 
-  it('elegir un asesor concreto guarda la estrategia fija con su id (AC14)', async () => {
+  it('elegir una persona concreta guarda un destino «usuario» con su id (AC14)', async () => {
     renderForm();
 
-    await userEvent.click(screen.getByLabelText('Asesor que la recibe'));
+    // Las personas se eligen en el segundo paso, entre los miembros del rol del primero.
+    await userEvent.click(screen.getByLabelText('Quién recibe la conversación'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Asesores' }));
+    await userEvent.click(screen.getByLabelText('Dentro del grupo, se elige a'));
     await userEvent.click(await screen.findByRole('option', { name: 'Ana Ruiz' }));
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }));
 
     expect(mockSave.mock.calls[0]![0]).toMatchObject({
-      estrategiaDestino: 'fijo',
-      asesorDestinoId: 'u1',
+      destino: { modo: 'usuario', usuarioId: 'u1', reserva: { tipo: 'cualquiera' } },
     });
+  });
+
+  it('«Si no hay nadie disponible» puede dejarla sin asignar', async () => {
+    renderForm();
+
+    await userEvent.click(screen.getByLabelText('Si no hay nadie disponible'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Dejarla sin asignar' }));
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }));
+
+    expect(mockSave.mock.calls[0]![0]).toMatchObject({ destino: { reserva: { tipo: 'sin_asignar' } } });
   });
 
   it('«Ver asignación» abre el panel de reparto', async () => {

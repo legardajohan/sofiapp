@@ -94,14 +94,40 @@
   email: String,
   passwordHash: String,           // select:false
   rol: "superadmin" | "admin",
-  subrol: "director" | "manager" | "coordinator" | "secretary" | null,  // opcional, solo admin; metadata, no afecta permisos (AUTH-02)
+  rolEmpresa: "administrador" | "coordinador" | "asesor",  // required si rol=admin (AUTH-04, ADR 0017); ausente en el superadmin
+  coordinadorId: ObjectId | null, // ref User — solo asesores: su coordinador (equipo). null en el resto o sin coordinador
+  // subrol (AUTH-02): retirado. `migrate:roles-empresa` lo traduce a rolEmpresa y `--unset-legacy` lo borra.
   activo: Boolean,                // default true
+  esPrincipal: Boolean,           // default false — el que creó el superadmin con la empresa; uno por tenant (AUTH-05, ADR 0018)
+  puedeGestionarAdministradores: Boolean, // default false — Administrador no principal que gestiona a otros admins; lo concede el principal
+  eliminado: Boolean,             // default false — borrado lógico; un eliminado siempre está además inactivo
+  eliminadoEn: Date, eliminadoPor: ObjectId,  // ref User — solo si eliminado
+  emailOriginal: String,          // email antes de reescribirlo a `<id>.eliminado@invalid.sofiapp` (libera el original)
   createdAt, updatedAt
 }
 // Índices: { email: 1 } unique  (email único GLOBAL para usuarios de panel; login resuelve el tenant — ADR 0003)
 //          { tenantId: 1, email: 1 }  (NO único; lookups scoped por tenant)
 //          { rol: 1 }  (para localizar al/los superadmin)
+//          { tenantId: 1, coordinadorId: 1 }  (equipo de un coordinador, AUTH-04)
+//          { tenantId: 1, rolEmpresa: 1, activo: 1 }  (cuota `administradores`, último Administrador)
+//          { tenantId: 1 } unique, partialFilterExpression { esPrincipal: true }  (un principal por empresa, AUTH-05)
 ```
+
+### `session_revocations` (AUTH-03, ADR 0016)
+
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required — tenant-scoped como el resto
+  userId: ObjectId,               // ref User
+  revokedAt: Date,                // todo JWT del usuario con iat <= revokedAt deja de valer
+  expiraEn: Date                  // revokedAt + 7d (≥ JWT_EXPIRES_IN); lo borra el TTL
+}
+// Índices: { tenantId: 1, userId: 1 } unique · { expiraEn: 1 } TTL (expireAfterSeconds: 0)
+```
+> Se escribe al **desactivar**, **cambiar el rol** o **restablecer la contraseña** de un usuario.
+> La ausencia de documento significa sesión válida: la colección vive casi vacía y desplegar no
+> cierra la sesión de nadie. `authenticateJWT` y el handshake de Socket.IO la consultan.
 
 ## meta_integrations  (conexión Tech Provider por tenant; resuelve el webhook)
 ```js
@@ -211,7 +237,7 @@
   // persona la confirma. Sin índice: se proyectan al abrir la ficha, nadie filtra por esto.
   datosExtraidos: {               // subdoc con _id: false; ausente si nunca se extrajo
     nombreCompleto: String?,
-    correo: String?,              // mismo gate por subrol que `correoEnc` al leerlo
+    correo: String?,              // mismo gate por rol que `correoEnc` al leerlo
     telefono: String,             // NUNCA null: cae al número de WhatsApp del contacto
     telefonoOrigen: "conversacion" | "whatsapp",
     interes: String?,             // <= 120 chars, texto libre: QUÉ pide, no cuánto le interesa
@@ -261,7 +287,7 @@
 > **El cifrado en reposo de estos campos está DESACTIVADO (HU-CRM-02).** `correoEnc`,
 > `documentoEnc`, `textoEnc` de las notas y el `valor` de los atributos sensibles se guardan **en
 > claro**. Dependían de `DATA_ENC_KEY`, una variable opcional, y sin ella cualquier guardado moría
-> con un 500. Lo que protege el dato es el **control de acceso por subrol** (`authorizeSubrol` +
+> con un 500. Lo que protege el dato es el **control de acceso por rol de empresa** (`authorizeRolEmpresa` +
 > enmascarado), que nunca dependió del cifrado; lo que se pierde es la protección ante un volcado de
 > la base o un backup extraviado. Los valores escritos mientras estuvo activo llevan el prefijo
 > `enc:v1:` y se siguen leyendo (`utils/field-crypto.util`), así que no hizo falta migrar.
@@ -681,8 +707,8 @@ clave extra es un 400, no un campo ignorado):
 | `condicion` | `{ variable: "ultimo_mensaje"\|"var:<nombre>", ramas: [{ operador: "igual_a"\|"contiene"\|"opcion_elegida", valor, nodoDestino }], ramaPorDefecto }` |
 | `intencion` | `{ etiquetas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto }` |
 | `kb` | `{ pregunta: "ultimo_mensaje"\|string, kSobrescrito?, siNoHayRespuesta }` — **sin** campo de texto de respuesta: delega en `AIService.chat()` |
-| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId } }` |
-| `handoff` | `{ motivo?, notificarAsesorId? }` |
+| `accion` | `{ efecto: { tipo: "cambiar_estado", estado } \| { tipo: "aplicar_etiquetas", tagIds } \| { tipo: "crear_lead" } \| { tipo: "asignar_asesor", asesorId?, destino? } }` — AUTH-06: `destino` (`DestinoAsignacion`) manda; `asesorId` es el formato previo |
+| `handoff` | `{ motivo?, notificarAsesorId?, destino? }` — AUTH-06: `destino` (`DestinoAsignacion`) manda; sin destino ni `notificarAsesorId`, usa el de `handoff_settings` |
 | `espera` | `{ minutos }` — job diferido, HU-FLOW-02 |
 | `ia` | `{ objetivo, salidas: [{ etiqueta, descripcion, nodoDestino }], ramaPorDefecto, maxTurnos, usarKb }` — conversa varios turnos con `AIService.extract()` (historial real, no solo el último mensaje) y retoma el flujo por la salida que la IA decide cumplida; `maxTurnos` (1-10) fuerza salida por `ramaPorDefecto` sin llamar de nuevo a la IA. HU-FLOW-03 |
 
@@ -876,7 +902,7 @@ activo**. Una rama sin destino en un flujo en borrador (chat de prueba) termina 
 > duro, es la única copia que queda — y el `despues` lleva solo `{ motivo }`.
 >
 > **La bitácora nunca guarda un valor sensible.** Esta colección no tiene control de acceso por
-> subrol, así que volcar aquí el antes/después de un campo sensible lo dejaría al alcance de quien
+> rol, así que volcar aquí el antes/después de un campo sensible lo dejaría al alcance de quien
 > no puede verlo en la ficha. En `cliente.update`, `correo`, `documento` y los
 > atributos sensibles se guardan como la cadena `"[oculto]"` — queda constancia de **qué** cambió,
 > nunca de **a qué**. `contact-note.create` registra el id de la nota y su `clienteId`, jamás el
@@ -1023,7 +1049,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > un pendiente recalcula `recordatorioAt` en el mismo documento y rearma `notificadoPara`: nunca hay
 > dos recordatorios para una nota. Los estados PENDIENTE / VENCIDO / POSPUESTO / CERRADO **no se
 > guardan**: se derivan de `estadoPendiente`, `recordatorioAt`, `vecesPospuesto` y la hora actual
-> (`organizador.estado.ts`). Ver ADR 0016.
+> (`organizador.estado.ts`). Ver ADR 0020.
 
 ## pendiente_eventos  (historial de los pendientes — HU-PDF-02)
 ```js
@@ -1112,7 +1138,7 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   label: String,                  // 1..60
   labelNormalizado: String,       // sin mayúsculas, tildes ni espacios repetidos: hace única la etiqueta
   tipoDato: "texto" | "numero" | "fecha" | "booleano",   // default "texto"
-  sensible: Boolean,              // default false; oculta el valor a quien no tenga el subrol (ADR 0006)
+  sensible: Boolean,              // default false; oculta el valor a quien no tenga el rol autorizado (ADR 0006/0017)
   orden: Number,
   activo: Boolean,                // false = archivado
   createdAt, updatedAt
@@ -1149,6 +1175,8 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
   // A quién le llega la conversación (HU-IA-07). `asesorDestinoId` solo significa algo con "fijo".
   estrategiaDestino: "primero" | "menor_carga" | "fijo",   // default "primero"
   asesorDestinoId: ObjectId?,     // ref User (admin activo del tenant)
+  // AUTH-06 (ADR 0019). Manda sobre los dos de arriba, que se siguen escribiendo un release.
+  destino?: DestinoAsignacion,    // ver abajo; ausente en documentos previos → se deriva al leer
   mensajeTransicion: String,      // lo que lee el cliente al ser transferido
   reglas: {                       // los CUATRO disparadores de fábrica, objeto fijo
     explicitRequest: { activa: Boolean, frases: [String] },
@@ -1175,6 +1203,13 @@ los leads ya llevan grabada) y `{ tenantId, orden }` para la lectura del catálo
 > endpoints nuevos, y sin criterio de orden que inventar: el orden es el del array, que es el que ve
 > quien las configura. Se evalúan **después** de las dos reglas de texto de fábrica y **antes** de
 > `lowConfidence`/`intentPurchase`, porque son gratis: no llaman al modelo.
+>
+> **`DestinoAsignacion` (AUTH-06, `packages/shared/src/destino-usuarios.ts`):**
+> `{ modo: "usuario", usuarioId, reserva }` | `{ modo: "grupo", grupo, criterio: "primero" | "menor_carga",
+> soloEnLinea: Boolean, reserva }`. `grupo`: `{ tipo: "todos" }` | `{ tipo: "rol", rol, excluirPrincipal? }`
+> | `{ tipo: "equipo", coordinadorId, incluirCoordinador? }`. `reserva`: `{ tipo: "cualquiera" }` |
+> `{ tipo: "grupo", grupo }` | `{ tipo: "sin_asignar" }`. Se guarda como `Mixed`; la forma la valida
+> Zod en el borde. Sin migración: un documento sin `destino` lo deriva de `estrategiaDestino`.
 >
 > **`estrategiaDestino` y `condicionesExtras` no necesitaron migración.** Los documentos guardados
 > antes de HU-IA-07 no los traen, y el servicio los deriva al leer (`asesorDestinoId ? "fijo" :

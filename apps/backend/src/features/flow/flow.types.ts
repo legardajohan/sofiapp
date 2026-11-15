@@ -1,6 +1,6 @@
 import type { Document, Types } from 'mongoose';
 import type { EstadoComercial } from '../cliente/cliente.types.js';
-import type { ErrorGrafo } from '@sofiapp/shared';
+import type { DestinoAsignacion, ErrorGrafo } from '@sofiapp/shared';
 import type { SlotSpec } from '../../integrations/llm/llm-provider.types.js';
 import type { CampoFijoContacto } from '../contact-field/contact-field.types.js';
 
@@ -67,7 +67,11 @@ export type EfectoAccion =
   | { tipo: 'cambiar_estado'; estado: EstadoComercial }
   | { tipo: 'aplicar_etiquetas'; tagIds: string[] }
   | { tipo: 'crear_lead' }
-  | { tipo: 'asignar_asesor'; asesorId: string };
+  /**
+   * AUTH-06: `destino` (usuario o grupo de rol/equipo, con reserva) manda. `asesorId` es el formato
+   * previo y se ejecuta como un destino `usuario`; al menos uno de los dos está presente.
+   */
+  | { tipo: 'asignar_asesor'; asesorId?: string; destino?: DestinoAsignacion };
 
 /**
  * Dónde deja su dato un nodo `captura` (HU-FLOW-05). `variable` es el comportamiento de siempre
@@ -111,7 +115,7 @@ export type ConfigNodo =
   | { tipo: 'intencion'; etiquetas: IEtiquetaIntencion[]; ramaPorDefecto: string }
   | { tipo: 'kb'; pregunta: 'ultimo_mensaje' | string; kSobrescrito?: number; siNoHayRespuesta: string }
   | { tipo: 'accion'; efecto: EfectoAccion }
-  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
+  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string; destino?: DestinoAsignacion }
   | { tipo: 'espera'; minutos: number }
   | {
       tipo: 'ia';
@@ -225,7 +229,7 @@ export type Efecto =
   | EfectoAccion
   /** HU-FLOW-05: el dato capturado debe quedar en la ficha del contacto. */
   | { tipo: 'guardar_dato'; destino: DestinoFicha; valor: unknown; sobrescribir: boolean }
-  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string }
+  | { tipo: 'handoff'; motivo?: string; notificarAsesorId?: string; destino?: DestinoAsignacion }
   | { tipo: 'error'; mensaje: string };
 
 export interface EntradaMotor {

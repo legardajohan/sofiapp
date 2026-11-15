@@ -62,17 +62,16 @@ describe('HU-PDF-01 — rutas de pendientes y de edición de notas', () => {
   });
 
   describe('CA10 — permisos (RN8)', () => {
-    it('un subrol sin acceso a datos sensibles recibe 403 en las cuatro rutas', async () => {
-      const t = token(tenant, actor, 'coordinator');
-      expect((await get(t, '/api/pendientes')).status).toBe(403);
-      expect((await get(t, PDF_OK)).status).toBe(403);
-      const patch = conCsrf(
-        request(app).patch(`/api/clientes/${contacto}/notas/${nota}`),
-        t,
-      ).send({ pendiente: false });
-      expect((await patch).status).toBe(403);
-      const del = conCsrf(request(app).delete(`/api/clientes/${contacto}/notas/${nota}`), t);
-      expect((await del).status).toBe(403);
+    it('coordinador y asesor también entran: los tres roles ven datos sensibles (AUTH-05)', async () => {
+      for (const subrol of ['coordinator', 'secretary']) {
+        const t = token(tenant, actor, subrol);
+        expect((await get(t, '/api/pendientes')).status).toBe(200);
+        const patch = conCsrf(
+          request(app).patch(`/api/clientes/${contacto}/notas/${nota}`),
+          t,
+        ).send({ pendiente: false });
+        expect((await patch).status).not.toBe(403);
+      }
     });
 
     it('un admin sin subrol o con subrol autorizado entra', async () => {
@@ -213,14 +212,14 @@ describe('HU-PDF-01 — rutas de pendientes y de edición de notas', () => {
       expect((await conCsrf(request(app).post(`/api/pendientes/${nota}/reabrir`), t)).status).toBe(409);
     });
 
-    it('estado inválido → 400; id inválido → 400; subrol sin acceso → 403', async () => {
+    it('estado inválido → 400; id inválido → 400; el asesor también puede cerrar (AUTH-05)', async () => {
       const t = token(tenant, actor);
       expect((await get(t, '/api/pendientes?estado=todos')).status).toBe(400);
       expect((await conCsrf(request(app).post('/api/pendientes/no-es-id/cerrar'), t)).status).toBe(400);
-      const sinAcceso = token(tenant, actor, 'secretary');
+      const asesor = token(tenant, actor, 'secretary');
       expect(
-        (await conCsrf(request(app).post(`/api/pendientes/${nota}/cerrar`), sinAcceso)).status,
-      ).toBe(403);
+        (await conCsrf(request(app).post(`/api/pendientes/${nota}/cerrar`), asesor)).status,
+      ).not.toBe(403);
     });
   });
 });

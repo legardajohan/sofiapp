@@ -53,7 +53,7 @@ async function crearAsesor(tenantId: Types.ObjectId, email: string): Promise<str
     nombre: 'Asesor',
     email,
     passwordHash: 'x',
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo: true,
   });
   return String(doc._id);

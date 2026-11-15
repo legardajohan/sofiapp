@@ -1,4 +1,4 @@
-# ADR 0016 — Recordatorios del Organizador: estado derivado en la nota y barrido del worker
+# ADR 0020 — Recordatorios del Organizador: estado derivado en la nota y barrido del worker
 
 **Estado:** aceptado · **Fecha:** 2026-11-10 · **Contexto:** HU-PDF-02 (Organizador de pendientes)
 

@@ -16,7 +16,7 @@ const tenantId = new Types.ObjectId().toString();
 const actorId = new Types.ObjectId().toString();
 
 async function crearAdmin(
-  overrides: Partial<{ nombre: string; activo: boolean; subrol: string; rol: string }> = {},
+  overrides: Partial<{ nombre: string; activo: boolean; rolEmpresa: string; rol: string }> = {},
 ) {
   return UserModel.create({
     tenantId: new Types.ObjectId(tenantId),
@@ -25,7 +25,9 @@ async function crearAdmin(
     passwordHash: 'hash',
     rol: overrides.rol ?? 'admin',
     activo: overrides.activo ?? true,
-    ...(overrides.subrol ? { subrol: overrides.subrol } : {}),
+    ...((overrides.rol ?? 'admin') === 'admin'
+      ? { rolEmpresa: overrides.rolEmpresa ?? 'administrador' }
+      : {}),
   });
 }
 
@@ -44,7 +46,7 @@ async function crearCliente(overrides: Record<string, unknown> = {}) {
 
 describe('conversation.service — assignConversation (HU-OMNI-02)', () => {
   it('asigna a otro admin y persiste asesorId + DTO asignadoA*', async () => {
-    const admin = await crearAdmin({ nombre: 'Coord', subrol: 'coordinator' });
+    const admin = await crearAdmin({ nombre: 'Coord', rolEmpresa: 'coordinador' });
     const cliente = await crearCliente();
 
     const result = await assignConversation(
@@ -57,7 +59,7 @@ describe('conversation.service — assignConversation (HU-OMNI-02)', () => {
     expect(result.asesorId).toBe(admin._id.toString());
     expect(result.asignadoA).toBe(admin._id.toString());
     expect(result.asignadoANombre).toBe('Coord');
-    expect(result.asignadoASubrol).toBe('coordinator');
+    expect(result.asignadoARol).toBe('coordinador');
 
     const persisted = await Cliente.findById(cliente._id).lean();
     expect(String(persisted?.asesorId)).toBe(admin._id.toString());

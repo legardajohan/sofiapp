@@ -10,7 +10,7 @@ export type AuditAccion =
   | 'cliente.tema'
   // HU-IA-06. `cliente.extract`: la IA escribió `datosExtraidos` (actor `null` si fue el worker).
   // `cliente.extract-confirm`: una persona pasó esos datos a la ficha. En ambos el correo viaja
-  // como `[oculto]`: `audit_events` no tiene gate por subrol.
+  // como `[oculto]`: `audit_events` no tiene gate por rol.
   | 'cliente.extract'
   | 'cliente.extract-confirm'
   | 'contact-note.create'
@@ -46,8 +46,23 @@ export type AuditAccion =
   // (`flujo`, `recordatorio`, `ia`); actor `null`, lo decide el sistema.
   | 'send-window.update'
   | 'campaign.retenida-horario'
-  | 'mensaje.retenido-horario';
-export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign' | 'send-window';
+  | 'mensaje.retenido-horario'
+  // AUTH-03 — gestión de usuarios del tenant. Nunca se audita el password, ni siquiera su hash.
+  | 'user.created'
+  | 'user.updated'
+  | 'user.role_changed'
+  | 'user.coordinator_changed'
+  | 'user.team_moved'
+  | 'user.deactivated'
+  | 'user.reactivated'
+  | 'user.password_reset'
+  /** Al desactivar: sus conversaciones se reasignaron o volvieron a la bandeja sin asignar. */
+  | 'user.conversations_moved'
+  // AUTH-05 — usuario principal y jerarquía de gestión.
+  | 'user.deleted'
+  | 'user.password_changed'
+  | 'user.admin_permission_changed';
+export type AuditEntidad = 'cliente' | 'contact-note' | 'lead' | 'campaign' | 'send-window' | 'user';
 
 // Colección tenant-scoped genérica de auditoría. Se accede SIEMPRE vía *Scoped.
 export interface IAuditEvent {

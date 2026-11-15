@@ -1,5 +1,5 @@
 import type { CondicionExtra, HandoffMotivo } from '../handoff/types.js';
-import type { AdminSubrol } from '@/stores/authStore';
+import type { RolEmpresa } from '@/stores/authStore';
 import type { SemaforoSlug, TagDTO } from '@/features/tags/types';
 
 export type FiltroBandeja = 'todos' | 'mios' | 'sin_asignar' | 'sofi';
@@ -45,7 +45,7 @@ export interface ConversationDTO {
   /** Alias público del contrato HTTP (HU-OMNI-02): mismo valor que `asesorId`. */
   asignadoA: string | null;
   asignadoANombre: string | null;
-  asignadoASubrol: AdminSubrol | null;
+  asignadoARol: RolEmpresa | null;
   iaHabilitada: boolean;
   ventana24hAbierta: boolean;
   estadoComercial: string;
@@ -172,7 +172,7 @@ export interface ContactCardDTO {
   /** Lead al que ya se convirtió este contacto, o `null` (HU-CRM-01). */
   leadId: string | null;
   // ─── Datos sensibles (HU-CRM-02) ─────────────────────────────────────────────
-  /** En claro o enmascarado (`d••••@dominio.com`) según el subrol. Lo decide el backend. */
+  /** En claro o enmascarado (`d••••@dominio.com`) según el rol. Lo decide el backend. */
   correo: string | null;
   /** En claro o enmascarado (`••••1234`). */
   documento: string | null;

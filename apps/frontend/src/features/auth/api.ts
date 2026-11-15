@@ -1,5 +1,5 @@
 import { apiClient } from '../../api/apiClient.js';
-import type { AdminSubrol, UserRol } from '../../stores/authStore.js';
+import type { RolEmpresa, UserRol } from '../../stores/authStore.js';
 
 export interface LoginDTO {
   email: string;
@@ -11,8 +11,10 @@ export interface ISessionUser {
   nombre: string;
   email: string;
   rol: UserRol;
-  subrol?: AdminSubrol;
+  rolEmpresa?: RolEmpresa;
   tenantId: string | null;
+  esPrincipal: boolean;
+  puedeGestionarAdministradores: boolean;
 }
 
 export async function login(dto: LoginDTO): Promise<ISessionUser> {

@@ -104,7 +104,7 @@ describe('POST /api/leads — cadena de middlewares y contrato HTTP', () => {
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
   });
@@ -343,7 +343,7 @@ describe('GET /api/leads — contrato HTTP del listado (HU-CRM-03)', () => {
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 
@@ -525,7 +525,7 @@ describe('HU-PIPE-01 — contrato HTTP del embudo', () => {
       nombre: 'Carolina',
       email: 'carolina@empresa.test',
       passwordHash: 'x',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
 

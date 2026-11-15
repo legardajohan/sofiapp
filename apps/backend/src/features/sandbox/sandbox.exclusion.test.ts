@@ -126,7 +126,7 @@ describe('HU-IA-08 — los datos de prueba no cuentan en ninguna cifra de negoci
       nombre: 'Asesora',
       email: `a-${new Types.ObjectId()}@t.com`,
       passwordHash: 'h',
-      rol: 'admin',
+      rol: 'admin', rolEmpresa: 'administrador',
       activo: true,
     });
     const real = await crearCliente(false, { asesorId });

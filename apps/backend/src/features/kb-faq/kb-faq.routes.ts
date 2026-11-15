@@ -2,6 +2,10 @@ import { Router, type Router as ExpressRouter } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -26,6 +30,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(listFaqsSchema),
   asyncHandler(listFaqsController),
 );
@@ -35,6 +40,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createFaqSchema),
   asyncHandler(createFaqController),
 );
@@ -45,6 +51,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(testFaqSchema),
   asyncHandler(testFaqController),
 );
@@ -54,6 +61,7 @@ router.patch(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateFaqSchema),
   asyncHandler(updateFaqController),
 );
@@ -63,6 +71,7 @@ router.delete(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(deleteFaqSchema),
   asyncHandler(deleteFaqController),
 );

@@ -9,7 +9,7 @@ import {
   updateLeadEstado,
   updateLeadSemaforo,
 } from './lead.service.js';
-import { puedeVerDatosSensibles } from '../../middlewares/authorize-subrol.middleware.js';
+import { puedeVerDatosSensibles } from '../../middlewares/authorize-rol-empresa.middleware.js';
 import type { ListLeadsQuery } from './lead.types.js';
 import type {
   CreateLeadBody,

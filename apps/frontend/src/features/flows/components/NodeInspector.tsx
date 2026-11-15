@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { AlertCircle, AlertTriangle, PanelRightClose, Plus, Trash2 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import type { DestinoAsignacion } from '@sofiapp/shared';
+import { DestinoSelector } from '@/components/users/DestinoSelector';
 import { useTenantUsers } from '../../users/hooks/useTenantUsers.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -230,7 +232,7 @@ function AccionForm({ config, onChange }: FormProps<'accion'>): React.ReactEleme
                 : tipo === 'aplicar_etiquetas'
                   ? { tipo, tagIds: [] }
                   : tipo === 'asignar_asesor'
-                    ? { tipo, asesorId: '' }
+                    ? { tipo, destino: DESTINO_NODO_POR_DEFECTO }
                     : { tipo: 'crear_lead' as const };
             onChange({ ...config, efecto: nuevoEfecto });
           }}
@@ -289,27 +291,51 @@ function AccionForm({ config, onChange }: FormProps<'accion'>): React.ReactEleme
       ) : null}
 
       {efecto.tipo === 'asignar_asesor' ? (
-        <Field label="ID del asesor">
-          <Input
-            value={efecto.asesorId}
-            onChange={(e) => onChange({ ...config, efecto: { tipo: 'asignar_asesor', asesorId: e.target.value } })}
-            placeholder="507f1f77bcf86cd799439011"
-          />
-        </Field>
+        <AsignarDestinoForm
+          destino={efecto.destino ?? destinoDeUsuarioPrevio(efecto.asesorId) ?? DESTINO_NODO_POR_DEFECTO}
+          onChange={(destino) => onChange({ ...config, efecto: { tipo: 'asignar_asesor', destino } })}
+        />
       ) : null}
     </div>
   );
 }
 
-/** Valor del `Select` para «sin asesor»: Radix no admite `value=""` en un ítem. */
-const ASESOR_AUTOMATICO = '__automatico__';
+/** AUTH-06: lo que propone un nodo nuevo de asignación — el asesor con menos conversaciones. */
+const DESTINO_NODO_POR_DEFECTO: DestinoAsignacion = {
+  modo: 'grupo',
+  grupo: { tipo: 'rol', rol: 'asesor' },
+  criterio: 'menor_carga',
+  soloEnLinea: false,
+  reserva: { tipo: 'cualquiera' },
+};
+
+/** Un nodo guardado antes de AUTH-06 con un id de usuario se edita como destino «usuario». */
+function destinoDeUsuarioPrevio(usuarioId: string | undefined): DestinoAsignacion | null {
+  return usuarioId ? { modo: 'usuario', usuarioId, reserva: { tipo: 'cualquiera' } } : null;
+}
+
+function AsignarDestinoForm({
+  destino,
+  onChange,
+}: {
+  destino: DestinoAsignacion;
+  onChange: (d: DestinoAsignacion) => void;
+}): React.ReactElement {
+  const { data: usuarios } = useTenantUsers({ alAbrir: true });
+  return (
+    <DestinoSelector
+      idPrefix="nodo-asignar"
+      etiqueta="A quién se asigna"
+      value={destino}
+      onChange={(d) => d && onChange(d)}
+      usuarios={usuarios}
+    />
+  );
+}
 
 function HandoffForm({ config, onChange }: FormProps<'handoff'>): React.ReactElement {
-  const { data: usuarios, isLoading } = useTenantUsers();
-  const asesores = (usuarios ?? []).filter((u) => u.activo);
-  const elegido = config.notificarAsesorId ?? '';
-  // Un asesor que ya no está activo se sigue mostrando, para no borrar la elección en silencio.
-  const huerfano = elegido !== '' && !isLoading && !asesores.some((a) => a.id === elegido);
+  const { data: usuarios } = useTenantUsers({ alAbrir: true });
+  const destino = config.destino ?? destinoDeUsuarioPrevio(config.notificarAsesorId);
 
   return (
     <div className="space-y-4">
@@ -325,38 +351,26 @@ function HandoffForm({ config, onChange }: FormProps<'handoff'>): React.ReactEle
           rows={2}
         />
       </Field>
-      <Field label="Asesor al que transferir (opcional)">
-        <Select
-          value={elegido === '' ? ASESOR_AUTOMATICO : elegido}
-          onValueChange={(v) => {
-            const { notificarAsesorId: _quitado, ...resto } = config;
-            void _quitado;
-            onChange(v === ASESOR_AUTOMATICO ? resto : { ...resto, notificarAsesorId: v });
-          }}
-        >
-          <SelectTrigger className="h-9 text-sm" aria-label="Asesor al que transferir">
-            <SelectValue placeholder={isLoading ? 'Cargando asesores…' : 'Automático'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ASESOR_AUTOMATICO}>Automático (según el reparto de chats)</SelectItem>
-            {asesores.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.nombre}
-              </SelectItem>
-            ))}
-            {huerfano ? (
-              <SelectItem value={elegido} disabled>
-                Asesor ya no disponible
-              </SelectItem>
-            ) : null}
-          </SelectContent>
-        </Select>
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {huerfano
-            ? 'El asesor elegido ya no está activo: se usará el reparto automático. Elige otro si quieres fijarlo.'
-            : 'Si eliges uno, la conversación va a esa persona y manda sobre el reparto automático de chats. Si no, se asigna a quien tenga menos.'}
+      <DestinoSelector
+        idPrefix="nodo-handoff"
+        etiqueta="A quién se transfiere"
+        value={destino}
+        opcionGeneral="Como diga la configuración de transferencia"
+        onChange={(d) => {
+          // El formato previo (`notificarAsesorId`) se retira al editar: manda `destino`.
+          const { notificarAsesorId: _previo, destino: _destino, ...resto } = config;
+          void _previo;
+          void _destino;
+          onChange(d ? { ...resto, destino: d } : resto);
+        }}
+        usuarios={usuarios}
+      />
+      {destino === null && (
+        <p className="text-[11px] text-muted-foreground">
+          Se usa lo que esté elegido en Asistente IA › Transferencia a un usuario. Si la conversación
+          ya tiene a alguien asignado, se queda con esa persona.
         </p>
-      </Field>
+      )}
     </div>
   );
 }

@@ -8,6 +8,11 @@ import { getAdvisorActivity, getAdvisorReport } from '../../../api/reports.js';
 import type { AdvisorActivity, AdvisorReport, AdvisorRow } from '../types/index.js';
 
 vi.mock('../../../api/reports.js', () => ({ getAdvisorReport: vi.fn(), getAdvisorActivity: vi.fn() }));
+// AUTH-06: el filtro de grupo lista a los usuarios del tenant.
+vi.mock('../../users/api.js', () => ({
+  fetchTenantUsers: vi.fn().mockResolvedValue([]),
+  fetchTenantUsersInactivos: vi.fn().mockResolvedValue([]),
+}));
 
 const mockGet = vi.mocked(getAdvisorReport);
 const mockActividad = vi.mocked(getAdvisorActivity);
@@ -22,6 +27,9 @@ function fila(nombre: string, atendidas: number, ventas: number, activo = true, 
     ventas,
     tasaCierre: atendidas ? ventas / atendidas : 0,
     segundosActivos,
+    rolEmpresa: 'asesor',
+    coordinadorId: null,
+    esPrincipal: false,
   };
 }
 
@@ -198,12 +206,66 @@ describe('Tiempo activo — HU-REP-06', () => {
     mockGet.mockResolvedValue(reporte([fila('Laura', 1, 0)]));
     mockActividad.mockResolvedValue(
       actividad(
-        [{ asesorId: 'bbbbbbbbbbbbbbbbbbbbbbbb', nombre: 'Pedro', totalSegundos: 600 }],
+        [{ asesorId: 'bbbbbbbbbbbbbbbbbbbbbbbb', nombre: 'Pedro', totalSegundos: 600, rolEmpresa: 'asesor', coordinadorId: null, esPrincipal: false }],
         [{ periodo: '2026-10-08', totalSegundos: 600, porAsesor: [{ asesorId: 'bbbbbbbbbbbbbbbbbbbbbbbb', segundos: 600 }] }],
       ),
     );
-    renderPage(`/reports/advisors?asesor=${ID_LAURA}`);
+    // AUTH-06: la persona de la gráfica se elige dentro de un rol (`actividadGrupo`).
+    renderPage(`/reports/advisors?actividadGrupo=rol:asesor&asesor=${ID_LAURA}`);
 
     expect(await screen.findByText('Este asesor no tiene tiempo activo en el periodo.')).toBeInTheDocument();
+  });
+
+  // AUTH-06 — filtros y comparación por rol.
+  it('«Quiénes» va a los indicadores; tiempo activo y la tabla tienen su propio filtro', async () => {
+    mockGet.mockResolvedValue(reporte([fila('Laura', 1, 0)]));
+    renderPage('/reports/advisors?grupo=rol:asesor&actividadGrupo=rol:coordinador');
+
+    await screen.findAllByText('Laura');
+    const pedidos = mockGet.mock.calls.map((c) => c[0]);
+    // Uno con «Quiénes» y otro de toda la empresa para la tabla, que filtra en el navegador.
+    expect(pedidos).toEqual(expect.arrayContaining([expect.objectContaining({ grupo: 'rol:asesor' })]));
+    expect(pedidos.some((p) => p && !('grupo' in p))).toBe(true);
+    expect(mockActividad.mock.calls[0]?.[0]).toMatchObject({ grupo: 'rol:coordinador' });
+  });
+
+  it('una persona elegida en «Quiénes» se pide como `usuario:<id>`', async () => {
+    mockGet.mockResolvedValue(reporte([fila('Laura', 1, 0)]));
+    renderPage(`/reports/advisors?grupo=rol:asesor&persona=${ID_LAURA}`);
+
+    await screen.findAllByText('Laura');
+    expect(mockGet.mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining([expect.objectContaining({ grupo: `usuario:${ID_LAURA}` })]),
+    );
+  });
+
+  it('el filtro de la tabla deja solo a las personas de ese rol', async () => {
+    mockGet.mockResolvedValue(
+      reporte([fila('Laura', 10, 1), { ...fila('Admin', 50, 9), rolEmpresa: 'administrador' }]),
+    );
+    renderPage('/reports/advisors?tablaGrupo=rol:administrador');
+
+    await screen.findAllByText('Admin');
+    const tabla = screen.getByRole('table');
+    expect(within(tabla).getByText('Admin')).toBeInTheDocument();
+    expect(within(tabla).queryByText('Laura')).not.toBeInTheDocument();
+  });
+
+  it('la tabla separa por rol: asesores con asesores, administradores aparte', async () => {
+    mockGet.mockResolvedValue(
+      reporte([fila('Laura', 10, 1), { ...fila('Admin', 50, 9), rolEmpresa: 'administrador', esPrincipal: true }]),
+    );
+    renderPage();
+
+    await screen.findByText('Laura');
+    const tabla = screen.getByRole('table');
+    const filas = within(tabla).getAllByRole('row').map((r) => r.textContent ?? '');
+    const iAsesores = filas.findIndex((t) => t === 'Asesores');
+    const iAdmins = filas.findIndex((t) => t === 'Administradores');
+    expect(iAsesores).toBeGreaterThan(-1);
+    expect(iAdmins).toBeGreaterThan(iAsesores);
+    expect(filas[iAsesores + 1]).toContain('Laura');
+    expect(filas[iAdmins + 1]).toContain('Admin');
+    expect(within(tabla).getByText('principal')).toBeInTheDocument();
   });
 });

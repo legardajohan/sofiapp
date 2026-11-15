@@ -188,7 +188,7 @@ describe('efectos del flujo sobre la conversación de prueba', () => {
 
   it('crear_lead crea un lead marcado como prueba y avisa al chat (criterio 8/9)', async () => {
     const owner = await UserModel.create({
-      tenantId, nombre: 'Dueña', email: `o-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', activo: true,
+      tenantId, nombre: 'Dueña', email: `o-${new Types.ObjectId()}@t.com`, passwordHash: 'h', rol: 'admin', rolEmpresa: 'administrador', activo: true,
     });
     await crearFlujo(
       [accion('acc', { tipo: 'crear_lead' }), mensaje('fin', 'Listo')],

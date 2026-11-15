@@ -236,7 +236,7 @@ mongoose
       { name: SANDBOX_SWEEP_JOB, opts: { removeOnComplete: 100 } },
     );
 
-    // Barrido del Organizador (HU-PDF-02, ADR 0016): avisa los recordatorios que acaban de vencer.
+    // Barrido del Organizador (HU-PDF-02, ADR 0020): avisa los recordatorios que acaban de vencer.
     await flowRuntimeQueue.upsertJobScheduler(
       ORGANIZADOR_SWEEP_SCHEDULER_ID,
       { every: env.ORGANIZADOR_SWEEP_INTERVAL_MS },

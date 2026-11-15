@@ -4,9 +4,9 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import {
-  SUBROLES_DATOS_SENSIBLES,
-  authorizeSubrol,
-} from '../../middlewares/authorize-subrol.middleware.js';
+  ROLES_DATOS_SENSIBLES,
+  authorizeRolEmpresa,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -39,8 +39,8 @@ import {
 const router = Router();
 
 // El Organizador muestra el texto de las notas: mismo gate que las notas y la columna Pendientes
-// (RN8 de HU-PDF-01, ADR 0006). Quien no puede leer notas tampoco recibe sus recordatorios.
-const organizadorRoles = [authorize(['admin']), authorizeSubrol(SUBROLES_DATOS_SENSIBLES)];
+// (RN8 de HU-PDF-01, ADR 0017 y 0018). Quien no puede leer notas tampoco recibe sus recordatorios.
+const organizadorRoles = [authorize(['admin']), authorizeRolEmpresa(ROLES_DATOS_SENSIBLES)];
 
 function cadena(schema: Parameters<typeof validate>[0], controller: RequestHandler): RequestHandler[] {
   return [

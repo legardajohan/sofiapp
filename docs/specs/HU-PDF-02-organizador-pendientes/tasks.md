@@ -43,7 +43,7 @@
 - [x] `docs/api-contract.md`: `/api/organizador/*` con 400/403/404/409/422.
 - [x] `docs/domain.md`: estados PENDIENTE/VENCIDO/POSPUESTO/CERRADO y transiciones.
 - [x] `docs/multi-tenancy.md`: el barrido del Organizador en la lista de barridos del worker.
-- [x] `docs/adr/0016-recordatorios-por-barrido.md` + entrada en `docs/adr/README.md`.
+- [x] `docs/adr/0020-recordatorios-por-barrido.md` + entrada en `docs/adr/README.md`.
 
 ## Implementación — frontend
 

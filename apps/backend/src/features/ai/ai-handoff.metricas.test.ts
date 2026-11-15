@@ -26,7 +26,7 @@ async function crearAdmin(
     nombre,
     email: `${nombre.toLowerCase().replace(/\s/g, '')}.${new Types.ObjectId().toString()}@empresa.test`,
     passwordHash: 'x'.repeat(20),
-    rol: 'admin',
+    rol: 'admin', rolEmpresa: 'administrador',
     activo,
   });
   return String(doc._id);

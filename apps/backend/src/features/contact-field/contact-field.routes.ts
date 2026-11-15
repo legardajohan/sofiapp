@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import {
@@ -37,6 +41,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   catalogoRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(createContactFieldSchema),
   asyncHandler(createContactFieldController),
 );
@@ -46,6 +51,7 @@ router.patch(
   authenticateJWT,
   requireTenant,
   catalogoRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateContactFieldSchema),
   asyncHandler(updateContactFieldController),
 );
@@ -55,6 +61,7 @@ router.delete(
   authenticateJWT,
   requireTenant,
   catalogoRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(archiveContactFieldSchema),
   asyncHandler(archiveContactFieldController),
 );

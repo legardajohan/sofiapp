@@ -29,6 +29,7 @@ vi.mock('../../estados/api.js', () => ({
 
 vi.mock('../../users/hooks/useTenantUsers.js', () => ({
   useTenantUsers: () => ({ data: [], isLoading: false }),
+  useTenantUsersConInactivos: () => ({ data: [], isLoading: false }),
 }));
 
 // La barra de filtros también pide las etiquetas; sin mock, jsdom intenta una petición real.

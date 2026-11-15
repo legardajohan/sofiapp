@@ -12,7 +12,16 @@ import { getAIService } from '../../services/ai/ai-service.singleton.js';
 import type { AiResult } from '../../services/ai/ai-service.types.js';
 import type { ChatTurn, NivelInteres } from '../../integrations/llm/llm-provider.types.js';
 import { CHAT_FRASE_DERIVACION } from '../../seed/seed-prompt-templates.js';
-import { assertAssignableAdmin, listTenantUsers } from '../users/user.service.js';
+import { listTenantUsers } from '../users/user.service.js';
+import { DESTINO_POR_DEFECTO } from '@sofiapp/shared';
+import { validarDestino } from '../users/user.grupos.js';
+import {
+  ESTADOS_ACTIVOS,
+  destinoDesdeLegado,
+  idsEnLinea,
+  legadoDesdeDestino,
+  resolverDestinoAsignacion,
+} from '../users/user.destino.js';
 import { MENSAJE_HANDOFF } from '../../workers/ai-reply.messages.js';
 import { HandoffSettings } from './ai-handoff.model.js';
 import {
@@ -63,6 +72,7 @@ function settingsDeFabrica(): HandoffSettingsDTO {
     activo: false,
     asesorDestinoId: null,
     estrategiaDestino: 'primero',
+    destino: structuredClone(DESTINO_POR_DEFECTO),
     mensajeTransicion: MENSAJE_HANDOFF,
     condicionesExtras: [],
     // Copia profunda: sin esto, dos tenants sin configuración compartirían el mismo array de frases
@@ -73,13 +83,17 @@ function settingsDeFabrica(): HandoffSettingsDTO {
 }
 
 function toDTO(doc: IHandoffSettings): HandoffSettingsDTO {
+  const asesorDestinoId = doc.asesorDestinoId ? String(doc.asesorDestinoId) : null;
+  // HU-IA-07: los documentos guardados antes no traen el campo. Derivarlo aquí es lo que evita un
+  // script de migración, y lo que garantiza que un tenant que no abra esta pantalla se comporte
+  // exactamente igual que antes.
+  const estrategiaDestino = doc.estrategiaDestino ?? (asesorDestinoId ? 'fijo' : 'primero');
   return {
     activo: doc.activo,
-    asesorDestinoId: doc.asesorDestinoId ? String(doc.asesorDestinoId) : null,
-    // HU-IA-07: los documentos guardados antes no traen el campo. Derivarlo aquí es lo que evita un
-    // script de migración, y lo que garantiza que un tenant que no abra esta pantalla se comporte
-    // exactamente igual que antes.
-    estrategiaDestino: doc.estrategiaDestino ?? (doc.asesorDestinoId ? 'fijo' : 'primero'),
+    asesorDestinoId,
+    estrategiaDestino,
+    // AUTH-06: misma idea, un nivel más: sin `destino`, se traduce del formato viejo.
+    destino: doc.destino ?? destinoDesdeLegado(estrategiaDestino, asesorDestinoId),
     mensajeTransicion: doc.mensajeTransicion,
     reglas: doc.reglas,
     condicionesExtras: doc.condicionesExtras ?? [],
@@ -109,10 +123,14 @@ export async function updateHandoffSettings(
   tenantId: string,
   dto: UpdateHandoffSettingsDTO,
 ): Promise<HandoffSettingsDTO> {
-  // Va ANTES de escribir: `asesorDestinoId` llega del cuerpo de la petición y es el único punto por
-  // el que un usuario de otro tenant podría colarse. Si no es un admin activo de esta empresa, la
-  // operación falla entera y no se escribe nada.
-  if (dto.asesorDestinoId) await assertAssignableAdmin(tenantId, dto.asesorDestinoId);
+  // AUTH-06: `destino` manda; un cliente viejo que aún manda el formato anterior se traduce.
+  const destino = dto.destino ?? destinoDesdeLegado(dto.estrategiaDestino, dto.asesorDestinoId ?? null);
+  // Va ANTES de escribir: el usuario y los coordinadores del destino llegan del cuerpo de la petición
+  // y son el único punto por el que un usuario de otro tenant podría colarse. Si alguno no es válido
+  // en esta empresa, la operación falla entera (404) y no se escribe nada.
+  await validarDestino(tenantId, destino);
+  // Se escribe también el formato viejo durante un release, para poder volver atrás sin perderlo.
+  const legado = legadoDesdeDestino(destino);
 
   const guardada = await findOneAndUpdateScoped(
     HandoffSettings,
@@ -121,8 +139,9 @@ export async function updateHandoffSettings(
     {
       $set: {
         activo: dto.activo,
-        asesorDestinoId: dto.asesorDestinoId ? new Types.ObjectId(dto.asesorDestinoId) : null,
-        estrategiaDestino: dto.estrategiaDestino,
+        destino,
+        asesorDestinoId: legado.asesorDestinoId ? new Types.ObjectId(legado.asesorDestinoId) : null,
+        estrategiaDestino: legado.estrategiaDestino,
         mensajeTransicion: dto.mensajeTransicion,
         reglas: dto.reglas,
         condicionesExtras: dto.condicionesExtras,
@@ -136,31 +155,17 @@ export async function updateHandoffSettings(
 }
 
 /**
- * Primer admin activo del tenant, como destino de reserva cuando no hay ninguno configurado.
- *
- * "El primero disponible" no puede significar otra cosa hoy: no existe presencia ni carga por
- * asesor. `listTenantUsers` ordena por nombre, así que el reparto es estable y predecible en vez de
- * arbitrario — que es lo que hace falta para poder explicarle a alguien por qué le llegó a él.
+ * Primer usuario activo del tenant por nombre. AUTH-06: envoltorio sobre el resolvedor único
+ * (`resolverDestinoAsignacion` con el grupo «todos»), que es quien decide de verdad.
  */
 export async function primerAdminActivo(tenantId: string): Promise<string | null> {
-  const admins = await listTenantUsers(tenantId, { rol: 'admin', activo: true });
-  return admins[0]?.id ?? null;
+  return resolverDestinoAsignacion(tenantId, { ...DESTINO_POR_DEFECTO, reserva: { tipo: 'sin_asignar' } });
 }
 
 // ─── Reparto por carga y métricas por asesor (HU-IA-07) ─────────────────────────
 
-/**
- * Estados que cuentan como carga viva. `pagado` y `perdido` son cierres (`docs/domain.md` §3).
- *
- * **Una sola definición** para el reparto automático y para el panel de asignación: si divergieran,
- * el modal enseñaría un número distinto del que decide a quién le llega la conversación.
- */
-export const ESTADOS_ACTIVOS = ['nuevo', 'en_gestion', 'pago_pendiente'] as const;
-
-interface CargaFila {
-  _id: Types.ObjectId | null;
-  activas: number;
-}
+/** Una sola definición de «carga viva» para el reparto y el panel: vive en `user.destino` (AUTH-06). */
+export { ESTADOS_ACTIVOS };
 
 interface EstadoFila {
   _id: { asesorId: Types.ObjectId | null; estadoComercial: string };
@@ -168,51 +173,17 @@ interface EstadoFila {
 }
 
 /**
- * Conversaciones activas por asesor, en UNA consulta. La clave del mapa es el id del asesor.
- *
- * Se apoya en los índices `{ tenantId, asesorId }` y `{ tenantId, estadoComercial }` que ya existen:
- * esta historia no añade ninguno.
- */
-async function cargaPorAsesor(tenantId: string): Promise<Map<string, number>> {
-  const filas = await aggregateScoped<CargaFila>(Cliente, tenantId, [
-    { $match: { asesorId: { $ne: null }, estadoComercial: { $in: [...ESTADOS_ACTIVOS] } } },
-    { $group: { _id: '$asesorId', activas: { $sum: 1 } } },
-  ]).exec();
-
-  return new Map(filas.map((f) => [String(f._id), f.activas]));
-}
-
-/**
- * Admin activo con menos conversaciones activas (HU-IA-07).
- *
- * **Empate → el primero por nombre.** El reparto tiene que poder explicársele a quien pregunte por
- * qué le llegó a él, y un desempate aleatorio no se puede explicar. `listTenantUsers` ya devuelve la
- * lista ordenada por nombre, así que basta recorrerla en orden y quedarse con el primero que mejore
- * el mínimo.
- *
- * Un admin sin ninguna conversación cuenta 0 y por tanto gana: es exactamente a quien queremos
- * mandarle la siguiente.
+ * Usuario activo con menos conversaciones activas de toda la empresa; empate → el primero por nombre.
+ * AUTH-06: envoltorio sobre el resolvedor único con el grupo «todos».
  */
 export async function asesorConMenorCarga(tenantId: string): Promise<string | null> {
-  const [admins, carga] = await Promise.all([
-    listTenantUsers(tenantId, { rol: 'admin', activo: true }),
-    cargaPorAsesor(tenantId),
-  ]);
-
-  const primero = admins[0];
-  if (!primero) return null;
-
-  let elegido = primero;
-  let minimo = carga.get(primero.id) ?? 0;
-  for (const admin of admins.slice(1)) {
-    const activas = carga.get(admin.id) ?? 0;
-    // `<` y no `<=`: ante un empate gana el que ya estaba, que es el primero por nombre.
-    if (activas < minimo) {
-      elegido = admin;
-      minimo = activas;
-    }
-  }
-  return elegido.id;
+  return resolverDestinoAsignacion(tenantId, {
+    modo: 'grupo',
+    grupo: { tipo: 'todos' },
+    criterio: 'menor_carga',
+    soloEnLinea: false,
+    reserva: { tipo: 'sin_asignar' },
+  });
 }
 
 /**
@@ -243,6 +214,8 @@ export async function metricasPorAsesor(tenantId: string): Promise<AsesorMetrica
     actual[fila._id.estadoComercial] = fila.total;
     porAsesor.set(id, actual);
   }
+  // AUTH-06: quién está en línea, con la misma definición que el filtro «solo en línea» del reparto.
+  const enLinea = await idsEnLinea(tenantId, admins.map((a) => a.id));
 
   return admins.map((admin) => {
     const conteos = porAsesor.get(admin.id) ?? {};
@@ -255,6 +228,10 @@ export async function metricasPorAsesor(tenantId: string): Promise<AsesorMetrica
       nombre: admin.nombre,
       activas: ESTADOS_ACTIVOS.reduce((suma, e) => suma + (porEstado[e] ?? 0), 0),
       porEstado,
+      rolEmpresa: admin.rolEmpresa ?? null,
+      coordinadorId: admin.coordinadorId,
+      esPrincipal: admin.esPrincipal === true,
+      enLinea: enLinea.has(admin.id),
     };
   });
 }

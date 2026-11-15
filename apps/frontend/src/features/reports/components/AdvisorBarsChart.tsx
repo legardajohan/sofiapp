@@ -9,6 +9,8 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { RolEmpresa } from '@/stores/authStore';
 import { ChartCard, ChartEmpty } from '@/components/charts/ChartCard';
 import { formatEntero, formatPorcentaje } from '@/lib/format';
 import type { AdvisorRow } from '../types/index.js';
@@ -19,6 +21,14 @@ interface Props {
 }
 
 type Vista = 'comparar' | 'tasa';
+
+/** AUTH-06: se compara a cada quien con los de su rol; «todos» solo si se pide explícitamente. */
+const ROLES_GRAFICA: Array<{ rol: RolEmpresa; etiqueta: string }> = [
+  { rol: 'asesor', etiqueta: 'Asesores' },
+  { rol: 'coordinador', etiqueta: 'Coordinadores' },
+  { rol: 'administrador', etiqueta: 'Administradores' },
+];
+type RolGrafica = RolEmpresa | 'todos';
 
 /** Con más asesores que esto, las barras van horizontales: los nombres no caben bajo el eje X. */
 const MAX_VERTICAL = 8;
@@ -39,13 +49,18 @@ const recortar = (v: string): string => (v.length > 16 ? `${v.slice(0, 15)}…` 
  */
 export function AdvisorBarsChart({ asesores, isLoading }: Props): React.ReactElement {
   const [vista, setVista] = useState<Vista>('comparar');
-  const filas = (asesores ?? []).filter((a) => a.conversacionesAtendidas > 0 || a.ventas > 0);
+  const [rolElegido, setRolElegido] = useState<RolGrafica | null>(null);
+  const conCifras = (asesores ?? []).filter((a) => a.conversacionesAtendidas > 0 || a.ventas > 0);
+  const rolesPresentes = ROLES_GRAFICA.filter((r) => conCifras.some((a) => (a.rolEmpresa ?? 'asesor') === r.rol));
+  // Por defecto, el primer rol con cifras (asesores antes que nadie): nunca asesores contra administradores.
+  const rol: RolGrafica = rolElegido ?? rolesPresentes[0]?.rol ?? 'todos';
+  const filas = rol === 'todos' ? conCifras : conCifras.filter((a) => (a.rolEmpresa ?? 'asesor') === rol);
   const horizontal = filas.length > MAX_VERTICAL;
   const alto = horizontal ? Math.max(filas.length * ALTO_FILA + 48, 240) : 280;
 
   return (
     <ChartCard
-      title="Por asesor"
+      title="Por persona"
       description={
         vista === 'comparar'
           ? 'Conversaciones atendidas y ventas cerradas en el periodo'
@@ -53,12 +68,29 @@ export function AdvisorBarsChart({ asesores, isLoading }: Props): React.ReactEle
       }
       isLoading={isLoading}
       action={
-        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="comparar" className="text-xs">Comparar</TabsTrigger>
-            <TabsTrigger value="tasa" className="text-xs">Tasa de cierre</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-2">
+          {rolesPresentes.length > 1 && (
+            <Select value={rol} onValueChange={(v) => setRolElegido(v as RolGrafica)}>
+              <SelectTrigger aria-label="Rol que se compara" className="h-8 w-40 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {rolesPresentes.map((r) => (
+                  <SelectItem key={r.rol} value={r.rol}>
+                    {r.etiqueta}
+                  </SelectItem>
+                ))}
+                <SelectItem value="todos">Todos los roles</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+            <TabsList className="h-8">
+              <TabsTrigger value="comparar" className="text-xs">Comparar</TabsTrigger>
+              <TabsTrigger value="tasa" className="text-xs">Tasa de cierre</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       }
     >
       {filas.length === 0 ? (

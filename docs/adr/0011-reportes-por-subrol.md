@@ -1,6 +1,6 @@
 # ADR 0011 — Los reportes de productividad del equipo se restringen por `subrol`
 
-**Estado:** aceptado · **Fecha:** 2026-10-08 · **Contexto:** HU-REP-01 (conversaciones atendidas y
+**Estado:** reemplazado por [ADR 0017](0017-roles-de-empresa.md) · **Fecha:** 2026-10-08 · **Contexto:** HU-REP-01 (conversaciones atendidas y
 ventas cerradas por asesor)
 
 ## Contexto

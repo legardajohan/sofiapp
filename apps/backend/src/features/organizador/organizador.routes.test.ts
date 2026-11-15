@@ -58,22 +58,30 @@ describe('HU-PDF-02 — rutas del Organizador', () => {
     nota = await crearRecordatorio(tenant, contacto, ana, 'Llamar', { recordatorioAt: at });
   });
 
-  it('un subrol sin acceso a notas recibe 403 en todo el Organizador', async () => {
-    const t = token(tenant, ana, 'coordinator');
-    for (const url of [
-      '/api/organizador/preferencias',
-      '/api/organizador/pendientes',
-      '/api/organizador/conteos',
-      '/api/organizador/activos',
-      '/api/organizador/historial',
-      `/api/organizador/pendientes/${nota}/historial`,
-      '/api/organizador/motivos-cierre',
-    ]) {
-      expect((await get(t, url)).status, url).toBe(403);
+  it('coordinador y asesor también entran: los tres roles ven datos sensibles (AUTH-05)', async () => {
+    for (const subrol of ['coordinator', 'secretary']) {
+      const t = token(tenant, ana, subrol);
+      for (const url of [
+        '/api/organizador/preferencias',
+        '/api/organizador/pendientes',
+        '/api/organizador/conteos',
+        '/api/organizador/activos',
+        '/api/organizador/historial',
+        `/api/organizador/pendientes/${nota}/historial`,
+        '/api/organizador/motivos-cierre',
+      ]) {
+        expect((await get(t, url)).status, `${subrol} ${url}`).toBe(200);
+      }
     }
-    const cerrar = await conCsrf(request(app).post(`/api/organizador/pendientes/${nota}/cerrar`), t)
-      .send({ motivoKeys: ['venta'], version });
-    expect(cerrar.status).toBe(403);
+  });
+
+  it('un usuario que no es de empresa recibe 403 en todo el Organizador', async () => {
+    const t = jwt.sign(
+      { sub: ana, tenantId: String(tenant), email: 'u@e.com', nombre: 'U', rol: 'superadmin', activo: true },
+      SECRET,
+      { expiresIn: '1h' },
+    );
+    expect((await get(t, '/api/organizador/pendientes')).status).toBe(403);
     const pref = await conCsrf(request(app).put('/api/organizador/preferencias'), t).send({
       activo: false,
     });

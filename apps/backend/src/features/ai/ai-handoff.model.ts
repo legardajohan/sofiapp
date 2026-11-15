@@ -25,6 +25,9 @@ const HandoffSettingsSchema = new Schema<IHandoffSettingsDocument>(
       enum: ['primero', 'menor_carga', 'fijo'],
       default: 'primero',
     },
+    // AUTH-06. `Mixed` y sin default: la forma la garantiza `destinoAsignacionSchema` en el borde, y
+    // un documento previo sin el campo lo deriva `toDTO` del formato viejo (sin migración).
+    destino: { type: Schema.Types.Mixed, default: undefined },
     mensajeTransicion: { type: String, required: true, trim: true },
     reglas: {
       explicitRequest: {

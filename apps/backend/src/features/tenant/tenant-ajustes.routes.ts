@@ -2,6 +2,10 @@ import { Router, type Router as ExpressRouter } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { getAjustesTenantSchema, updateAjustesTenantSchema } from './tenant.validation.js';
@@ -22,6 +26,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(getAjustesTenantSchema),
   asyncHandler(getAjustesTenantController),
 );
@@ -31,6 +36,7 @@ router.patch(
   authenticateJWT,
   requireTenant,
   authorize(['admin']),
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateAjustesTenantSchema),
   asyncHandler(updateAjustesTenantController),
 );

@@ -3,9 +3,9 @@ import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.j
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
 import {
-  authorizeSubrol,
-  SUBROLES_DATOS_SENSIBLES,
-} from '../../middlewares/authorize-subrol.middleware.js';
+  authorizeRolEmpresa,
+  ROLES_DATOS_SENSIBLES,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { subirArchivo, subirAudio } from '../../middlewares/upload.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
@@ -73,7 +73,7 @@ router.get(
 /**
  * Vista unificada: cabecera, etiquetas, resumen y permisos (HU-IA-04).
  *
- * **Sin `authorizeSubrol` a propósito.** La vista es para todos los admin y lo que cambia es su
+ * **Sin `authorizeRolEmpresa` a propósito.** La vista es para todos los admin y lo que cambia es su
  * contenido: cerrar la ruta entera dejaría a `coordinator` y `secretary` sin cabecera ni etiquetas,
  * que sí les corresponden. El gate del resumen va por campo, dentro del service — la misma
  * distinción de granularidad que ADR-0006 §3 establece entre las notas y los campos del contacto.
@@ -161,7 +161,7 @@ router.post(
   authenticateJWT,
   requireTenant,
   bandejaRoles,
-  authorizeSubrol(SUBROLES_DATOS_SENSIBLES),
+  authorizeRolEmpresa(ROLES_DATOS_SENSIBLES),
   validate(summarySchema),
   asyncHandler(generateSummaryController),
 );

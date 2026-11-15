@@ -1,18 +1,19 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { SUBROL_LABEL } from '@/lib/roles';
-import type { AdminSubrol } from '@/stores/authStore';
+import { nombreConRol } from '@/lib/roles';
+import type { RolEmpresa } from '@/stores/authStore';
 import { personInitials } from '../lib/format.js';
 
 interface Props {
   nombre: string | null;
-  subrol?: AdminSubrol | null;
+  rolEmpresa?: RolEmpresa | null;
 }
 
 /** Responsable de una conversación: avatar de iniciales + nombre, discreto en la fila de la lista. */
-export function AssigneeBadge({ nombre, subrol }: Props): React.ReactElement | null {
+export function AssigneeBadge({ nombre, rolEmpresa }: Props): React.ReactElement | null {
   if (!nombre) return null;
 
-  const title = subrol ? `${nombre} · ${SUBROL_LABEL[subrol]}` : nombre;
+  // La fila es estrecha: el rol va en el tooltip, no en el texto ("Juan Pérez · Coordinador").
+  const title = nombreConRol(nombre, rolEmpresa);
 
   return (
     <span className="flex min-w-0 items-center gap-1" title={title}>

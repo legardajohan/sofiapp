@@ -148,9 +148,17 @@ apiClient.interceptors.response.use(r => r, (e) => {
 - La UI nunca es la única defensa: el backend siempre re-valida con `authorize([roles])`.
 - Rol → vistas:
   - `superadmin`: panel `/admin` (empresas, planes, métricas globales).
-  - `admin`: usuarios, conexión WhatsApp, catálogo, bandeja omnicanal, clientes, campañas — todo
-    dentro del tenant. El `subrol` interno opcional (Director/Gerente/Coordinador/Secretaria) es
-    solo metadata visible en `NavUser`; no cambia qué ve el `admin` (`AUTH-02`).
+  - `admin`: bandeja omnicanal, leads, clientes — todo dentro del tenant. El **rol de empresa**
+    (`rolEmpresa`: Administrador/Coordinador/Asesor, `AUTH-04`, ADR 0017) decide el resto con los
+    helpers de `lib/roles.ts` (gemelos de `authorize-rol-empresa` del backend) y los guards
+    `RequireConfiguracion`, `RequireReportes` y `RequireGestionUsuarios`. Desde `AUTH-05` (ADR 0018)
+    configuración, campañas, datos sensibles y reportes son de los **tres roles** (las constantes
+    `ROLES_*` de `lib/roles.ts` los listan a todos; se conservan para poder volver a restringir).
+    `/settings/users` es de Administrador y Coordinador (este, sobre su equipo y los asesores sin
+    coordinador); el Asesor no entra. Qué se ofrece en cada fila lo decide `acciones`, que calcula el
+    backend con la matriz de `user.permisos.ts`: la UI no reconstruye esa regla. `rolesQuePuedeCrear`
+    y `puedeConcederPermisoAdmin` (gemelos del backend) solo deciden qué opciones mostrar en el
+    formulario. "Cambiar mi contraseña" vive en `NavUser` para todo usuario de empresa.
 
 ## Tiempo real
 

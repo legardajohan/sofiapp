@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { MOTIVO_DATOS_SENSIBLES } from '@/lib/roles';
+import { MOTIVO_DATOS_SENSIBLES, puedeConfigurar } from '@/lib/roles';
+import { useAuthStore } from '@/stores/authStore';
 import { camposPorKey, useContactFields } from '../hooks/useContactFields.js';
 import type { AtributoInput } from '../types.js';
 import type { ErroresAtributos } from '../lib/validate.js';
@@ -42,6 +43,8 @@ export function AtributosEditor({
   errores = {},
 }: Props): React.ReactElement {
   const [gestorAbierto, setGestorAbierto] = useState(false);
+  // El catálogo de campos es configuración de la empresa (AUTH-04): solo el Administrador lo edita.
+  const gestionaCatalogo = puedeConfigurar(useAuthStore((s) => s.user));
   // Con archivados: un contacto puede conservar un campo que ya se retiró del catálogo, y hay que
   // poder resolver su nombre.
   const { data: campos = [] } = useContactFields(true);
@@ -135,10 +138,14 @@ export function AtributosEditor({
                           {atributo.label} (archivado)
                         </SelectItem>
                       ) : null}
-                      <SelectSeparator />
-                      <SelectItem value={CREAR_CAMPO} className="text-xs">
-                        Crear campo…
-                      </SelectItem>
+                      {gestionaCatalogo && (
+                        <>
+                          <SelectSeparator />
+                          <SelectItem value={CREAR_CAMPO} className="text-xs">
+                            Crear campo…
+                          </SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                   <Button
@@ -200,19 +207,23 @@ export function AtributosEditor({
           <Plus className="h-4 w-4" />
           Agregar campo
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn('shrink-0 text-muted-foreground', pressable)}
-          onClick={() => setGestorAbierto(true)}
-        >
-          <Settings2 className="h-4 w-4" />
-          Administrar
-        </Button>
+        {gestionaCatalogo && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn('shrink-0 text-muted-foreground', pressable)}
+            onClick={() => setGestorAbierto(true)}
+          >
+            <Settings2 className="h-4 w-4" />
+            Administrar
+          </Button>
+        )}
       </div>
 
-      <CamposPersonalizadosManager open={gestorAbierto} onOpenChange={setGestorAbierto} />
+      {gestionaCatalogo && (
+        <CamposPersonalizadosManager open={gestorAbierto} onOpenChange={setGestorAbierto} />
+      )}
     </div>
   );
 }

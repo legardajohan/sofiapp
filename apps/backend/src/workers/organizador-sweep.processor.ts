@@ -9,7 +9,7 @@ import { getZonaHorariaTenant } from '../features/tenant/tenant.service.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Barrido del Organizador (HU-PDF-02, ADR 0016). Corre cada `ORGANIZADOR_SWEEP_INTERVAL_MS` en la
+ * Barrido del Organizador (HU-PDF-02, ADR 0020). Corre cada `ORGANIZADOR_SWEEP_INTERVAL_MS` en la
  * cola `flow-runtime`.
  *
  * La verdad de «qué está vencido» es la consulta (`recordatorioAt ≤ now`), no este proceso: si el

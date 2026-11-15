@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { authenticateJWT } from '../../middlewares/authenticate-jwt.middleware.js';
 import { requireTenant } from '../../middlewares/require-tenant.middleware.js';
 import { authorize } from '../../middlewares/authorize.middleware.js';
+import {
+  authorizeRolEmpresa,
+  ROLES_CONFIGURACION,
+} from '../../middlewares/authorize-rol-empresa.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../middlewares/async-handler.middleware.js';
 import { aiAnswerSchema, getAssistantSchema, updateAssistantSchema } from './ai.validation.js';
@@ -30,6 +34,7 @@ router.get(
   authenticateJWT,
   requireTenant,
   aiRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(getAssistantSchema),
   asyncHandler(getAssistantController),
 );
@@ -39,6 +44,7 @@ router.put(
   authenticateJWT,
   requireTenant,
   aiRoles,
+  authorizeRolEmpresa(ROLES_CONFIGURACION),
   validate(updateAssistantSchema),
   asyncHandler(updateAssistantController),
 );
