@@ -264,7 +264,7 @@ Ninguno en este feature. La cola `payments` es de HT-PAY-02 y el barrido de HT-P
   - Estados: `PENDING` (→ sigue `PENDIENTE`), `APPROVED` → `APROBADO`, `DECLINED` → `RECHAZADO`,
     `VOIDED` → `ANULADO` (o `requiere_revision` si ya estaba `APROBADO`), `ERROR` → `ERROR`.
     `EXPIRADO` es nuestro (checkout no completado antes de `expiraEn`).
-  - Tokens de aceptación: `GET /merchants/{public_key}` → `presigned_acceptance` y
+  - Tokens de aceptación: `GET /merchants/info` (header `x-merchant-public-key`; el endpoint `/merchants/{public_key}` está retirado) → `presigned_acceptance` y
     `presigned_personal_data_auth`.
   - Widget `https://checkout.wompi.co/widget.js` y Web Checkout `https://checkout.wompi.co/p/`.
 - `docs/data-model.md`: insertar las tres colecciones tras `tenant_usage`, con el mismo formato

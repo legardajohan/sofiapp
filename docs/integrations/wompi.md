@@ -96,3 +96,58 @@ Un estado desconocido **no** debe mover el pago: se registra el evento con resul
 | `IPaymentProvider`, firma, cliente HTTP, validación de llaves en `env.ts` | HT-PAY-01 |
 | Webhook, checksum, cola `payments` | HT-PAY-02 |
 | Conciliación y expiración | HT-PAY-03 |
+
+## 8. Variables de entorno (HT-PAY-01)
+
+| Variable | Defecto | Nota |
+|---|---|---|
+| `PAYMENTS_PROVIDER` | `stub` | `wompi` activa el cliente real y vuelve obligatorias las llaves. |
+| `WOMPI_ENV` | `sandbox` | `sandbox` \| `production`; fija la URL base y el prefijo esperado de las llaves. |
+| `WOMPI_PUBLIC_KEY` | — | `pub_test_…` / `pub_prod_…` |
+| `WOMPI_PRIVATE_KEY` | — | `prv_test_…` / `prv_prod_…` (Bearer de las consultas de transacciones). |
+| `WOMPI_EVENTS_SECRET` | — | `test_events_…` / `prod_events_…` (checksum de eventos). |
+| `WOMPI_INTEGRITY_SECRET` | — | `test_integrity_…` / `prod_integrity_…` (firma del checkout). |
+| `WOMPI_REDIRECT_URL` | — | URL absoluta de retorno tras el checkout. |
+| `WOMPI_HTTP_TIMEOUT_MS` | `8000` | Timeout por intento. |
+
+Con `PAYMENTS_PROVIDER=wompi` el arranque falla si falta cualquiera (salvo timeout) o si un prefijo no
+corresponde a `WOMPI_ENV`; el mensaje nombra la variable pero nunca imprime su valor.
+URL base: `https://sandbox.wompi.co/v1` o `https://production.wompi.co/v1`.
+
+## 9. Contrato de `IPaymentProvider`
+
+Código en `apps/backend/src/integrations/payments/`. Ninguna operación recibe `tenantId` ni toca Mongo.
+
+| Operación | Wompi | Auth |
+|---|---|---|
+| `crearIntento({ reference, amountInCents, expiraEn })` | local: firma de integridad (sin red) | — |
+| `obtenerTokensAceptacion()` | `GET /merchants/info` | `x-merchant-public-key` |
+| `consultarTransaccion(id)` | `GET /transactions/{id}` (404 → `AppError` 404) | `Bearer` llave privada |
+| `buscarPorReferencia(ref)` | `GET /transactions?reference=` (vacío/404 → `null`; varias → la más reciente) | `Bearer` llave privada ⚠️ por confirmar |
+| `verificarEvento(body, checksumCabecera?)` | local, síncrona: checksum con `timingSafeEqual` | `WOMPI_EVENTS_SECRET` |
+
+`crearIntento` exige referencia válida, monto entero seguro ≥ 1 y `expiraEn` entre 1 minuto y 24 h.
+El stub (`createStubPaymentProvider`) expone además `sembrarTransaccion` y `construirEventoFirmado`.
+
+**Política de reintentos:** solo `GET`; hasta 2 reintentos con backoff `250 · 2^n` ms ante error de
+red, timeout, 429 y 5xx. Timeout final → 504; red/5xx/429 agotados y 4xx inesperado → 502;
+401/403 → 503 genérico (llaves mal configuradas, se registra solo `{ ruta, status }`); 404 → 404. Los
+mensajes nunca incluyen llaves, cuerpos, cabeceras ni query.
+
+## 10. Vectores de prueba reproducibles
+
+Propios, no de Wompi: validan la fórmula documentada, no su aceptación por Wompi.
+
+- **Firma de integridad** — `reference=SOFI-AAAAAAAAAAAAAAAAAAAAAAAA`, `amountInCents=11900000`,
+  `COP`, `expirationTime=2026-11-19T20:28:50.000Z`, secreto `test_integrity_secretodeprueba`:
+  `printf '%s' 'SOFI-AAAAAAAAAAAAAAAAAAAAAAAA11900000COP2026-11-19T20:28:50.000Ztest_integrity_secretodeprueba' | sha256sum`
+  → `4c0eb341acc4a19d56488b7e42fb5b37424b5790709d64202d777823a8722a39`.
+- **Checksum de evento** — propiedades `transaction.id`, `transaction.status`,
+  `transaction.amount_in_cents` = `1234-1668624786-37890`, `APPROVED`, `11900000`, `timestamp=1668624786`,
+  secreto `test_events_secretodeprueba`:
+  `printf '%s' '1234-1668624786-37890APPROVED119000001668624786test_events_secretodeprueba' | sha256sum`
+  → `303b8490301963ee486c72006652759ea5b6d283070d3f97f3f0a21cf9789674`.
+
+**Prueba de contrato** (`wompi.contract.test.ts`): opcional, con `WOMPI_CONTRACT_TEST=1` y llaves de
+sandbox. Cierra las incógnitas pendientes (mayúsculas del checksum, autenticación de
+`/transactions?reference=`, estados adicionales). Aún no se ha ejecutado.

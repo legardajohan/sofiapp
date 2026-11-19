@@ -81,7 +81,7 @@ tests de aislamiento en verde.
 
 ### HT-PAY-01 — Adaptador y cliente Wompi
 - `IPaymentProvider`: `crearIntento` (datos del checkout firmados), `obtenerTokensAceptacion`
-  (`GET /merchants/{pub}`), `consultarTransaccion(id)`, `buscarPorReferencia(ref)` y
+  (`GET /merchants/info`), `consultarTransaccion(id)`, `buscarPorReferencia(ref)` y
   `verificarEvento(body)`.
 - URL base por `WOMPI_ENV` (`sandbox|production`).
 - **Firma de integridad**: `SHA256(reference + amountInCents + currency + expirationTime + integritySecret)`.
@@ -118,7 +118,7 @@ tests de aislamiento en verde.
 
 ### HU-BILL-01 — Panel superadmin de la integración
 - Muestra el entorno, si cada llave está presente y bien formada (sin mostrarla, solo enmascarada),
-  una prueba de conectividad con `GET /merchants/{pub}` y la URL de eventos que se configura en
+  una prueba de conectividad con `GET /merchants/info` y la URL de eventos que se configura en
   Wompi.
 - **Precios por periodo (D3, D5):** el formulario de plan del superadmin gana tres precios en COP con
   IVA incluido: trimestral, semestral y anual. Son obligatorios para que el plan se pueda pagar.

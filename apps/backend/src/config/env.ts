@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validarEntornoPagos } from './payments-env.js';
 
 // Meta exige App Secret, Verify Token y clave de cifrado del token por tenant para operar el
 // canal de WhatsApp de verdad; sin ellos el webhook falla en runtime (403 en todo o arranque
@@ -243,12 +244,34 @@ const EnvSchema = z.object({
   SPACES_KEY: z.string().optional(),
   SPACES_SECRET: z.string().optional(),
 
+  // ─── Pasarela de pagos (HT-PAY-01) ───────────────────────────────────────────────
+  // `stub` por defecto: desarrollo y tests arrancan sin llaves. Las llaves son opcionales en el
+  // esquema base a propósito (como `SPACES_*`): su obligatoriedad depende de PAYMENTS_PROVIDER y
+  // vive en el `superRefine` (`validarEntornoPagos`).
+  PAYMENTS_PROVIDER: z.enum(['wompi', 'stub']).default('stub'),
+  WOMPI_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  WOMPI_PUBLIC_KEY: z.string().min(1).optional(),
+  WOMPI_PRIVATE_KEY: z.string().min(1).optional(),
+  WOMPI_EVENTS_SECRET: z.string().min(1).optional(),
+  WOMPI_INTEGRITY_SECRET: z.string().min(1).optional(),
+  WOMPI_REDIRECT_URL: z.string().url().optional(),
+  WOMPI_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),
   SUPERADMIN_PASSWORD: z.string().min(8).optional(),
   SALT_ROUNDS: z.coerce.number().default(12),
 }).superRefine((valores, ctx) => {
+  // Pagos primero: el `return` temprano de Spaces cortaría el resto del refinamiento.
+  for (const incidencia of validarEntornoPagos(valores)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [incidencia.path],
+      message: incidencia.message,
+    });
+  }
+
   // Las credenciales de Spaces solo son obligatorias si se eligió ese driver. Declararlas
   // `required` a secas obligaría a todo entorno de desarrollo a inventarse un bucket.
   if (valores.MEDIA_DRIVER !== 'spaces') return;
