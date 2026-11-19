@@ -85,6 +85,87 @@
 // NOTA: usuarios y leads NO se guardan aquí; se derivan con countDocuments scoped al consultar.
 ```
 
+## subscriptions  (suscripción del tenant — HT-PAY-04)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required; UNIQUE (una por tenant)
+  estado: "sin_plan" | "activa" | "vencida",   // default "sin_plan"
+  planId: ObjectId | null,        // ref Plan
+  planVersion: Number | null,
+  periodo: "trimestral" | "semestral" | "anual" | null,
+  vigenciaDesde: Date | null,
+  vigenciaHasta: Date | null,
+  origen: "pago" | "manual" | null,
+  ultimoPagoId: ObjectId | null,  // ref Payment
+  renovacionAutomatica: Boolean,  // default false; reservado para HU-BILL-04
+  createdAt, updatedAt
+}
+// Índices: { tenantId: 1 } unique
+```
+> Lectura perezosa: un tenant sin documento está `sin_plan` y preguntarlo no escribe nada. Las
+> escrituras llegan con HU-BILL-03 (activar) y HT-PAY-03 (marcar `vencida`).
+
+## payments  (intentos de pago — HT-PAY-04, ADR 0021)
+```js
+{
+  _id: ObjectId,
+  tenantId: ObjectId,             // required + index
+  reference: String,              // "SOFI-<base32 de 24>", opaca y aleatoria; UNIQUE global
+  providerTransactionId: String | null,   // id de la transacción en Wompi; UNIQUE parcial
+  amountInCents: Number,          // entero >= 1: lo que se firma y se cobra
+  currency: "COP",
+  planId: ObjectId, planVersion: Number,
+  periodo: "trimestral" | "semestral" | "anual",
+  precio: {                       // snapshot inmutable (no retroactividad)
+    totalCop: Decimal128, baseCop: Decimal128, ivaCop: Decimal128, ivaPct: String   // "19"
+  },
+  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO" | "ANULADO" | "ERROR" | "EXPIRADO",
+  metodo: String | null,          // CARD, PSE, NEQUI…
+  detalleProveedor: String | null,        // máx. 500
+  aceptaciones: {                 // Habeas Data y términos de Wompi
+    tokenAceptacionWompi, tokenDatosPersonalesWompi, versionTerminosSofi,
+    versionPoliticaDatos, aceptadoEn: Date, ip: String
+  },
+  expiraEn: Date,
+  intentadoPor: ObjectId,         // ref User (usuario principal, AUTH-05)
+  finalizadoEn: Date | null,
+  origenTransicion: "webhook" | "conciliacion" | "consulta" | null,
+  createdAt, updatedAt
+}
+// Índices: { reference: 1 } unique · { providerTransactionId: 1 } unique parcial ($type: string)
+//          { tenantId: 1, createdAt: -1 }
+//          { tenantId: 1, estado: 1 } UNIQUE parcial { estado: 'PENDIENTE' } (un PENDIENTE por tenant)
+//          { estado: 1, expiraEn: 1 }  (barrido de HT-PAY-03; cross-tenant, no empieza por tenantId)
+```
+> Los estados terminales son inmutables: la transición es una escritura condicional sobre
+> `estado: 'PENDIENTE'`. `amountInCents` y `precio.*` salen del mismo string COP con `decimal.js`.
+
+## payment_events  (log GLOBAL append-only de eventos de Wompi — HT-PAY-04, ADR 0022)
+```js
+{
+  _id: ObjectId,
+  claveIdempotencia: String,      // UNIQUE; la deriva HT-PAY-02
+  evento: String,                 // "transaction.updated"
+  transaccionId: String | null,
+  estadoReportado: String | null, // estado de Wompi tal cual (APPROVED…)
+  reference: String | null,
+  amountInCents: Number | null,
+  currency: String | null,
+  entorno: "test" | "prod" | null,
+  recibidoEn: Date,
+  tenantId: ObjectId | null,      // NO requerido: nulo hasta resolver el tenant por `reference`
+  paymentId: ObjectId | null,
+  procesadoEn: Date | null,
+  resultado: "aplicado" | "sin_cambio" | "rechazado_transicion" | "monto_no_coincide"
+           | "referencia_desconocida" | "requiere_revision" | "error" | null
+}
+// Índices: { claveIdempotencia: 1 } unique · { reference: 1, recibidoEn: -1 }
+//          { tenantId: 1, recibidoEn: -1 } parcial { tenantId: { $type: 'objectId' } }
+```
+> Excepción documentada a "todo modelo lleva `tenantId` requerido" (ADR 0022). **No guarda el cuerpo
+> crudo** del evento (trae correo y teléfono del pagador).
+
 ## users  (usuarios del panel)
 ```js
 {

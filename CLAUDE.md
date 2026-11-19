@@ -24,8 +24,9 @@ Aunque hoy opere con un cliente, **todo es multi-tenant desde el día 1** para n
    (`findScoped`, `createScoped`, …). NUNCA `Model.find/create/findById` directos.
    Ver `docs/multi-tenancy.md`. Una fuga de datos entre tenants es el peor fallo posible.
 2. **`tenantId` siempre nace del token** (`req.user!.tenantId`), nunca del body/params/query.
-   Excepciones documentadas y únicas: `login` y el **webhook de Meta** (resuelve tenant por
-   `phone_number_id`). Ver `docs/integrations/meta-whatsapp.md`.
+   Excepciones documentadas y únicas: `login`, el **webhook de Meta** (resuelve tenant por
+   `phone_number_id`, ver `docs/integrations/meta-whatsapp.md`) y el **webhook de Wompi** (resuelve
+   tenant por la `reference` del pago, ADR 0022, ver `docs/integrations/wompi.md`).
 3. **Controllers delgados:** sin `try/catch`, sin lógica de negocio, sin acceso a Mongoose.
    La lógica vive en el `service`; los errores esperables se lanzan con `AppError(msg, code)`.
 4. **Validación en el borde con Zod** (`{ body, params, query }`) antes del controller.
