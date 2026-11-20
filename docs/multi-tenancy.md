@@ -141,6 +141,16 @@ propio código:
    de tiempo real va al room `asesor:<autorId>`. Test: `organizador-sweep.processor.test.ts` +
    `organizador.isolation.test.ts`.
 
+8. **Webhook de Wompi y log de eventos (HT-PAY-04 · ADR 0022)** — el webhook de pagos no lleva JWT:
+   `billing/payment.resolver.ts:resolverTenantPorReferencia` busca `Payment.findOne({ reference })`
+   sin `tenantId` (la referencia es única global, aleatoria y no contiene el tenant; cumple el papel
+   de `phone_number_id` en Meta). Valida el formato antes de consultar y **solo devuelve
+   `{ tenantId, paymentId }`**; desde ahí todo vuelve a `*Scoped` con ese `tenantId`. Además,
+   `payment_events` es una colección **global y append-only** (sin `tenantId` requerido: el evento
+   llega antes de saber de quién es) y solo la toca `billing/payment-event.service.ts`, sin borrado
+   ni edición. La autenticidad la da el checksum del evento (HT-PAY-02), no la referencia. Tests:
+   `billing.isolation.test.ts` + `payment.resolver.test.ts`.
+
 ### Datos de prueba fuera de las cifras de negocio (HU-IA-08)
 
 Un `Cliente` con `esPrueba` y un `Lead` con `esPrueba` no cuentan en nada que un tenant mire. Toda

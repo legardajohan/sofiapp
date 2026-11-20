@@ -29,3 +29,18 @@ export type {
   ReservaDestino,
   RolEmpresaDestino,
 } from './destino-usuarios.js';
+export {
+  PERIODOS_COBRO,
+  MESES_POR_PERIODO_COBRO,
+  ESTADOS_PAGO,
+  ESTADOS_PAGO_TERMINALES,
+  ESTADOS_SUSCRIPCION,
+  ORIGENES_SUSCRIPCION,
+} from './billing.js';
+export type {
+  PeriodoCobro,
+  EstadoPago,
+  EstadoPagoTerminal,
+  EstadoSuscripcion,
+  OrigenSuscripcion,
+} from './billing.js';

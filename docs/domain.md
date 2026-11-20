@@ -32,11 +32,16 @@
 | **Campo del contacto (fijo)** | Dato con columna propia en la ficha: `nombre`, `correo`, `documento`, `rolContacto`. Un nodo `captura` puede escribir en ellos; el teléfono no (el webhook lo reescribe). |
 | **Destino de captura** | Dónde deja su dato un nodo `captura`: solo en una variable del flujo, en un campo fijo del contacto o en un campo personalizado. |
 | **Advertencia de flujo** | Problema de conexión o de contenido de un flujo guardado a medias (nodo suelto, rama sin destino, nodo incompleto). No impide guardar, pero impide **activar**. |
+| **Suscripción** | Estado del plan de un tenant (`Subscription`, HT-PAY-04): `sin_plan`, `activa` o `vencida`, con su periodo, su vigencia y su origen (`pago` o `manual`). Una por tenant. Un tenant sin documento está `sin_plan`. Que venza **no** suspende al tenant: eso lo decide el superadmin (ADR 0021). |
+| **Intento de pago** | Un cobro en Wompi de un plan y un periodo (`Payment`). Nace `PENDIENTE` con el precio congelado y termina en `APROBADO`, `RECHAZADO`, `ANULADO`, `ERROR` o `EXPIRADO`. Solo hay uno `PENDIENTE` por tenant. |
+| **Referencia de pago** | Identificador opaco y aleatorio del intento (`SOFI-` + 24 caracteres base32). Es única global, no contiene el tenant, y es con lo que el webhook encuentra el pago (ADR 0022). |
+| **Vigencia** | Intervalo `vigenciaDesde`–`vigenciaHasta` que cubre el periodo pagado (3, 6 o 12 meses). Pagar antes de vencer la suma desde `vigenciaHasta`, no desde hoy (HU-BILL-03). |
 
 ## 2. Entidades del dominio
 
 `Tenant`, `Plan`, `User`, `MetaIntegration`, `Cliente`, `Message`, `Tag`, `Lead`, `ContactNote`,
-`CatalogItem`, `Campaign`, `AuditEvent`, `Flow`, `FlowState`. Esquemas en `data-model.md`.
+`CatalogItem`, `Campaign`, `AuditEvent`, `Flow`, `FlowState`, `Subscription`, `Payment`,
+`PaymentEvent`. Esquemas en `data-model.md`.
 
 ## 3. Estados del prospecto (`estadoComercial`)
 
@@ -468,3 +473,7 @@ el admin escribe como si fuera un cliente y recibe lo que recibiría por WhatsAp
    `audit_events`, donde se guarda como `"[oculto]"`. Editarlo exige un rol autorizado; leerlo sin
    él devuelve el valor enmascarado, nunca vacío (HU-CRM-02, ADR 0006). El cifrado en reposo está
    desactivado: en la base el valor está en claro (ver `docs/data-model.md`).
+10. Un `Payment` pertenece a exactamente un `Tenant` y su `reference` es única globalmente. Un
+    tenant tiene como máximo un `Payment` en `PENDIENTE`. Un pago en estado terminal **no cambia**
+    nunca: una anulación de Wompi sobre un pago `APROBADO` se registra como `requiere_revision` y la
+    resuelve el superadmin (HT-PAY-04, ADR 0021).

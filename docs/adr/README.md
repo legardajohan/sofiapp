@@ -26,6 +26,8 @@ marca al anterior como *Reemplazado*.
 | [0018](0018-usuario-principal-y-accesos-iguales.md) | Usuario principal, jerarquía de gestión y accesos iguales | Aceptada |
 | [0019](0019-destinos-por-rol.md) | Destinos por rol: grupo de usuarios y resolvedor único | Aceptada |
 | [0020](0020-recordatorios-por-barrido.md) | Recordatorios del Organizador: estado derivado en la nota y barrido del worker | Aceptada |
+| [0021](0021-modelo-de-cobro-wompi.md) | Modelo de cobro y proveedor de pagos (Wompi) | Aceptada |
+| [0022](0022-tenant-por-referencia-wompi.md) | Tenant resuelto por referencia en el webhook de Wompi | Aceptada |
 
 ## Convención
 

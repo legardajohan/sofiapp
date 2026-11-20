@@ -155,6 +155,10 @@ En este orden:
    - `client_max_body_size 20m`: la media sube hasta 16 MB (`MEDIA_MAX_BYTES_*`) y Nginx corta en
      1 MB por defecto.
    - `proxy_read_timeout` ≥ 60 s.
+   - **IP real del cliente:** `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` y
+     `proxy_set_header X-Real-IP $remote_addr;`. Sin ellas, el límite de peticiones y la IP que
+     guardan los pagos verían siempre la del proxy. La API acota en cuántos saltos confía con
+     `TRUST_PROXY_HOPS` (Fase 5).
 6. **HTTPS con certbot** (`certbot --nginx -d api.<dominio>`) con renovación automática. Meta exige
    un certificado válido en el webhook.
 7. **ffmpeg:** no hace falta instalarlo. `ffmpeg-static`/`ffprobe-static` bajan sus binarios en el
@@ -204,6 +208,7 @@ openssl rand -hex 24   # → META_VERIFY_TOKEN (cualquier cadena secreta)
 | Meta | `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_GRAPH_VERSION`, `TENANT_TOKEN_ENC_KEY` | sí (`META_APP_ID` es opcional técnicamente, pero sin ella el Embedded Signup responde 503) |
 | Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_EMBED_MODEL`, `LLM_TIMEOUT_MS` | `GEMINI_API_KEY` sí; el resto trae defaults |
 | Media | `MEDIA_DRIVER=spaces`, `MEDIA_URL_SECRET`, `SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET`, `SPACES_KEY`, `SPACES_SECRET` | sí con `spaces`. **No usar `local` en producción**: la media quedaría solo en el disco del VPS |
+| Seguridad HTTP (HT-PAY-05) | `TRUST_PROXY_HOPS`, `RATE_LIMIT_WEBHOOK_PAGOS_MAX`, `RATE_LIMIT_INTENTOS_MAX` | no, pero **`TRUST_PROXY_HOPS` debe ser correcto**: `1` con Nginx directo (defecto); `2` con Cloudflare en modo proxied delante de Nginx. Con un valor menor, todos los clientes compartirían la IP del proxy; con uno mayor, un cliente podría falsificar su IP con `X-Forwarded-For`. Los límites traen defaults (120 por IP y minuto en el webhook de Wompi; 10 intentos por tenant cada 10 min) |
 | Afinación IA/campañas | `SEMAFORO_*`, `EXTRACT_*`, `TEMA_*`, `KB_*`, `FAQ_*`, `CAMPAIGN_*`, `REMINDER_*` | no, los defaults sirven para arrancar |
 
 > `DATA_ENC_KEY` solo hace falta para leer datos cifrados heredados. En una base nueva se omite.
@@ -250,8 +255,13 @@ openssl rand -hex 24   # → META_VERIFY_TOKEN (cualquier cadena secreta)
    `pnpm build`, output `dist`. Comprueba que Vercel instale con pnpm desde la raíz del workspace.
    Si `@sofiapp/shared` no queda compilado, ajusta el install o build command a
    `pnpm --filter @sofiapp/shared build && pnpm --filter @sofiapp/web build`.
-2. Rewrite SPA (todas las rutas → `index.html`) para que el router de React no dé 404 al
-   recargar.
+2. Rewrite SPA y cabeceras de seguridad: ya están **versionados en `apps/frontend/vercel.json`**
+   (rewrite de todas las rutas a `index.html`, CSP, `X-Frame-Options`, `Permissions-Policy`…). Si
+   configuraste el rewrite a mano en el panel de Vercel, ya es redundante y puede quitarse. La CSP
+   asume el dominio `api.sofiapp.co`: **si el real es otro, cámbialo en `vercel.json`** (aparece una
+   vez por esquema, `https` y `wss`). Está en modo bloqueo: prueba un deploy de *preview* con la
+   consola abierta (login, bandeja con Socket.IO, imagen y audio, nota de voz, emojis, popup de
+   Facebook) antes de producción.
 3. Variables de entorno (Production):
    | Variable | Valor |
    |---|---|
@@ -259,8 +269,12 @@ openssl rand -hex 24   # → META_VERIFY_TOKEN (cualquier cadena secreta)
    | `VITE_META_APP_ID` | id de la app de Meta |
    | `VITE_META_CONFIG_ID` | id de la configuración de *Facebook Login for Business* (Fase 8.4) |
    | `VITE_META_GRAPH_VERSION` | igual a `META_GRAPH_VERSION` |
+   | `VITE_WOMPI_PUBLIC_KEY` | llave **pública** de Wompi (`pub_test_…` / `pub_prod_…`). Es la única variable de Wompi permitida en el frontend |
    > Las `VITE_*` se **incrustan al compilar**: cambiarlas exige redeploy. Nunca pongas un secreto
-   > en una `VITE_*`, porque queda público en el bundle.
+   > en una `VITE_*`, porque queda público en el bundle. `pnpm build` ejecuta
+   > `scripts/check-bundle-secrets.mjs`: si existe una `VITE_*` con `PRIVATE`, `SECRET`, `INTEGRITY` o
+   > `EVENTS` en el nombre, o si el bundle contiene una llave privada, un secreto de eventos o de
+   > integridad de Wompi, **el build falla** y el despliegue no se publica.
 4. Asignar el dominio `app.<dominio>`.
 5. Verificar: login con el superadmin desde `https://app.<dominio>`, la cookie queda puesta
    (DevTools → Application) y la bandeja conecta el socket sin errores de CORS.

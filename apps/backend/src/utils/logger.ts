@@ -1,11 +1,31 @@
+import { redactar, redactarTexto } from './log-redaction.js';
+
+type Nivel = 'info' | 'warn' | 'error';
+type Salida = (linea: string) => void;
+
+// Toda llamada pasa por la redacción (HT-PAY-05). El formato no cambia: `level`, `message`,
+// campos del meta y `ts`. Si redactar o serializar fallan, se emite solo `{ level, message, ts }`.
+function emitir(nivel: Nivel, salida: Salida, message: string, meta?: Record<string, unknown>): void {
+  const ts = new Date().toISOString();
+  const mensaje = redactarTexto(message);
+  try {
+    const campos = meta ? redactar(meta) : undefined;
+    const cuerpo =
+      typeof campos === 'object' && campos !== null && !Array.isArray(campos) ? campos : {};
+    salida(JSON.stringify({ level: nivel, message: mensaje, ...cuerpo, ts }));
+  } catch {
+    salida(JSON.stringify({ level: nivel, message: mensaje, ts }));
+  }
+}
+
 export const logger = {
   info: (message: string, meta?: Record<string, unknown>): void => {
-    console.log(JSON.stringify({ level: 'info', message, ...meta, ts: new Date().toISOString() }));
+    emitir('info', (l) => console.log(l), message, meta);
   },
   warn: (message: string, meta?: Record<string, unknown>): void => {
-    console.warn(JSON.stringify({ level: 'warn', message, ...meta, ts: new Date().toISOString() }));
+    emitir('warn', (l) => console.warn(l), message, meta);
   },
   error: (message: string, meta?: Record<string, unknown>): void => {
-    console.error(JSON.stringify({ level: 'error', message, ...meta, ts: new Date().toISOString() }));
+    emitir('error', (l) => console.error(l), message, meta);
   },
 };
