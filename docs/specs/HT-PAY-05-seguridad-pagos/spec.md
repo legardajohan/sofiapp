@@ -5,7 +5,7 @@
 > seguridad en la API, límite de peticiones respaldado en Redis, redacción de datos sensibles en los
 > logs, CSP del SPA y garantía de que al frontend solo llega la llave pública de Wompi.
 
-**Estado:** creado
+**Estado:** implementado
 
 ## Objetivo
 

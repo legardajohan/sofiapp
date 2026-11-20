@@ -257,6 +257,15 @@ const EnvSchema = z.object({
   WOMPI_REDIRECT_URL: z.string().url().optional(),
   WOMPI_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
+  // ─── Seguridad HTTP (HT-PAY-05) ──────────────────────────────────────────────────
+  // Saltos de proxy de confianza para `req.ip`: 1 con Nginx, 2 con Cloudflare proxied delante de
+  // Nginx. Confiar en X-Forwarded-For sin acotar permitiría falsificar la IP y esquivar el límite.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
+  // Webhook de Wompi: peticiones por IP y minuto. Falla abierto si Redis cae (ver rate-limit).
+  RATE_LIMIT_WEBHOOK_PAGOS_MAX: z.coerce.number().int().positive().default(120),
+  // Creación de intentos de pago: por tenant del token y 10 min.
+  RATE_LIMIT_INTENTOS_MAX: z.coerce.number().int().positive().default(10),
+
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
   SUPERADMIN_EMAIL: z.string().email().optional(),

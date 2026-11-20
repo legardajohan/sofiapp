@@ -151,3 +151,61 @@ Propios, no de Wompi: validan la fórmula documentada, no su aceptación por Wom
 **Prueba de contrato** (`wompi.contract.test.ts`): opcional, con `WOMPI_CONTRACT_TEST=1` y llaves de
 sandbox. Cierra las incógnitas pendientes (mayúsculas del checksum, autenticación de
 `/transactions?reference=`, estados adicionales). Aún no se ha ejecutado.
+
+## 11. Seguridad (HT-PAY-05)
+
+**Cabeceras de la API.** `helmet` es el primer middleware de `app.ts`: CSP `default-src 'none'`,
+`frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, HSTS de 180 días **sin** `includeSubDomains`
+ni `preload` (eso lo decide Cloudflare/Nginx) y `Cross-Origin-Resource-Policy: cross-origin`, porque la
+media se pide como `<img>` desde otro origen.
+
+**IP real.** `TRUST_PROXY_HOPS` (0–5, defecto `1`) fija en cuántos proxies confía Express. `1` con
+Nginx; `2` con Cloudflare proxied delante. Un valor mayor del real permite falsificar la IP con
+`X-Forwarded-For`; uno menor deja a todos con la IP del proxy.
+
+**Límites de peticiones** (`express-rate-limit` con store en Redis, conexión `ioredis` propia):
+
+| Limitador | Clave | Ventana y máximo | Prefijo Redis |
+|---|---|---|---|
+| Webhook `/api/webhooks/wompi` | IP (`req.ip`) | 1 min · `RATE_LIMIT_WEBHOOK_PAGOS_MAX` (120) | `rl:pagos:webhook:` |
+| Creación de intentos | `tenantId` **del token** | 10 min · `RATE_LIMIT_INTENTOS_MAX` (10) | `rl:pagos:intentos:` |
+
+El del webhook se monta antes de `express.json()` (corta el abuso sin parsear el cuerpo). El de
+intentos va entre `authorize` y `validate` y solo lee `req.user`: ni cabeceras ni cuerpo cambian la
+cubeta, y dos empresas detrás de la misma IP no se pisan.
+
+**Fallo abierto.** Si Redis no responde, la petición **pasa** y se registra
+(`Rate limit: store no disponible`, solo con el nombre del limitador). Wompi reintenta el webhook
+solo 3 veces en 24 h: un 5xx por un Redis caído perdería confirmaciones de pagos reales. La defensa
+real del webhook es el checksum (HT-PAY-02), no el límite.
+
+**Redacción de logs.** `logger.info|warn|error` oculta con `[REDACTADO]` el valor de una lista cerrada
+de claves (`authorization`, `cookie`, `token`, `secret`, `signature`, `checksum`, `email`, `phone`,
+`documento`…; ver `utils/log-redaction.ts`), por **nombre exacto** y no por subcadena, y sustituye en
+cualquier texto las llaves de Wompi, `Bearer …`, JWT y correos. Conserva `key`, `tokens`,
+`phoneNumberId`, `reference` y `tenantId`. Es defensa en profundidad: la regla sigue siendo no
+registrar PII ni secretos (no cubre `console.*` directo).
+
+**CSP del SPA** (`apps/frontend/vercel.json`, modo bloqueo, sin `Report-Only`). Un test la comprueba
+directiva por directiva. Orígenes admitidos:
+
+| Origen | Por qué |
+|---|---|
+| `checkout.wompi.co` | `widget.js` (script), el iframe del Widget y el `<form>` GET del Web Checkout |
+| `*.wompi.co` (connect) | el Widget consulta la API (`sandbox.`/`production.`/`checkout.`) |
+| `connect.facebook.net` | `src/lib/facebook-sdk.ts` carga el SDK de Embedded Signup |
+| `*.facebook.com`, `graph.facebook.com` | frames/popup y llamadas del SDK |
+| `api.sofiapp.co` (https + wss) | `apiClient`, Socket.IO y la media de `/api/media/:id` |
+| `*.digitaloceanspaces.com` | destino de la redirección prefirmada de la media |
+| `cdn.jsdelivr.net` | `frimousse` descarga los datos de emojis |
+| `blob:`, `data:` | notas de voz, previsualizaciones y SVG inlinados por Vite |
+| `style-src 'unsafe-inline'` | Radix, `sonner` y `@xyflow/react` inyectan estilos; es el único `unsafe-inline` y no cubre scripts |
+
+No se define `Cross-Origin-Opener-Policy` (el popup de Embedded Signup necesita `window.opener`). El
+Widget puede cargar recursos propios fuera de esta lista: HT-PAY-06 la contrasta en sandbox. Los
+frames anidados en el iframe de Wompi (3-D Secure) no los gobierna esta CSP.
+
+**Solo la llave pública en el frontend.** `VITE_WOMPI_PUBLIC_KEY` es la única variable de Wompi
+tipada. `pnpm --filter @sofiapp/web build` termina con `scripts/check-bundle-secrets.mjs`, que falla
+(código 1, sin imprimir el valor) si el bundle contiene `prv_…`, `*_events_…` o `*_integrity_…`, o si
+existe una `VITE_*` con `PRIVATE`, `SECRET`, `INTEGRITY` o `EVENTS` en el nombre.

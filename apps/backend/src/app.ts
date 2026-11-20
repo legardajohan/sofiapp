@@ -7,6 +7,8 @@ import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
 import { csrfGuard } from './middlewares/csrf.middleware.js';
+import { securityHeaders } from './middlewares/security-headers.middleware.js';
+import { crearLimitadorWebhookPagos } from './middlewares/rate-limit.middleware.js';
 import { seedSuperadmin } from './seed/seed-superadmin.js';
 import { createSocketGateway, subscribeSessionRevocations } from './realtime/socket.gateway.js';
 import { subscribeRealtime } from './realtime/realtime.publisher.js';
@@ -60,6 +62,11 @@ import { suscribirInvalidacionVentana } from './features/send-window/send-window
 
 const app = express();
 
+// Primero de todo: así las cabeceras de seguridad también salen en errores de CORS y de parseo.
+app.use(securityHeaders);
+// Sin esto, detrás de Nginx todo cliente tiene la misma IP y un límite «por IP» sería global.
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
+
 app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 
 // ⚠️ ANTES de `express.json()`, y no abajo con el resto de rutas.
@@ -74,6 +81,10 @@ app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 // Lo que sostiene esta regla no es este comentario: es `webhook.routes.test.ts`, que falla en el
 // acto si el orden se rompe.
 app.use('/api/webhooks/whatsapp', webhookRoutes);
+
+// Webhook de Wompi (HT-PAY-02 monta la ruta; aquí solo el límite). También ANTES de
+// `express.json()`: corta el abuso sin leer ni parsear el cuerpo. Falla abierto si Redis cae.
+app.use('/api/webhooks/wompi', crearLimitadorWebhookPagos());
 
 app.use(express.json());
 app.use(cookieParser());
